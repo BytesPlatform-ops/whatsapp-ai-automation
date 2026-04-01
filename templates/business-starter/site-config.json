@@ -1,0 +1,33 @@
+{
+  "businessName": "Your Business",
+  "industry": "Professional Services",
+  "primaryColor": "#2563EB",
+  "secondaryColor": "#1E40AF",
+  "accentColor": "#60A5FA",
+  "headline": "Welcome to Your Business",
+  "tagline": "Professional solutions tailored for your needs",
+  "aboutTitle": "About Us",
+  "aboutText": "We are a dedicated team of professionals committed to delivering exceptional service and results for our clients. With years of experience in our industry, we bring expertise and passion to every project.",
+  "servicesTitle": "Our Services",
+  "services": [
+    {
+      "title": "Service One",
+      "description": "Professional service tailored to your specific needs with attention to detail and quality."
+    },
+    {
+      "title": "Service Two",
+      "description": "Comprehensive solutions designed to help your business grow and succeed in today's market."
+    },
+    {
+      "title": "Service Three",
+      "description": "Expert guidance and support to help you achieve your goals efficiently and effectively."
+    }
+  ],
+  "ctaTitle": "Ready to Get Started?",
+  "ctaText": "Contact us today for a free consultation and discover how we can help your business thrive.",
+  "ctaButton": "Get in Touch",
+  "footerTagline": "© 2026 Your Business. All rights reserved.",
+  "contactEmail": "hello@yourbusiness.com",
+  "contactPhone": "+1 (555) 123-4567",
+  "contactAddress": "123 Main Street, City, State 12345"
+}

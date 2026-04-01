@@ -1,0 +1,37 @@
+{
+  "name": "whatsapp-ai-automation",
+  "version": "1.0.0",
+  "description": "WhatsApp AI Automation Platform for Digital Agency",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "embed": "node src/knowledge/loader.js"
+  },
+  "keywords": [
+    "whatsapp",
+    "automation",
+    "ai"
+  ],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.80.0",
+    "@supabase/supabase-js": "^2.100.0",
+    "axios": "^1.13.6",
+    "cheerio": "^1.2.0",
+    "chromium": "^3.0.3",
+    "cors": "^2.8.6",
+    "dotenv": "^17.3.1",
+    "express": "^5.2.1",
+    "express-rate-limit": "^8.3.1",
+    "helmet": "^8.1.0",
+    "openai": "^6.32.0",
+    "pdfkit": "^0.18.0",
+    "puppeteer-core": "^24.40.0",
+    "stripe": "^21.0.1",
+    "uuid": "^13.0.0",
+    "winston": "^3.19.0"
+  }
+}

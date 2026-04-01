@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Chatbot SaaS - Admin Dashboard</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    .tab-active { border-bottom: 2px solid #3b82f6; color: #3b82f6; }
+    .modal-overlay { background: rgba(0,0,0,0.4); }
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 9999px; font-size: 12px; font-weight: 500; }
+    .badge-active { background: #dcfce7; color: #166534; }
+    .badge-trial { background: #dbeafe; color: #1e40af; }
+    .badge-demo { background: #fef9c3; color: #854d0e; }
+    .badge-paused { background: #fee2e2; color: #991b1b; }
+    .badge-cancelled { background: #f3f4f6; color: #6b7280; }
+  </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+  <!-- Header -->
+  <nav class="bg-white border-b px-6 py-3 flex items-center justify-between">
+    <div class="flex items-center gap-4">
+      <a href="/admin" class="text-gray-500 hover:text-gray-700 text-sm">&larr; Main Dashboard</a>
+      <h1 class="text-lg font-bold text-gray-800">Chatbot SaaS</h1>
+    </div>
+    <div id="global-stats" class="flex gap-6 text-sm text-gray-500"></div>
+  </nav>
+
+  <!-- Tabs -->
+  <div class="bg-white border-b px-6 flex gap-6">
+    <button class="tab py-3 text-sm font-medium text-gray-500 hover:text-gray-700 tab-active" data-tab="clients">Clients</button>
+    <button class="tab py-3 text-sm font-medium text-gray-500 hover:text-gray-700" data-tab="analytics">Global Analytics</button>
+  </div>
+
+  <!-- Content -->
+  <div class="p-6 max-w-7xl mx-auto">
+    <!-- Clients Tab -->
+    <div id="tab-clients">
+      <!-- Filters -->
+      <div class="flex gap-3 mb-4">
+        <input id="filter-search" type="text" placeholder="Search by name..." class="px-3 py-2 border rounded-lg text-sm flex-1 max-w-xs">
+        <select id="filter-status" class="px-3 py-2 border rounded-lg text-sm">
+          <option value="">All Status</option>
+          <option value="active">Active</option>
+          <option value="trial">Trial</option>
+          <option value="demo">Demo</option>
+          <option value="paused">Paused</option>
+          <option value="cancelled">Cancelled</option>
+        </select>
+        <select id="filter-tier" class="px-3 py-2 border rounded-lg text-sm">
+          <option value="">All Tiers</option>
+          <option value="starter">Starter</option>
+          <option value="growth">Growth</option>
+          <option value="premium">Premium</option>
+        </select>
+      </div>
+
+      <!-- Client Table -->
+      <div class="bg-white rounded-lg border overflow-hidden">
+        <table class="w-full text-sm">
+          <thead class="bg-gray-50 text-left text-gray-500">
+            <tr>
+              <th class="px-4 py-3 font-medium">Business</th>
+              <th class="px-4 py-3 font-medium">Status</th>
+              <th class="px-4 py-3 font-medium">Tier</th>
+              <th class="px-4 py-3 font-medium">Conversations</th>
+              <th class="px-4 py-3 font-medium">Leads</th>
+              <th class="px-4 py-3 font-medium">Created</th>
+              <th class="px-4 py-3 font-medium">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="clients-table" class="divide-y"></tbody>
+        </table>
+        <div id="clients-empty" class="hidden p-8 text-center text-gray-400">No clients found</div>
+      </div>
+    </div>
+
+    <!-- Analytics Tab -->
+    <div id="tab-analytics" class="hidden">
+      <div class="grid grid-cols-4 gap-4 mb-6" id="global-metrics"></div>
+      <div class="bg-white rounded-lg border p-6">
+        <h3 class="font-medium text-gray-700 mb-4">Client Distribution</h3>
+        <div id="distribution-chart" class="space-y-3"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Client Detail Modal -->
+  <div id="detail-modal" class="fixed inset-0 modal-overlay hidden flex items-center justify-center z-50 p-4">
+    <div class="bg-white rounded-xl shadow-xl w-full max-w-3xl max-h-[90vh] overflow-y-auto">
+      <div class="sticky top-0 bg-white border-b px-6 py-4 flex items-center justify-between">
+        <h2 id="detail-title" class="text-lg font-bold"></h2>
+        <button onclick="closeModal()" class="text-gray-400 hover:text-gray-600 text-2xl">&times;</button>
+      </div>
+      <div id="detail-content" class="p-6"></div>
+    </div>
+  </div>
+
+  <script>
+    const API = '/admin/api/chatbot';
+    let allClients = [];
+
+    // Tabs
+    document.querySelectorAll('.tab').forEach(tab => {
+      tab.onclick = () => {
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('tab-active'));
+        tab.classList.add('tab-active');
+        document.getElementById('tab-clients').classList.toggle('hidden', tab.dataset.tab !== 'clients');
+        document.getElementById('tab-analytics').classList.toggle('hidden', tab.dataset.tab !== 'analytics');
+        if (tab.dataset.tab === 'analytics') loadGlobalAnalytics();
+      };
+    });
+
+    // Filters
+    ['filter-search', 'filter-status', 'filter-tier'].forEach(id => {
+      document.getElementById(id).addEventListener('input', renderClients);
+      document.getElementById(id).addEventListener('change', renderClients);
+    });
+
+    function badge(status) {
+      return `<span class="badge badge-${status}">${status}</span>`;
+    }
+
+    function timeAgo(date) {
+      if (!date) return '-';
+      const d = new Date(date);
+      const diff = Date.now() - d.getTime();
+      const mins = Math.floor(diff / 60000);
+      if (mins < 60) return `${mins}m ago`;
+      const hrs = Math.floor(mins / 60);
+      if (hrs < 24) return `${hrs}h ago`;
+      const days = Math.floor(hrs / 24);
+      return `${days}d ago`;
+    }
+
+    async function loadClients() {
+      try {
+        const res = await fetch(`${API}/clients`);
+        allClients = await res.json();
+        renderClients();
+      } catch (e) { console.error('Failed to load clients', e); }
+    }
+
+    function renderClients() {
+      const search = document.getElementById('filter-search').value.toLowerCase();
+      const status = document.getElementById('filter-status').value;
+      const tier = document.getElementById('filter-tier').value;
+
+      let filtered = allClients;
+      if (search) filtered = filtered.filter(c => c.business_name.toLowerCase().includes(search));
+      if (status) filtered = filtered.filter(c => c.status === status);
+      if (tier) filtered = filtered.filter(c => c.tier === tier);
+
+      const tbody = document.getElementById('clients-table');
+      const empty = document.getElementById('clients-empty');
+
+      if (filtered.length === 0) {
+        tbody.innerHTML = '';
+        empty.classList.remove('hidden');
+        return;
+      }
+      empty.classList.add('hidden');
+
+      tbody.innerHTML = filtered.map(c => `
+        <tr class="hover:bg-gray-50 cursor-pointer" onclick="showDetail('${c.client_id}')">
+          <td class="px-4 py-3">
+            <div class="font-medium text-gray-800">${esc(c.business_name)}</div>
+            <div class="text-xs text-gray-400">${esc(c.client_id)}</div>
+          </td>
+          <td class="px-4 py-3">${badge(c.status)}</td>
+          <td class="px-4 py-3 text-gray-600 capitalize">${c.tier}</td>
+          <td class="px-4 py-3 text-gray-600">-</td>
+          <td class="px-4 py-3 text-gray-600">-</td>
+          <td class="px-4 py-3 text-gray-400">${timeAgo(c.created_at)}</td>
+          <td class="px-4 py-3">
+            <div class="flex gap-1">
+              ${c.status === 'trial' || c.status === 'demo' ? `<button onclick="event.stopPropagation(); quickAction('${c.client_id}', 'activate')" class="text-xs px-2 py-1 bg-green-50 text-green-700 rounded hover:bg-green-100">Activate</button>` : ''}
+              ${c.status === 'active' ? `<button onclick="event.stopPropagation(); quickAction('${c.client_id}', 'pause')" class="text-xs px-2 py-1 bg-yellow-50 text-yellow-700 rounded hover:bg-yellow-100">Pause</button>` : ''}
+              ${c.status === 'paused' ? `<button onclick="event.stopPropagation(); quickAction('${c.client_id}', 'activate')" class="text-xs px-2 py-1 bg-green-50 text-green-700 rounded hover:bg-green-100">Resume</button>` : ''}
+              ${c.status !== 'cancelled' ? `<button onclick="event.stopPropagation(); quickAction('${c.client_id}', 'cancel')" class="text-xs px-2 py-1 bg-red-50 text-red-700 rounded hover:bg-red-100">Cancel</button>` : ''}
+            </div>
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    async function quickAction(clientId, action) {
+      if (action === 'cancel' && !confirm('Cancel this client?')) return;
+      try {
+        await fetch(`${API}/clients/${clientId}/${action}`, { method: 'POST' });
+        loadClients();
+      } catch (e) { alert('Action failed'); }
+    }
+
+    async function showDetail(clientId) {
+      const modal = document.getElementById('detail-modal');
+      const title = document.getElementById('detail-title');
+      const content = document.getElementById('detail-content');
+      modal.classList.remove('hidden');
+
+      title.textContent = 'Loading...';
+      content.innerHTML = '<div class="text-center text-gray-400 py-8">Loading...</div>';
+
+      try {
+        const [clientRes, convosRes, analyticsRes] = await Promise.all([
+          fetch(`${API}/clients/${clientId}`).then(r => r.json()),
+          fetch(`${API}/clients/${clientId}/conversations`).then(r => r.json()),
+          fetch(`${API}/clients/${clientId}/analytics`).then(r => r.json()),
+        ]);
+
+        const c = clientRes;
+        const data = c.chatbot_data || {};
+        title.textContent = c.business_name;
+
+        content.innerHTML = `
+          <div class="grid grid-cols-2 gap-6 mb-6">
+            <div>
+              <h4 class="text-sm font-medium text-gray-500 mb-2">Profile</h4>
+              <div class="space-y-1 text-sm">
+                <div><span class="text-gray-400">Slug:</span> ${esc(c.client_id)}</div>
+                <div><span class="text-gray-400">Industry:</span> ${esc(c.industry || '-')}</div>
+                <div><span class="text-gray-400">Owner:</span> ${esc(c.owner_name || '-')}</div>
+                <div><span class="text-gray-400">Phone:</span> ${esc(c.owner_phone || '-')}</div>
+                <div><span class="text-gray-400">Status:</span> ${badge(c.status)}</div>
+                <div><span class="text-gray-400">Tier:</span> ${c.tier}</div>
+                ${c.trial_ends_at ? `<div><span class="text-gray-400">Trial ends:</span> ${new Date(c.trial_ends_at).toLocaleDateString()}</div>` : ''}
+              </div>
+            </div>
+            <div>
+              <h4 class="text-sm font-medium text-gray-500 mb-2">30-Day Stats</h4>
+              <div class="grid grid-cols-2 gap-3">
+                <div class="bg-blue-50 rounded-lg p-3 text-center">
+                  <div class="text-xl font-bold text-blue-700">${analyticsRes.total_conversations || 0}</div>
+                  <div class="text-xs text-blue-500">Conversations</div>
+                </div>
+                <div class="bg-green-50 rounded-lg p-3 text-center">
+                  <div class="text-xl font-bold text-green-700">${analyticsRes.leads_captured || 0}</div>
+                  <div class="text-xs text-green-500">Leads</div>
+                </div>
+                <div class="bg-purple-50 rounded-lg p-3 text-center">
+                  <div class="text-xl font-bold text-purple-700">${analyticsRes.total_messages || 0}</div>
+                  <div class="text-xs text-purple-500">Messages</div>
+                </div>
+                <div class="bg-orange-50 rounded-lg p-3 text-center">
+                  <div class="text-xl font-bold text-orange-700">${analyticsRes.unique_visitors || 0}</div>
+                  <div class="text-xs text-orange-500">Visitors</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="mb-6">
+            <h4 class="text-sm font-medium text-gray-500 mb-2">Chatbot Data</h4>
+            <div class="bg-gray-50 rounded-lg p-4 text-sm space-y-2">
+              ${data.services && data.services.length ? `<div><span class="text-gray-400">Services:</span> ${data.services.map(s => esc(s.name + (s.price ? ' (' + s.price + ')' : ''))).join(', ')}</div>` : ''}
+              ${data.hours ? `<div><span class="text-gray-400">Hours:</span> ${esc(data.hours)}</div>` : ''}
+              ${data.location ? `<div><span class="text-gray-400">Location:</span> ${esc(data.location)}</div>` : ''}
+              ${data.faqs && data.faqs.length ? `<div><span class="text-gray-400">FAQs:</span> ${data.faqs.length} questions</div>` : ''}
+            </div>
+          </div>
+
+          <div>
+            <h4 class="text-sm font-medium text-gray-500 mb-2">Recent Conversations (${convosRes.length})</h4>
+            <div class="space-y-2 max-h-64 overflow-y-auto">
+              ${convosRes.length === 0 ? '<div class="text-gray-400 text-sm">No conversations yet</div>' :
+                convosRes.slice(0, 20).map(conv => `
+                  <div class="border rounded-lg p-3 text-sm">
+                    <div class="flex justify-between text-gray-400 text-xs mb-1">
+                      <span>${conv.visitor_name || 'Anonymous'} ${conv.visitor_email ? '(' + esc(conv.visitor_email) + ')' : ''}</span>
+                      <span>${timeAgo(conv.last_message_at)} - ${conv.message_count || 0} msgs</span>
+                    </div>
+                    <div class="text-gray-600 truncate">${conv.messages && conv.messages.length ? esc(conv.messages[conv.messages.length - 1].content || '') : 'Empty'}</div>
+                  </div>
+                `).join('')}
+            </div>
+          </div>
+        `;
+      } catch (e) {
+        content.innerHTML = '<div class="text-center text-red-400 py-8">Failed to load details</div>';
+      }
+    }
+
+    function closeModal() {
+      document.getElementById('detail-modal').classList.add('hidden');
+    }
+
+    document.getElementById('detail-modal').onclick = function(e) {
+      if (e.target === this) closeModal();
+    };
+
+    async function loadGlobalAnalytics() {
+      try {
+        const data = await fetch(`${API}/global`).then(r => r.json());
+        document.getElementById('global-metrics').innerHTML = `
+          <div class="bg-white rounded-lg border p-4">
+            <div class="text-2xl font-bold">${data.clients.total}</div>
+            <div class="text-sm text-gray-500">Total Clients</div>
+          </div>
+          <div class="bg-white rounded-lg border p-4">
+            <div class="text-2xl font-bold text-green-600">${data.clients.active}</div>
+            <div class="text-sm text-gray-500">Active</div>
+          </div>
+          <div class="bg-white rounded-lg border p-4">
+            <div class="text-2xl font-bold text-blue-600">${data.month.conversations}</div>
+            <div class="text-sm text-gray-500">Conversations (30d)</div>
+          </div>
+          <div class="bg-white rounded-lg border p-4">
+            <div class="text-2xl font-bold text-purple-600">${data.month.leads}</div>
+            <div class="text-sm text-gray-500">Leads (30d)</div>
+          </div>
+        `;
+
+        const tiers = data.clients.by_tier;
+        const tierPrices = { starter: 97, growth: 249, premium: 599 };
+        const mrr = Object.entries(tiers).reduce((s, [t, c]) => s + c * (tierPrices[t] || 0), 0);
+
+        document.getElementById('distribution-chart').innerHTML = `
+          <div class="flex items-center gap-3">
+            <span class="w-20 text-sm text-gray-500">Active</span>
+            <div class="flex-1 bg-gray-100 rounded-full h-6">
+              <div class="bg-green-500 rounded-full h-6 flex items-center px-2 text-white text-xs font-medium" style="width:${Math.max(data.clients.active / Math.max(data.clients.total, 1) * 100, 5)}%">${data.clients.active}</div>
+            </div>
+          </div>
+          <div class="flex items-center gap-3">
+            <span class="w-20 text-sm text-gray-500">Trial</span>
+            <div class="flex-1 bg-gray-100 rounded-full h-6">
+              <div class="bg-blue-500 rounded-full h-6 flex items-center px-2 text-white text-xs font-medium" style="width:${Math.max(data.clients.trial / Math.max(data.clients.total, 1) * 100, 5)}%">${data.clients.trial}</div>
+            </div>
+          </div>
+          <div class="flex items-center gap-3">
+            <span class="w-20 text-sm text-gray-500">Demo</span>
+            <div class="flex-1 bg-gray-100 rounded-full h-6">
+              <div class="bg-yellow-500 rounded-full h-6 flex items-center px-2 text-white text-xs font-medium" style="width:${Math.max(data.clients.demo / Math.max(data.clients.total, 1) * 100, 5)}%">${data.clients.demo}</div>
+            </div>
+          </div>
+          <div class="mt-4 p-4 bg-gray-50 rounded-lg">
+            <div class="text-sm text-gray-500">Estimated MRR (active clients)</div>
+            <div class="text-2xl font-bold text-gray-800">$${mrr.toLocaleString()}/mo</div>
+            <div class="text-xs text-gray-400 mt-1">Starter: ${tiers.starter} x $97 | Growth: ${tiers.growth} x $249 | Premium: ${tiers.premium} x $599</div>
+          </div>
+        `;
+
+        // Update header stats
+        document.getElementById('global-stats').innerHTML = `
+          <span>${data.clients.active} active</span>
+          <span>${data.today.conversations} convos today</span>
+          <span>$${mrr}/mo MRR</span>
+        `;
+      } catch (e) { console.error('Failed to load global analytics', e); }
+    }
+
+    function esc(str) {
+      const div = document.createElement('div');
+      div.textContent = str || '';
+      return div.innerHTML;
+    }
+
+    // Init
+    loadClients();
+    loadGlobalAnalytics();
+  </script>
+</body>
+</html>

@@ -1,0 +1,1305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WhatsApp Bot Admin</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    * { font-family: 'Inter', sans-serif; }
+    .sidebar-link.active { background: rgba(255,255,255,0.1); border-right: 3px solid #818cf8; }
+    .sidebar-link:hover { background: rgba(255,255,255,0.05); }
+    .chat-user { background: #dcfce7; margin-left: auto; }
+    .chat-bot { background: #f3f4f6; margin-right: auto; }
+    .fade-in { animation: fadeIn 0.3s ease; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+    .funnel-bar { transition: width 0.6s ease; }
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-thumb { background: #374151; border-radius: 3px; }
+    .loader { border: 3px solid #e5e7eb; border-top-color: #818cf8; border-radius: 50%; width: 24px; height: 24px; animation: spin 0.6s linear infinite; display: inline-block; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .badge { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 9999px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+  </style>
+</head>
+<body class="bg-gray-50 text-gray-900">
+  <div class="flex h-screen overflow-hidden">
+    <!-- Sidebar -->
+    <aside class="w-64 bg-gray-900 text-gray-300 flex flex-col flex-shrink-0">
+      <div class="p-5 border-b border-gray-800">
+        <h1 class="text-white font-bold text-lg">WA Bot Admin</h1>
+        <p class="text-xs text-gray-500 mt-1">Analytics &amp; Management</p>
+      </div>
+      <nav class="flex-1 py-4 space-y-1 px-3 overflow-y-auto">
+        <a href="#" class="sidebar-link active flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm" data-section="overview">
+          <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0h4"/></svg>
+          Overview
+        </a>
+        <a href="#" class="sidebar-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm" data-section="salesprep">
+          <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+          Sales Prep
+        </a>
+        <a href="#" class="sidebar-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm" data-section="leads">
+          <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+          Leads
+        </a>
+        <a href="#" class="sidebar-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm" data-section="conversations">
+          <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>
+          Conversations
+        </a>
+        <a href="#" class="sidebar-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm" data-section="dropoffs">
+          <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M13 17h8m0 0V9m0 8l-8-8-4 4-6-6"/></svg>
+          Drop-offs
+        </a>
+        <a href="#" class="sidebar-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm" data-section="funnel">
+          <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"/></svg>
+          Funnel
+        </a>
+        <div class="pt-3 mt-3 border-t border-gray-800">
+          <p class="px-3 text-xs text-gray-600 uppercase tracking-wider mb-2">Revenue</p>
+        </div>
+        <a href="#" class="sidebar-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm" data-section="revenue">
+          <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+          Revenue
+        </a>
+        <a href="#" class="sidebar-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm" data-section="payments">
+          <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"/></svg>
+          Payments
+        </a>
+        <div class="pt-3 mt-3 border-t border-gray-800">
+          <p class="px-3 text-xs text-gray-600 uppercase tracking-wider mb-2">Services</p>
+        </div>
+        <a href="#" class="sidebar-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm" data-section="sites">
+          <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9"/></svg>
+          Websites
+        </a>
+        <a href="#" class="sidebar-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm" data-section="audits">
+          <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+          SEO Audits
+        </a>
+        <a href="#" class="sidebar-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm" data-section="meetings">
+          <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+          Meetings
+        </a>
+      </nav>
+      <div class="p-4 border-t border-gray-800">
+        <a href="/admin/logout" class="flex items-center gap-2 text-sm text-gray-500 hover:text-red-400 transition-colors">
+          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
+          Logout
+        </a>
+      </div>
+    </aside>
+
+    <!-- Main content -->
+    <main class="flex-1 overflow-y-auto">
+      <div class="p-6 max-w-7xl mx-auto" id="content">
+        <div class="flex items-center justify-center h-64"><div class="loader"></div></div>
+      </div>
+    </main>
+
+    <!-- Conversation modal -->
+    <div id="conv-modal" class="fixed inset-0 bg-black/50 z-50 hidden items-center justify-center">
+      <div class="bg-white rounded-2xl w-full max-w-2xl max-h-[85vh] flex flex-col m-4 shadow-2xl">
+        <div class="flex items-center justify-between p-4 border-b">
+          <div>
+            <h3 id="conv-modal-title" class="font-bold text-lg">Conversation</h3>
+            <p id="conv-modal-subtitle" class="text-sm text-gray-500"></p>
+          </div>
+          <button onclick="closeConvModal()" class="p-2 hover:bg-gray-100 rounded-lg">
+            <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+          </button>
+        </div>
+        <div id="conv-modal-body" class="flex-1 overflow-y-auto p-4 space-y-3"></div>
+      </div>
+    </div>
+  </div>
+
+<script>
+// State
+var currentSection = 'overview';
+var leadsData = [];
+
+// API helpers
+function api(endpoint) {
+  return fetch('/admin/api/' + endpoint).then(function(res) {
+    if (!res.ok) throw new Error('API error: ' + res.status);
+    return res.json();
+  });
+}
+
+function showLoader() {
+  document.getElementById('content').innerHTML = '<div class="flex items-center justify-center h-64"><div class="loader"></div></div>';
+}
+
+function esc(str) {
+  var d = document.createElement('div');
+  d.textContent = str || '';
+  return d.innerHTML;
+}
+
+function timeAgo(dateStr) {
+  if (!dateStr) return 'Never';
+  var diff = Date.now() - new Date(dateStr).getTime();
+  var mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'Just now';
+  if (mins < 60) return mins + 'm ago';
+  var hrs = Math.floor(mins / 60);
+  if (hrs < 24) return hrs + 'h ago';
+  var days = Math.floor(hrs / 24);
+  if (days < 30) return days + 'd ago';
+  return Math.floor(days / 30) + 'mo ago';
+}
+
+function fmtDate(dateStr) {
+  if (!dateStr) return '-';
+  return new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
+function stateBadge(state) {
+  var colors = {
+    WELCOME: 'bg-gray-100 text-gray-600',
+    SERVICE_SELECTION: 'bg-blue-100 text-blue-700',
+    SALES_CHAT: 'bg-purple-100 text-purple-700',
+    GENERAL_CHAT: 'bg-gray-100 text-gray-600'
+  };
+  var prefixes = [
+    ['SEO_', 'bg-amber-100 text-amber-700'],
+    ['WEB_', 'bg-emerald-100 text-emerald-700'],
+    ['APP_', 'bg-cyan-100 text-cyan-700'],
+    ['MARKETING_', 'bg-pink-100 text-pink-700'],
+    ['SCHEDULE_', 'bg-indigo-100 text-indigo-700']
+  ];
+  var color = colors[state] || 'bg-gray-100 text-gray-600';
+  for (var i = 0; i < prefixes.length; i++) {
+    if (state.indexOf(prefixes[i][0]) === 0) { color = prefixes[i][1]; break; }
+  }
+  return '<span class="badge ' + color + '">' + esc(state) + '</span>';
+}
+
+function leadStatusBadge(lead) {
+  if (lead.is_closed) return '<span class="badge bg-green-100 text-green-700">Closed</span>';
+  if (lead.is_qualified) return '<span class="badge bg-yellow-100 text-yellow-700">Qualified</span>';
+  return '<span class="badge bg-gray-100 text-gray-500">Open</span>';
+}
+
+function tempBadge(temp) {
+  if (!temp) return '';
+  if (temp === 'HOT') return '<span class="badge bg-red-100 text-red-700">🔥 HOT</span>';
+  if (temp === 'WARM') return '<span class="badge bg-orange-100 text-orange-700">⚡ WARM</span>';
+  if (temp === 'COLD') return '<span class="badge bg-blue-100 text-blue-700">🧊 COLD</span>';
+  return '';
+}
+
+// Navigation
+document.querySelectorAll('.sidebar-link').forEach(function(link) {
+  link.addEventListener('click', function(e) {
+    e.preventDefault();
+    var section = link.dataset.section;
+    if (section === currentSection) return;
+    document.querySelectorAll('.sidebar-link').forEach(function(l) { l.classList.remove('active'); });
+    link.classList.add('active');
+    currentSection = section;
+    loadSection(section);
+  });
+});
+
+function loadSection(section) {
+  showLoader();
+  var promise;
+  switch (section) {
+    case 'overview': promise = Promise.all([api('overview'), api('message-volume')]).then(function(r) { renderOverview(r[0], r[1]); }); break;
+    case 'salesprep': promise = api('sales-prep').then(renderSalesPrep); break;
+    case 'leads': promise = api('leads').then(function(d) { leadsData = d; renderLeads(d); }); break;
+    case 'conversations':
+      promise = (leadsData.length ? Promise.resolve(leadsData) : api('leads')).then(function(d) { leadsData = d; renderConversations(d); });
+      break;
+    case 'dropoffs': promise = api('dropoffs').then(renderDropoffs); break;
+    case 'funnel': promise = api('funnel').then(renderFunnel); break;
+    case 'sites': promise = api('sites').then(renderSites); break;
+    case 'audits': promise = api('audits').then(renderAudits); break;
+    case 'meetings': promise = api('meetings').then(renderMeetings); break;
+    case 'revenue': promise = Promise.all([api('revenue'), api('payments')]).then(function(r) { renderRevenue(r[0], r[1]); }); break;
+    case 'payments': promise = api('payments').then(renderPayments); break;
+  }
+  promise.catch(function(err) {
+    document.getElementById('content').innerHTML = '<div class="bg-red-50 text-red-700 rounded-xl p-6"><b>Error loading data:</b> ' + esc(err.message) + '</div>';
+  });
+}
+
+// ─── Overview ──────────────────────────────────
+function metricCard(label, value, colorClass, subtitle) {
+  return '<div class="bg-white rounded-xl border p-5">' +
+    '<div class="flex items-center gap-3">' +
+      '<div class="w-10 h-10 rounded-lg ' + colorClass + ' flex items-center justify-center">' +
+        '<span class="text-white font-bold text-sm">#</span>' +
+      '</div>' +
+      '<div>' +
+        '<p class="text-2xl font-bold">' + value + '</p>' +
+        '<p class="text-xs text-gray-500">' + esc(label) + '</p>' +
+      '</div>' +
+    '</div>' +
+    (subtitle ? '<p class="text-xs text-gray-400 mt-2">Rate: ' + subtitle + '</p>' : '') +
+  '</div>';
+}
+
+function serviceCard(title, data, keys, colors) {
+  return '<div class="bg-white rounded-xl border p-5">' +
+    '<h3 class="font-semibold mb-3">' + esc(title) + ' <span class="text-gray-400 font-normal text-sm">(' + data.total + ')</span></h3>' +
+    '<div class="space-y-2">' +
+      keys.map(function(k, i) {
+        return '<div class="flex items-center justify-between">' +
+          '<span class="badge ' + colors[i] + '">' + k + '</span>' +
+          '<span class="font-semibold">' + (data[k] || 0) + '</span>' +
+        '</div>';
+      }).join('') +
+    '</div>' +
+  '</div>';
+}
+
+// Destroy previous chart instances to prevent canvas reuse errors
+var activeCharts = [];
+function destroyCharts() {
+  activeCharts.forEach(function(c) { c.destroy(); });
+  activeCharts = [];
+}
+
+var chartDefaults = {
+  font: { family: 'Inter' },
+  color: '#6b7280',
+  plugins: { legend: { labels: { font: { family: 'Inter', size: 12 }, padding: 16 } } }
+};
+
+function renderOverview(m, volume) {
+  destroyCharts();
+
+  document.getElementById('content').innerHTML = '<div class="fade-in">' +
+    '<div class="flex items-center justify-between mb-8"><h2 class="text-2xl font-bold">Dashboard Overview</h2><button onclick="loadSection(\'overview\')" class="text-sm text-indigo-600 hover:text-indigo-800">Refresh</button></div>' +
+
+    // Metric cards
+    '<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">' +
+      metricCard('Total Leads', m.totalUsers, 'bg-indigo-500') +
+      metricCard('Active Today', m.activeToday, 'bg-emerald-500') +
+      metricCard('Qualified', m.qualified, 'bg-yellow-500', m.qualificationRate + '%') +
+      metricCard('Closed', m.closed, 'bg-green-600', m.conversionRate + '%') +
+    '</div>' +
+
+    // Charts row 1: Message volume + Lead status
+    '<div class="grid md:grid-cols-3 gap-6 mb-8">' +
+      '<div class="md:col-span-2 bg-white rounded-xl border p-5">' +
+        '<h3 class="font-semibold mb-4">Message Volume (7 days)</h3>' +
+        '<div style="height:260px"><canvas id="chart-volume"></canvas></div>' +
+      '</div>' +
+      '<div class="bg-white rounded-xl border p-5">' +
+        '<h3 class="font-semibold mb-4">Lead Status</h3>' +
+        '<div style="height:260px" class="flex items-center justify-center"><canvas id="chart-lead-status"></canvas></div>' +
+      '</div>' +
+    '</div>' +
+
+    // Charts row 2: Services breakdown + State distribution
+    '<div class="grid md:grid-cols-2 gap-6 mb-8">' +
+      '<div class="bg-white rounded-xl border p-5">' +
+        '<h3 class="font-semibold mb-4">Services Overview</h3>' +
+        '<div style="height:280px"><canvas id="chart-services"></canvas></div>' +
+      '</div>' +
+      '<div class="bg-white rounded-xl border p-5">' +
+        '<h3 class="font-semibold mb-4">User State Distribution</h3>' +
+        '<div style="height:280px"><canvas id="chart-states"></canvas></div>' +
+      '</div>' +
+    '</div>' +
+
+    // Extra metrics row
+    '<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">' +
+      metricCard('Active This Week', m.activeWeek, 'bg-blue-500') +
+      metricCard('Messages (7d)', m.messagesWeek, 'bg-purple-500') +
+      metricCard('Sites Generated', m.sites.total, 'bg-emerald-600') +
+      metricCard('SEO Audits', m.audits.total, 'bg-amber-500') +
+    '</div>' +
+
+    // Lead temperature row
+    ((m.hotLeads || m.warmLeads || m.coldLeads) ?
+    '<div class="bg-white rounded-xl border p-5 mb-8">' +
+      '<h3 class="font-semibold mb-4">Lead Temperature</h3>' +
+      '<div class="grid grid-cols-3 gap-4">' +
+        '<div class="flex items-center gap-3 p-3 bg-red-50 rounded-xl border border-red-100">' +
+          '<span class="text-2xl font-bold text-red-600">' + (m.hotLeads || 0) + '</span>' +
+          '<div><p class="font-semibold text-red-700 text-sm">🔥 HOT</p><p class="text-xs text-red-400">Ready to close</p></div>' +
+        '</div>' +
+        '<div class="flex items-center gap-3 p-3 bg-orange-50 rounded-xl border border-orange-100">' +
+          '<span class="text-2xl font-bold text-orange-600">' + (m.warmLeads || 0) + '</span>' +
+          '<div><p class="font-semibold text-orange-700 text-sm">⚡ WARM</p><p class="text-xs text-orange-400">Needs nurturing</p></div>' +
+        '</div>' +
+        '<div class="flex items-center gap-3 p-3 bg-blue-50 rounded-xl border border-blue-100">' +
+          '<span class="text-2xl font-bold text-blue-600">' + (m.coldLeads || 0) + '</span>' +
+          '<div><p class="font-semibold text-blue-700 text-sm">🧊 COLD</p><p class="text-xs text-blue-400">Still browsing</p></div>' +
+        '</div>' +
+      '</div>' +
+    '</div>' : '') +
+
+  '</div>';
+
+  // ── Chart 1: Message volume line chart ──
+  var days = Object.keys(volume).sort();
+  var userMsgs = days.map(function(d) { return volume[d].user || 0; });
+  var botMsgs = days.map(function(d) { return volume[d].assistant || 0; });
+  var dayLabels = days.map(function(d) { var dt = new Date(d + 'T00:00:00'); return dt.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }); });
+
+  activeCharts.push(new Chart(document.getElementById('chart-volume'), {
+    type: 'line',
+    data: {
+      labels: dayLabels,
+      datasets: [
+        { label: 'User Messages', data: userMsgs, borderColor: '#6366f1', backgroundColor: 'rgba(99,102,241,0.1)', fill: true, tension: 0.4, borderWidth: 2, pointRadius: 4, pointBackgroundColor: '#6366f1' },
+        { label: 'Bot Responses', data: botMsgs, borderColor: '#10b981', backgroundColor: 'rgba(16,185,129,0.1)', fill: true, tension: 0.4, borderWidth: 2, pointRadius: 4, pointBackgroundColor: '#10b981' }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      scales: { y: { beginAtZero: true, ticks: { font: { family: 'Inter' } }, grid: { color: '#f3f4f6' } }, x: { ticks: { font: { family: 'Inter', size: 11 } }, grid: { display: false } } },
+      plugins: { legend: { labels: { font: { family: 'Inter', size: 12 }, usePointStyle: true, padding: 20 } } }
+    }
+  }));
+
+  // ── Chart 2: Lead status doughnut ──
+  var openCount = m.totalUsers - m.qualified;
+  var qualOnly = m.qualified - m.closed;
+  activeCharts.push(new Chart(document.getElementById('chart-lead-status'), {
+    type: 'doughnut',
+    data: {
+      labels: ['Open', 'Qualified', 'Closed'],
+      datasets: [{ data: [openCount, qualOnly, m.closed], backgroundColor: ['#e5e7eb', '#fbbf24', '#22c55e'], borderWidth: 0, hoverOffset: 8 }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false, cutout: '65%',
+      plugins: {
+        legend: { position: 'bottom', labels: { font: { family: 'Inter', size: 12 }, usePointStyle: true, padding: 16 } }
+      }
+    }
+  }));
+
+  // ── Chart 3: Services grouped bar ──
+  activeCharts.push(new Chart(document.getElementById('chart-services'), {
+    type: 'bar',
+    data: {
+      labels: ['Websites', 'SEO Audits', 'Meetings'],
+      datasets: [
+        { label: 'Pending', data: [m.sites.collecting, m.audits.pending, m.meetings.pending], backgroundColor: '#fbbf24', borderRadius: 6 },
+        { label: 'Completed', data: [m.sites.approved, m.audits.completed, m.meetings.confirmed], backgroundColor: '#22c55e', borderRadius: 6 },
+        { label: 'In Progress / Failed', data: [m.sites.preview, m.audits.failed, m.meetings.cancelled], backgroundColor: '#6366f1', borderRadius: 6 }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      scales: { y: { beginAtZero: true, ticks: { stepSize: 1, font: { family: 'Inter' } }, grid: { color: '#f3f4f6' } }, x: { ticks: { font: { family: 'Inter' } }, grid: { display: false } } },
+      plugins: { legend: { labels: { font: { family: 'Inter', size: 12 }, usePointStyle: true, padding: 16 } } }
+    }
+  }));
+
+  // ── Chart 4: State distribution horizontal bar ──
+  var stateEntries = Object.entries(m.stateDistribution).sort(function(a, b) { return b[1] - a[1]; }).slice(0, 10);
+  var stateColors = stateEntries.map(function(e) {
+    var s = e[0];
+    if (s.indexOf('WEB_') === 0) return '#10b981';
+    if (s.indexOf('SEO_') === 0) return '#f59e0b';
+    if (s.indexOf('SALES') === 0) return '#8b5cf6';
+    if (s.indexOf('APP_') === 0) return '#06b6d4';
+    if (s.indexOf('MARKETING_') === 0) return '#ec4899';
+    if (s.indexOf('SCHEDULE_') === 0) return '#6366f1';
+    return '#9ca3af';
+  });
+
+  activeCharts.push(new Chart(document.getElementById('chart-states'), {
+    type: 'bar',
+    data: {
+      labels: stateEntries.map(function(e) { return e[0]; }),
+      datasets: [{ data: stateEntries.map(function(e) { return e[1]; }), backgroundColor: stateColors, borderRadius: 6, borderSkipped: false }]
+    },
+    options: {
+      indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+      scales: { x: { beginAtZero: true, ticks: { stepSize: 1, font: { family: 'Inter' } }, grid: { color: '#f3f4f6' } }, y: { ticks: { font: { family: 'Inter', size: 11 } }, grid: { display: false } } },
+      plugins: { legend: { display: false } }
+    }
+  }));
+}
+
+// ─── Leads ─────────────────────────────────────
+function leadsTableRows(leads) {
+  if (!leads.length) return '<tr><td colspan="9" class="p-8 text-center text-gray-400">No leads found</td></tr>';
+  return leads.map(function(l) {
+    var svcs = [];
+    if (l.services_used.website) svcs.push('<span class="badge bg-emerald-100 text-emerald-700">Web</span>');
+    if (l.services_used.seo) svcs.push('<span class="badge bg-amber-100 text-amber-700">SEO</span>');
+    return '<tr class="border-b hover:bg-gray-50 transition-colors">' +
+      '<td class="p-3 font-mono text-xs">' + esc(l.phone_number) + '</td>' +
+      '<td class="p-3">' + esc(l.name || '-') + '</td>' +
+      '<td class="p-3">' + stateBadge(l.state) + '</td>' +
+      '<td class="p-3">' + leadStatusBadge(l) + '</td>' +
+      '<td class="p-3">' + (l.lead_temperature ? tempBadge(l.lead_temperature) : '<span class="text-gray-300 text-xs">-</span>') + '</td>' +
+      '<td class="p-3 text-center">' + l.message_count + '</td>' +
+      '<td class="p-3">' + (svcs.length ? svcs.join(' ') : '<span class="text-gray-300">-</span>') + '</td>' +
+      '<td class="p-3 text-gray-500 text-xs">' + timeAgo(l.last_message_at) + '</td>' +
+      '<td class="p-3"><button onclick="openConversation(\'' + l.id + '\', \'' + esc(l.phone_number) + '\', \'' + esc(l.name || '') + '\')" class="text-indigo-600 hover:text-indigo-800 text-xs font-medium">View Chat</button></td>' +
+    '</tr>';
+  }).join('');
+}
+
+function renderLeads(leads) {
+  var stateOptions = [];
+  var seen = {};
+  leads.forEach(function(l) { if (!seen[l.state]) { seen[l.state] = true; stateOptions.push(l.state); } });
+  stateOptions.sort();
+
+  var filters = '<div class="flex flex-wrap gap-3 mb-4">' +
+    '<input id="lead-search" type="text" placeholder="Search phone or name..." class="px-3 py-2 border rounded-lg text-sm w-64" oninput="filterLeads()">' +
+    '<select id="lead-status" class="px-3 py-2 border rounded-lg text-sm" onchange="filterLeads()">' +
+      '<option value="">All Status</option><option value="closed">Closed</option><option value="qualified">Qualified</option><option value="open">Open</option>' +
+    '</select>' +
+    '<select id="lead-temp" class="px-3 py-2 border rounded-lg text-sm" onchange="filterLeads()">' +
+      '<option value="">All Temps</option><option value="HOT">🔥 HOT</option><option value="WARM">⚡ WARM</option><option value="COLD">🧊 COLD</option>' +
+    '</select>' +
+    '<select id="lead-state" class="px-3 py-2 border rounded-lg text-sm" onchange="filterLeads()">' +
+      '<option value="">All States</option>' +
+      stateOptions.map(function(s) { return '<option value="' + s + '">' + s + '</option>'; }).join('') +
+    '</select>' +
+  '</div>';
+
+  document.getElementById('content').innerHTML = '<div class="fade-in">' +
+    '<div class="flex items-center justify-between mb-6"><h2 class="text-2xl font-bold">Leads (' + leads.length + ')</h2></div>' +
+    filters +
+    '<div class="bg-white rounded-xl border overflow-hidden"><div class="overflow-x-auto">' +
+    '<table class="w-full text-sm">' +
+      '<thead class="bg-gray-50 border-b"><tr>' +
+        '<th class="text-left p-3 font-semibold">Phone</th>' +
+        '<th class="text-left p-3 font-semibold">Name</th>' +
+        '<th class="text-left p-3 font-semibold">State</th>' +
+        '<th class="text-left p-3 font-semibold">Status</th>' +
+        '<th class="text-left p-3 font-semibold">Temp</th>' +
+        '<th class="text-left p-3 font-semibold">Messages</th>' +
+        '<th class="text-left p-3 font-semibold">Services</th>' +
+        '<th class="text-left p-3 font-semibold">Last Active</th>' +
+        '<th class="text-left p-3 font-semibold">Actions</th>' +
+      '</tr></thead>' +
+      '<tbody id="leads-tbody">' + leadsTableRows(leads) + '</tbody>' +
+    '</table></div></div>' +
+  '</div>';
+}
+
+function filterLeads() {
+  var search = document.getElementById('lead-search').value.toLowerCase();
+  var status = document.getElementById('lead-status').value;
+  var temp = document.getElementById('lead-temp').value;
+  var state = document.getElementById('lead-state').value;
+  var filtered = leadsData.filter(function(l) {
+    if (search && l.phone_number.toLowerCase().indexOf(search) === -1 && (l.name || '').toLowerCase().indexOf(search) === -1) return false;
+    if (status === 'closed' && !l.is_closed) return false;
+    if (status === 'qualified' && (!l.is_qualified || l.is_closed)) return false;
+    if (status === 'open' && (l.is_qualified || l.is_closed)) return false;
+    if (temp && l.lead_temperature !== temp) return false;
+    if (state && l.state !== state) return false;
+    return true;
+  });
+  document.getElementById('leads-tbody').innerHTML = leadsTableRows(filtered);
+}
+
+// ─── Conversations ─────────────────────────────
+function convListItems(leads) {
+  return leads.filter(function(l) { return l.message_count > 0; }).map(function(l) {
+    return '<div class="bg-white rounded-xl border p-4 flex items-center justify-between hover:border-indigo-300 transition-colors cursor-pointer" onclick="openConversation(\'' + l.id + '\', \'' + esc(l.phone_number) + '\', \'' + esc(l.name || '') + '\')">' +
+      '<div class="flex items-center gap-4">' +
+        '<div class="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-bold text-sm">' + (l.name ? l.name[0].toUpperCase() : '#') + '</div>' +
+        '<div>' +
+          '<p class="font-semibold text-sm">' + esc(l.name || l.phone_number) + '</p>' +
+          '<p class="text-xs text-gray-500">' + esc(l.phone_number) + ' &middot; ' + l.message_count + ' messages</p>' +
+        '</div>' +
+      '</div>' +
+      '<div class="text-right">' +
+        stateBadge(l.state) +
+        '<p class="text-xs text-gray-400 mt-1">' + timeAgo(l.last_message_at) + '</p>' +
+      '</div>' +
+    '</div>';
+  }).join('');
+}
+
+function renderConversations(leads) {
+  document.getElementById('content').innerHTML = '<div class="fade-in">' +
+    '<h2 class="text-2xl font-bold mb-6">Conversations</h2>' +
+    '<input id="conv-search" type="text" placeholder="Search by phone or name..." class="px-3 py-2 border rounded-lg text-sm w-80 mb-4" oninput="filterConvList()">' +
+    '<div id="conv-list" class="grid gap-3">' + convListItems(leads) + '</div>' +
+  '</div>';
+}
+
+function filterConvList() {
+  var s = document.getElementById('conv-search').value.toLowerCase();
+  var filtered = leadsData.filter(function(l) {
+    return l.message_count > 0 && (l.phone_number.toLowerCase().indexOf(s) !== -1 || (l.name || '').toLowerCase().indexOf(s) !== -1);
+  });
+  document.getElementById('conv-list').innerHTML = convListItems(filtered);
+}
+
+// ─── Conversation Modal ────────────────────────
+function openConversation(userId, phone, name) {
+  var modal = document.getElementById('conv-modal');
+  modal.classList.remove('hidden');
+  modal.classList.add('flex');
+  document.getElementById('conv-modal-title').textContent = name || phone;
+  document.getElementById('conv-modal-subtitle').textContent = phone;
+  document.getElementById('conv-modal-body').innerHTML = '<div class="flex justify-center py-8"><div class="loader"></div></div>';
+
+  api('conversations/' + userId).then(function(data) {
+    var user = data.user;
+    var msgs = data.messages;
+    var html = '<div class="bg-indigo-50 rounded-lg p-3 mb-4 text-xs space-y-1">' +
+      '<p><b>State:</b> ' + esc(user.state) + '</p>' +
+      '<p><b>Joined:</b> ' + fmtDate(user.created_at) + '</p>' +
+      (user.metadata && user.metadata.leadBrief ? '<p><b>Lead Brief:</b> ' + esc(user.metadata.leadBrief).slice(0, 300) + '</p>' : '') +
+      (user.metadata && user.metadata.adSource ? '<p><b>Ad Source:</b> ' + esc(user.metadata.adSource) + '</p>' : '') +
+    '</div>';
+
+    msgs.forEach(function(m) {
+      var isUser = m.role === 'user';
+      html += '<div class="max-w-[85%] rounded-2xl px-4 py-2.5 text-sm ' + (isUser ? 'chat-user' : 'chat-bot') + '">' +
+        '<p class="whitespace-pre-wrap">' + esc(m.message_text) + '</p>' +
+        '<p class="text-[10px] text-gray-400 mt-1">' + fmtDate(m.created_at) + '</p>' +
+      '</div>';
+    });
+
+    if (!msgs.length) html += '<p class="text-center text-gray-400 py-8">No messages yet</p>';
+    document.getElementById('conv-modal-body').innerHTML = html;
+    document.getElementById('conv-modal-body').scrollTop = document.getElementById('conv-modal-body').scrollHeight;
+  }).catch(function(err) {
+    document.getElementById('conv-modal-body').innerHTML = '<p class="text-red-500">Failed to load: ' + esc(err.message) + '</p>';
+  });
+}
+
+function closeConvModal() {
+  var modal = document.getElementById('conv-modal');
+  modal.classList.add('hidden');
+  modal.classList.remove('flex');
+}
+
+document.getElementById('conv-modal').addEventListener('click', function(e) {
+  if (e.target === e.currentTarget) closeConvModal();
+});
+
+// ─── Drop-offs ─────────────────────────────────
+function renderDropoffs(dropoffs) {
+  var byState = {};
+  dropoffs.forEach(function(d) {
+    if (!byState[d.state]) byState[d.state] = [];
+    byState[d.state].push(d);
+  });
+
+  var stateCards = Object.entries(byState)
+    .sort(function(a, b) { return b[1].length - a[1].length; })
+    .map(function(entry) {
+      var state = entry[0], users = entry[1];
+      return '<div class="bg-white rounded-xl border p-5 mb-4">' +
+        '<div class="flex items-center justify-between mb-3">' +
+          '<div class="flex items-center gap-2">' + stateBadge(state) + '<span class="text-sm text-gray-500">' + users.length + ' users stuck here</span></div>' +
+        '</div>' +
+        '<div class="space-y-2">' +
+          users.slice(0, 10).map(function(u) {
+            return '<div class="flex items-center justify-between py-2 border-b last:border-0">' +
+              '<div class="flex-1 min-w-0">' +
+                '<p class="text-sm font-medium">' + esc(u.name || u.phone_number) + '</p>' +
+                '<p class="text-xs text-gray-400 truncate">Last said: "' + esc(u.last_user_message || '-') + '"</p>' +
+              '</div>' +
+              '<div class="text-right ml-4 flex-shrink-0">' +
+                '<p class="text-xs font-semibold text-red-500">' + u.hours_inactive + 'h inactive</p>' +
+                '<button onclick="openConversation(\'' + u.id + '\', \'' + esc(u.phone_number) + '\', \'' + esc(u.name || '') + '\')" class="text-xs text-indigo-600 hover:underline">View Chat</button>' +
+              '</div>' +
+            '</div>';
+          }).join('') +
+          (users.length > 10 ? '<p class="text-xs text-gray-400 pt-2">+' + (users.length - 10) + ' more</p>' : '') +
+        '</div>' +
+      '</div>';
+    }).join('');
+
+  document.getElementById('content').innerHTML = '<div class="fade-in">' +
+    '<h2 class="text-2xl font-bold mb-2">Drop-off Analysis</h2>' +
+    '<p class="text-gray-500 text-sm mb-6">Users inactive for 24h+ who have not converted. Grouped by where they stopped.</p>' +
+    (dropoffs.length ? stateCards : '<div class="bg-green-50 text-green-700 rounded-xl p-6 text-center">No significant drop-offs detected!</div>') +
+  '</div>';
+}
+
+// ─── Funnel ────────────────────────────────────
+function renderFunnel(stages) {
+  destroyCharts();
+  var maxCount = (stages[0] && stages[0].count) || 1;
+
+  // Build drop-off stats
+  var statsHTML = stages.map(function(s, i) {
+    var dropPct = (i > 0 && stages[i-1].count > 0) ? Math.round((1 - s.count / stages[i-1].count) * 100) : 0;
+    return '<div class="flex items-center justify-between p-3 ' + (i % 2 === 0 ? 'bg-gray-50' : '') + ' rounded-lg">' +
+      '<span class="text-sm font-medium">' + esc(s.name) + '</span>' +
+      '<div class="flex items-center gap-3">' +
+        '<span class="text-sm font-bold">' + s.count + '</span>' +
+        (i > 0 ? '<span class="badge bg-red-100 text-red-600">-' + dropPct + '%</span>' : '<span class="badge bg-green-100 text-green-700">start</span>') +
+      '</div>' +
+    '</div>';
+  }).join('');
+
+  document.getElementById('content').innerHTML = '<div class="fade-in">' +
+    '<h2 class="text-2xl font-bold mb-2">Conversion Funnel</h2>' +
+    '<p class="text-gray-500 text-sm mb-6">How users progress from first contact to closed lead.</p>' +
+    '<div class="grid md:grid-cols-2 gap-6">' +
+      '<div class="bg-white rounded-xl border p-6">' +
+        '<h3 class="font-semibold mb-4">Funnel Chart</h3>' +
+        '<div style="height:320px"><canvas id="chart-funnel"></canvas></div>' +
+      '</div>' +
+      '<div class="bg-white rounded-xl border p-6">' +
+        '<h3 class="font-semibold mb-4">Stage-by-Stage Drop-off</h3>' +
+        '<div class="space-y-1">' + statsHTML + '</div>' +
+      '</div>' +
+    '</div>' +
+  '</div>';
+
+  // Funnel chart - horizontal bar with gradient colors
+  var funnelColors = ['#6366f1', '#818cf8', '#a78bfa', '#c4b5fd', '#ddd6fe', '#ede9fe'];
+  activeCharts.push(new Chart(document.getElementById('chart-funnel'), {
+    type: 'bar',
+    data: {
+      labels: stages.map(function(s) { return s.name; }),
+      datasets: [{
+        data: stages.map(function(s) { return s.count; }),
+        backgroundColor: stages.map(function(s, i) { return funnelColors[i] || '#e5e7eb'; }),
+        borderRadius: 8,
+        borderSkipped: false
+      }]
+    },
+    options: {
+      indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+      scales: {
+        x: { beginAtZero: true, ticks: { stepSize: 1, font: { family: 'Inter' } }, grid: { color: '#f3f4f6' } },
+        y: { ticks: { font: { family: 'Inter', size: 12, weight: 500 } }, grid: { display: false } }
+      },
+      plugins: { legend: { display: false } }
+    }
+  }));
+}
+
+// ─── Sites ─────────────────────────────────────
+function renderSites(sites) {
+  var rows = sites.map(function(s) {
+    var statusColor = s.status === 'approved' ? 'bg-green-100 text-green-700' : s.status === 'preview' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600';
+    return '<tr class="border-b hover:bg-gray-50">' +
+      '<td class="p-3 text-sm">' + esc(s.business_name || '-') + '</td>' +
+      '<td class="p-3 text-sm font-mono text-xs">' + esc(s.user_phone) + '</td>' +
+      '<td class="p-3"><span class="badge ' + statusColor + '">' + s.status + '</span></td>' +
+      '<td class="p-3">' + (s.preview_url ? '<a href="' + esc(s.preview_url) + '" target="_blank" class="text-indigo-600 hover:underline text-xs">Open</a>' : '-') + '</td>' +
+      '<td class="p-3 text-xs text-gray-500">' + fmtDate(s.created_at) + '</td>' +
+    '</tr>';
+  }).join('');
+
+  document.getElementById('content').innerHTML = '<div class="fade-in">' +
+    '<h2 class="text-2xl font-bold mb-6">Generated Websites (' + sites.length + ')</h2>' +
+    '<div class="bg-white rounded-xl border overflow-hidden"><table class="w-full text-sm">' +
+      '<thead class="bg-gray-50 border-b"><tr><th class="text-left p-3 font-semibold">Business</th><th class="text-left p-3 font-semibold">User</th><th class="text-left p-3 font-semibold">Status</th><th class="text-left p-3 font-semibold">Preview</th><th class="text-left p-3 font-semibold">Created</th></tr></thead>' +
+      '<tbody>' + (rows || '<tr><td colspan="5" class="p-8 text-center text-gray-400">No sites yet</td></tr>') + '</tbody>' +
+    '</table></div>' +
+  '</div>';
+}
+
+// ─── Audits ────────────────────────────────────
+function scoreColor(s) {
+  if (s >= 80) return { bg: 'bg-green-500', text: 'text-green-700', ring: 'ring-green-200', label: 'Good' };
+  if (s >= 60) return { bg: 'bg-yellow-500', text: 'text-yellow-700', ring: 'ring-yellow-200', label: 'Needs Work' };
+  if (s >= 40) return { bg: 'bg-orange-500', text: 'text-orange-700', ring: 'ring-orange-200', label: 'Poor' };
+  return { bg: 'bg-red-500', text: 'text-red-700', ring: 'ring-red-200', label: 'Critical' };
+}
+
+function metricPill(label, value, good) {
+  var color = good ? 'bg-green-50 text-green-700 border-green-100' : 'bg-red-50 text-red-700 border-red-100';
+  var icon = good ? '<svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>' :
+    '<svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>';
+  return '<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium border ' + color + '">' + icon + ' ' + esc(label) + (value !== undefined ? ': ' + esc(String(value)) : '') + '</span>';
+}
+
+function parseAnalysis(text) {
+  if (!text) return '';
+  // Convert markdown-ish analysis to HTML
+  var html = esc(text)
+    .replace(/^#{1,3}\s*(.+)/gm, '<h4 class="font-bold text-gray-800 mt-4 mb-2">$1</h4>')
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/^\s*[-*•]\s+(.+)/gm, '<li class="ml-4 text-sm text-gray-600 py-0.5">$1</li>')
+    .replace(/^\d+\.\s+(.+)/gm, '<li class="ml-4 text-sm text-gray-600 py-0.5 list-decimal">$1</li>')
+    .replace(/\n\n/g, '<br><br>')
+    .replace(/\n/g, '<br>');
+  return '<div class="prose-sm leading-relaxed">' + html + '</div>';
+}
+
+function renderAudits(audits) {
+  // Stats bar
+  var completed = audits.filter(function(a) { return a.status === 'completed'; });
+  var avgScore = completed.length > 0 ? Math.round(completed.reduce(function(s, a) { return s + (a.score || 0); }, 0) / completed.filter(function(a) { return a.score; }).length) || 0 : 0;
+
+  var statsBar = '<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">' +
+    '<div class="bg-white rounded-xl border p-4"><p class="text-xs text-gray-400 uppercase tracking-wider">Total Audits</p><p class="text-2xl font-bold mt-1">' + audits.length + '</p></div>' +
+    '<div class="bg-white rounded-xl border p-4"><p class="text-xs text-gray-400 uppercase tracking-wider">Completed</p><p class="text-2xl font-bold text-green-600 mt-1">' + completed.length + '</p></div>' +
+    '<div class="bg-white rounded-xl border p-4"><p class="text-xs text-gray-400 uppercase tracking-wider">Failed</p><p class="text-2xl font-bold text-red-500 mt-1">' + audits.filter(function(a) { return a.status === 'failed'; }).length + '</p></div>' +
+    '<div class="bg-white rounded-xl border p-4"><p class="text-xs text-gray-400 uppercase tracking-wider">Avg Score</p><p class="text-2xl font-bold text-indigo-600 mt-1">' + (avgScore || '-') + '<span class="text-sm text-gray-400 font-normal">/100</span></p></div>' +
+  '</div>';
+
+  var cards = audits.map(function(a) {
+    var statusColor = a.status === 'completed' ? 'bg-green-100 text-green-700' : a.status === 'failed' ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700';
+    var m = a.metrics || {};
+
+    // Score ring
+    var scoreRing = '';
+    if (a.score) {
+      var sc = scoreColor(a.score);
+      scoreRing = '<div class="flex-shrink-0 w-16 h-16 rounded-full ring-4 ' + sc.ring + ' ' + sc.bg + ' flex items-center justify-center">' +
+        '<span class="text-white font-bold text-lg">' + a.score + '</span></div>';
+    }
+
+    // Health checks
+    var checks = [];
+    if (m.title) checks.push(metricPill('Title Tag', undefined, true));
+    else checks.push(metricPill('Title Tag', 'Missing', false));
+    if (m.metaDescription) checks.push(metricPill('Meta Desc', undefined, true));
+    else checks.push(metricPill('Meta Desc', 'Missing', false));
+    if (m.hasViewport) checks.push(metricPill('Mobile', undefined, true));
+    else checks.push(metricPill('Mobile', 'No viewport', false));
+    if (m.isHttps) checks.push(metricPill('HTTPS', undefined, true));
+    else checks.push(metricPill('HTTPS', 'Not secure', false));
+    if (m.h1 && m.h1.length === 1) checks.push(metricPill('H1', undefined, true));
+    else if (m.h1 && m.h1.length > 1) checks.push(metricPill('H1', m.h1.length + ' found', false));
+    else checks.push(metricPill('H1', 'Missing', false));
+    if (m.ogTitle) checks.push(metricPill('OG Tags', undefined, true));
+    else checks.push(metricPill('OG Tags', 'Missing', false));
+    if (m.totalImages > 0 && m.imagesWithoutAlt === 0) checks.push(metricPill('Alt Tags', undefined, true));
+    else if (m.imagesWithoutAlt > 0) checks.push(metricPill('Alt Tags', m.imagesWithoutAlt + ' missing', false));
+
+    // Performance metrics
+    var perfItems = '';
+    if (m.loadTimeMs) {
+      var loadGood = m.loadTimeMs < 3000;
+      perfItems += '<div class="flex items-center justify-between py-1.5"><span class="text-xs text-gray-500">Load Time</span><span class="text-xs font-semibold ' + (loadGood ? 'text-green-600' : 'text-red-600') + '">' + (m.loadTimeMs / 1000).toFixed(1) + 's</span></div>';
+    }
+    if (m.htmlSize) perfItems += '<div class="flex items-center justify-between py-1.5"><span class="text-xs text-gray-500">Page Size</span><span class="text-xs font-semibold text-gray-700">' + (m.htmlSize / 1024).toFixed(0) + ' KB</span></div>';
+    if (m.totalImages) perfItems += '<div class="flex items-center justify-between py-1.5"><span class="text-xs text-gray-500">Images</span><span class="text-xs font-semibold text-gray-700">' + m.totalImages + '</span></div>';
+    if (m.totalLinks) perfItems += '<div class="flex items-center justify-between py-1.5"><span class="text-xs text-gray-500">Links</span><span class="text-xs font-semibold text-gray-700">' + m.totalLinks + ' (' + m.externalLinks + ' external)</span></div>';
+    if (m.bodyTextLength) perfItems += '<div class="flex items-center justify-between py-1.5"><span class="text-xs text-gray-500">Content</span><span class="text-xs font-semibold text-gray-700">' + Math.round(m.bodyTextLength / 100) * 100 + ' chars</span></div>';
+    if (m.h2Count) perfItems += '<div class="flex items-center justify-between py-1.5"><span class="text-xs text-gray-500">H2 Headings</span><span class="text-xs font-semibold text-gray-700">' + m.h2Count + '</span></div>';
+
+    return '<div class="bg-white rounded-2xl border shadow-sm overflow-hidden">' +
+      // Header
+      '<div class="p-5 border-b">' +
+        '<div class="flex items-center justify-between mb-3">' +
+          '<div class="flex items-center gap-3">' +
+            scoreRing +
+            '<div>' +
+              '<a href="' + esc(a.url) + '" target="_blank" class="font-bold text-indigo-600 hover:underline text-sm">' + esc(a.url) + '</a>' +
+              '<p class="text-xs text-gray-400 mt-0.5">' + esc(a.user_name || a.user_phone) + ' - ' + fmtDate(a.created_at) + '</p>' +
+            '</div>' +
+          '</div>' +
+          '<span class="badge ' + statusColor + '">' + esc(a.status) + '</span>' +
+        '</div>' +
+        (m.title ? '<p class="text-sm text-gray-700 mb-1"><span class="text-xs text-gray-400">Title:</span> ' + esc(m.title) + '</p>' : '') +
+        (m.metaDescription ? '<p class="text-xs text-gray-500 line-clamp-2">' + esc(m.metaDescription) + '</p>' : '') +
+      '</div>' +
+
+      // Health checks
+      '<div class="px-5 py-3 bg-gray-50 border-b">' +
+        '<div class="flex flex-wrap gap-2">' + checks.join('') + '</div>' +
+      '</div>' +
+
+      // Metrics + Analysis
+      '<div class="p-5">' +
+        (perfItems ? '<div class="mb-4 p-3 bg-gray-50 rounded-xl divide-y divide-gray-100">' + perfItems + '</div>' : '') +
+        // Collapsible analysis
+        (a.analysis ? '<details class="group"><summary class="cursor-pointer text-sm font-semibold text-indigo-600 hover:text-indigo-800 flex items-center gap-1 mb-2">View Full Analysis <svg class="w-4 h-4 transition-transform group-open:rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg></summary>' +
+          '<div class="mt-2 p-4 bg-gray-50 rounded-xl max-h-96 overflow-y-auto text-sm text-gray-700 leading-relaxed">' + parseAnalysis(a.analysis) + '</div></details>' : '') +
+      '</div>' +
+    '</div>';
+  }).join('');
+
+  document.getElementById('content').innerHTML = '<div class="fade-in">' +
+    '<h2 class="text-2xl font-bold mb-6">SEO Audits</h2>' +
+    statsBar +
+    '<div class="grid lg:grid-cols-2 gap-6">' + (cards || '<div class="col-span-2 text-center text-gray-400 py-12">No audits yet</div>') + '</div>' +
+  '</div>';
+}
+
+// ─── Meetings ──────────────────────────────────
+function renderMeetings(meetings) {
+  var rows = meetings.map(function(m) {
+    var statusColor = m.status === 'confirmed' ? 'bg-green-100 text-green-700' : m.status === 'cancelled' ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700';
+    return '<tr class="border-b hover:bg-gray-50">' +
+      '<td class="p-3 text-sm">' + esc(m.name || '-') + '</td>' +
+      '<td class="p-3 font-mono text-xs">' + esc(m.phone_number) + '</td>' +
+      '<td class="p-3"><span class="badge ' + statusColor + '">' + m.status + '</span></td>' +
+      '<td class="p-3 text-sm">' + esc(m.preferred_date || '-') + '</td>' +
+      '<td class="p-3 text-sm">' + esc(m.preferred_time || '-') + '</td>' +
+      '<td class="p-3 text-xs text-gray-500 max-w-xs truncate">' + esc(m.topic || '-') + '</td>' +
+      '<td class="p-3 text-xs text-gray-500 max-w-xs truncate">' + esc(m.chat_summary || '-') + '</td>' +
+    '</tr>';
+  }).join('');
+
+  document.getElementById('content').innerHTML = '<div class="fade-in">' +
+    '<h2 class="text-2xl font-bold mb-6">Meetings (' + meetings.length + ')</h2>' +
+    '<div class="bg-white rounded-xl border overflow-hidden"><div class="overflow-x-auto"><table class="w-full text-sm">' +
+      '<thead class="bg-gray-50 border-b"><tr><th class="text-left p-3 font-semibold">Name</th><th class="text-left p-3 font-semibold">Phone</th><th class="text-left p-3 font-semibold">Status</th><th class="text-left p-3 font-semibold">Date</th><th class="text-left p-3 font-semibold">Time</th><th class="text-left p-3 font-semibold">Topic</th><th class="text-left p-3 font-semibold">Summary</th></tr></thead>' +
+      '<tbody>' + (rows || '<tr><td colspan="7" class="p-8 text-center text-gray-400">No meetings yet</td></tr>') + '</tbody>' +
+    '</table></div></div>' +
+  '</div>';
+}
+
+// ─── Revenue ──────────────────────────────────
+// Parse lead brief into structured HTML
+function parseBrief(brief) {
+  if (!brief) return '';
+  // Strip markdown bold markers
+  var text = brief.replace(/\*\*/g, '');
+
+  // All known field keys in order (used to build a lookahead pattern)
+  var fieldKeys = [
+    'Lead Name', 'Lead name', 'Business Name', 'Business name', 'Industry',
+    'Website URL', 'Current Website', 'Service Needed', 'Service needed',
+    'Main Pain Point', 'Pain Point / Goal', 'Pain Point',
+    'Budget Range', 'Budget range', 'Budget',
+    'Timeline', 'Package Discussed', 'Package discussed',
+    'Payment Plan', 'Payment plan requested', 'Payment Plan Requested',
+    'Personality Mode', 'Personality mode',
+    'Language Used', 'Language used', 'Language',
+    'Objections Raised', 'Objections raised',
+    'Conversation Summary', 'Recommended Approach for Call', 'Recommended Approach'
+  ];
+
+  // Build a lookahead regex that matches any field key
+  var keyPattern = fieldKeys.map(function(k) { return k.replace(/[.*+?^${}()|[\]\\\/]/g, '\\$&'); }).join('|');
+  var lookahead = '(?=' + keyPattern + '\\s*:|$)';
+
+  var fieldDefs = [
+    { key: 'Lead [Nn]ame', label: 'Name', icon: '👤' },
+    { key: 'Business [Nn]ame', label: 'Business', icon: '🏢' },
+    { key: 'Industry', label: 'Industry', icon: '🏭' },
+    { key: 'Website URL|Current Website', label: 'Website', icon: '🌐' },
+    { key: 'Service [Nn]eeded', label: 'Service', icon: '🎯' },
+    { key: 'Main Pain Point|Pain Point \\/ Goal|Pain Point', label: 'Goal', icon: '⚡' },
+    { key: 'Budget [Rr]ange|Budget', label: 'Budget', icon: '💰' },
+    { key: 'Timeline', label: 'Timeline', icon: '📅' },
+    { key: 'Package [Dd]iscussed', label: 'Package', icon: '📦' },
+    { key: 'Payment [Pp]lan[^:]*', label: 'Payment Plan', icon: '💳' },
+    { key: 'Personality [Mm]ode', label: 'Personality', icon: '🎭' },
+    { key: 'Language [Uu]sed|Language', label: 'Language', icon: '🗣️' },
+    { key: 'Objections [Rr]aised', label: 'Objections', icon: '🤔' },
+  ];
+
+  var extracted = {};
+
+  fieldDefs.forEach(function(f) {
+    var regex = new RegExp('(?:' + f.key + ')\\s*:\\s*(.+?)\\s*' + lookahead, 'i');
+    var match = text.match(regex);
+    if (match) {
+      var val = match[1].trim();
+      if (val && val !== 'N/A' && val !== 'None' && val !== 'none' && val !== '-') {
+        extracted[f.label] = { value: val, icon: f.icon };
+      }
+    }
+  });
+
+  // Extract conversation summary / recommended approach (everything after it)
+  var summaryRegex = /(?:Conversation Summary|Recommended Approach[^:]*)\s*:\s*([\s\S]+)/i;
+  var summaryMatch = text.match(summaryRegex);
+  var summary = summaryMatch ? summaryMatch[1].trim() : '';
+
+  // Build the grid
+  var gridItems = Object.keys(extracted).map(function(label) {
+    var item = extracted[label];
+    return '<div class="flex items-start gap-2.5 py-2.5 px-1">' +
+      '<span class="text-base">' + item.icon + '</span>' +
+      '<div><p class="text-[10px] text-gray-400 uppercase tracking-widest font-semibold mb-0.5">' + esc(label) + '</p>' +
+      '<p class="text-sm font-medium text-gray-800">' + esc(item.value) + '</p></div></div>';
+  }).join('');
+
+  var html = '';
+  if (gridItems) {
+    html += '<div class="grid grid-cols-2 gap-x-6 divide-y divide-gray-50">' + gridItems + '</div>';
+  }
+
+  if (summary) {
+    html += '<div class="mt-3 pt-3 border-t border-amber-100">' +
+      '<p class="text-[10px] text-amber-600 font-bold uppercase tracking-widest mb-2">Call Notes & Approach</p>' +
+      '<p class="text-sm text-gray-700 leading-relaxed">' + esc(summary) + '</p></div>';
+  }
+
+  if (!html) {
+    // Fallback: just show cleaned text
+    html = '<p class="text-sm text-gray-600 leading-relaxed">' + esc(text.trim()) + '</p>';
+  }
+
+  return html;
+}
+
+function fmtMoney(cents) {
+  return '$' + (cents / 100).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+}
+
+function renderRevenue(rev, payments) {
+  // Revenue by service chart data
+  var svcLabels = Object.keys(rev.byService);
+  var svcData = svcLabels.map(function(k) { return rev.byService[k] / 100; });
+  var svcColors = ['#6366f1', '#22c55e', '#f59e0b', '#ef4444', '#06b6d4', '#ec4899'];
+
+  // Revenue by month chart data
+  var monthLabels = Object.keys(rev.byMonth).sort();
+  var monthData = monthLabels.map(function(k) { return rev.byMonth[k] / 100; });
+
+  // Recent payments
+  var recentPaid = payments.filter(function(p) { return p.status === 'paid'; }).slice(0, 5);
+  var recentRows = recentPaid.map(function(p) {
+    return '<tr class="border-b hover:bg-gray-50">' +
+      '<td class="p-3 text-sm font-medium">' + esc(p.user_name || p.user_phone) + '</td>' +
+      '<td class="p-3 text-sm font-bold text-green-600">' + fmtMoney(p.amount) + '</td>' +
+      '<td class="p-3"><span class="badge bg-indigo-100 text-indigo-700">' + esc(p.service_type) + '</span></td>' +
+      '<td class="p-3 text-xs text-gray-500">' + fmtDate(p.paid_at) + '</td>' +
+    '</tr>';
+  }).join('');
+
+  var monthChange = rev.revenueLastMonth > 0 ? Math.round(((rev.revenueThisMonth - rev.revenueLastMonth) / rev.revenueLastMonth) * 100) : (rev.revenueThisMonth > 0 ? 100 : 0);
+  var changeClass = monthChange >= 0 ? 'text-green-600' : 'text-red-600';
+  var changeIcon = monthChange >= 0 ? '↑' : '↓';
+
+  document.getElementById('content').innerHTML = '<div class="fade-in">' +
+    '<div class="flex items-center justify-between mb-6"><h2 class="text-2xl font-bold">Revenue Dashboard</h2>' +
+    '<button onclick="syncPayments()" class="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors">Sync Payments</button></div>' +
+
+    // Metric cards
+    '<div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">' +
+      '<div class="bg-white rounded-xl border p-5"><p class="text-xs text-gray-500 uppercase tracking-wider mb-1">Total Revenue</p><p class="text-2xl font-bold text-green-600">' + fmtMoney(rev.totalRevenue) + '</p></div>' +
+      '<div class="bg-white rounded-xl border p-5"><p class="text-xs text-gray-500 uppercase tracking-wider mb-1">This Month</p><p class="text-2xl font-bold">' + fmtMoney(rev.revenueThisMonth) + '</p><p class="text-xs ' + changeClass + ' mt-1">' + changeIcon + ' ' + Math.abs(monthChange) + '% vs last month</p></div>' +
+      '<div class="bg-white rounded-xl border p-5"><p class="text-xs text-gray-500 uppercase tracking-wider mb-1">Pending</p><p class="text-2xl font-bold text-yellow-600">' + fmtMoney(rev.pendingAmount) + '</p><p class="text-xs text-gray-400 mt-1">' + rev.totalPending + ' unpaid</p></div>' +
+      '<div class="bg-white rounded-xl border p-5"><p class="text-xs text-gray-500 uppercase tracking-wider mb-1">Avg Deal Size</p><p class="text-2xl font-bold">' + fmtMoney(rev.avgDealSize) + '</p><p class="text-xs text-gray-400 mt-1">' + rev.totalPaid + ' deals closed</p></div>' +
+    '</div>' +
+
+    // Charts row
+    '<div class="grid lg:grid-cols-2 gap-6 mb-8">' +
+      '<div class="bg-white rounded-xl border p-6"><h3 class="font-bold mb-4">Revenue by Month</h3><canvas id="revenueMonthChart" height="200"></canvas></div>' +
+      '<div class="bg-white rounded-xl border p-6"><h3 class="font-bold mb-4">Revenue by Service</h3><canvas id="revenueServiceChart" height="200"></canvas></div>' +
+    '</div>' +
+
+    // Recent payments table
+    '<div class="bg-white rounded-xl border overflow-hidden"><div class="p-4 border-b"><h3 class="font-bold">Recent Payments</h3></div>' +
+      '<div class="overflow-x-auto"><table class="w-full text-sm"><thead class="bg-gray-50 border-b"><tr><th class="text-left p-3 font-semibold">Client</th><th class="text-left p-3 font-semibold">Amount</th><th class="text-left p-3 font-semibold">Service</th><th class="text-left p-3 font-semibold">Paid At</th></tr></thead>' +
+      '<tbody>' + (recentRows || '<tr><td colspan="4" class="p-8 text-center text-gray-400">No payments yet</td></tr>') + '</tbody></table></div></div>' +
+  '</div>';
+
+  // Render charts
+  if (monthLabels.length > 0) {
+    new Chart(document.getElementById('revenueMonthChart'), {
+      type: 'bar', data: { labels: monthLabels, datasets: [{ label: 'Revenue ($)', data: monthData, backgroundColor: '#6366f1', borderRadius: 8 }] },
+      options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { callback: function(v) { return '$' + v; } } } } }
+    });
+  }
+  if (svcLabels.length > 0) {
+    new Chart(document.getElementById('revenueServiceChart'), {
+      type: 'doughnut', data: { labels: svcLabels, datasets: [{ data: svcData, backgroundColor: svcColors.slice(0, svcLabels.length), borderWidth: 0 }] },
+      options: { responsive: true, plugins: { legend: { position: 'bottom' } } }
+    });
+  }
+}
+
+function syncPayments() {
+  var btn = event.target;
+  btn.textContent = 'Syncing...';
+  btn.disabled = true;
+  fetch('/admin/api/payments/sync', { method: 'POST' })
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      btn.textContent = 'Synced ' + d.synced + '/' + d.total;
+      btn.disabled = false;
+      setTimeout(function() { btn.textContent = 'Sync Payments'; loadSection('revenue'); }, 2000);
+    })
+    .catch(function() { btn.textContent = 'Sync Failed'; btn.disabled = false; });
+}
+
+// ─── Payments ──────────────────────────────────
+function renderPayments(payments) {
+  var rows = payments.map(function(p) {
+    var statusColor = p.status === 'paid' ? 'bg-green-100 text-green-700' : p.status === 'expired' ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700';
+    return '<tr class="border-b hover:bg-gray-50">' +
+      '<td class="p-3 text-sm font-medium">' + esc(p.user_name || p.user_phone || '-') + '</td>' +
+      '<td class="p-3 font-mono text-xs">' + esc(p.user_phone) + '</td>' +
+      '<td class="p-3 text-sm font-bold">' + fmtMoney(p.amount) + '</td>' +
+      '<td class="p-3"><span class="badge ' + statusColor + '">' + p.status + '</span></td>' +
+      '<td class="p-3"><span class="badge bg-indigo-100 text-indigo-700">' + esc(p.service_type) + '</span></td>' +
+      '<td class="p-3"><span class="badge bg-gray-100 text-gray-600">' + esc(p.package_tier) + '</span></td>' +
+      '<td class="p-3 text-xs text-gray-500 max-w-xs truncate">' + esc(p.description) + '</td>' +
+      '<td class="p-3 text-xs text-gray-500">' + (p.paid_at ? fmtDate(p.paid_at) : fmtDate(p.created_at)) + '</td>' +
+      '<td class="p-3">' + (p.stripe_payment_link_url ? '<a href="' + esc(p.stripe_payment_link_url) + '" target="_blank" class="text-indigo-600 hover:underline text-xs">Link</a>' : '-') + '</td>' +
+    '</tr>';
+  }).join('');
+
+  var totalPaid = payments.filter(function(p) { return p.status === 'paid'; }).reduce(function(s, p) { return s + p.amount; }, 0);
+  var totalPending = payments.filter(function(p) { return p.status === 'pending'; }).reduce(function(s, p) { return s + p.amount; }, 0);
+
+  document.getElementById('content').innerHTML = '<div class="fade-in">' +
+    '<div class="flex items-center justify-between mb-6"><h2 class="text-2xl font-bold">Payments (' + payments.length + ')</h2>' +
+    '<div class="flex gap-4"><span class="text-sm text-green-600 font-bold">Paid: ' + fmtMoney(totalPaid) + '</span><span class="text-sm text-yellow-600 font-bold">Pending: ' + fmtMoney(totalPending) + '</span></div></div>' +
+    '<div class="bg-white rounded-xl border overflow-hidden"><div class="overflow-x-auto"><table class="w-full text-sm">' +
+      '<thead class="bg-gray-50 border-b"><tr><th class="text-left p-3 font-semibold">Client</th><th class="text-left p-3 font-semibold">Phone</th><th class="text-left p-3 font-semibold">Amount</th><th class="text-left p-3 font-semibold">Status</th><th class="text-left p-3 font-semibold">Service</th><th class="text-left p-3 font-semibold">Tier</th><th class="text-left p-3 font-semibold">Description</th><th class="text-left p-3 font-semibold">Date</th><th class="text-left p-3 font-semibold">Link</th></tr></thead>' +
+      '<tbody>' + (rows || '<tr><td colspan="9" class="p-8 text-center text-gray-400">No payments yet</td></tr>') + '</tbody>' +
+    '</table></div></div>' +
+  '</div>';
+}
+
+// ─── Sales Prep ───────────────────────────────
+function renderSalesPrep(leads) {
+  // Filter to only leads worth showing (have some activity)
+  var active = leads.filter(function(l) { return l.total_messages > 2; });
+
+  // Sort: qualified/closed first, then by last activity
+  active.sort(function(a, b) {
+    var scoreA = (a.is_closed ? 3 : 0) + (a.is_qualified ? 2 : 0) + (a.payment_confirmed ? 4 : 0);
+    var scoreB = (b.is_closed ? 3 : 0) + (b.is_qualified ? 2 : 0) + (b.payment_confirmed ? 4 : 0);
+    if (scoreB !== scoreA) return scoreB - scoreA;
+    return new Date(b.last_activity) - new Date(a.last_activity);
+  });
+
+  var cards = active.map(function(lead) {
+    // Status badge
+    var statusBadge = '';
+    if (lead.payment_confirmed) statusBadge = '<span class="badge bg-green-100 text-green-700">Paid</span>';
+    else if (lead.is_closed) statusBadge = '<span class="badge bg-blue-100 text-blue-700">Closed</span>';
+    else if (lead.is_qualified) statusBadge = '<span class="badge bg-yellow-100 text-yellow-700">Qualified</span>';
+    else statusBadge = '<span class="badge bg-gray-100 text-gray-500">Open</span>';
+
+    var tempLabel = lead.lead_temperature ? tempBadge(lead.lead_temperature) : '';
+    var closingLabel = lead.closing_technique && lead.closing_technique !== 'N/A'
+      ? '<span class="badge bg-purple-50 text-purple-600" title="Closing technique used">' + esc(lead.closing_technique) + '</span>'
+      : '';
+
+    // Topics
+    var topicBadges = lead.topics_discussed.map(function(t) {
+      return '<span class="badge bg-indigo-50 text-indigo-600">' + esc(t) + '</span>';
+    }).join(' ');
+
+    // Lead brief section - parse the structured brief into a clean card
+    var briefSection = '';
+    if (lead.lead_brief) {
+      briefSection = '<div class="mt-4 rounded-xl border border-amber-100 overflow-hidden">' +
+        '<div class="px-4 py-3 bg-amber-50 border-b border-amber-100 flex items-center justify-between"><h4 class="font-semibold text-amber-800 text-sm">Lead Brief</h4>' +
+        '<button onclick="regenerateSummary(\'' + lead.id + '\', this)" class="text-xs text-amber-600 hover:text-amber-800 font-medium">Regenerate</button></div>' +
+        '<div class="p-4 bg-white">' + parseBrief(lead.lead_brief) + '</div>' +
+      '</div>';
+    } else if (lead.total_messages >= 4) {
+      briefSection = '<div class="mt-4 rounded-xl border border-dashed border-amber-200 p-4 text-center" id="brief-' + lead.id + '">' +
+        '<p class="text-sm text-gray-400 mb-2">No summary generated yet</p>' +
+        '<button onclick="regenerateSummary(\'' + lead.id + '\', this)" class="px-4 py-2 bg-amber-500 text-white rounded-lg text-sm font-medium hover:bg-amber-600 transition-colors">Generate AI Summary</button>' +
+      '</div>';
+    }
+
+    // Meetings section
+    var meetingSection = '';
+    if (lead.meetings.length > 0) {
+      var meetingRows = lead.meetings.filter(function(m) {
+        // Only show meetings with actual date/time info
+        return m.date || m.time;
+      }).map(function(m) {
+        var mStatusColor = m.status === 'confirmed' ? 'bg-green-100 text-green-700' : m.status === 'cancelled' ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700';
+        var dateTime = [m.date, m.time, m.timezone].filter(Boolean).join(' - ');
+        // Filter out summaries that are actually lead briefs dumped into the wrong field
+        var cleanSummary = (m.summary && !m.summary.includes('Lead Name') && !m.summary.includes('**')) ? m.summary : '';
+        return '<div class="p-3 bg-white rounded-lg border border-blue-50 mb-2 last:mb-0">' +
+          '<div class="flex items-center justify-between mb-1">' +
+            '<div class="flex items-center gap-2"><svg class="w-4 h-4 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg><span class="font-semibold text-sm text-gray-800">' + esc(dateTime) + '</span></div>' +
+            '<span class="badge ' + mStatusColor + '">' + esc(m.status) + '</span>' +
+          '</div>' +
+          (m.topic ? '<p class="text-xs text-gray-600 mt-1">Topic: <span class="font-medium">' + esc(m.topic) + '</span></p>' : '') +
+          (cleanSummary ? '<p class="text-xs text-gray-500 italic mt-1">' + esc(cleanSummary) + '</p>' : '') +
+        '</div>';
+      }).join('');
+      if (meetingRows) {
+        meetingSection = '<div class="mt-4 rounded-xl border border-blue-100 overflow-hidden">' +
+          '<div class="px-4 py-3 bg-blue-50 border-b border-blue-100"><h4 class="font-semibold text-blue-800 text-sm">Meetings</h4></div>' +
+          '<div class="p-3">' + meetingRows + '</div></div>';
+      }
+    }
+
+    // Payments section
+    var paymentSection = '';
+    if (lead.payments.length > 0) {
+      var paymentRows = lead.payments.map(function(p) {
+        var pStatusColor = p.status === 'paid' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700';
+        return '<div class="p-3 bg-white rounded-lg border border-green-50 mb-2 last:mb-0">' +
+          '<div class="flex items-center justify-between">' +
+            '<div class="flex items-center gap-2"><svg class="w-4 h-4 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8V7m0 10v1"/></svg><span class="font-bold text-sm text-gray-800">' + fmtMoney(p.amount) + '</span></div>' +
+            '<span class="badge ' + pStatusColor + '">' + esc(p.status) + '</span>' +
+          '</div>' +
+          '<p class="text-xs text-gray-600 mt-1">' + esc(p.description || p.service || '') + (p.tier ? ' (' + esc(p.tier) + ')' : '') + '</p>' +
+          (p.paid_at ? '<p class="text-xs text-gray-400 mt-1">Paid ' + fmtDate(p.paid_at) + '</p>' : '') +
+        '</div>';
+      }).join('');
+      paymentSection = '<div class="mt-4 rounded-xl border border-green-100 overflow-hidden">' +
+        '<div class="px-4 py-3 bg-green-50 border-b border-green-100"><h4 class="font-semibold text-green-800 text-sm">Payments</h4></div>' +
+        '<div class="p-3">' + paymentRows + '</div></div>';
+    }
+
+    // Websites section
+    var websiteSection = '';
+    if (lead.websites.length > 0) {
+      var siteLinks = lead.websites.map(function(s) {
+        return '<div class="flex items-center justify-between py-2">' +
+          '<a href="' + esc(s.preview_url) + '" target="_blank" class="text-indigo-600 hover:underline text-sm truncate max-w-xs">' + esc(s.preview_url || 'Preview') + '</a>' +
+          '<span class="badge ' + (s.status === 'approved' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600') + '">' + esc(s.status) + '</span>' +
+        '</div>';
+      }).join('');
+      websiteSection = '<div class="mt-4 p-4 bg-purple-50 rounded-xl border border-purple-100">' +
+        '<h4 class="font-semibold text-purple-800 text-sm mb-2">Generated Websites</h4>' + siteLinks + '</div>';
+    }
+
+    // Audits section
+    var auditSection = '';
+    if (lead.audits.length > 0) {
+      var auditItems = lead.audits.map(function(a) {
+        var aStatusColor = a.status === 'completed' ? 'bg-green-100 text-green-700' : a.status === 'pending' ? 'bg-yellow-100 text-yellow-700' : 'bg-gray-100 text-gray-600';
+        return '<div class="p-3 bg-white rounded-lg border border-orange-50 mb-2 last:mb-0">' +
+          '<div class="flex items-center justify-between gap-2">' +
+            '<div class="flex items-center gap-2 min-w-0">' +
+              '<svg class="w-4 h-4 text-orange-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>' +
+              '<span class="text-sm font-medium text-gray-800 truncate">' + esc(a.url) + '</span>' +
+            '</div>' +
+            '<span class="badge ' + aStatusColor + ' flex-shrink-0">' + esc(a.status) + '</span>' +
+          '</div>' +
+          (a.summary ? '<p class="text-xs text-gray-500 mt-2 line-clamp-2 leading-relaxed">' + esc(a.summary.slice(0, 150)) + '…</p>' : '') +
+        '</div>';
+      }).join('');
+      auditSection = '<div class="mt-4 rounded-xl border border-orange-100 overflow-hidden">' +
+        '<div class="px-4 py-3 bg-orange-50 border-b border-orange-100"><h4 class="font-semibold text-orange-800 text-sm">SEO Audits</h4></div>' +
+        '<div class="p-3">' + auditItems + '</div></div>';
+    }
+
+    // Last messages preview
+    var lastMsgSection = '<div class="mt-4 p-4 bg-gray-50 rounded-xl border border-gray-100">' +
+      '<h4 class="font-semibold text-gray-700 text-sm mb-2">Last Messages</h4>' +
+      (lead.last_user_message ? '<div class="mb-2"><span class="text-xs text-gray-400">Client:</span><p class="text-sm text-gray-800 bg-green-50 rounded-lg p-2 mt-1">' + esc(lead.last_user_message) + '</p></div>' : '') +
+      (lead.last_bot_message ? '<div><span class="text-xs text-gray-400">Bot:</span><p class="text-sm text-gray-600 bg-gray-100 rounded-lg p-2 mt-1">' + esc(lead.last_bot_message) + '</p></div>' : '') +
+    '</div>';
+
+    // View full chat button
+    var chatBtn = '<button onclick="openConversation(\'' + lead.id + '\', \'' + esc(lead.phone_number) + '\', \'' + esc(lead.name || '') + '\')" class="mt-4 w-full py-2.5 text-sm font-medium text-indigo-600 bg-indigo-50 rounded-xl hover:bg-indigo-100 transition-colors">View Full Conversation</button>';
+
+    return '<div class="bg-white rounded-2xl border shadow-sm overflow-hidden">' +
+      // Header
+      '<div class="p-5 border-b bg-gradient-to-r from-gray-50 to-white">' +
+        '<div class="flex items-center justify-between mb-3">' +
+          '<div class="flex items-center gap-3">' +
+            '<div class="w-12 h-12 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-bold text-lg">' + esc((lead.name || lead.phone_number || '?').charAt(0).toUpperCase()) + '</div>' +
+            '<div>' +
+              '<h3 class="font-bold text-lg">' + esc(lead.name || lead.phone_number) + '</h3>' +
+              (lead.business_name ? '<p class="text-sm text-gray-500">' + esc(lead.business_name) + (lead.industry ? ' - ' + esc(lead.industry) : '') + '</p>' : '') +
+            '</div>' +
+          '</div>' +
+          statusBadge +
+        '</div>' +
+        '<div class="flex flex-wrap gap-2 mb-2">' +
+          '<span class="text-xs text-gray-400 flex items-center gap-1"><svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"/></svg>' + esc(lead.phone_number) + '</span>' +
+          '<span class="text-xs text-gray-400">' + lead.total_messages + ' messages</span>' +
+          '<span class="text-xs text-gray-400">Last: ' + timeAgo(lead.last_activity) + '</span>' +
+          (lead.ad_source ? '<span class="badge bg-gray-100 text-gray-500">via ' + esc(lead.ad_source) + '</span>' : '') +
+          (tempLabel ? tempLabel : '') +
+          (closingLabel ? closingLabel : '') +
+        '</div>' +
+        (topicBadges ? '<div class="flex flex-wrap gap-1">' + topicBadges + '</div>' : '') +
+      '</div>' +
+      // Body
+      '<div class="p-5">' +
+        briefSection +
+        meetingSection +
+        paymentSection +
+        websiteSection +
+        auditSection +
+        lastMsgSection +
+        chatBtn +
+      '</div>' +
+    '</div>';
+  }).join('');
+
+  // Search/filter bar
+  var filterBar = '<div class="flex flex-col sm:flex-row gap-3 mb-6">' +
+    '<input type="text" id="prep-search" placeholder="Search by name, phone, or business..." class="flex-1 px-4 py-2.5 border rounded-xl text-sm focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 outline-none" oninput="filterSalesPrep()">' +
+    '<select id="prep-filter" class="px-4 py-2.5 border rounded-xl text-sm bg-white focus:ring-2 focus:ring-indigo-200 outline-none" onchange="filterSalesPrep()">' +
+      '<option value="all">All Leads</option>' +
+      '<option value="paid">Paid</option>' +
+      '<option value="closed">Closed</option>' +
+      '<option value="qualified">Qualified</option>' +
+      '<option value="open">Open</option>' +
+    '</select>' +
+    '<select id="prep-temp" class="px-4 py-2.5 border rounded-xl text-sm bg-white focus:ring-2 focus:ring-indigo-200 outline-none" onchange="filterSalesPrep()">' +
+      '<option value="">All Temps</option>' +
+      '<option value="HOT">🔥 HOT</option>' +
+      '<option value="WARM">⚡ WARM</option>' +
+      '<option value="COLD">🧊 COLD</option>' +
+    '</select>' +
+  '</div>';
+
+  document.getElementById('content').innerHTML = '<div class="fade-in">' +
+    '<div class="flex items-center justify-between mb-6"><h2 class="text-2xl font-bold">Sales Prep</h2>' +
+    '<p class="text-sm text-gray-400">' + active.length + ' leads with activity</p></div>' +
+    filterBar +
+    '<div id="prep-cards" class="grid lg:grid-cols-2 gap-6">' + (cards || '<div class="col-span-2 text-center text-gray-400 py-12">No leads with activity yet</div>') + '</div>' +
+  '</div>';
+
+  // Store for filtering
+  window._salesPrepData = active;
+}
+
+function filterSalesPrep() {
+  var search = (document.getElementById('prep-search').value || '').toLowerCase();
+  var filter = document.getElementById('prep-filter').value;
+  var temp = (document.getElementById('prep-temp') || {}).value || '';
+  var data = window._salesPrepData || [];
+
+  var filtered = data.filter(function(l) {
+    // Text search
+    var matchSearch = !search || (l.name || '').toLowerCase().includes(search) ||
+      (l.phone_number || '').includes(search) ||
+      (l.business_name || '').toLowerCase().includes(search);
+
+    // Status filter
+    var matchFilter = filter === 'all' ||
+      (filter === 'paid' && l.payment_confirmed) ||
+      (filter === 'closed' && l.is_closed && !l.payment_confirmed) ||
+      (filter === 'qualified' && l.is_qualified && !l.is_closed) ||
+      (filter === 'open' && !l.is_qualified);
+
+    // Temperature filter
+    var matchTemp = !temp || l.lead_temperature === temp;
+
+    return matchSearch && matchFilter && matchTemp;
+  });
+
+  renderSalesPrep(filtered);
+  // Restore search/filter values
+  document.getElementById('prep-search').value = search;
+  document.getElementById('prep-filter').value = filter;
+  if (document.getElementById('prep-temp')) document.getElementById('prep-temp').value = temp;
+  window._salesPrepData = data; // Restore full data
+}
+
+function regenerateSummary(userId, btn) {
+  btn.disabled = true;
+  btn.textContent = 'Generating...';
+  var parent = btn.closest('[id^="brief-"]') || btn.closest('.rounded-xl');
+  fetch('/admin/api/sales-prep/' + userId + '/summary', { method: 'POST' })
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      if (d.summary) {
+        parent.outerHTML = '<div class="mt-4 rounded-xl border border-amber-100 overflow-hidden">' +
+          '<div class="px-4 py-3 bg-amber-50 border-b border-amber-100 flex items-center justify-between"><h4 class="font-semibold text-amber-800 text-sm">Lead Brief</h4>' +
+          '<button onclick="regenerateSummary(\'' + userId + '\', this)" class="text-xs text-amber-600 hover:text-amber-800 font-medium">Regenerate</button></div>' +
+          '<div class="p-4 bg-white">' + parseBrief(d.summary) + '</div></div>';
+      } else {
+        btn.textContent = 'Failed - Try Again';
+        btn.disabled = false;
+      }
+    })
+    .catch(function() { btn.textContent = 'Failed - Try Again'; btn.disabled = false; });
+}
+
+// ─── Init ──────────────────────────────────────
+loadSection('overview');
+</script>
+</body>
+</html>

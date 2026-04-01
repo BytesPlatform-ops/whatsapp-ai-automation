@@ -1,0 +1,329 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Nexus Digital - Services</title><meta name="description" content="We craft cutting-edge digital experiences that transform businesses.">
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+:root{--pc:#6366F1;--ac:#A78BFA}*{margin:0;padding:0;box-sizing:border-box}html{scroll-behavior:smooth}body{font-family:'Inter',sans-serif;color:#1a1a2e;overflow-x:hidden}
+@keyframes fadeUp{from{opacity:0;transform:translateY(40px)}to{opacity:1;transform:translateY(0)}}
+@keyframes fadeDown{from{opacity:0;transform:translateY(-30px)}to{opacity:1;transform:translateY(0)}}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+@keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-15px)}}
+@keyframes floatSlow{0%,100%{transform:translateY(0) rotate(0deg)}50%{transform:translateY(-20px) rotate(3deg)}}
+@keyframes pulseGlow{0%,100%{box-shadow:0 0 20px rgba(255,255,255,0.1)}50%{box-shadow:0 0 50px rgba(255,255,255,0.3)}}
+@keyframes morphBlob{0%,100%{border-radius:60% 40% 30% 70%/60% 30% 70% 40%}50%{border-radius:30% 60% 70% 40%/50% 60% 30% 60%}}
+@keyframes shimmer{0%{background-position:-200% 0}100%{background-position:200% 0}}
+@keyframes marquee{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+@keyframes gridPulse{0%,100%{opacity:0.03}50%{opacity:0.06}}
+@keyframes borderFlow{0%{background-position:0% 50%}50%{background-position:100% 50%}100%{background-position:0% 50%}}
+@keyframes pageIn{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+body{animation:pageIn 0.5s ease-out}
+.glass{background:rgba(255,255,255,0.08);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:1px solid rgba(255,255,255,0.12)}
+.rv{opacity:0;transform:translateY(40px);transition:all 0.8s cubic-bezier(0.16,1,0.3,1)}.rv.v{opacity:1;transform:translateY(0)}
+.rl{opacity:0;transform:translateX(-40px);transition:all 0.8s cubic-bezier(0.16,1,0.3,1)}.rl.v{opacity:1;transform:translateX(0)}
+.rr{opacity:0;transform:translateX(40px);transition:all 0.8s cubic-bezier(0.16,1,0.3,1)}.rr.v{opacity:1;transform:translateX(0)}
+.rs{opacity:0;transform:scale(0.9);transition:all 0.8s cubic-bezier(0.16,1,0.3,1)}.rs.v{opacity:1;transform:scale(1)}
+.d1{transition-delay:.1s}.d2{transition-delay:.2s}.d3{transition-delay:.3s}.d4{transition-delay:.4s}.d5{transition-delay:.5s}.d6{transition-delay:.6s}.d7{transition-delay:.7s}
+.blob{border-radius:60% 40% 30% 70%/60% 30% 70% 40%;animation:morphBlob 8s ease-in-out infinite}
+.hl{transition:all 0.4s cubic-bezier(0.16,1,0.3,1)}.hl:hover{transform:translateY(-8px);box-shadow:0 25px 60px rgba(0,0,0,0.12)}
+.tilt{transition:transform 0.4s ease}.tilt:hover{transform:perspective(800px) rotateY(-4deg) rotateX(4deg) translateY(-6px);box-shadow:0 25px 60px rgba(0,0,0,0.15)}
+.sect{padding:100px 24px;position:relative}@media(min-width:768px){.sect{padding:120px 48px}}
+.ctn{max-width:1200px;margin:0 auto}
+.btn-p{display:inline-flex;align-items:center;gap:8px;padding:16px 32px;font-size:16px;font-weight:600;color:#fff;background:linear-gradient(135deg,#6366F1,#6366F1dd);border:none;border-radius:50px;cursor:pointer;transition:all 0.4s cubic-bezier(0.16,1,0.3,1);text-decoration:none;position:relative;overflow:hidden}
+.btn-p::before{content:'';position:absolute;inset:0;background:linear-gradient(135deg,transparent,rgba(255,255,255,0.15),transparent);transform:translateX(-100%);transition:transform 0.6s}.btn-p:hover::before{transform:translateX(100%)}
+.btn-p:hover{transform:translateY(-3px);box-shadow:0 15px 40px #6366F144}
+.btn-s{display:inline-flex;align-items:center;gap:8px;padding:16px 32px;font-size:16px;font-weight:600;color:#6366F1;background:transparent;border:2px solid #6366F1;border-radius:50px;cursor:pointer;transition:all 0.4s;text-decoration:none}.btn-s:hover{background:#6366F1;color:#fff;transform:translateY(-3px)}
+.btn-w{display:inline-flex;align-items:center;gap:8px;padding:16px 32px;font-size:16px;font-weight:600;color:#6366F1;background:#fff;border:none;border-radius:50px;cursor:pointer;transition:all 0.4s cubic-bezier(0.16,1,0.3,1);text-decoration:none}.btn-w:hover{transform:translateY(-3px);box-shadow:0 15px 40px rgba(255,255,255,0.3)}
+.glow-card{position:relative;background:#fff;border-radius:20px;padding:40px 32px;border:1px solid #f0f0f0;overflow:hidden;transition:all 0.5s}
+.glow-card::before{content:'';position:absolute;top:-2px;left:-2px;right:-2px;bottom:-2px;background:linear-gradient(135deg,#6366F1,#A78BFA,#6366F1);border-radius:inherit;z-index:-1;opacity:0;transition:opacity 0.5s;background-size:200% 200%;animation:borderFlow 3s ease infinite}
+.glow-card:hover::before{opacity:1}.glow-card:hover{border-color:transparent;box-shadow:0 20px 60px rgba(0,0,0,0.08)}
+.dot-grid{background-image:radial-gradient(circle,#6366F115 1px,transparent 1px);background-size:32px 32px;animation:gridPulse 4s ease-in-out infinite}
+.noise::after{content:'';position:absolute;inset:0;opacity:0.03;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");pointer-events:none}
+.nav{position:fixed;top:0;left:0;right:0;z-index:1000;transition:all 0.4s;padding:20px 24px}
+.nav.scrolled,.nav.nav-dark{background:rgba(255,255,255,0.92);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);box-shadow:0 1px 30px rgba(0,0,0,0.08);padding:12px 24px}
+.nav.scrolled .nav-l,.nav.nav-dark .nav-l{color:#333!important}.nav.scrolled .nav-l:hover,.nav.nav-dark .nav-l:hover{color:#6366F1!important}
+.nav.scrolled .nav-b,.nav.nav-dark .nav-b{color:#6366F1!important}
+.nav-i{max-width:1200px;margin:0 auto;display:flex;align-items:center;justify-content:space-between}
+.nav-b{font-size:22px;font-weight:800;color:#fff;text-decoration:none;letter-spacing:-0.5px;transition:color 0.3s}
+.nav-ls{display:none;gap:32px;align-items:center}@media(min-width:768px){.nav-ls{display:flex}}
+.nav-l{color:rgba(255,255,255,0.85);text-decoration:none;font-size:14px;font-weight:500;transition:all 0.3s;position:relative}
+.nav-l:hover{color:#fff}.nav-l::after{content:'';position:absolute;bottom:-4px;left:0;width:0;height:2px;background:#A78BFA;transition:width 0.3s;border-radius:2px}.nav-l:hover::after{width:100%}
+.nav.nav-dark .nav-l:hover{color:#6366F1!important}
+.mt{display:flex;flex-direction:column;gap:5px;cursor:pointer;padding:8px}@media(min-width:768px){.mt{display:none}}
+.mt span{display:block;width:24px;height:2px;background:#fff;transition:all 0.3s;border-radius:2px}.nav.scrolled .mt span,.nav.nav-dark .mt span{background:#333}
+.mm{display:none;position:fixed;inset:0;background:rgba(10,10,26,0.98);z-index:1100;flex-direction:column;align-items:center;justify-content:center;gap:0}
+.mm.open{display:flex}.mm a{color:#fff;font-size:28px;font-weight:600;text-decoration:none;padding:16px;opacity:0;transform:translateY(20px);transition:all 0.4s}
+.mm.open a{opacity:1;transform:translateY(0)}.mm.open a:nth-child(1){transition-delay:0.1s}.mm.open a:nth-child(2){transition-delay:0.15s}.mm.open a:nth-child(3){transition-delay:0.2s}.mm.open a:nth-child(4){transition-delay:0.25s}.mm.open a:nth-child(5){transition-delay:0.3s}
+.mm a:hover{color:#A78BFA}.mc{position:absolute;top:24px;right:24px;color:#fff;font-size:36px;cursor:pointer;background:none;border:none;z-index:1101;transition:transform 0.3s}.mc:hover{transform:rotate(90deg)}
+.scroll-bar{position:fixed;top:0;left:0;height:3px;background:linear-gradient(90deg,#6366F1,#A78BFA);z-index:1001;transition:width 0.1s;width:0}
+.btt{position:fixed;bottom:32px;right:32px;width:48px;height:48px;border-radius:50%;background:#6366F1;color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;z-index:998;opacity:0;transform:translateY(20px);transition:all 0.4s;border:none;box-shadow:0 8px 24px #6366F144}
+.btt.show{opacity:1;transform:translateY(0)}.btt:hover{transform:translateY(-4px);box-shadow:0 12px 32px #6366F166}
+.marquee-strip{overflow:hidden;padding:20px 0;background:#fafafa;border-top:1px solid #f0f0f0;border-bottom:1px solid #f0f0f0}
+.marquee-track{display:flex;animation:marquee 25s linear infinite;width:max-content}
+.marquee-item{padding:0 48px;font-size:15px;font-weight:600;color:#ccc;white-space:nowrap;display:flex;align-items:center;gap:16px;text-transform:uppercase;letter-spacing:2px}
+.marquee-item .dot{width:6px;height:6px;border-radius:50%;background:#6366F144}
+.faq-item{background:#fff;border-radius:16px;border:1px solid #eee;overflow:hidden;transition:border-color 0.3s}
+.faq-item:hover{border-color:#6366F133}
+.faq-q{padding:24px 32px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:16px;font-size:17px;font-weight:700;color:#1a1a2e;transition:color 0.3s}
+.faq-q:hover{color:#6366F1}
+.faq-q svg{flex-shrink:0;transition:transform 0.3s;color:#6366F1}
+.faq-a{max-height:0;overflow:hidden;transition:max-height 0.4s cubic-bezier(0.16,1,0.3,1),padding 0.3s}
+.faq-item.open .faq-a{max-height:300px;padding:0 32px 24px}
+.faq-item.open .faq-q svg{transform:rotate(180deg)}
+.cursor-glow{position:fixed;width:300px;height:300px;border-radius:50%;background:radial-gradient(circle,#6366F108 0%,transparent 70%);pointer-events:none;z-index:0;transform:translate(-50%,-50%);transition:opacity 0.3s;opacity:0}
+.cursor-glow.active{opacity:1}
+@media(min-width:768px){.md2{grid-template-columns:1fr 1fr!important}}
+@media(max-width:640px){.mobile-1col{grid-template-columns:1fr!important}.mobile-stack{display:flex!important;flex-direction:column!important}.sect{padding:60px 16px}}
+</style></head><body>
+<div class="scroll-bar"></div>
+<div class="cursor-glow"></div>
+<nav class="nav nav-dark"><div class="nav-i">
+  <a href="/" class="nav-b">Nexus Digital</a>
+  <div class="nav-ls"><a href="/" class="nav-l">Home</a><a href="/services" class="nav-l font-semibold">Services</a><a href="/about" class="nav-l">About</a><a href="/contact" class="nav-l">Contact</a><a href="/contact" class="btn-p" style="padding:10px 24px;font-size:14px">Get Started</a></div>
+  <div class="mt" aria-label="Menu"><span></span><span></span><span></span></div>
+</div></nav>
+<div class="mm"><button class="mc" aria-label="Close">&times;</button><a href="/">Home</a><a href="/services">Services</a><a href="/about">About</a><a href="/contact">Contact</a><a href="/contact" class="btn-p" style="margin-top:16px">Get Started</a></div><main>
+    <section style="padding:160px 24px 80px;text-align:center;position:relative;overflow:hidden;background:linear-gradient(135deg,#6366F106,#A78BFA06)">
+      <div class="dot-grid" style="position:absolute;inset:0"></div>
+      <div style="position:absolute;top:-50%;right:-20%;width:600px;height:600px;border-radius:50%;background:#6366F1;opacity:0.03"></div>
+      <div class="ctn" style="position:relative;z-index:10"><div style="animation:fadeUp 0.8s ease-out">
+        <span style="display:inline-block;padding:8px 20px;border-radius:50px;font-size:13px;font-weight:600;letter-spacing:1px;text-transform:uppercase;background:#6366F115;color:#6366F1;margin-bottom:16px">Our Services</span>
+        <h1 style="font-size:clamp(32px,5vw,56px);font-weight:900;color:#1a1a2e;letter-spacing:-2px;margin-bottom:20px">Services That Drive Growth</h1>
+        <p style="font-size:18px;color:#666;max-width:650px;margin:0 auto;line-height:1.7">Full spectrum of digital services.</p>
+      </div></div>
+    </section>
+
+    <section style="padding:0 24px 80px;margin-top:-20px"><div class="ctn"><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(min(280px,100%),1fr));gap:20px">
+    <a href="#service-0" class="glow-card tilt rv d1" style="text-decoration:none;display:flex;align-items:flex-start;gap:16px;padding:32px">
+      <div style="width:48px;height:48px;border-radius:12px;background:#6366F110;display:flex;align-items:center;justify-content:center;color:#6366F1;flex-shrink:0"><svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"/></svg></div>
+      <div><h3 style="font-size:17px;font-weight:700;color:#1a1a2e;margin-bottom:6px">Web Dev</h3><p style="font-size:13px;color:#888;line-height:1.5">Custom websites.</p></div>
+    </a>
+    <a href="#service-1" class="glow-card tilt rv d2" style="text-decoration:none;display:flex;align-items:flex-start;gap:16px;padding:32px">
+      <div style="width:48px;height:48px;border-radius:12px;background:#6366F110;display:flex;align-items:center;justify-content:center;color:#6366F1;flex-shrink:0"><svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01"/></svg></div>
+      <div><h3 style="font-size:17px;font-weight:700;color:#1a1a2e;margin-bottom:6px">UI/UX</h3><p style="font-size:13px;color:#888;line-height:1.5">Design that converts.</p></div>
+    </a>
+    <a href="#service-2" class="glow-card tilt rv d3" style="text-decoration:none;display:flex;align-items:flex-start;gap:16px;padding:32px">
+      <div style="width:48px;height:48px;border-radius:12px;background:#6366F110;display:flex;align-items:center;justify-content:center;color:#6366F1;flex-shrink:0"><svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15.59 14.37a6 6 0 01-5.84 7.38v-4.8m5.84-2.58a14.98 14.98 0 006.16-12.12A14.98 14.98 0 009.631 8.41m5.96 5.96a14.926 14.926 0 01-5.841 2.58m-.119-8.54a6 6 0 00-7.381 5.84h4.8m2.581-5.84a14.927 14.927 0 00-2.58 5.84m2.699 2.7c-.103.021-.207.041-.311.06a15.09 15.09 0 01-2.448-2.448 14.9 14.9 0 01.06-.312m-2.24 2.39a4.493 4.493 0 00-1.757 4.306 4.493 4.493 0 004.306-1.758M16.5 9a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0z"/></svg></div>
+      <div><h3 style="font-size:17px;font-weight:700;color:#1a1a2e;margin-bottom:6px">Cloud</h3><p style="font-size:13px;color:#888;line-height:1.5">Scalable infra.</p></div>
+    </a>
+    <a href="#service-3" class="glow-card tilt rv d4" style="text-decoration:none;display:flex;align-items:flex-start;gap:16px;padding:32px">
+      <div style="width:48px;height:48px;border-radius:12px;background:#6366F110;display:flex;align-items:center;justify-content:center;color:#6366F1;flex-shrink:0"><svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z"/></svg></div>
+      <div><h3 style="font-size:17px;font-weight:700;color:#1a1a2e;margin-bottom:6px">Marketing</h3><p style="font-size:13px;color:#888;line-height:1.5">Data-driven ROI.</p></div>
+    </a>
+    <a href="#service-4" class="glow-card tilt rv d5" style="text-decoration:none;display:flex;align-items:flex-start;gap:16px;padding:32px">
+      <div style="width:48px;height:48px;border-radius:12px;background:#6366F110;display:flex;align-items:center;justify-content:center;color:#6366F1;flex-shrink:0"><svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg></div>
+      <div><h3 style="font-size:17px;font-weight:700;color:#1a1a2e;margin-bottom:6px">Mobile</h3><p style="font-size:13px;color:#888;line-height:1.5">iOS &amp; Android.</p></div>
+    </a>
+    <a href="#service-5" class="glow-card tilt rv d6" style="text-decoration:none;display:flex;align-items:flex-start;gap:16px;padding:32px">
+      <div style="width:48px;height:48px;border-radius:12px;background:#6366F110;display:flex;align-items:center;justify-content:center;color:#6366F1;flex-shrink:0"><svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg></div>
+      <div><h3 style="font-size:17px;font-weight:700;color:#1a1a2e;margin-bottom:6px">AI</h3><p style="font-size:13px;color:#888;line-height:1.5">Automation.</p></div>
+    </a></div></div></section>
+
+    <div class="marquee-strip"><div class="marquee-track"><span class="marquee-item"><span class="dot"></span>Web Dev</span><span class="marquee-item"><span class="dot"></span>UI/UX</span><span class="marquee-item"><span class="dot"></span>Cloud</span><span class="marquee-item"><span class="dot"></span>Marketing</span><span class="marquee-item"><span class="dot"></span>Mobile</span><span class="marquee-item"><span class="dot"></span>AI</span><span class="marquee-item"><span class="dot"></span>Nexus Digital</span><span class="marquee-item"><span class="dot"></span>Technology</span><span class="marquee-item"><span class="dot"></span>Web Dev</span><span class="marquee-item"><span class="dot"></span>UI/UX</span><span class="marquee-item"><span class="dot"></span>Cloud</span><span class="marquee-item"><span class="dot"></span>Marketing</span><span class="marquee-item"><span class="dot"></span>Mobile</span><span class="marquee-item"><span class="dot"></span>AI</span><span class="marquee-item"><span class="dot"></span>Nexus Digital</span><span class="marquee-item"><span class="dot"></span>Technology</span></div></div>
+
+    
+    <div class="sect" style="background:#fff" id="service-0">
+      <div class="ctn">
+        <div style="display:grid;grid-template-columns:1fr;gap:56px;align-items:center" class="md2">
+          <div class="rl" style="order:1">
+            <div style="display:flex;align-items:center;gap:16px;margin-bottom:24px">
+              <div style="width:60px;height:60px;border-radius:16px;background:linear-gradient(135deg,#6366F1,#A78BFA);display:flex;align-items:center;justify-content:center;color:#fff;box-shadow:0 8px 24px #6366F133"><svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"/></svg></div>
+              <span style="font-size:72px;font-weight:900;color:#6366F108;line-height:1">01</span>
+            </div>
+            <h3 style="font-size:clamp(24px,3vw,36px);font-weight:800;color:#1a1a2e;margin-bottom:16px;letter-spacing:-0.5px">Web Dev</h3>
+            <p style="font-size:17px;line-height:1.8;color:#555;margin-bottom:24px">Marketing sites to SaaS.</p>
+            <a href="/contact" class="btn-p">Get Started <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 8l4 4m0 0l-4 4m4-4H3"/></svg></a>
+          </div>
+          <div class="rr" style="order:2">
+            <div style="background:#fafafa;border-radius:24px;padding:40px;border:1px solid #f0f0f0">
+              <h4 style="font-size:16px;font-weight:700;color:#1a1a2e;margin-bottom:20px;text-transform:uppercase;letter-spacing:1px">Key Features</h4>
+              <ul style="display:flex;flex-direction:column;gap:16px;list-style:none"><li style="display:flex;align-items:flex-start;gap:12px;font-size:15px;color:#555"><svg style="flex-shrink:0;margin-top:2px" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg> React &amp; Next.js</li><li style="display:flex;align-items:flex-start;gap:12px;font-size:15px;color:#555"><svg style="flex-shrink:0;margin-top:2px" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg> Mobile-first</li><li style="display:flex;align-items:flex-start;gap:12px;font-size:15px;color:#555"><svg style="flex-shrink:0;margin-top:2px" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg> SEO</li><li style="display:flex;align-items:flex-start;gap:12px;font-size:15px;color:#555"><svg style="flex-shrink:0;margin-top:2px" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg> Performance</li></ul>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="sect" style="background:#fafafa" id="service-1">
+      <div class="ctn">
+        <div style="display:grid;grid-template-columns:1fr;gap:56px;align-items:center" class="md2">
+          <div class="rr" style="order:2">
+            <div style="display:flex;align-items:center;gap:16px;margin-bottom:24px">
+              <div style="width:60px;height:60px;border-radius:16px;background:linear-gradient(135deg,#6366F1,#A78BFA);display:flex;align-items:center;justify-content:center;color:#fff;box-shadow:0 8px 24px #6366F133"><svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01"/></svg></div>
+              <span style="font-size:72px;font-weight:900;color:#6366F108;line-height:1">02</span>
+            </div>
+            <h3 style="font-size:clamp(24px,3vw,36px);font-weight:800;color:#1a1a2e;margin-bottom:16px;letter-spacing:-0.5px">UI/UX</h3>
+            <p style="font-size:17px;line-height:1.8;color:#555;margin-bottom:24px">Research, prototypes, interfaces.</p>
+            <a href="/contact" class="btn-p">Get Started <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 8l4 4m0 0l-4 4m4-4H3"/></svg></a>
+          </div>
+          <div class="rl" style="order:1">
+            <div style="background:#fff;border-radius:24px;padding:40px;border:1px solid #f0f0f0">
+              <h4 style="font-size:16px;font-weight:700;color:#1a1a2e;margin-bottom:20px;text-transform:uppercase;letter-spacing:1px">Key Features</h4>
+              <ul style="display:flex;flex-direction:column;gap:16px;list-style:none"><li style="display:flex;align-items:flex-start;gap:12px;font-size:15px;color:#555"><svg style="flex-shrink:0;margin-top:2px" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg> Research</li><li style="display:flex;align-items:flex-start;gap:12px;font-size:15px;color:#555"><svg style="flex-shrink:0;margin-top:2px" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg> Prototyping</li><li style="display:flex;align-items:flex-start;gap:12px;font-size:15px;color:#555"><svg style="flex-shrink:0;margin-top:2px" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg> Design systems</li><li style="display:flex;align-items:flex-start;gap:12px;font-size:15px;color:#555"><svg style="flex-shrink:0;margin-top:2px" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg> A/B testing</li></ul>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="sect" style="background:#fff" id="service-2">
+      <div class="ctn">
+        <div style="display:grid;grid-template-columns:1fr;gap:56px;align-items:center" class="md2">
+          <div class="rl" style="order:1">
+            <div style="display:flex;align-items:center;gap:16px;margin-bottom:24px">
+              <div style="width:60px;height:60px;border-radius:16px;background:linear-gradient(135deg,#6366F1,#A78BFA);display:flex;align-items:center;justify-content:center;color:#fff;box-shadow:0 8px 24px #6366F133"><svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15.59 14.37a6 6 0 01-5.84 7.38v-4.8m5.84-2.58a14.98 14.98 0 006.16-12.12A14.98 14.98 0 009.631 8.41m5.96 5.96a14.926 14.926 0 01-5.841 2.58m-.119-8.54a6 6 0 00-7.381 5.84h4.8m2.581-5.84a14.927 14.927 0 00-2.58 5.84m2.699 2.7c-.103.021-.207.041-.311.06a15.09 15.09 0 01-2.448-2.448 14.9 14.9 0 01.06-.312m-2.24 2.39a4.493 4.493 0 00-1.757 4.306 4.493 4.493 0 004.306-1.758M16.5 9a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0z"/></svg></div>
+              <span style="font-size:72px;font-weight:900;color:#6366F108;line-height:1">03</span>
+            </div>
+            <h3 style="font-size:clamp(24px,3vw,36px);font-weight:800;color:#1a1a2e;margin-bottom:16px;letter-spacing:-0.5px">Cloud</h3>
+            <p style="font-size:17px;line-height:1.8;color:#555;margin-bottom:24px">AWS, GCP, Azure.</p>
+            <a href="/contact" class="btn-p">Get Started <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 8l4 4m0 0l-4 4m4-4H3"/></svg></a>
+          </div>
+          <div class="rr" style="order:2">
+            <div style="background:#fafafa;border-radius:24px;padding:40px;border:1px solid #f0f0f0">
+              <h4 style="font-size:16px;font-weight:700;color:#1a1a2e;margin-bottom:20px;text-transform:uppercase;letter-spacing:1px">Key Features</h4>
+              <ul style="display:flex;flex-direction:column;gap:16px;list-style:none"><li style="display:flex;align-items:flex-start;gap:12px;font-size:15px;color:#555"><svg style="flex-shrink:0;margin-top:2px" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg> Multi-cloud</li><li style="display:flex;align-items:flex-start;gap:12px;font-size:15px;color:#555"><svg style="flex-shrink:0;margin-top:2px" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg> K8s</li><li style="display:flex;align-items:flex-start;gap:12px;font-size:15px;color:#555"><svg style="flex-shrink:0;margin-top:2px" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg> CI/CD</li><li style="display:flex;align-items:flex-start;gap:12px;font-size:15px;color:#555"><svg style="flex-shrink:0;margin-top:2px" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg> Monitoring</li></ul>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="sect" style="background:#fafafa" id="service-3">
+      <div class="ctn">
+        <div style="display:grid;grid-template-columns:1fr;gap:56px;align-items:center" class="md2">
+          <div class="rr" style="order:2">
+            <div style="display:flex;align-items:center;gap:16px;margin-bottom:24px">
+              <div style="width:60px;height:60px;border-radius:16px;background:linear-gradient(135deg,#6366F1,#A78BFA);display:flex;align-items:center;justify-content:center;color:#fff;box-shadow:0 8px 24px #6366F133"><svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z"/></svg></div>
+              <span style="font-size:72px;font-weight:900;color:#6366F108;line-height:1">04</span>
+            </div>
+            <h3 style="font-size:clamp(24px,3vw,36px);font-weight:800;color:#1a1a2e;margin-bottom:16px;letter-spacing:-0.5px">Marketing</h3>
+            <p style="font-size:17px;line-height:1.8;color:#555;margin-bottom:24px">SEO, ads, content.</p>
+            <a href="/contact" class="btn-p">Get Started <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 8l4 4m0 0l-4 4m4-4H3"/></svg></a>
+          </div>
+          <div class="rl" style="order:1">
+            <div style="background:#fff;border-radius:24px;padding:40px;border:1px solid #f0f0f0">
+              <h4 style="font-size:16px;font-weight:700;color:#1a1a2e;margin-bottom:20px;text-transform:uppercase;letter-spacing:1px">Key Features</h4>
+              <ul style="display:flex;flex-direction:column;gap:16px;list-style:none"><li style="display:flex;align-items:flex-start;gap:12px;font-size:15px;color:#555"><svg style="flex-shrink:0;margin-top:2px" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg> SEO</li><li style="display:flex;align-items:flex-start;gap:12px;font-size:15px;color:#555"><svg style="flex-shrink:0;margin-top:2px" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg> Google Ads</li><li style="display:flex;align-items:flex-start;gap:12px;font-size:15px;color:#555"><svg style="flex-shrink:0;margin-top:2px" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg> Email</li><li style="display:flex;align-items:flex-start;gap:12px;font-size:15px;color:#555"><svg style="flex-shrink:0;margin-top:2px" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg> Analytics</li></ul>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="sect" style="background:#fff" id="service-4">
+      <div class="ctn">
+        <div style="display:grid;grid-template-columns:1fr;gap:56px;align-items:center" class="md2">
+          <div class="rl" style="order:1">
+            <div style="display:flex;align-items:center;gap:16px;margin-bottom:24px">
+              <div style="width:60px;height:60px;border-radius:16px;background:linear-gradient(135deg,#6366F1,#A78BFA);display:flex;align-items:center;justify-content:center;color:#fff;box-shadow:0 8px 24px #6366F133"><svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg></div>
+              <span style="font-size:72px;font-weight:900;color:#6366F108;line-height:1">05</span>
+            </div>
+            <h3 style="font-size:clamp(24px,3vw,36px);font-weight:800;color:#1a1a2e;margin-bottom:16px;letter-spacing:-0.5px">Mobile</h3>
+            <p style="font-size:17px;line-height:1.8;color:#555;margin-bottom:24px">React Native, Flutter.</p>
+            <a href="/contact" class="btn-p">Get Started <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 8l4 4m0 0l-4 4m4-4H3"/></svg></a>
+          </div>
+          <div class="rr" style="order:2">
+            <div style="background:#fafafa;border-radius:24px;padding:40px;border:1px solid #f0f0f0">
+              <h4 style="font-size:16px;font-weight:700;color:#1a1a2e;margin-bottom:20px;text-transform:uppercase;letter-spacing:1px">Key Features</h4>
+              <ul style="display:flex;flex-direction:column;gap:16px;list-style:none"><li style="display:flex;align-items:flex-start;gap:12px;font-size:15px;color:#555"><svg style="flex-shrink:0;margin-top:2px" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg> Cross-platform</li><li style="display:flex;align-items:flex-start;gap:12px;font-size:15px;color:#555"><svg style="flex-shrink:0;margin-top:2px" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg> Native</li><li style="display:flex;align-items:flex-start;gap:12px;font-size:15px;color:#555"><svg style="flex-shrink:0;margin-top:2px" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg> Offline</li><li style="display:flex;align-items:flex-start;gap:12px;font-size:15px;color:#555"><svg style="flex-shrink:0;margin-top:2px" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg> ASO</li></ul>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="sect" style="background:#fafafa" id="service-5">
+      <div class="ctn">
+        <div style="display:grid;grid-template-columns:1fr;gap:56px;align-items:center" class="md2">
+          <div class="rr" style="order:2">
+            <div style="display:flex;align-items:center;gap:16px;margin-bottom:24px">
+              <div style="width:60px;height:60px;border-radius:16px;background:linear-gradient(135deg,#6366F1,#A78BFA);display:flex;align-items:center;justify-content:center;color:#fff;box-shadow:0 8px 24px #6366F133"><svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg></div>
+              <span style="font-size:72px;font-weight:900;color:#6366F108;line-height:1">06</span>
+            </div>
+            <h3 style="font-size:clamp(24px,3vw,36px);font-weight:800;color:#1a1a2e;margin-bottom:16px;letter-spacing:-0.5px">AI</h3>
+            <p style="font-size:17px;line-height:1.8;color:#555;margin-bottom:24px">Chatbots, analytics.</p>
+            <a href="/contact" class="btn-p">Get Started <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 8l4 4m0 0l-4 4m4-4H3"/></svg></a>
+          </div>
+          <div class="rl" style="order:1">
+            <div style="background:#fff;border-radius:24px;padding:40px;border:1px solid #f0f0f0">
+              <h4 style="font-size:16px;font-weight:700;color:#1a1a2e;margin-bottom:20px;text-transform:uppercase;letter-spacing:1px">Key Features</h4>
+              <ul style="display:flex;flex-direction:column;gap:16px;list-style:none"><li style="display:flex;align-items:flex-start;gap:12px;font-size:15px;color:#555"><svg style="flex-shrink:0;margin-top:2px" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg> AI chatbots</li><li style="display:flex;align-items:flex-start;gap:12px;font-size:15px;color:#555"><svg style="flex-shrink:0;margin-top:2px" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg> Automation</li><li style="display:flex;align-items:flex-start;gap:12px;font-size:15px;color:#555"><svg style="flex-shrink:0;margin-top:2px" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg> Analytics</li><li style="display:flex;align-items:flex-start;gap:12px;font-size:15px;color:#555"><svg style="flex-shrink:0;margin-top:2px" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg> APIs</li></ul>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <section class="sect" style="background:#fafafa"><div class="ctn">
+      <div class="rv" style="text-align:center;margin-bottom:64px">
+        <span style="display:inline-block;padding:8px 20px;border-radius:50px;font-size:13px;font-weight:600;letter-spacing:1px;text-transform:uppercase;background:#6366F110;color:#6366F1;margin-bottom:16px">Our Process</span>
+        <h2 style="font-size:clamp(28px,4vw,44px);font-weight:800;color:#1a1a2e;letter-spacing:-1px">How We Work</h2>
+      </div>
+      <div style="max-width:700px;margin:0 auto">
+    <div class="rv d1" style="display:flex;gap:24px;margin-bottom:48px;position:relative">
+      <div style="position:absolute;left:24px;top:56px;bottom:-48px;width:2px;background:linear-gradient(180deg,#6366F133,#6366F108)"></div>
+      <div style="width:48px;height:48px;border-radius:50%;background:linear-gradient(135deg,#6366F1,#A78BFA);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:18px;flex-shrink:0;box-shadow:0 4px 16px #6366F133">1</div>
+      <div style="padding-top:4px"><h4 style="font-size:20px;font-weight:700;color:#1a1a2e;margin-bottom:8px">Discovery</h4><p style="font-size:15px;color:#666;line-height:1.7">Goals &amp; audience.</p></div>
+    </div>
+    <div class="rv d2" style="display:flex;gap:24px;margin-bottom:48px;position:relative">
+      <div style="position:absolute;left:24px;top:56px;bottom:-48px;width:2px;background:linear-gradient(180deg,#6366F133,#6366F108)"></div>
+      <div style="width:48px;height:48px;border-radius:50%;background:linear-gradient(135deg,#6366F1,#A78BFA);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:18px;flex-shrink:0;box-shadow:0 4px 16px #6366F133">2</div>
+      <div style="padding-top:4px"><h4 style="font-size:20px;font-weight:700;color:#1a1a2e;margin-bottom:8px">Strategy</h4><p style="font-size:15px;color:#666;line-height:1.7">Roadmap.</p></div>
+    </div>
+    <div class="rv d3" style="display:flex;gap:24px;margin-bottom:48px;position:relative">
+      <div style="position:absolute;left:24px;top:56px;bottom:-48px;width:2px;background:linear-gradient(180deg,#6366F133,#6366F108)"></div>
+      <div style="width:48px;height:48px;border-radius:50%;background:linear-gradient(135deg,#6366F1,#A78BFA);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:18px;flex-shrink:0;box-shadow:0 4px 16px #6366F133">3</div>
+      <div style="padding-top:4px"><h4 style="font-size:20px;font-weight:700;color:#1a1a2e;margin-bottom:8px">Build</h4><p style="font-size:15px;color:#666;line-height:1.7">Sprints &amp; demos.</p></div>
+    </div>
+    <div class="rv d4" style="display:flex;gap:24px;margin-bottom:48px;position:relative">
+      <div style="position:absolute;left:24px;top:56px;bottom:-48px;width:2px;background:linear-gradient(180deg,#6366F133,#6366F108)"></div>
+      <div style="width:48px;height:48px;border-radius:50%;background:linear-gradient(135deg,#6366F1,#A78BFA);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:18px;flex-shrink:0;box-shadow:0 4px 16px #6366F133">4</div>
+      <div style="padding-top:4px"><h4 style="font-size:20px;font-weight:700;color:#1a1a2e;margin-bottom:8px">Launch</h4><p style="font-size:15px;color:#666;line-height:1.7">QA &amp; deploy.</p></div>
+    </div>
+    <div class="rv d5" style="display:flex;gap:24px;margin-bottom:0;position:relative">
+      
+      <div style="width:48px;height:48px;border-radius:50%;background:linear-gradient(135deg,#6366F1,#A78BFA);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:18px;flex-shrink:0;box-shadow:0 4px 16px #6366F133">5</div>
+      <div style="padding-top:4px"><h4 style="font-size:20px;font-weight:700;color:#1a1a2e;margin-bottom:8px">Grow</h4><p style="font-size:15px;color:#666;line-height:1.7">Optimize.</p></div>
+    </div></div>
+    </div></section>
+
+    <section class="sect" style="background:linear-gradient(135deg,#6366F1,#A78BFA88);color:#fff;text-align:center"><div class="ctn rv">
+      <h2 style="font-size:clamp(28px,4vw,44px);font-weight:900;margin-bottom:20px">Ready to Launch?</h2>
+      <p style="font-size:18px;opacity:0.85;max-width:500px;margin:0 auto 32px">Book a free strategy session.</p>
+      <a href="/contact" class="btn-w">Start Your Project <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 8l4 4m0 0l-4 4m4-4H3"/></svg></a>
+    </div></section></main>
+<footer style="background:#0a0a1a;color:#999;padding:80px 24px 40px"><div class="ctn">
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(200px,100%),1fr));gap:48px;margin-bottom:48px">
+    <div><p style="font-size:24px;font-weight:800;color:#fff;margin-bottom:12px">Nexus Digital</p><p style="font-size:14px;line-height:1.8;opacity:0.6">Ideas into digital reality.</p></div>
+    <div><p style="font-weight:600;color:#fff;margin-bottom:16px;font-size:14px;text-transform:uppercase;letter-spacing:1px">Pages</p><div style="display:flex;flex-direction:column;gap:10px">
+      <a href="/" style="color:#999;text-decoration:none;font-size:14px;transition:color 0.3s">Home</a><a href="/services" style="color:#999;text-decoration:none;font-size:14px;transition:color 0.3s">Services</a><a href="/about" style="color:#999;text-decoration:none;font-size:14px;transition:color 0.3s">About</a><a href="/contact" style="color:#999;text-decoration:none;font-size:14px;transition:color 0.3s">Contact</a>
+    </div></div>
+    <div><p style="font-weight:600;color:#fff;margin-bottom:16px;font-size:14px;text-transform:uppercase;letter-spacing:1px">Contact</p><div style="display:flex;flex-direction:column;gap:10px">
+      <a href="mailto:hello@nexusdigital.com" style="color:#999;text-decoration:none;font-size:14px">hello@nexusdigital.com</a>
+      <a href="tel:+1 (555) 123-4567" style="color:#999;text-decoration:none;font-size:14px">+1 (555) 123-4567</a>
+      <p style="font-size:14px">123 Innovation Drive, San Francisco, CA</p>
+    </div></div>
+  </div>
+  <div style="border-top:1px solid rgba(255,255,255,0.08);padding-top:24px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:16px">
+    <p style="font-size:12px;opacity:0.4">Built with care. All rights reserved.</p><p style="font-size:12px;opacity:0.4">Nexus Digital &copy; 2026</p>
+  </div>
+</div></footer>
+<button class="btt" aria-label="Back to top"><svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"/></svg></button><script>
+const ob=new IntersectionObserver(e=>{e.forEach(x=>{if(x.isIntersecting)x.target.classList.add('v')})},{threshold:0.08,rootMargin:'0px 0px -40px 0px'});
+document.querySelectorAll('.rv,.rl,.rr,.rs').forEach(el=>ob.observe(el));
+const nav=document.querySelector('.nav');
+const btt=document.querySelector('.btt');
+const sb=document.querySelector('.scroll-bar');
+const cg=document.querySelector('.cursor-glow');
+window.addEventListener('scroll',()=>{
+  const s=window.scrollY;
+  if(nav)nav.classList.toggle('scrolled',s>50);
+  if(btt)btt.classList.toggle('show',s>500);
+  if(sb){const h=document.documentElement.scrollHeight-window.innerHeight;sb.style.width=(s/h*100)+'%'}
+});
+if(btt)btt.addEventListener('click',()=>window.scrollTo({top:0,behavior:'smooth'}));
+const mt=document.querySelector('.mt'),mm=document.querySelector('.mm'),mc=document.querySelector('.mc');
+if(mt&&mm){mt.addEventListener('click',()=>mm.classList.add('open'));if(mc)mc.addEventListener('click',()=>mm.classList.remove('open'));mm.querySelectorAll('a').forEach(a=>a.addEventListener('click',()=>mm.classList.remove('open')))}
+document.querySelectorAll('[data-count]').forEach(el=>{
+  const cob=new IntersectionObserver(e=>{e.forEach(x=>{if(x.isIntersecting){const t=el.getAttribute('data-count'),n=parseInt(t);if(isNaN(n)){el.textContent=t;return}let c=0;const inc=Math.max(1,Math.floor(n/40));const tm=setInterval(()=>{c+=inc;if(c>=n){el.textContent=t;clearInterval(tm)}else{el.textContent=c+(t.includes('+')?'+':t.includes('%')?'%':'')}},30);cob.unobserve(el)}})},{threshold:0.5});cob.observe(el)});
+const hero=document.querySelector('.hero-section');
+if(hero)hero.addEventListener('mousemove',e=>{hero.querySelectorAll('.ps').forEach((s,i)=>{const sp=(i+1)*10;const x=(e.clientX/window.innerWidth-0.5)*2;const y=(e.clientY/window.innerHeight-0.5)*2;s.style.transform='translate('+x*sp+'px,'+y*sp+'px)'})});
+if(cg)document.addEventListener('mousemove',e=>{cg.style.left=e.clientX+'px';cg.style.top=e.clientY+'px';cg.classList.add('active')});
+document.querySelectorAll('.faq-q').forEach(q=>{q.addEventListener('click',()=>{const item=q.parentElement;document.querySelectorAll('.faq-item').forEach(f=>{if(f!==item)f.classList.remove('open')});item.classList.toggle('open')})});
+document.querySelectorAll('.tilt').forEach(card=>{card.addEventListener('mousemove',e=>{const r=card.getBoundingClientRect();const x=(e.clientX-r.left)/r.width;const y=(e.clientY-r.top)/r.height;card.style.transform='perspective(800px) rotateY('+(x-0.5)*8+'deg) rotateX('+((0.5-y)*8)+'deg) translateY(-6px)'});card.addEventListener('mouseleave',()=>{card.style.transform=''})});
+</script></body></html>
