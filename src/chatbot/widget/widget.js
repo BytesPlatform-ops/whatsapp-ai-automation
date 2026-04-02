@@ -213,7 +213,7 @@
         <textarea id="bp-chat-input" placeholder="Type a message..." rows="1"></textarea>\
         <button id="bp-chat-send" style="background:' + color + '"><svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg></button>\
       </div>\
-      <div id="bp-chat-powered">Powered by <a href="https://bytesplatform.info" target="_blank" rel="noopener">Bytes Platform</a></div>\
+      <div id="bp-chat-powered">Powered by <a href="https://bytesplatform.com" target="_blank" rel="noopener">Bytes Platform</a></div>\
     ';
     container.appendChild(win);
 

@@ -1,11 +1,12 @@
 const { supabase } = require('../config/database');
 
-async function findOrCreateUser(phoneNumber) {
-  // Try to find existing user
+async function findOrCreateUser(phoneNumber, channel = 'whatsapp') {
+  // Try to find existing user by phone/ID + channel
   const { data: existing, error: findError } = await supabase
     .from('users')
     .select('*')
     .eq('phone_number', phoneNumber)
+    .eq('channel', channel)
     .single();
 
   if (existing) return existing;
@@ -13,7 +14,7 @@ async function findOrCreateUser(phoneNumber) {
   // Create new user
   const { data: newUser, error: createError } = await supabase
     .from('users')
-    .insert({ phone_number: phoneNumber, state: 'WELCOME' })
+    .insert({ phone_number: phoneNumber, channel, state: 'WELCOME' })
     .select()
     .single();
 

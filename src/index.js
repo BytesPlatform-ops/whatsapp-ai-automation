@@ -54,6 +54,10 @@ app.get('/health', (req, res) => {
 app.use('/', webhookRoutes);
 app.use('/', calendlyRoutes);
 
+// Messenger & Instagram webhook routes
+const messengerRoutes = require('./webhook/messengerRoutes');
+app.use('/', messengerRoutes);
+
 // Admin dashboard
 app.use('/admin', adminRoutes);
 

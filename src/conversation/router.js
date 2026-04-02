@@ -1,6 +1,7 @@
 const { findOrCreateUser, updateUserState } = require('../db/users');
 const { logMessage } = require('../db/conversations');
 const { markAsRead, sendTextMessage, sendInteractiveButtons, sendWithMenuButton, setLastMessageId } = require('../messages/sender');
+const { runWithChannel } = require('../messages/channelContext');
 const { STATES } = require('./states');
 const { logger } = require('../utils/logger');
 const { generateResponse } = require('../llm/provider');
@@ -141,10 +142,16 @@ async function classifyIntent(state, text) {
 }
 
 /**
- * Main message router. Called for every incoming WhatsApp message.
+ * Main message router. Called for every incoming message (WhatsApp, Messenger, Instagram).
  */
 async function routeMessage(message) {
+  const channel = message.channel || 'whatsapp';
+  return runWithChannel(channel, () => _routeMessage(message));
+}
+
+async function _routeMessage(message) {
   const { from, text, messageId } = message;
+  const channel = message.channel || 'whatsapp';
 
   // Track the message ID so typing indicators work for all outgoing messages
   setLastMessageId(from, messageId);
@@ -157,12 +164,13 @@ async function routeMessage(message) {
   }
 
   // Transcribe audio messages to text
-  if (message.type === 'audio' && message.mediaId) {
+  if (message.type === 'audio' && (message.mediaId || message.mediaUrl)) {
     try {
-      const transcript = await transcribeAudio(message.mediaId, message.mimeType);
+      const mediaRef = message.mediaId || message.mediaUrl;
+      const transcript = await transcribeAudio(mediaRef, message.mimeType);
       if (transcript) {
         message.text = transcript;
-        message.type = 'text'; // Treat as text from here on
+        message.type = 'text';
         logger.info(`Audio from ${from} transcribed: "${transcript.slice(0, 100)}"`);
       }
     } catch (error) {
@@ -172,8 +180,8 @@ async function routeMessage(message) {
     }
   }
 
-  // Find or create user
-  const user = await findOrCreateUser(from);
+  // Find or create user (channel-aware)
+  const user = await findOrCreateUser(from, channel);
 
   // Log incoming message
   await logMessage(user.id, text || '', 'user', message.type, messageId);

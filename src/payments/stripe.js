@@ -44,7 +44,7 @@ async function createPaymentLink({ userId, phoneNumber, amount, serviceType, pac
       },
       after_completion: {
         type: 'redirect',
-        redirect: { url: 'https://bytesplatform.info/thank-you' },
+        redirect: { url: 'https://bytesplatform.com/thank-you' },
       },
     });
 

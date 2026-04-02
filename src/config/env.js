@@ -27,6 +27,8 @@ const optional = [
   'CALENDLY_WEBHOOK_SIGNING_KEY',
   'STRIPE_SECRET_KEY',
   'CHATBOT_BASE_URL',
+  'META_PAGE_ACCESS_TOKEN',
+  'META_APP_SECRET',
 ];
 
 function validateEnv() {
@@ -76,7 +78,13 @@ const env = {
     secretKey: process.env.STRIPE_SECRET_KEY || '',
   },
   chatbot: {
-    baseUrl: process.env.CHATBOT_BASE_URL || 'https://bytesplatform.info',
+    baseUrl: process.env.CHATBOT_BASE_URL || 'https://bytesplatform.com',
+  },
+  // Messenger & Instagram (shared Page Access Token)
+  messenger: {
+    pageAccessToken: process.env.META_PAGE_ACCESS_TOKEN || '',
+    appSecret: process.env.META_APP_SECRET || '',
+    verifyToken: process.env.WEBHOOK_VERIFY_TOKEN, // reuse the same verify token
   },
   agentPhone: process.env.AGENT_PHONE_NUMBER || '',
   // Server

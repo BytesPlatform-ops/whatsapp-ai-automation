@@ -38,7 +38,7 @@ Not necessarily. We can write professional copy for your website based on your b
 Absolutely. Here are a few examples:
 - https://quantiva-hq.vercel.app/
 - https://bytescart.ai
-- https://bytesplatform.info
+- https://bytesplatform.com
 
 We can also share examples closer to your specific industry or style preference.
 

@@ -15,6 +15,7 @@
 
 const { supabase } = require('../config/database');
 const { sendTextMessage } = require('../messages/sender');
+const { runWithChannel } = require('../messages/channelContext');
 const { logMessage } = require('../db/conversations');
 const { updateUserMetadata } = require('../db/users');
 const { logger } = require('../utils/logger');
@@ -112,7 +113,7 @@ async function runFollowupCycle() {
     // Get all users currently in the sales chat state
     const { data: users, error: userErr } = await supabase
       .from('users')
-      .select('id, phone_number, metadata')
+      .select('id, phone_number, metadata, channel')
       .eq('state', STATES.SALES_CHAT);
 
     if (userErr) {
@@ -124,7 +125,7 @@ async function runFollowupCycle() {
 
     for (const user of users) {
       try {
-        await processUserFollowup(user);
+        await runWithChannel(user.channel || 'whatsapp', () => processUserFollowup(user));
       } catch (err) {
         logger.error(`Followup: error processing user ${user.phone_number}`, err);
       }
@@ -202,7 +203,7 @@ async function runMeetingReminders() {
   try {
     const { data: meetings, error } = await supabase
       .from('meetings')
-      .select('id, user_id, phone_number, name, preferred_date, preferred_time, preferred_timezone, topic')
+      .select('id, user_id, phone_number, name, preferred_date, preferred_time, preferred_timezone, topic, channel')
       .eq('status', 'confirmed');
 
     if (error || !meetings || meetings.length === 0) return;
@@ -241,10 +242,10 @@ async function runMeetingReminders() {
           const displayDate = meeting.preferred_date;
           const topic = meeting.topic || 'your upcoming call';
 
-          await sendTextMessage(
+          await runWithChannel(meeting.channel || 'whatsapp', () => sendTextMessage(
             meeting.phone_number,
             `Hey${meeting.name ? ' ' + meeting.name : ''}! Just a quick reminder - you have a call about *${topic}* in about 30 minutes (${displayTime}, ${displayDate}). Talk soon!`
-          );
+          ));
           await logMessage(meeting.user_id, `Meeting reminder sent for ${displayDate} at ${displayTime}`, 'assistant');
 
           // Mark as sent
@@ -274,7 +275,7 @@ async function runPaymentPolling() {
   try {
     const { data: pending, error } = await supabase
       .from('payments')
-      .select('id, user_id, phone_number, stripe_payment_link_id, amount, currency, service_type, package_tier, description')
+      .select('id, user_id, phone_number, stripe_payment_link_id, amount, currency, service_type, package_tier, description, channel')
       .eq('status', 'pending')
       .not('stripe_payment_link_id', 'is', null);
 
@@ -314,14 +315,14 @@ async function runPaymentPolling() {
           paid_at: new Date().toISOString(),
         }).eq('id', payment.id);
 
-        // Send WhatsApp confirmation
+        // Send payment confirmation
         const amountDisplay = `$${(payment.amount / 100).toLocaleString()}`;
-        await sendTextMessage(
+        await runWithChannel(payment.channel || 'whatsapp', () => sendTextMessage(
           payment.phone_number,
           `Payment of *${amountDisplay}* received! Thank you for choosing Bytes Platform.\n\n` +
             `*Package:* ${payment.description || payment.service_type}\n\n` +
             `Our team will be in touch shortly to kick things off. If you have any questions in the meantime, just message here.`
-        );
+        ));
         await logMessage(payment.user_id, `Payment confirmed: ${amountDisplay} for ${payment.service_type}`, 'assistant');
 
         // Update user metadata

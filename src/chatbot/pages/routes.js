@@ -105,7 +105,7 @@ function buildDemoPage(client, config) {
       <p>Ask anything your customers would ask</p>
     </div>
     <div id="chat-embed"></div>
-    <div class="page-footer">Powered by <a href="https://bytesplatform.info" target="_blank">Bytes Platform</a></div>
+    <div class="page-footer">Powered by <a href="https://bytesplatform.com" target="_blank">Bytes Platform</a></div>
   </div>
   <script src="/widget.js" data-client-id="${escapeHtml(client.client_id)}" data-embedded="true" data-container="chat-embed"></script>
 </body>
@@ -234,7 +234,7 @@ function buildStandalonePage(client, config) {
       </div>
     </div>
     <div id="chat-embed"></div>
-    <div class="page-footer"><a href="https://bytesplatform.info" target="_blank">Powered by Bytes Platform</a></div>
+    <div class="page-footer"><a href="https://bytesplatform.com" target="_blank">Powered by Bytes Platform</a></div>
   </div>
   <script src="/widget.js" data-client-id="${escapeHtml(client.client_id)}" data-embedded="true" data-container="chat-embed"></script>
 </body>

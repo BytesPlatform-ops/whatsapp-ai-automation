@@ -32,6 +32,7 @@ function parseWebhookPayload(body) {
       timestamp: message.timestamp,
       type: message.type, // text, image, document, interactive, etc.
       contactName: contact?.profile?.name || '',
+      channel: 'whatsapp',
     };
 
     // Extract content based on message type
