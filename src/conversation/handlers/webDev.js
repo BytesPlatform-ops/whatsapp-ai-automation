@@ -4,10 +4,11 @@ const {
   sendCTAButton,
   downloadMedia,
 } = require('../../messages/sender');
-const { logMessage } = require('../../db/conversations');
+const { logMessage, getConversationHistory } = require('../../db/conversations');
 const { updateUserMetadata, updateUserState } = require('../../db/users');
 const { createSite, updateSite, getLatestSite } = require('../../db/sites');
 const { logger } = require('../../utils/logger');
+const { generateResponse } = require('../../llm/provider');
 const { STATES } = require('../states');
 
 async function handleWebDev(user, message) {
@@ -59,13 +60,38 @@ async function handleCollectName(user, message) {
 }
 
 async function handleCollectIndustry(user, message) {
-  const industry = message.listId
+  let industry = message.listId
     ? message.text // Use the title from the list selection
     : (message.text || '').trim();
 
   if (!industry) {
     await sendTextMessage(user.phone_number, 'Please select or type your industry:');
     return STATES.WEB_COLLECT_INDUSTRY;
+  }
+
+  // If the user asks the bot to figure it out, infer from conversation context
+  const inferPhrases = /figure.?it.?out|you.?tell.?me|i.?don.?t.?know|idk|from.?(the|my).?(idea|description|above|prev)|you.?already.?know|can.?t.?figure|same.?as/i;
+  if (inferPhrases.test(industry)) {
+    try {
+      const history = await getConversationHistory(user.id, 10);
+      const websiteData = user.metadata?.websiteData || {};
+      const context = history.map(m => `${m.role}: ${m.message_text}`).join('\n');
+      const inferred = await generateResponse(
+        `Based on the conversation below and the business name "${websiteData.businessName || ''}", determine the most appropriate industry/niche for this business. Return ONLY the industry name (1-3 words, e.g. "Education", "Poetry & Literature", "Food & Beverage"). No explanation.\n\nConversation:\n${context}`,
+        [{ role: 'user', content: industry }]
+      );
+      if (inferred && inferred.trim().length > 1) {
+        industry = inferred.trim().replace(/^["']|["']$/g, '');
+        await sendTextMessage(user.phone_number, `Got it - I'll go with *${industry}*!`);
+      } else {
+        await sendTextMessage(user.phone_number, "I couldn't figure that out from our conversation. Could you just type the industry? For example: tech, education, food, creative, etc.");
+        return STATES.WEB_COLLECT_INDUSTRY;
+      }
+    } catch (error) {
+      logger.error('Industry inference error:', error);
+      await sendTextMessage(user.phone_number, "Could you just type the industry? For example: tech, education, food, creative, etc.");
+      return STATES.WEB_COLLECT_INDUSTRY;
+    }
   }
 
   await updateUserMetadata(user.id, {

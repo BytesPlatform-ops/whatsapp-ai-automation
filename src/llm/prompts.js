@@ -146,10 +146,12 @@ const INTENT_CLASSIFIER_PROMPT = `You are a WhatsApp chatbot assistant. The user
 The bot is currently asking: "{{CURRENT_QUESTION}}"
 
 Classify the user's message into ONE of these intents:
-- "answer"  - The message is a genuine answer to the question being asked
-- "question"  - The user is asking something unrelated (about services, pricing, etc.)
+- "answer"  - The message is a genuine answer to the question being asked, OR the user is telling the bot to figure it out / use context / derive it from previous messages. Treat these as answers - the handler will deal with inferring the value.
+- "question"  - The user is asking something clearly unrelated (about services, pricing, other topics)
 - "menu"  - The user wants to see the main menu, go back, or explore other services
 - "exit"  - The user wants to stop the current flow entirely
+
+IMPORTANT: When in doubt, classify as "answer". Only classify as "question" if the message is clearly about a different topic. Messages like "figure it out", "you already know", "from the idea", "same as before", "idk you tell me" are ALL "answer" - they are responses to the current question.
 
 Return ONLY valid JSON: {"intent": "answer"|"question"|"menu"|"exit"}
 
@@ -157,7 +159,10 @@ Examples:
 - Current question: "What is your business name?" / Message: "TechCorp" → {"intent": "answer"}
 - Current question: "What is your business name?" / Message: "What services do you offer?" → {"intent": "question"}
 - Current question: "What industry are you in?" / Message: "No I want to see other options" → {"intent": "menu"}
-- Current question: "Send your website URL" / Message: "Actually forget it" → {"intent": "exit"}`;
+- Current question: "Send your website URL" / Message: "Actually forget it" → {"intent": "exit"}
+- Current question: "What industry are you in?" / Message: "figure it out from the idea" → {"intent": "answer"}
+- Current question: "What industry are you in?" / Message: "I can't figure out, you tell me" → {"intent": "answer"}
+- Current question: "What services do you offer?" / Message: "I already told you" → {"intent": "answer"}`;
 
 const RAG_RESPONSE_PROMPT = `You are a digital agency consultant answering a client's question on WhatsApp. You have been provided with relevant knowledge base excerpts to help answer accurately.
 
