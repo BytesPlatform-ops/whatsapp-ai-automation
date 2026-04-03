@@ -1,24 +1,13 @@
-const axios = require('axios');
-const { env } = require('../config/env');
 const { logger } = require('../utils/logger');
 
-/**
- * Fetch message text from Instagram Graph API using the message mid.
- */
-async function fetchMessageText(mid) {
-  try {
-    const token = env.messenger.pageAccessToken;
-    if (!token) return null;
-    const url = `https://graph.facebook.com/v25.0/${mid}?fields=message&access_token=${token}`;
-    const res = await axios.get(url);
-    return res.data?.message || null;
-  } catch (error) {
-    logger.error('[PARSER] Failed to fetch message text from Graph API', {
-      mid,
-      error: error.response?.data || error.message,
-    });
-    return null;
-  }
+// Cache echo message texts keyed by mid — Instagram sends an echo with the text
+// right before the message_edit event for the same mid
+const echoTextCache = new Map();
+const ECHO_CACHE_TTL = 30000; // 30 seconds
+
+function cacheEchoText(mid, text) {
+  echoTextCache.set(mid, text);
+  setTimeout(() => echoTextCache.delete(mid), ECHO_CACHE_TTL);
 }
 
 /**
@@ -28,7 +17,7 @@ async function fetchMessageText(mid) {
  * Messenger: body.object === 'page'
  * Instagram: body.object === 'instagram'
  */
-async function parseMessengerPayload(body) {
+function parseMessengerPayload(body) {
   try {
     const objectType = body.object; // 'page' or 'instagram'
     if (objectType !== 'page' && objectType !== 'instagram') return null;
@@ -62,6 +51,18 @@ async function parseMessengerPayload(body) {
     const senderId = messaging.sender?.id;
     if (!senderId) return null;
 
+    // For Instagram echo messages: cache the text keyed by mid so we can
+    // use it when the corresponding message_edit arrives
+    if (messaging.message?.is_echo && channel === 'instagram') {
+      const mid = messaging.message.mid;
+      const text = messaging.message.text;
+      if (mid && text) {
+        cacheEchoText(mid, text);
+        logger.debug('[PARSER] Cached echo text for mid', { mid, text: text.slice(0, 50) });
+      }
+      return null;
+    }
+
     // Skip echo messages (messages sent by the page itself)
     if (messaging.message?.is_echo) return null;
 
@@ -85,24 +86,27 @@ async function parseMessengerPayload(body) {
       return parsed;
     }
 
-    // Handle message_edit as original message (Instagram API v25 sends incoming
-    // messages as message_edit with num_edit=0 instead of a regular message event)
+    // Handle message_edit — Instagram API v25 sends incoming messages as
+    // message_edit with num_edit=0. The echo with the actual text arrives
+    // right before this event with the same mid.
     if (messaging.message_edit && !messaging.message) {
       const mid = messaging.message_edit.mid;
-      logger.info('[PARSER] Received message_edit event — fetching text from Graph API', {
+      const cachedText = echoTextCache.get(mid);
+      logger.info('[PARSER] Received message_edit event', {
         mid,
         numEdit: messaging.message_edit.num_edit,
         senderId,
+        hasCachedText: !!cachedText,
       });
-      const text = await fetchMessageText(mid);
-      if (!text) {
-        logger.warn('[PARSER] Could not fetch message text for message_edit', { mid });
-        return null;
+      if (cachedText) {
+        echoTextCache.delete(mid);
+        parsed.messageId = mid;
+        parsed.text = cachedText;
+        parsed.type = 'text';
+        return parsed;
       }
-      parsed.messageId = mid;
-      parsed.text = text;
-      parsed.type = 'text';
-      return parsed;
+      logger.warn('[PARSER] No cached text found for message_edit', { mid });
+      return null;
     }
 
     const message = messaging.message;

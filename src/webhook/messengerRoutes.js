@@ -87,7 +87,7 @@ router.post('/msg-webhook', async (req, res) => {
     // return;
   }
 
-  const message = await parseMessengerPayload(req.body);
+  const message = parseMessengerPayload(req.body);
   if (!message) {
     logger.info('[MSG-WEBHOOK] No parseable message from payload');
     return;
