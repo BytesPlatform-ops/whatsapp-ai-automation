@@ -1,8 +1,14 @@
 const axios = require('axios');
 const { env } = require('../config/env');
 const { logger } = require('../utils/logger');
+const { getCurrentChannel } = require('./channelContext');
 
-const API_BASE = 'https://graph.facebook.com/v21.0/me/messages';
+const MESSENGER_API_BASE = 'https://graph.facebook.com/v25.0/me/messages';
+const INSTAGRAM_API_BASE = 'https://graph.instagram.com/v25.0/me/messages';
+
+function getApiBase() {
+  return getCurrentChannel() === 'instagram' ? INSTAGRAM_API_BASE : MESSENGER_API_BASE;
+}
 
 function getHeaders() {
   return {
@@ -12,14 +18,16 @@ function getHeaders() {
 }
 
 async function sendRequest(payload) {
+  const apiBase = getApiBase();
   try {
-    const response = await axios.post(API_BASE, payload, { headers: getHeaders() });
-    logger.debug('Messenger message sent', { to: payload.recipient?.id });
+    const response = await axios.post(apiBase, payload, { headers: getHeaders() });
+    logger.debug('Messenger message sent', { to: payload.recipient?.id, api: apiBase });
     return response.data;
   } catch (error) {
     logger.error('Messenger API error:', {
       status: error.response?.status,
       data: error.response?.data,
+      api: apiBase,
     });
     throw error;
   }
@@ -158,7 +166,7 @@ async function sendDocumentBuffer(to, buffer, caption = '', filename = 'report.p
   try {
     if (caption) await sendTextMessage(to, caption);
 
-    const response = await axios.post(API_BASE, form, {
+    const response = await axios.post(getApiBase(), form, {
       headers: {
         Authorization: `Bearer ${env.messenger.pageAccessToken}`,
         ...form.getHeaders(),
