@@ -1,4 +1,25 @@
+const axios = require('axios');
+const { env } = require('../config/env');
 const { logger } = require('../utils/logger');
+
+/**
+ * Fetch message text from Instagram Graph API using the message mid.
+ */
+async function fetchMessageText(mid) {
+  try {
+    const token = env.messenger.pageAccessToken;
+    if (!token) return null;
+    const url = `https://graph.facebook.com/v25.0/${mid}?fields=message&access_token=${token}`;
+    const res = await axios.get(url);
+    return res.data?.message || null;
+  } catch (error) {
+    logger.error('[PARSER] Failed to fetch message text from Graph API', {
+      mid,
+      error: error.response?.data || error.message,
+    });
+    return null;
+  }
+}
 
 /**
  * Parse incoming webhook payload from Meta's Messenger / Instagram API.
@@ -7,7 +28,7 @@ const { logger } = require('../utils/logger');
  * Messenger: body.object === 'page'
  * Instagram: body.object === 'instagram'
  */
-function parseMessengerPayload(body) {
+async function parseMessengerPayload(body) {
   try {
     const objectType = body.object; // 'page' or 'instagram'
     if (objectType !== 'page' && objectType !== 'instagram') return null;
@@ -47,9 +68,6 @@ function parseMessengerPayload(body) {
     // Skip delivery/read receipts
     if (messaging.delivery || messaging.read) return null;
 
-    // Skip message edits
-    if (messaging.message_edit) return null;
-
     const parsed = {
       from: senderId,
       messageId: messaging.message?.mid || `${Date.now()}`,
@@ -63,6 +81,26 @@ function parseMessengerPayload(body) {
     if (messaging.postback) {
       parsed.text = messaging.postback.title || '';
       parsed.buttonId = messaging.postback.payload || '';
+      parsed.type = 'text';
+      return parsed;
+    }
+
+    // Handle message_edit as original message (Instagram API v25 sends incoming
+    // messages as message_edit with num_edit=0 instead of a regular message event)
+    if (messaging.message_edit && !messaging.message) {
+      const mid = messaging.message_edit.mid;
+      logger.info('[PARSER] Received message_edit event — fetching text from Graph API', {
+        mid,
+        numEdit: messaging.message_edit.num_edit,
+        senderId,
+      });
+      const text = await fetchMessageText(mid);
+      if (!text) {
+        logger.warn('[PARSER] Could not fetch message text for message_edit', { mid });
+        return null;
+      }
+      parsed.messageId = mid;
+      parsed.text = text;
       parsed.type = 'text';
       return parsed;
     }
