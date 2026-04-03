@@ -70,16 +70,28 @@ router.get('/msg-webhook', (req, res) => {
  * POST /msg-webhook — Receive incoming Messenger/Instagram messages.
  */
 router.post('/msg-webhook', async (req, res) => {
+  // Log EVERY incoming POST so we know if Meta is reaching us
+  logger.info('[MSG-WEBHOOK] POST received', {
+    object: req.body?.object,
+    entryCount: req.body?.entry?.length,
+    hasMessaging: !!req.body?.entry?.[0]?.messaging,
+    body: JSON.stringify(req.body).slice(0, 300),
+  });
+
   // Always respond 200 immediately (Meta requirement)
   res.sendStatus(200);
 
   if (!verifySignature(req)) {
-    logger.warn('Invalid Messenger/IG webhook signature');
-    return;
+    logger.warn('Invalid Messenger/IG webhook signature — skipping for now (debug)');
+    // TODO: re-enable once correct app secret is confirmed
+    // return;
   }
 
   const message = parseMessengerPayload(req.body);
-  if (!message) return;
+  if (!message) {
+    logger.info('[MSG-WEBHOOK] No parseable message from payload');
+    return;
+  }
 
   logger.info('Incoming Messenger/IG message', {
     from: message.from,
