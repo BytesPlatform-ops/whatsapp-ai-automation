@@ -75,7 +75,7 @@ router.post('/msg-webhook', async (req, res) => {
     object: req.body?.object,
     entryCount: req.body?.entry?.length,
     hasMessaging: !!req.body?.entry?.[0]?.messaging,
-    body: JSON.stringify(req.body).slice(0, 300),
+    body: JSON.stringify(req.body).slice(0, 1000),
   });
 
   // Always respond 200 immediately (Meta requirement)

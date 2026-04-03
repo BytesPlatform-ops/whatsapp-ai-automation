@@ -17,7 +17,25 @@ function parseMessengerPayload(body) {
     const entry = body.entry?.[0];
     if (!entry) return null;
 
-    const messaging = entry.messaging?.[0];
+    // Instagram API can send webhooks in two formats:
+    // 1. "messaging" format (Messenger-style)
+    // 2. "changes" format (Instagram API v25+)
+    let messaging = entry.messaging?.[0];
+
+    // Handle "changes" format — convert to messaging-style object
+    if (!messaging && entry.changes) {
+      const change = entry.changes.find(c => c.field === 'messages');
+      if (change?.value) {
+        const v = change.value;
+        messaging = {
+          sender: v.sender,
+          recipient: v.recipient,
+          timestamp: v.timestamp,
+          message: v.message,
+        };
+      }
+    }
+
     if (!messaging) return null;
 
     const senderId = messaging.sender?.id;
@@ -28,6 +46,9 @@ function parseMessengerPayload(body) {
 
     // Skip delivery/read receipts
     if (messaging.delivery || messaging.read) return null;
+
+    // Skip message edits
+    if (messaging.message_edit) return null;
 
     const parsed = {
       from: senderId,
