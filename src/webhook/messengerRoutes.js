@@ -15,7 +15,15 @@ function verifySignature(req) {
   if (!appSecret) return true;
 
   const signature = req.headers['x-hub-signature-256'];
-  if (!signature) return false;
+  if (!signature) {
+    logger.warn('No x-hub-signature-256 header found');
+    return false;
+  }
+
+  if (!req.rawBody) {
+    logger.warn('No rawBody available on request');
+    return false;
+  }
 
   const expectedSignature =
     'sha256=' +
@@ -23,6 +31,15 @@ function verifySignature(req) {
       .createHmac('sha256', appSecret)
       .update(req.rawBody)
       .digest('hex');
+
+  const match = expectedSignature === signature;
+  if (!match) {
+    logger.warn('Signature mismatch', {
+      secretUsed: appSecret ? `${appSecret.slice(0, 4)}...` : 'none',
+      received: signature.slice(0, 20) + '...',
+      expected: expectedSignature.slice(0, 20) + '...',
+    });
+  }
 
   return crypto.timingSafeEqual(
     Buffer.from(signature),
