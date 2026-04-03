@@ -8,7 +8,7 @@ async function logMessage(userId, messageText, role, messageType = 'text', waMes
       message_text: messageText,
       role,
       message_type: messageType,
-      whatsapp_message_id: waMessageId,
+      whatsapp_message_id: waMessageId ? waMessageId.slice(0, 100) : null,
     });
 
   if (error) throw new Error(`Failed to log message: ${error.message}`);
