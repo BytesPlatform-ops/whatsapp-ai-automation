@@ -4,10 +4,13 @@ const { logger } = require('../utils/logger');
 const { getCurrentChannel } = require('./channelContext');
 
 const MESSENGER_API_BASE = 'https://graph.facebook.com/v25.0/me/messages';
-const INSTAGRAM_API_BASE = 'https://graph.instagram.com/v25.0/me/messages';
 
 function getApiBase() {
-  return getCurrentChannel() === 'instagram' ? INSTAGRAM_API_BASE : MESSENGER_API_BASE;
+  if (getCurrentChannel() === 'instagram') {
+    const igUserId = env.messenger.instagramUserId;
+    return `https://graph.facebook.com/v25.0/${igUserId}/messages`;
+  }
+  return MESSENGER_API_BASE;
 }
 
 function getHeaders() {

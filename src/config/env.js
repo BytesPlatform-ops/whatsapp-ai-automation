@@ -85,6 +85,7 @@ const env = {
     pageAccessToken: process.env.META_PAGE_ACCESS_TOKEN || '',
     appSecret: process.env.META_APP_SECRET || '',
     verifyToken: process.env.WEBHOOK_VERIFY_TOKEN, // reuse the same verify token
+    instagramUserId: process.env.INSTAGRAM_USER_ID || '',
   },
   agentPhone: process.env.AGENT_PHONE_NUMBER || '',
   // Server
