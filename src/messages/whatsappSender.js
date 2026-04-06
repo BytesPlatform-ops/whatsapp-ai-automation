@@ -58,7 +58,6 @@ async function showTyping(phoneNumber) {
  * Send a plain text message. Automatically shows typing indicator first.
  */
 async function sendTextMessage(to, text) {
-  await showTyping(to);
   return sendRequest({
     messaging_product: 'whatsapp',
     to,
