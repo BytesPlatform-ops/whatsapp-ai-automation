@@ -35,6 +35,23 @@ function parseWebhookPayload(body) {
       channel: 'whatsapp',
     };
 
+    // Extract ad referral data (Click-to-WhatsApp ads)
+    const referral = message.referral || value.messages?.[0]?.referral;
+    if (referral) {
+      parsed.referral = {
+        sourceId: referral.source_id || '',
+        sourceType: referral.source_type || '',
+        headline: referral.headline || '',
+        body: referral.body || '',
+        ctwaClid: referral.ctwa_clid || '',
+      };
+      logger.info('[AD TRACKING] WhatsApp referral detected', {
+        sourceId: parsed.referral.sourceId,
+        headline: parsed.referral.headline,
+        body: (parsed.referral.body || '').slice(0, 100),
+      });
+    }
+
     // Extract content based on message type
     switch (message.type) {
       case 'text':

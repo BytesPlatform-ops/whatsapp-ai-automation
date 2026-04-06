@@ -238,7 +238,6 @@ async function handleCollectContact(user, message) {
     `*Business Name:* ${wd.businessName || '-'}\n` +
     `*Industry:* ${wd.industry || '-'}\n` +
     `*Services:* ${servicesList}\n` +
-    `*Logo:* ${wd.logo ? 'Uploaded' : 'None (text logo)'}\n` +
     `*Contact:* ${contactInfo}\n\n` +
     `Does everything look good? You can say *"yes"* to proceed, or tell me what you'd like to change.`;
 

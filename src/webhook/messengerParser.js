@@ -83,6 +83,23 @@ function parseMessengerPayload(body) {
       channel,
     };
 
+    // Extract ad referral data (Click-to-Messenger/Instagram ads)
+    const referral = messaging.referral || messaging.postback?.referral;
+    if (referral) {
+      parsed.referral = {
+        sourceId: referral.source || referral.ad_id || '',
+        sourceType: referral.type || '',
+        headline: referral.ads_context_data?.title || referral.ad_title || '',
+        body: referral.ads_context_data?.body || referral.ref || '',
+        ctwaClid: '',
+      };
+      logger.info(`[AD TRACKING] ${channel} referral detected`, {
+        sourceId: parsed.referral.sourceId,
+        headline: parsed.referral.headline,
+        body: (parsed.referral.body || '').slice(0, 100),
+      });
+    }
+
     // Handle postback (button clicks)
     if (messaging.postback) {
       parsed.text = messaging.postback.title || '';

@@ -1,4 +1,4 @@
-const { findOrCreateUser, updateUserState } = require('../db/users');
+const { findOrCreateUser, updateUserState, updateUserMetadata } = require('../db/users');
 const { logMessage } = require('../db/conversations');
 const { markAsRead, sendTextMessage, sendInteractiveButtons, sendWithMenuButton, setLastMessageId } = require('../messages/sender');
 const { runWithChannel } = require('../messages/channelContext');
@@ -7,6 +7,20 @@ const { logger } = require('../utils/logger');
 const { generateResponse } = require('../llm/provider');
 const { INTENT_CLASSIFIER_PROMPT, GENERAL_CHAT_PROMPT } = require('../llm/prompts');
 const { transcribeAudio } = require('../llm/transcribe');
+
+/**
+ * Identify which product an ad is promoting based on the ad body text.
+ */
+function identifyProduct(adBody) {
+  const body = (adBody || '').toLowerCase();
+  if (body.includes('chatbot') || body.includes('bot') || body.includes('automation') || body.includes('ai assistant')) return 'chatbot';
+  if (body.includes('website') || body.includes('web design') || body.includes('web development') || body.includes('landing page')) return 'web';
+  if (body.includes('seo') || body.includes('ranking') || body.includes('google rank')) return 'seo';
+  if (body.includes('social media') || body.includes('marketing') || body.includes('ads') || body.includes('campaign')) return 'smm';
+  if (body.includes('app') || body.includes('mobile') || body.includes('android') || body.includes('ios')) return 'app';
+  if (body.includes('ecommerce') || body.includes('store') || body.includes('shop') || body.includes('shopify')) return 'ecommerce';
+  return 'generic';
+}
 
 // Import handlers
 const { handleWelcome } = require('./handlers/welcome');
@@ -191,6 +205,26 @@ async function _routeMessage(message) {
 
   // Find or create user (channel-aware)
   const user = await findOrCreateUser(from, channel);
+
+  // Store ad referral data on first interaction (if present)
+  if (message.referral && !user.metadata?.adSource) {
+    const ref = message.referral;
+    const product = identifyProduct(ref.body || ref.headline || '');
+    await updateUserMetadata(user.id, {
+      adSource: product,
+      adReferral: {
+        sourceId: ref.sourceId,
+        sourceType: ref.sourceType,
+        headline: ref.headline,
+        body: ref.body,
+        ctwaClid: ref.ctwaClid,
+        platform: channel,
+        timestamp: new Date().toISOString(),
+      },
+    });
+    user.metadata = { ...user.metadata, adSource: product, adReferral: ref };
+    logger.info(`[AD TRACKING] Platform: ${channel} | Product: ${product} | Ad: ${ref.headline || 'N/A'} | User: ${from}`);
+  }
 
   // Log incoming message
   await logMessage(user.id, text || '', 'user', message.type, messageId);

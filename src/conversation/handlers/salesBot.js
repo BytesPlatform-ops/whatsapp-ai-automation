@@ -7,6 +7,7 @@ const { updateUserMetadata } = require('../../db/users');
 const { logger } = require('../../utils/logger');
 const { STATES } = require('../states');
 const { env } = require('../../config/env');
+const { saveLeadSummary } = require('../../db/leadSummaries');
 
 /**
  * Extract and strip the [LEAD_BRIEF]...[/LEAD_BRIEF] block from the LLM response.
@@ -40,6 +41,7 @@ async function handleSalesBot(user, message) {
       "No worries at all! I won't follow up further. If you ever change your mind, just send a message and I'll be here. Have a great day!"
     );
     await logMessage(user.id, 'User not interested — follow-ups stopped', 'assistant');
+    saveLeadSummary(user, 'opted_out', 'User said not interested — follow-ups stopped').catch(() => {});
     return STATES.SALES_CHAT;
   }
 
@@ -249,6 +251,7 @@ async function handleSalesBot(user, message) {
     await logMessage(user.id, 'Sent Calendly booking link', 'assistant');
     // Mark lead as closed - stop follow-up sequences
     await updateUserMetadata(user.id, { leadClosed: true });
+    saveLeadSummary(user, 'meeting_booked', 'Calendly booking link sent').catch(() => {});
   }
 
   // Send payment link if the LLM triggered it
@@ -281,6 +284,7 @@ async function handleSalesBot(user, message) {
         lastPaymentAmount: amount,
         leadClosed: true,
       });
+      saveLeadSummary(user, 'paid', `Payment link sent: $${amount} for ${serviceType} (${tier})`).catch(() => {});
       logger.info(`[SALES] Payment link sent to ${user.phone_number}: $${amount} for ${serviceType}`);
     } catch (error) {
       logger.error('[SALES] Failed to create payment link:', error.message);

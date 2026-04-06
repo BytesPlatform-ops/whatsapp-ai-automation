@@ -323,13 +323,9 @@ async function runPaymentPolling() {
               payment.phone_number,
               `Payment of *${amountDisplay}* received! Thank you for choosing Bytes Platform.\n\n` +
                 `*Package:* ${payment.description || payment.service_type}\n\n` +
-                `Your website is all set! Would you like to put it on your own custom domain? (e.g., yourbusiness.com)`
+                `Your website is all set! Would you like to put it on your own custom domain? (e.g., yourbusiness.com)\n\n` +
+                `Just say *"yes"* and I'll help you find and set one up, or *"no"* if you want to do it later.`
             );
-            const { sendInteractiveButtons } = require('../messages/sender');
-            await sendInteractiveButtons(payment.phone_number, 'Custom domain?', [
-              { id: 'domain_yes', title: 'Yes, set up domain' },
-              { id: 'domain_no', title: 'No, maybe later' },
-            ]);
           });
           await logMessage(payment.user_id, `Payment confirmed: ${amountDisplay} for ${payment.service_type}`, 'assistant');
 

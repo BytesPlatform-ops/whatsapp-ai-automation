@@ -104,8 +104,8 @@ async function runDomainSearch(user, baseName) {
   const links = getPurchaseLinks(topDomain.domain);
 
   msg += '\n*To purchase a domain:*\n\n';
-  msg += `1. Namecheap (~$9/yr):\n${links.namecheap}\n\n`;
-  msg += `2. Porkbun (~$10/yr):\n${links.porkbun}\n\n`;
+  msg += `1. Namecheap:\n${links.namecheap}\n\n`;
+  msg += `2. Porkbun:\n${links.porkbun}\n\n`;
 
   if (available.length > 1) {
     msg += '_You can search for any of the available domains above on either site._\n\n';
@@ -153,16 +153,44 @@ async function handlePurchaseWait(user, message) {
 
   // Get the site's Netlify info
   const site = await getLatestSite(user.id);
-  const netlifySubdomain = site?.netlify_subdomain || 'your-site';
+  let netlifySubdomain = site?.netlify_subdomain || '';
+  let netlifySiteId = site?.netlify_site_id || '';
+
+  // Fallback: extract subdomain from preview URL if not stored
+  if (!netlifySubdomain && site?.preview_url) {
+    const match = site.preview_url.match(/https?:\/\/([^.]+)\.netlify\.app/);
+    if (match) netlifySubdomain = match[1];
+  }
+
+  // Fallback: look up site ID from Netlify API using subdomain
+  if (!netlifySiteId && netlifySubdomain) {
+    try {
+      const axios = require('axios');
+      const { env } = require('../../config/env');
+      const res = await axios.get(`https://api.netlify.com/api/v1/sites/${netlifySubdomain}.netlify.app`, {
+        headers: { Authorization: `Bearer ${env.netlify.token}` },
+      });
+      netlifySiteId = res.data.id;
+      // Save it for future use
+      if (site) await updateSite(site.id, { netlify_site_id: netlifySiteId, netlify_subdomain: netlifySubdomain });
+      logger.info(`[DOMAIN] Resolved Netlify site ID from subdomain: ${netlifySiteId}`);
+    } catch (err) {
+      logger.error('[DOMAIN] Could not resolve Netlify site ID:', err.response?.data || err.message);
+    }
+  }
+
+  if (!netlifySubdomain) netlifySubdomain = 'your-site';
 
   // Add the custom domain to Netlify
   try {
-    if (site?.netlify_site_id) {
-      await addCustomDomainToNetlify(site.netlify_site_id, domain);
+    if (netlifySiteId) {
+      await addCustomDomainToNetlify(netlifySiteId, domain);
       await updateSite(site.id, { custom_domain: domain });
+    } else {
+      logger.warn(`[DOMAIN] No Netlify site ID found for user ${user.phone_number} — skipping API call`);
     }
   } catch (error) {
-    logger.error('Failed to add domain to Netlify:', error.message);
+    logger.error('Failed to add domain to Netlify:', error.response?.data || error.message);
     // Continue anyway — the DNS instructions are still valid
   }
 
@@ -224,7 +252,7 @@ async function handleDNSGuide(user, message) {
 
   await sendTextMessage(
     user.phone_number,
-    'No rush! Just send *"done"* when you\'ve updated the DNS records and I\'ll check the connection.\n\nSend *"help"* if you need more detailed instructions.'
+    'Hey, I can only help with domain setup right now! Just send *"done"* when you\'ve updated the DNS records and I\'ll check the connection, or *"help"* if you need guidance.'
   );
   return STATES.DOMAIN_DNS_GUIDE;
 }
@@ -239,7 +267,7 @@ async function handleVerify(user, message) {
 
   await sendTextMessage(
     user.phone_number,
-    'Send *"check"* when you\'re ready and I\'ll verify the DNS connection again.'
+    'I can only help with your domain setup at the moment. Send *"check"* when you\'re ready and I\'ll verify the DNS connection.'
   );
   return STATES.DOMAIN_VERIFY;
 }
