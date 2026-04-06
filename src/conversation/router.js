@@ -229,6 +229,17 @@ async function _routeMessage(message) {
   // Log incoming message
   await logMessage(user.id, text || '', 'user', message.type, messageId);
 
+  // Auto-update lead temperature based on user message count
+  const messageCount = (user.metadata?.userMessageCount || 0) + 1;
+  const currentTemp = user.metadata?.leadTemperature || 'COLD';
+  const newTemp = messageCount >= 10 ? 'HOT' : messageCount >= 5 ? 'WARM' : currentTemp;
+  if (newTemp !== currentTemp || messageCount !== user.metadata?.userMessageCount) {
+    await updateUserMetadata(user.id, { userMessageCount: messageCount, leadTemperature: newTemp });
+    if (newTemp !== currentTemp) {
+      logger.info(`[LEAD] ${from} temperature: ${currentTemp} → ${newTemp} (${messageCount} messages)`);
+    }
+  }
+
   // Check for reset command
   if (text && text.toLowerCase().trim() === '/reset') {
     await updateUserState(user.id, STATES.WELCOME);

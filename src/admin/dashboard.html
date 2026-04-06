@@ -48,6 +48,10 @@
           <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>
           Conversations
         </a>
+        <a href="#" class="sidebar-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm" data-section="leadsummaries">
+          <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+          Lead Summaries
+        </a>
         <a href="#" class="sidebar-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm" data-section="dropoffs">
           <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M13 17h8m0 0V9m0 8l-8-8-4 4-6-6"/></svg>
           Drop-offs
@@ -221,6 +225,7 @@ function loadSection(section) {
     case 'meetings': promise = api('meetings').then(renderMeetings); break;
     case 'revenue': promise = Promise.all([api('revenue'), api('payments')]).then(function(r) { renderRevenue(r[0], r[1]); }); break;
     case 'payments': promise = api('payments').then(renderPayments); break;
+    case 'leadsummaries': promise = api('lead-summaries').then(renderLeadSummaries); break;
   }
   promise.catch(function(err) {
     document.getElementById('content').innerHTML = '<div class="bg-red-50 text-red-700 rounded-xl p-6"><b>Error loading data:</b> ' + esc(err.message) + '</div>';
@@ -619,6 +624,123 @@ function closeConvModal() {
 document.getElementById('conv-modal').addEventListener('click', function(e) {
   if (e.target === e.currentTarget) closeConvModal();
 });
+
+// ─── Lead Summaries ───────────────────────────
+var leadSummaryFilter = 'all';
+
+function outcomeBadge(outcome) {
+  var colors = { paid: 'bg-green-100 text-green-700', meeting_booked: 'bg-blue-100 text-blue-700', opted_out: 'bg-red-100 text-red-700', declined: 'bg-gray-100 text-gray-700' };
+  var labels = { paid: 'Paid', meeting_booked: 'Meeting', opted_out: 'Opted Out', declined: 'Declined' };
+  var c = colors[outcome] || 'bg-gray-100 text-gray-600';
+  var l = labels[outcome] || outcome;
+  return '<span class="badge ' + c + '">' + l + '</span>';
+}
+
+function leadSummaryRows(summaries) {
+  return summaries.filter(function(s) {
+    if (leadSummaryFilter === 'all') return true;
+    return s.outcome === leadSummaryFilter;
+  }).map(function(s) {
+    var temp = s.lead_temperature ? tempBadge(s.lead_temperature) : '<span class="text-gray-300 text-xs">-</span>';
+    var channelBadge = s.channel === 'messenger' ? '<span class="text-xs text-blue-500 font-semibold">MSG</span>' :
+      s.channel === 'instagram' ? '<span class="text-xs text-pink-500 font-semibold">IG</span>' :
+      '<span class="text-xs text-green-500 font-semibold">WA</span>';
+    return '<tr class="border-b border-gray-100 hover:bg-gray-50">' +
+      '<td class="p-3">' + channelBadge + '</td>' +
+      '<td class="p-3 font-medium text-sm">' + esc(s.name || s.phone_number) + '</td>' +
+      '<td class="p-3 text-xs text-gray-500">' + esc(s.phone_number) + '</td>' +
+      '<td class="p-3 text-sm">' + esc(s.business_name || '-') + '</td>' +
+      '<td class="p-3 text-sm">' + esc(s.industry || '-') + '</td>' +
+      '<td class="p-3 text-sm">' + esc(s.services_discussed || '-') + '</td>' +
+      '<td class="p-3">' + temp + '</td>' +
+      '<td class="p-3">' + outcomeBadge(s.outcome) + '</td>' +
+      '<td class="p-3 text-xs text-gray-500">' + esc(s.budget_range || '-') + '</td>' +
+      '<td class="p-3 text-xs text-gray-400">' + s.total_messages + '</td>' +
+      '<td class="p-3 text-xs text-gray-400">' + timeAgo(s.created_at) + '</td>' +
+      '<td class="p-3"><button onclick="toggleSummaryDetail(this)" class="text-indigo-600 hover:text-indigo-800 text-xs font-medium">View</button>' +
+        '<div class="hidden mt-2 p-3 bg-gray-50 rounded-lg text-xs text-gray-600 max-w-md">' +
+          '<p class="font-semibold mb-1">Summary:</p><p>' + esc(s.conversation_summary || 'No summary available') + '</p>' +
+          (s.outcome_details ? '<p class="font-semibold mt-2 mb-1">Details:</p><p>' + esc(s.outcome_details) + '</p>' : '') +
+          (s.ad_source && s.ad_source !== 'generic' ? '<p class="mt-2"><span class="font-semibold">Ad Source:</span> ' + esc(s.ad_source) + '</p>' : '') +
+        '</div>' +
+      '</td>' +
+    '</tr>';
+  }).join('');
+}
+
+function toggleSummaryDetail(btn) {
+  var detail = btn.nextElementSibling;
+  detail.classList.toggle('hidden');
+  btn.textContent = detail.classList.contains('hidden') ? 'View' : 'Hide';
+}
+
+function renderLeadSummaries(summaries) {
+  var counts = { all: summaries.length };
+  ['paid', 'meeting_booked', 'opted_out', 'declined'].forEach(function(o) {
+    counts[o] = summaries.filter(function(s) { return s.outcome === o; }).length;
+  });
+
+  function tabClass(key) {
+    return leadSummaryFilter === key
+      ? 'px-4 py-2 text-sm font-medium rounded-lg bg-indigo-600 text-white'
+      : 'px-4 py-2 text-sm font-medium rounded-lg bg-white text-gray-600 border hover:bg-gray-50';
+  }
+
+  // Count by temperature
+  var hotCount = summaries.filter(function(s) { return s.lead_temperature === 'HOT'; }).length;
+  var warmCount = summaries.filter(function(s) { return s.lead_temperature === 'WARM'; }).length;
+  var coldCount = summaries.filter(function(s) { return s.lead_temperature === 'COLD'; }).length;
+
+  document.getElementById('content').innerHTML = '<div class="fade-in">' +
+    '<h2 class="text-2xl font-bold mb-2">Lead Summaries</h2>' +
+    '<p class="text-gray-500 text-sm mb-6">Closed conversations with AI-generated summaries</p>' +
+
+    // Temperature overview cards
+    '<div class="grid grid-cols-3 gap-4 mb-6">' +
+      '<div class="bg-white rounded-xl border p-4 text-center"><p class="text-2xl font-bold text-red-500">' + hotCount + '</p><p class="text-xs text-gray-500 mt-1">Hot Leads</p></div>' +
+      '<div class="bg-white rounded-xl border p-4 text-center"><p class="text-2xl font-bold text-orange-500">' + warmCount + '</p><p class="text-xs text-gray-500 mt-1">Warm Leads</p></div>' +
+      '<div class="bg-white rounded-xl border p-4 text-center"><p class="text-2xl font-bold text-blue-500">' + coldCount + '</p><p class="text-xs text-gray-500 mt-1">Cold Leads</p></div>' +
+    '</div>' +
+
+    // Outcome filter tabs
+    '<div class="flex items-center gap-3 mb-4">' +
+      '<button onclick="setLeadSummaryFilter(\'all\')" class="' + tabClass('all') + '">All (' + counts.all + ')</button>' +
+      '<button onclick="setLeadSummaryFilter(\'paid\')" class="' + tabClass('paid') + '">Paid (' + (counts.paid || 0) + ')</button>' +
+      '<button onclick="setLeadSummaryFilter(\'meeting_booked\')" class="' + tabClass('meeting_booked') + '">Meetings (' + (counts.meeting_booked || 0) + ')</button>' +
+      '<button onclick="setLeadSummaryFilter(\'opted_out\')" class="' + tabClass('opted_out') + '">Opted Out (' + (counts.opted_out || 0) + ')</button>' +
+      '<button onclick="setLeadSummaryFilter(\'declined\')" class="' + tabClass('declined') + '">Declined (' + (counts.declined || 0) + ')</button>' +
+    '</div>' +
+
+    // Table
+    '<div class="bg-white rounded-xl border overflow-x-auto">' +
+      '<table class="w-full text-left">' +
+        '<thead class="bg-gray-50 text-xs text-gray-500 uppercase"><tr>' +
+          '<th class="p-3">Ch</th>' +
+          '<th class="p-3">Name</th>' +
+          '<th class="p-3">Phone</th>' +
+          '<th class="p-3">Business</th>' +
+          '<th class="p-3">Industry</th>' +
+          '<th class="p-3">Services</th>' +
+          '<th class="p-3">Temp</th>' +
+          '<th class="p-3">Outcome</th>' +
+          '<th class="p-3">Budget</th>' +
+          '<th class="p-3">Msgs</th>' +
+          '<th class="p-3">When</th>' +
+          '<th class="p-3">Summary</th>' +
+        '</tr></thead>' +
+        '<tbody>' + leadSummaryRows(summaries) + '</tbody>' +
+      '</table>' +
+    '</div>' +
+  '</div>';
+
+  // Store for filtering
+  window._leadSummariesData = summaries;
+}
+
+function setLeadSummaryFilter(f) {
+  leadSummaryFilter = f;
+  renderLeadSummaries(window._leadSummariesData || []);
+}
 
 // ─── Drop-offs ─────────────────────────────────
 function renderDropoffs(dropoffs) {

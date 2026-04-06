@@ -87,6 +87,16 @@ router.get('/api/leads', async (req, res) => {
   }
 });
 
+router.get('/api/lead-summaries', async (req, res) => {
+  try {
+    const data = await queries.getLeadSummaries();
+    res.json(data);
+  } catch (err) {
+    logger.error('[ADMIN] Lead summaries error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.get('/api/conversations/:userId', async (req, res) => {
   try {
     const data = await queries.getConversation(req.params.userId);

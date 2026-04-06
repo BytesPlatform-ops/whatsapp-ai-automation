@@ -636,6 +636,16 @@ Conversation Summary: [2-3 sentence summary of how the conversation went, what w
   }
 }
 
+async function getLeadSummaries() {
+  const { data, error } = await supabase
+    .from('lead_summaries')
+    .select('*')
+    .order('created_at', { ascending: false });
+
+  if (error) throw error;
+  return data || [];
+}
+
 module.exports = {
   getOverviewMetrics,
   getLeads,
@@ -650,4 +660,5 @@ module.exports = {
   getRevenue,
   getSalesPrep,
   generateLeadSummary,
+  getLeadSummaries,
 };
