@@ -140,6 +140,7 @@ async function getLeads() {
       returnToSales: !!u.metadata?.returnToSales,
     },
     ad_source: u.metadata?.adSource || '',
+    channel: u.channel || 'whatsapp',
   }));
 }
 

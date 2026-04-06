@@ -502,13 +502,25 @@ function filterLeads() {
 }
 
 // ─── Conversations ─────────────────────────────
+var convChannelFilter = 'all';
+
+function channelIcon(channel) {
+  if (channel === 'messenger') return '<span class="inline-block w-5 h-5 rounded-full bg-blue-100 text-blue-600 text-[10px] font-bold flex items-center justify-center" title="Messenger">M</span>';
+  if (channel === 'instagram') return '<span class="inline-block w-5 h-5 rounded-full bg-pink-100 text-pink-600 text-[10px] font-bold flex items-center justify-center" title="Instagram">IG</span>';
+  return '<span class="inline-block w-5 h-5 rounded-full bg-green-100 text-green-600 text-[10px] font-bold flex items-center justify-center" title="WhatsApp">WA</span>';
+}
+
 function convListItems(leads) {
-  return leads.filter(function(l) { return l.message_count > 0; }).map(function(l) {
+  return leads.filter(function(l) {
+    if (l.message_count === 0) return false;
+    if (convChannelFilter === 'all') return true;
+    return (l.channel || 'whatsapp') === convChannelFilter;
+  }).map(function(l) {
     return '<div class="bg-white rounded-xl border p-4 flex items-center justify-between hover:border-indigo-300 transition-colors cursor-pointer" onclick="openConversation(\'' + l.id + '\', \'' + esc(l.phone_number) + '\', \'' + esc(l.name || '') + '\')">' +
       '<div class="flex items-center gap-4">' +
         '<div class="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-bold text-sm">' + (l.name ? l.name[0].toUpperCase() : '#') + '</div>' +
         '<div>' +
-          '<p class="font-semibold text-sm">' + esc(l.name || l.phone_number) + '</p>' +
+          '<p class="font-semibold text-sm flex items-center gap-2">' + esc(l.name || l.phone_number) + ' ' + channelIcon(l.channel || 'whatsapp') + '</p>' +
           '<p class="text-xs text-gray-500">' + esc(l.phone_number) + ' &middot; ' + l.message_count + ' messages</p>' +
         '</div>' +
       '</div>' +
@@ -520,18 +532,45 @@ function convListItems(leads) {
   }).join('');
 }
 
+function convChannelCounts(leads) {
+  var active = leads.filter(function(l) { return l.message_count > 0; });
+  var wa = active.filter(function(l) { return (l.channel || 'whatsapp') === 'whatsapp'; }).length;
+  var msg = active.filter(function(l) { return (l.channel || 'whatsapp') === 'messenger'; }).length;
+  var ig = active.filter(function(l) { return (l.channel || 'whatsapp') === 'instagram'; }).length;
+  return { all: active.length, whatsapp: wa, messenger: msg, instagram: ig };
+}
+
 function renderConversations(leads) {
+  var counts = convChannelCounts(leads);
+  function tabClass(key) {
+    return convChannelFilter === key
+      ? 'px-4 py-2 text-sm font-medium rounded-lg bg-indigo-600 text-white'
+      : 'px-4 py-2 text-sm font-medium rounded-lg bg-white text-gray-600 border hover:bg-gray-50';
+  }
   document.getElementById('content').innerHTML = '<div class="fade-in">' +
     '<h2 class="text-2xl font-bold mb-6">Conversations</h2>' +
+    '<div class="flex items-center gap-3 mb-4">' +
+      '<button onclick="setConvChannel(\'all\')" class="' + tabClass('all') + '">All <span class="ml-1 text-xs opacity-75">(' + counts.all + ')</span></button>' +
+      '<button onclick="setConvChannel(\'whatsapp\')" class="' + tabClass('whatsapp') + '">WhatsApp <span class="ml-1 text-xs opacity-75">(' + counts.whatsapp + ')</span></button>' +
+      '<button onclick="setConvChannel(\'messenger\')" class="' + tabClass('messenger') + '">Messenger <span class="ml-1 text-xs opacity-75">(' + counts.messenger + ')</span></button>' +
+      '<button onclick="setConvChannel(\'instagram\')" class="' + tabClass('instagram') + '">Instagram <span class="ml-1 text-xs opacity-75">(' + counts.instagram + ')</span></button>' +
+    '</div>' +
     '<input id="conv-search" type="text" placeholder="Search by phone or name..." class="px-3 py-2 border rounded-lg text-sm w-80 mb-4" oninput="filterConvList()">' +
     '<div id="conv-list" class="grid gap-3">' + convListItems(leads) + '</div>' +
   '</div>';
 }
 
+function setConvChannel(ch) {
+  convChannelFilter = ch;
+  renderConversations(leadsData);
+}
+
 function filterConvList() {
   var s = document.getElementById('conv-search').value.toLowerCase();
   var filtered = leadsData.filter(function(l) {
-    return l.message_count > 0 && (l.phone_number.toLowerCase().indexOf(s) !== -1 || (l.name || '').toLowerCase().indexOf(s) !== -1);
+    if (l.message_count === 0) return false;
+    if (convChannelFilter !== 'all' && (l.channel || 'whatsapp') !== convChannelFilter) return false;
+    return l.phone_number.toLowerCase().indexOf(s) !== -1 || (l.name || '').toLowerCase().indexOf(s) !== -1;
   });
   document.getElementById('conv-list').innerHTML = convListItems(filtered);
 }

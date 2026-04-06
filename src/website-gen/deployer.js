@@ -32,7 +32,7 @@ async function deployToNetlify(siteConfig) {
     logger.info('[NETLIFY] Waiting for deploy to be ready...');
     const previewUrl = await waitForDeploy(deployId, headers);
     logger.info(`[NETLIFY] Deploy ready: ${previewUrl}`);
-    return previewUrl;
+    return { previewUrl, netlifySiteId: siteId, netlifySubdomain: siteResponse.data.name };
   } catch (error) {
     logger.error('[NETLIFY] Deployment failed:', { message: error.message, status: error.response?.status, data: JSON.stringify(error.response?.data || {}) });
     throw error;
@@ -627,4 +627,19 @@ function generateAllPages(config) {
 function generateStaticHTML(config) { return generateHomePage(config); }
 function esc(s) { if(!s)return''; return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;'); }
 
-module.exports = { deployToNetlify };
+/**
+ * Add a custom domain to an existing Netlify site.
+ */
+async function addCustomDomainToNetlify(netlifySiteId, domain) {
+  const headers = { Authorization: `Bearer ${env.netlify.token}`, 'Content-Type': 'application/json' };
+  try {
+    await axios.post(`${NETLIFY_API}/sites/${netlifySiteId}/domain_aliases`, { domain }, { headers });
+    logger.info(`[NETLIFY] Custom domain added: ${domain} -> site ${netlifySiteId}`);
+    return true;
+  } catch (error) {
+    logger.error(`[NETLIFY] Failed to add custom domain ${domain}:`, error.response?.data || error.message);
+    throw error;
+  }
+}
+
+module.exports = { deployToNetlify, addCustomDomainToNetlify };

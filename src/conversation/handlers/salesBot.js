@@ -31,6 +31,18 @@ async function handleSalesBot(user, message) {
     return STATES.SALES_CHAT;
   }
 
+  // Detect "not interested" and stop follow-ups (not a closed lead — just opted out of follow-ups)
+  const notInterested = /\b(not interested|no thanks|stop messaging|leave me alone|don'?t contact|don'?t message|unsubscribe|stop contacting|i'?m good|no need|pass|not for me)\b/i.test(text);
+  if (notInterested && !user.metadata?.followupOptOut) {
+    await updateUserMetadata(user.id, { followupOptOut: true });
+    await sendTextMessage(
+      user.phone_number,
+      "No worries at all! I won't follow up further. If you ever change your mind, just send a message and I'll be here. Have a great day!"
+    );
+    await logMessage(user.id, 'User not interested — follow-ups stopped', 'assistant');
+    return STATES.SALES_CHAT;
+  }
+
   // Get conversation history (last 40 messages for full context)
   const history = await getConversationHistory(user.id, 40);
 
@@ -334,9 +346,11 @@ async function handleSalesBot(user, message) {
 
     // Try to extract business info from the conversation — only match explicit mentions
     const conversationText = messages.map(m => m.content).join('\n');
-    const nameMatch = conversationText.match(/(?:business(?:\s+name)?(?:\s+is)?|(?:called|named|it'?s|i(?:'?m| am))\s+)[\s:]*["']?([A-Z][A-Za-z0-9\s&.'-]{1,40}?)["']?\s*(?:[.,!?\n]|$)/m);
+    const greetings = /^(hello|hi|hey|yo|sup|good\s+(morning|afternoon|evening)|howdy|greetings|what'?s?\s+up)$/i;
+    const nameMatch = conversationText.match(/(?:business(?:\s+name)?(?:\s+is)?|(?:called|named|it'?s)\s+)[\s:]*["']?([A-Z][A-Za-z0-9\s&.'-]{1,40}?)["']?\s*(?:[.,!?\n]|$)/m);
+    const candidate = nameMatch ? nameMatch[1].trim() : null;
     const businessName = user.metadata?.websiteData?.businessName
-      || (nameMatch ? nameMatch[1].trim() : null);
+      || (candidate && !greetings.test(candidate) ? candidate : null);
 
     if (businessName) {
       const { createSite } = require('../../db/sites');

@@ -22,13 +22,12 @@ const { logger } = require('../utils/logger');
 const { env } = require('../config/env');
 const { STATES } = require('../conversation/states');
 
-// Follow-up ladder keyed by step name → hours since last message
+// Follow-up ladder keyed by step name → hours since last message (capped at 24h window)
 const FOLLOWUP_LADDER = [
   { step: 'followup_2h', afterHours: 2 },
+  { step: 'followup_6h', afterHours: 6 },
+  { step: 'followup_12h', afterHours: 12 },
   { step: 'followup_24h', afterHours: 24 },
-  { step: 'followup_72h', afterHours: 72 },
-  { step: 'followup_7d', afterHours: 168 },
-  { step: 'followup_14d', afterHours: 336 },
 ];
 
 // Messages per step × personality mode
@@ -41,33 +40,26 @@ const FOLLOWUP_MESSAGES = {
     NEGOTIATOR: "sent you the details. let me know.",
     DEFAULT: "Hey! Just checking in - I'm here whenever you're ready.",
   },
-  followup_24h: {
+  followup_6h: {
     COOL: `hey! put together some examples i think you'd vibe with - ${env.portfolio?.website1 || ''} check it out and lmk what you think 🔥`,
     PROFESSIONAL: `I've prepared a few relevant examples for you: ${env.portfolio?.website1 || ''} - this is similar to what we'd build for your business. Shall I walk you through the approach?`,
     UNSURE: `hey! i found some examples that might help you picture what we'd build - ${env.portfolio?.website1 || ''} - no pressure, just wanted to share so you have a better idea 😊`,
     NEGOTIATOR: `got some examples ready. here's one: ${env.portfolio?.website1 || ''} - similar scope to what we discussed.`,
     DEFAULT: `I've got some examples from similar projects: ${env.portfolio?.website1 || ''} - want me to walk you through them?`,
   },
-  followup_72h: {
+  followup_12h: {
+    COOL: "hey just circling back - got some cool ideas for your project if you're still down 🤙",
+    PROFESSIONAL: "Following up once more - I have some additional insights for your project when you have a moment.",
+    UNSURE: "hey! no rush at all, just wanted to make sure you know I'm still here if you have any questions 😊",
+    NEGOTIATOR: "circling back. let me know if you want to move forward.",
+    DEFAULT: "Just wanted to follow up - I have some ideas that might interest you. Let me know when you're free!",
+  },
+  followup_24h: {
     COOL: "last one from me - if the project thing comes back up just hit me anytime 🤙",
     PROFESSIONAL: "Last message from me - if the project timeline changes, feel free to reach out anytime.",
     UNSURE: "hey! just my last check-in - whenever you're ready, just send a message and we'll pick right up where we left off 💛",
     NEGOTIATOR: "final follow-up. you know where to find me.",
     DEFAULT: "Last check-in from me - whenever you're ready, just message and we'll pick up where we left off.",
-  },
-  followup_7d: {
-    COOL: `just wrapped something fire for a similar business. want to see? 👀 ${env.portfolio?.website1 || ''}`,
-    PROFESSIONAL: `We recently completed a project for a similar business with strong results. Happy to share details if it's still on your radar: ${env.portfolio?.website1 || ''}`,
-    UNSURE: `hey! we just finished a project for someone in a similar space and it turned out amazing - ${env.portfolio?.website1 || ''} might give you some inspo!`,
-    NEGOTIATOR: `just finished a similar project. solid results. ${env.portfolio?.website1 || ''} still interested?`,
-    DEFAULT: `We just wrapped up a project for a similar business - ${env.portfolio?.website1 || ''} happy to share if you're still interested.`,
-  },
-  followup_14d: {
-    COOL: `yo quick thought - ran into something that reminded me of your project. if you're still thinking about it, the offer still stands. no pressure 🤙`,
-    PROFESSIONAL: `Just a brief note - we have a few openings for new projects this month. If the timing is better now, I'm happy to pick up where we left off.`,
-    UNSURE: `hey! just wanted to let you know we're still here whenever you're ready. a lot can change in a couple weeks - if things have shifted, just say the word 😊`,
-    NEGOTIATOR: `got a slot open this month. if the project's still on your radar, now's good timing.`,
-    DEFAULT: `Quick note - we have availability this month if the project timing works better now. Just reply and we'll pick up where we left off.`,
   },
 };
 
@@ -124,10 +116,7 @@ async function runFollowupCycle() {
     if (!users || users.length === 0) return;
 
     for (const user of users) {
-      // Skip Messenger/Instagram users — follow-ups outside the 24h window are blocked by Meta
       const channel = user.channel || 'whatsapp';
-      if (channel === 'messenger' || channel === 'instagram') continue;
-
       try {
         await runWithChannel(channel, () => processUserFollowup(user));
       } catch (err) {
@@ -143,10 +132,11 @@ async function processUserFollowup(user) {
   const metadata = user.metadata || {};
   const completedSteps = metadata.followupSteps || [];
 
-  // Skip closed leads - don't follow up on customers who already converted
+  // Skip closed leads, converted customers, or opted-out users
   if (metadata.leadClosed) return;
   if (metadata.meetingBooked) return;
   if (metadata.paymentConfirmed) return;
+  if (metadata.followupOptOut) return;
 
   // If all steps are done, skip
   if (completedSteps.length >= FOLLOWUP_LADDER.length) return;

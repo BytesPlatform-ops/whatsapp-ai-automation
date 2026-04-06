@@ -20,6 +20,7 @@ const { handleScheduling } = require('./handlers/scheduling');
 const { handleSalesBot } = require('./handlers/salesBot');
 const { handleInformativeBot } = require('./handlers/informativeBot');
 const { handleChatbotService } = require('./handlers/chatbotService');
+const { handleCustomDomain } = require('./handlers/customDomain');
 
 // Map states to their handler functions
 const STATE_HANDLERS = {
@@ -39,10 +40,18 @@ const STATE_HANDLERS = {
   [STATES.WEB_COLLECT_COLORS]: handleWebDev,
   [STATES.WEB_COLLECT_LOGO]: handleWebDev,
   [STATES.WEB_COLLECT_CONTACT]: handleWebDev,
+  [STATES.WEB_CONFIRM]: handleWebDev,
   [STATES.WEB_GENERATING]: handleWebDev,
   [STATES.WEB_GENERATION_FAILED]: handleGenerationFailed,
   [STATES.WEB_PREVIEW]: handleWebDev,
   [STATES.WEB_REVISIONS]: handleWebDev,
+
+  // Custom domain flow
+  [STATES.DOMAIN_OFFER]: handleCustomDomain,
+  [STATES.DOMAIN_SEARCH]: handleCustomDomain,
+  [STATES.DOMAIN_PURCHASE_WAIT]: handleCustomDomain,
+  [STATES.DOMAIN_DNS_GUIDE]: handleCustomDomain,
+  [STATES.DOMAIN_VERIFY]: handleCustomDomain,
 
   // App Dev flow
   [STATES.APP_COLLECT_REQUIREMENTS]: handleAppDev,

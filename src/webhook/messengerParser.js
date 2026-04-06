@@ -51,6 +51,11 @@ function parseMessengerPayload(body) {
     const senderId = messaging.sender?.id;
     if (!senderId) return null;
 
+    // Skip messages from the page/bot itself (tester conversations with other users)
+    const recipientId = messaging.recipient?.id;
+    const PAGE_IDS = ['17841404243186643'];
+    if (PAGE_IDS.includes(senderId)) return null;
+
     // For Instagram echo messages: cache the text keyed by mid so we can
     // use it when the corresponding message_edit arrives
     if (messaging.message?.is_echo && channel === 'instagram') {

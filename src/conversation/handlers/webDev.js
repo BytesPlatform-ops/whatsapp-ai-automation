@@ -26,6 +26,8 @@ async function handleWebDev(user, message) {
       return handleCollectLogo(user, message);
     case STATES.WEB_COLLECT_CONTACT:
       return handleCollectContact(user, message);
+    case STATES.WEB_CONFIRM:
+      return handleConfirm(user, message);
     case STATES.WEB_GENERATING:
       return handleGenerating(user, message);
     case STATES.WEB_PREVIEW:
@@ -221,10 +223,8 @@ async function handleCollectContact(user, message) {
 
   let contactData;
   if (!contactText || contactText.length < 3 || skipWords.test(contactText)) {
-    // User doesn't want to add contact info — leave fields empty
     contactData = { contactEmail: '', contactPhone: '', contactAddress: '' };
   } else {
-    // Parse contact details loosely
     const emailMatch = contactText.match(/[\w.-]+@[\w.-]+\.\w+/);
     const phoneMatch = contactText.match(/[\+]?[\d\s\-()]{7,}/);
     const addressMatch = contactText.replace(emailMatch?.[0] || '', '').replace(phoneMatch?.[0] || '', '').trim();
@@ -240,13 +240,93 @@ async function handleCollectContact(user, message) {
     websiteData: { ...(user.metadata?.websiteData || {}), ...contactData },
   });
 
+  // Show confirmation summary before generating
+  const wd = { ...(user.metadata?.websiteData || {}), ...contactData };
+  const servicesList = (wd.services || []).length > 0 ? wd.services.join(', ') : 'None (skipped)';
+  const contactInfo = [wd.contactEmail, wd.contactPhone, wd.contactAddress].filter(Boolean).join(' | ') || 'None';
+
+  const summary =
+    `Here's a summary of your website details:\n\n` +
+    `*Business Name:* ${wd.businessName || '-'}\n` +
+    `*Industry:* ${wd.industry || '-'}\n` +
+    `*Services:* ${servicesList}\n` +
+    `*Logo:* ${wd.logo ? 'Uploaded' : 'None (text logo)'}\n` +
+    `*Contact:* ${contactInfo}\n\n` +
+    `Does everything look good? You can say *"yes"* to proceed, or tell me what you'd like to change.`;
+
+  await sendTextMessage(user.phone_number, summary);
+  await logMessage(user.id, 'Contact info collected, showing confirmation', 'assistant');
+
+  return STATES.WEB_CONFIRM;
+}
+
+async function handleConfirm(user, message) {
+  const text = (message.text || '').trim().toLowerCase();
+  const confirmWords = /^(yes|yeah|yep|yup|y|ok|okay|sure|go|looks good|lgtm|correct|perfect|proceed|generate|build|do it|let'?s go|go ahead)$/i;
+
+  if (confirmWords.test(text)) {
+    await sendTextMessage(
+      user.phone_number,
+      'Alright, give me about 30-60 seconds to build your site...'
+    );
+    await logMessage(user.id, 'Confirmed, generating website', 'assistant');
+    return generateWebsite(user);
+  }
+
+  // User wants to change something — parse what they want to update
+  const wd = user.metadata?.websiteData || {};
+
+  // Check for specific field changes
+  const nameChange = text.match(/(?:business\s*)?name\s*(?:to|:|should be|is)\s*(.+)/i);
+  const industryChange = text.match(/industry\s*(?:to|:|should be|is)\s*(.+)/i);
+  const servicesChange = text.match(/services?\s*(?:to|:|should be|are|change)\s*(.+)/i);
+  const contactChange = text.match(/(?:contact|email|phone)\s*(?:to|:|should be|is)\s*(.+)/i);
+
+  if (nameChange) {
+    wd.businessName = nameChange[1].trim();
+    await updateUserMetadata(user.id, { websiteData: wd });
+    await sendTextMessage(user.phone_number, `Updated business name to *${wd.businessName}*. Anything else to change, or say *"yes"* to proceed.`);
+    return STATES.WEB_CONFIRM;
+  }
+  if (industryChange) {
+    wd.industry = industryChange[1].trim();
+    await updateUserMetadata(user.id, { websiteData: wd });
+    await sendTextMessage(user.phone_number, `Updated industry to *${wd.industry}*. Anything else, or say *"yes"* to proceed.`);
+    return STATES.WEB_CONFIRM;
+  }
+  if (servicesChange) {
+    wd.services = servicesChange[1].split(',').map(s => s.trim()).filter(Boolean);
+    await updateUserMetadata(user.id, { websiteData: wd });
+    await sendTextMessage(user.phone_number, `Updated services to *${wd.services.join(', ')}*. Anything else, or say *"yes"* to proceed.`);
+    return STATES.WEB_CONFIRM;
+  }
+  if (contactChange) {
+    const val = contactChange[1].trim();
+    const emailMatch = val.match(/[\w.-]+@[\w.-]+\.\w+/);
+    const phoneMatch = val.match(/[\+]?[\d\s\-()]{7,}/);
+    if (emailMatch) wd.contactEmail = emailMatch[0];
+    if (phoneMatch) wd.contactPhone = phoneMatch[0].trim();
+    const rest = val.replace(emailMatch?.[0] || '', '').replace(phoneMatch?.[0] || '', '').trim();
+    if (rest) wd.contactAddress = rest;
+    await updateUserMetadata(user.id, { websiteData: wd });
+    await sendTextMessage(user.phone_number, `Updated contact info. Anything else, or say *"yes"* to proceed.`);
+    return STATES.WEB_CONFIRM;
+  }
+
+  // Couldn't parse the change — ask them to be more specific
   await sendTextMessage(
     user.phone_number,
-    'Alright, I\'ve got everything I need. Give me about 30-60 seconds to build your site...'
+    'What would you like to change? You can say things like:\n\n' +
+      '• "Name to MyBusiness"\n' +
+      '• "Industry to Tech"\n' +
+      '• "Services to Web Design, SEO, Branding"\n' +
+      '• "Email to hello@example.com"\n\n' +
+      'Or say *"yes"* to proceed with the current details.'
   );
-  await logMessage(user.id, 'Contact info collected, generating website', 'assistant');
+  return STATES.WEB_CONFIRM;
+}
 
-  // Generate the website
+async function generateWebsite(user) {
   try {
     const { generateWebsiteContent } = require('../../website-gen/generator');
     const { deployToNetlify } = require('../../website-gen/deployer');
@@ -271,9 +351,9 @@ async function handleCollectContact(user, message) {
       servicesCount: siteConfig.services?.length,
     });
 
-    // 2. Deploy to Vercel
-    logger.info(`[WEBGEN] Step 3/5: Deploying to Vercel...`);
-    const previewUrl = await deployToNetlify(siteConfig);
+    // 2. Deploy to Netlify
+    logger.info(`[WEBGEN] Step 3/5: Deploying to Netlify...`);
+    const { previewUrl, netlifySiteId, netlifySubdomain } = await deployToNetlify(siteConfig);
     logger.info(`[WEBGEN] Deployed successfully: ${previewUrl}`);
 
     // 3. Update site record
@@ -283,6 +363,8 @@ async function handleCollectContact(user, message) {
       await updateSite(siteId, {
         site_data: siteConfig,
         preview_url: previewUrl,
+        netlify_site_id: netlifySiteId,
+        netlify_subdomain: netlifySubdomain,
         status: 'preview',
       });
       logger.info(`[WEBGEN] Site record ${siteId} updated`);
@@ -357,7 +439,7 @@ async function handleGenerationFailed(user, message) {
   // Retry generation
   if (buttonId === 'web_retry') {
     await sendTextMessage(user.phone_number, '🔄 Let me try generating your website again...');
-    return handleCollectContact(user, { text: user.metadata?.websiteData?.contactEmail || 'retry' });
+    return generateWebsite(user);
   }
 
   // Any other text - re-show the options
@@ -383,31 +465,19 @@ async function handleRevisions(user, message) {
   }
 
   if (buttonId === 'web_approve') {
-    const returnToSales = user.metadata?.returnToSales;
-
-    if (returnToSales) {
-      await sendTextMessage(
-        user.phone_number,
-        "Nice - that's yours to keep as a preview. Now let's talk about getting this live on your own domain."
-      );
-      await logMessage(user.id, 'Website approved, returning to sales flow', 'assistant');
-    } else {
-      await sendTextMessage(
-        user.phone_number,
-        '🎉 *Awesome!* Your website preview is approved.\n\n' +
-          'Our team will reach out to discuss:\n' +
-          '• Custom domain setup\n' +
-          '• Hosting plan\n' +
-          '• Any additional features\n\n' +
-          'Thank you for choosing us! 🙏'
-      );
-      await logMessage(user.id, 'Website approved by user', 'assistant');
-    }
-
     const siteId = user.metadata?.currentSiteId;
     if (siteId) await updateSite(siteId, { status: 'approved' });
 
-    return returnToSales ? STATES.SALES_CHAT : STATES.GENERAL_CHAT;
+    await sendTextMessage(
+      user.phone_number,
+      '🎉 *Awesome!* Your website is approved.\n\nWould you like to put it on your own custom domain? (e.g., yourbusiness.com)'
+    );
+    await sendInteractiveButtons(user.phone_number, 'Custom domain?', [
+      { id: 'domain_yes', title: 'Yes, set up domain' },
+      { id: 'domain_no', title: 'No, maybe later' },
+    ]);
+    await logMessage(user.id, 'Website approved, offering custom domain', 'assistant');
+    return STATES.DOMAIN_OFFER;
   }
 
   if (buttonId === 'web_restart') {
@@ -418,7 +488,7 @@ async function handleRevisions(user, message) {
 
   if (buttonId === 'web_retry') {
     await sendTextMessage(user.phone_number, '🔄 Let me try generating your website again...');
-    return handleCollectContact(user, { text: user.metadata?.websiteData?.contactEmail || 'retry' });
+    return generateWebsite(user);
   }
 
   // Handle revision requests via LLM
@@ -483,32 +553,21 @@ async function handleRevisions(user, message) {
         return STATES.WEB_REVISIONS;
       }
 
-      // User is happy with the website - treat as approval
+      // User is happy with the website - treat as approval → offer custom domain
       if (updates._approved) {
-        const returnToSales = user.metadata?.returnToSales;
-
-        if (returnToSales) {
-          await sendTextMessage(
-            user.phone_number,
-            "Nice - that's yours to keep as a preview. Now let's talk about getting this live on your own domain."
-          );
-          await logMessage(user.id, 'Website approved (free text), returning to sales flow', 'assistant');
-        } else {
-          await sendTextMessage(
-            user.phone_number,
-            '🎉 *Awesome!* Your website preview is approved.\n\n' +
-              'Our team will reach out to discuss:\n' +
-              '• Custom domain setup\n' +
-              '• Hosting plan\n' +
-              '• Any additional features\n\n' +
-              'Thank you for choosing us! 🙏'
-          );
-          await logMessage(user.id, 'Website approved by user (free text)', 'assistant');
-        }
-
         const siteId = user.metadata?.currentSiteId;
         if (siteId) await updateSite(siteId, { status: 'approved' });
-        return returnToSales ? STATES.SALES_CHAT : STATES.GENERAL_CHAT;
+
+        await sendTextMessage(
+          user.phone_number,
+          '🎉 *Awesome!* Your website is approved.\n\nWould you like to put it on your own custom domain? (e.g., yourbusiness.com)'
+        );
+        await sendInteractiveButtons(user.phone_number, 'Custom domain?', [
+          { id: 'domain_yes', title: 'Yes, set up domain' },
+          { id: 'domain_no', title: 'No, maybe later' },
+        ]);
+        await logMessage(user.id, 'Website approved, offering custom domain', 'assistant');
+        return STATES.DOMAIN_OFFER;
       }
 
       if (updates._unclear) {
@@ -521,10 +580,10 @@ async function handleRevisions(user, message) {
 
       await sendTextMessage(user.phone_number, '🔄 Applying your changes and redeploying...');
 
-      const previewUrl = await deployToNetlify(updatedConfig);
+      const { previewUrl, netlifySiteId, netlifySubdomain } = await deployToNetlify(updatedConfig);
 
       if (site) {
-        await updateSite(site.id, { site_data: updatedConfig, preview_url: previewUrl });
+        await updateSite(site.id, { site_data: updatedConfig, preview_url: previewUrl, netlify_site_id: netlifySiteId, netlify_subdomain: netlifySubdomain });
       }
 
       await sendTextMessage(
