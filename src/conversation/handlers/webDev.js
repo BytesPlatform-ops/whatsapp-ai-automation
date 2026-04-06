@@ -387,11 +387,9 @@ async function generateWebsite(user) {
     if (returnToSales) {
       await sendTextMessage(
         user.phone_number,
-        "That's yours to keep as a preview. The final version will be even more polished with your own domain, custom features, and everything dialed in. Ready to move forward?"
+        "There you go! Have a look and let me know what you think — do you like it?"
       );
-      await logMessage(user.id, 'Website preview sent, returning to sales for closing', 'assistant');
-      const siteId = freshUser.metadata?.currentSiteId;
-      if (siteId) await updateSite(siteId, { status: 'approved' });
+      await logMessage(user.id, 'Website preview sent, asking for feedback', 'assistant');
       return STATES.SALES_CHAT;
     }
 
