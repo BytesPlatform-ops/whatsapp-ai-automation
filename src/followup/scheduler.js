@@ -116,7 +116,10 @@ async function runFollowupCycle() {
     if (!users || users.length === 0) return;
 
     for (const user of users) {
+      // Skip Messenger/Instagram — Meta blocks messages outside the 24h interaction window
       const channel = user.channel || 'whatsapp';
+      if (channel === 'messenger' || channel === 'instagram') continue;
+
       try {
         await runWithChannel(channel, () => processUserFollowup(user));
       } catch (err) {
