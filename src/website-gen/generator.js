@@ -21,10 +21,11 @@ async function generateWebsiteContent(businessData) {
     logo,
   } = businessData;
 
+  const hasServices = Array.isArray(services) && services.length > 0;
   const prompt = `
 Business Name: ${businessName}
 Industry: ${industry}
-Services/Products: ${Array.isArray(services) ? services.join(', ') : services || 'General services'}
+Services/Products: ${hasServices ? services.join(', ') : 'None provided — skip services page'}
 ${contactEmail ? `Email: ${contactEmail}` : ''}
 ${contactPhone ? `Phone: ${contactPhone}` : ''}
 ${contactAddress ? `Address: ${contactAddress}` : ''}
@@ -47,7 +48,7 @@ Generate compelling website copy for this business. Return ONLY valid JSON.`;
     logger.error('[WEBGEN] Failed to parse LLM JSON response, using fallback:', error.message);
     logger.debug('[WEBGEN] Raw LLM response:', response.slice(0, 500));
     // Fall back to defaults
-    const servicesList = (Array.isArray(services) ? services : [services || 'Our Services']);
+    const servicesList = hasServices ? services : [];
     generatedContent = {
       headline: `Welcome to ${businessName}`,
       tagline: `${industry} solutions tailored for your needs`,
@@ -71,7 +72,7 @@ Generate compelling website copy for this business. Return ONLY valid JSON.`;
         { number: '50+', label: 'Happy Clients' },
         { number: '5+', label: 'Years Experience' },
       ],
-      servicesTitle: 'Our Services',
+      servicesTitle: servicesList.length > 0 ? 'Our Services' : '',
       services: servicesList.map((s) => ({
         title: s,
         shortDescription: `Professional ${s.toLowerCase()} services tailored to your specific needs.`,
@@ -79,13 +80,13 @@ Generate compelling website copy for this business. Return ONLY valid JSON.`;
         features: ['Custom solutions', 'Expert team', 'Fast turnaround', 'Ongoing support'],
         icon: 'star',
       })),
-      servicesPageIntro: `At ${businessName}, we offer a comprehensive range of ${industry.toLowerCase()} services designed to help your business thrive.`,
-      processSteps: [
+      servicesPageIntro: servicesList.length > 0 ? `At ${businessName}, we offer a comprehensive range of ${industry.toLowerCase()} services designed to help your business thrive.` : '',
+      processSteps: servicesList.length > 0 ? [
         { title: 'Discovery', description: 'We learn about your business, goals, and challenges.' },
         { title: 'Strategy', description: 'We create a tailored plan to achieve your objectives.' },
         { title: 'Execution', description: 'Our team brings the strategy to life with precision.' },
         { title: 'Delivery', description: 'We deliver results and ensure your complete satisfaction.' },
-      ],
+      ] : [],
       testimonials: [
         { quote: `${businessName} exceeded our expectations. Their team is professional and incredibly responsive.`, name: 'Sarah Johnson', role: 'Business Owner' },
         { quote: 'The results speak for themselves. Highly recommend their services.', name: 'Michael Chen', role: 'Marketing Director' },

@@ -148,17 +148,32 @@ function getColorsForIndustry(industry) {
 
 async function handleCollectServices(user, message) {
   const servicesText = (message.text || '').trim();
-  if (!servicesText || servicesText.length < 3) {
+  if (!servicesText || servicesText.length < 2) {
     await sendTextMessage(
       user.phone_number,
-      'Please list your services/products separated by commas:'
+      'Please list your services/products separated by commas, or say "skip" if you don\'t have specific services:'
     );
     return STATES.WEB_COLLECT_SERVICES;
   }
 
-  const services = servicesText.split(',').map((s) => s.trim()).filter(Boolean);
+  const skipWords = /^(idk|i don'?t know|skip|none|no|n\/a|na|nah|nothing|not sure|no idea)$/i;
   const industry = user.metadata?.websiteData?.industry || '';
   const colors = getColorsForIndustry(industry);
+
+  if (skipWords.test(servicesText)) {
+    // User has no services — skip services page entirely
+    await updateUserMetadata(user.id, {
+      websiteData: { ...(user.metadata?.websiteData || {}), services: [], ...colors },
+    });
+    await sendTextMessage(
+      user.phone_number,
+      'No worries, we\'ll skip the services page! Do you have a logo? Send it as an image, or just say "skip" and we\'ll use a clean text logo.'
+    );
+    await logMessage(user.id, `Services: skipped | Colors auto-assigned for ${industry}`, 'assistant');
+    return STATES.WEB_COLLECT_LOGO;
+  }
+
+  const services = servicesText.split(',').map((s) => s.trim()).filter(Boolean);
 
   await updateUserMetadata(user.id, {
     websiteData: { ...(user.metadata?.websiteData || {}), services, ...colors },
@@ -202,24 +217,24 @@ async function handleCollectLogo(user, message) {
 
 async function handleCollectContact(user, message) {
   const contactText = (message.text || '').trim();
-  if (!contactText || contactText.length < 5) {
-    await sendTextMessage(
-      user.phone_number,
-      'Please share at least an email or phone number for the contact section:'
-    );
-    return STATES.WEB_COLLECT_CONTACT;
+  const skipWords = /^(nothing|none|no|skip|n\/a|na|nah|nope|don'?t|dont|no thanks)$/i;
+
+  let contactData;
+  if (!contactText || contactText.length < 3 || skipWords.test(contactText)) {
+    // User doesn't want to add contact info — leave fields empty
+    contactData = { contactEmail: '', contactPhone: '', contactAddress: '' };
+  } else {
+    // Parse contact details loosely
+    const emailMatch = contactText.match(/[\w.-]+@[\w.-]+\.\w+/);
+    const phoneMatch = contactText.match(/[\+]?[\d\s\-()]{7,}/);
+    const addressMatch = contactText.replace(emailMatch?.[0] || '', '').replace(phoneMatch?.[0] || '', '').trim();
+
+    contactData = {
+      contactEmail: emailMatch?.[0] || '',
+      contactPhone: phoneMatch?.[0]?.trim() || '',
+      contactAddress: addressMatch || '',
+    };
   }
-
-  // Parse contact details loosely
-  const emailMatch = contactText.match(/[\w.-]+@[\w.-]+\.\w+/);
-  const phoneMatch = contactText.match(/[\+]?[\d\s\-()]{7,}/);
-  const addressMatch = contactText.replace(emailMatch?.[0] || '', '').replace(phoneMatch?.[0] || '', '').trim();
-
-  const contactData = {
-    contactEmail: emailMatch?.[0] || '',
-    contactPhone: phoneMatch?.[0]?.trim() || '',
-    contactAddress: addressMatch || '',
-  };
 
   await updateUserMetadata(user.id, {
     websiteData: { ...(user.metadata?.websiteData || {}), ...contactData },
@@ -279,7 +294,7 @@ async function handleCollectContact(user, message) {
     logger.info(`[WEBGEN] Step 5/5: Sending preview URL to user`);
     await sendTextMessage(
       user.phone_number,
-      `Your website is ready! Here's the preview:\n\n${previewUrl}\n\nHave a look - it's a 4-page site with Home, Services, About, and Contact pages.`
+      `Your website is ready! Here's the preview:\n\n${previewUrl}\n\nHave a look - it's a ${(websiteData.services||[]).length>0?'4-page site with Home, Services, About, and Contact pages':'3-page site with Home, About, and Contact pages'}.`
     );
 
     await logMessage(user.id, `Website deployed: ${previewUrl}`, 'assistant');

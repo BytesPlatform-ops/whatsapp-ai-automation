@@ -29,6 +29,8 @@ const optional = [
   'CHATBOT_BASE_URL',
   'META_PAGE_ACCESS_TOKEN',
   'META_APP_SECRET',
+  'INSTAGRAM_ACCESS_TOKEN',
+  'INSTAGRAM_APP_SECRET',
 ];
 
 function validateEnv() {
@@ -80,9 +82,10 @@ const env = {
   chatbot: {
     baseUrl: process.env.CHATBOT_BASE_URL || 'https://bytesplatform.com',
   },
-  // Messenger & Instagram (shared Page Access Token)
+  // Messenger & Instagram
   messenger: {
     pageAccessToken: process.env.META_PAGE_ACCESS_TOKEN || '',
+    instagramAccessToken: process.env.INSTAGRAM_ACCESS_TOKEN || '',
     appSecret: process.env.META_APP_SECRET || '',
     verifyToken: process.env.WEBHOOK_VERIFY_TOKEN, // reuse the same verify token
     instagramUserId: process.env.INSTAGRAM_USER_ID || '',

@@ -177,8 +177,16 @@ document.querySelectorAll('.tilt').forEach(card=>{card.addEventListener('mousemo
 }
 
 // ─── Navbar ─────────────────────────────────────────────────────────────────
+function getPages(c) {
+  const pages=[{n:'Home',h:'/'}];
+  if((c.services||[]).length>0) pages.push({n:'Services',h:'/services'});
+  pages.push({n:'About',h:'/about'});
+  pages.push({n:'Contact',h:'/contact'});
+  return pages;
+}
+
 function getNav(c, cur) {
-  const pages=[{n:'Home',h:'/'},{n:'Services',h:'/services'},{n:'About',h:'/about'},{n:'Contact',h:'/contact'}];
+  const pages=getPages(c);
   const isDark = cur !== '/';
   return `
 <div class="scroll-bar"></div>
@@ -199,7 +207,7 @@ function getFoot(c) {
   <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(200px,100%),1fr));gap:48px;margin-bottom:48px">
     <div><p style="font-size:24px;font-weight:800;color:#fff;margin-bottom:12px">${esc(c.businessName)}</p><p style="font-size:14px;line-height:1.8;opacity:0.6">${esc(c.footerTagline||'')}</p></div>
     <div><p style="font-weight:600;color:#fff;margin-bottom:16px;font-size:14px;text-transform:uppercase;letter-spacing:1px">Pages</p><div style="display:flex;flex-direction:column;gap:10px">
-      <a href="/" style="color:#999;text-decoration:none;font-size:14px;transition:color 0.3s">Home</a><a href="/services" style="color:#999;text-decoration:none;font-size:14px;transition:color 0.3s">Services</a><a href="/about" style="color:#999;text-decoration:none;font-size:14px;transition:color 0.3s">About</a><a href="/contact" style="color:#999;text-decoration:none;font-size:14px;transition:color 0.3s">Contact</a>
+      ${getPages(c).map(p=>`<a href="${p.h}" style="color:#999;text-decoration:none;font-size:14px;transition:color 0.3s">${p.n}</a>`).join('')}
     </div></div>
     <div><p style="font-weight:600;color:#fff;margin-bottom:16px;font-size:14px;text-transform:uppercase;letter-spacing:1px">Contact</p><div style="display:flex;flex-direction:column;gap:10px">
       ${c.contactEmail?`<a href="mailto:${esc(c.contactEmail)}" style="color:#999;text-decoration:none;font-size:14px">${esc(c.contactEmail)}</a>`:''}
@@ -298,7 +306,7 @@ function generateHomePage(c) {
         <p style="font-size:clamp(16px,2.5vw,22px);opacity:0.85;max-width:650px;margin:0 auto 40px;line-height:1.6;animation:fadeUp 0.8s ease-out 0.4s both">${esc(c.tagline)}</p>
         <div style="display:flex;gap:16px;justify-content:center;flex-wrap:wrap;animation:fadeUp 0.8s ease-out 0.6s both">
           <a href="/contact" class="btn-w" style="animation:pulseGlow 3s ease-in-out infinite">${esc(c.ctaButton)} ${ARR}</a>
-          <a href="/services" class="btn-s" style="color:#fff;border-color:rgba(255,255,255,0.3)">Our Services</a>
+          ${(c.services||[]).length>0?`<a href="/services" class="btn-s" style="color:#fff;border-color:rgba(255,255,255,0.3)">Our Services</a>`:''}
         </div>
       </div>
       <div style="position:absolute;bottom:32px;left:50%;transform:translateX(-50%);animation:fadeIn 1s ease-out 1s both">
@@ -310,7 +318,7 @@ function generateHomePage(c) {
 
     ${getMarquee(c)}
 
-    <section class="sect" style="background:#fafafa"><div class="ctn">
+    ${(c.services||[]).length>0?`<section class="sect" style="background:#fafafa"><div class="ctn">
       <div class="rv" style="text-align:center;margin-bottom:64px">
         <span style="display:inline-block;padding:8px 20px;border-radius:50px;font-size:13px;font-weight:600;letter-spacing:1px;text-transform:uppercase;background:${pc}10;color:${pc};margin-bottom:16px">What We Do</span>
         <h2 style="font-size:clamp(28px,4vw,48px);font-weight:800;color:#1a1a2e;letter-spacing:-1px">${esc(c.servicesTitle)}</h2>
@@ -318,7 +326,7 @@ function generateHomePage(c) {
       </div>
       <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(min(320px,100%),1fr));gap:28px">${services}</div>
       <div class="rv d4" style="text-align:center;margin-top:48px"><a href="/services" class="btn-p">View All Services ${ARR}</a></div>
-    </div></section>
+    </div></section>`:''}
 
     <section class="sect" style="background:#fff"><div class="ctn">
       <div style="display:grid;grid-template-columns:1fr;gap:64px;align-items:center" class="md2">
@@ -606,12 +614,15 @@ function generateContactPage(c) {
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 function generateAllPages(config) {
-  return {
+  const pages = {
     '/index.html': generateHomePage(config),
-    '/services/index.html': generateServicesPage(config),
     '/about/index.html': generateAboutPage(config),
     '/contact/index.html': generateContactPage(config),
   };
+  if ((config.services || []).length > 0) {
+    pages['/services/index.html'] = generateServicesPage(config);
+  }
+  return pages;
 }
 function generateStaticHTML(config) { return generateHomePage(config); }
 function esc(s) { if(!s)return''; return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;'); }

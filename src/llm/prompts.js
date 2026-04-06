@@ -99,7 +99,7 @@ Generate the following in JSON format:
 }
 
 IMPORTANT RULES:
-- Generate exactly 3-6 services with DETAILED content (features, full descriptions) based on what the business offers. Use the service names they provided but expand them with rich, specific content.
+- If the business provided specific services/products, generate exactly 3-6 services with DETAILED content (features, full descriptions) based on what they offer. Use the service names they provided but expand them with rich, specific content. If no services were provided (empty or "General services"), set "services" to an empty array [] and omit "servicesTitle", "servicesPageIntro", and "processSteps".
 - Generate exactly 3 testimonials with realistic names and specific praise.
 - Generate exactly 4-6 FAQ items relevant to the industry.
 - Generate exactly 3-5 process steps.

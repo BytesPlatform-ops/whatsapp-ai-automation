@@ -4,24 +4,25 @@ const { logger } = require('../utils/logger');
 const { getCurrentChannel } = require('./channelContext');
 
 const MESSENGER_API_BASE = 'https://graph.facebook.com/v25.0/me/messages';
+const INSTAGRAM_API_BASE = 'https://graph.instagram.com/v25.0/me/messages';
 
 function getApiBase() {
   if (getCurrentChannel() === 'instagram') {
-    const token = env.messenger.pageAccessToken;
-    // IG-scoped tokens (start with "IG") must use graph.instagram.com
-    if (token && token.startsWith('IG')) {
-      return 'https://graph.instagram.com/v25.0/me/messages';
-    }
-    // System User tokens use graph.facebook.com with the IG user ID
-    const igUserId = env.messenger.instagramUserId;
-    return `https://graph.facebook.com/v25.0/${igUserId}/messages`;
+    return INSTAGRAM_API_BASE;
   }
   return MESSENGER_API_BASE;
 }
 
+function getToken() {
+  if (getCurrentChannel() === 'instagram' && env.messenger.instagramAccessToken) {
+    return env.messenger.instagramAccessToken;
+  }
+  return env.messenger.pageAccessToken;
+}
+
 function getHeaders() {
   return {
-    Authorization: `Bearer ${env.messenger.pageAccessToken}`,
+    Authorization: `Bearer ${getToken()}`,
     'Content-Type': 'application/json',
   };
 }

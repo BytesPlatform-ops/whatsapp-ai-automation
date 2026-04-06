@@ -10,6 +10,7 @@ const { startFollowupScheduler } = require('./followup/scheduler');
 const chatbotApiRoutes = require('./chatbot/api');
 const chatbotPageRoutes = require('./chatbot/pages/routes');
 const { startChatbotScheduler } = require('./chatbot/jobs/scheduler');
+const { startInstagramTokenRefreshScheduler } = require('./jobs/instagramTokenRefresh');
 const path = require('path');
 
 // Validate environment variables
@@ -22,7 +23,7 @@ app.set('trust proxy', 1);
 
 // Security middleware (skip helmet on /admin — it uses Tailwind CDN + inline scripts)
 app.use((req, res, next) => {
-  if (req.path.startsWith('/admin') || req.path === '/widget.js' || req.path.startsWith('/chat/') || req.path.startsWith('/demo/')) return next();
+  if (req.path === '/' || req.path.startsWith('/admin') || req.path === '/widget.js' || req.path.startsWith('/chat/') || req.path.startsWith('/demo/')) return next();
   helmet()(req, res, next);
 });
 
@@ -80,6 +81,11 @@ app.get('/widget.js', (req, res) => {
 // Chatbot SaaS - demo and standalone pages
 app.use('/', chatbotPageRoutes);
 
+// Landing page
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'landing.html'));
+});
+
 // 404 handler
 app.use((req, res) => {
   res.status(404).json({ error: 'Not found' });
@@ -101,6 +107,9 @@ app.listen(env.port, () => {
 
   // Start the chatbot SaaS scheduler (trial expiry, demo follow-ups, monthly reports)
   startChatbotScheduler();
+
+  // Start Instagram token auto-refresh (every 50 days)
+  startInstagramTokenRefreshScheduler();
 });
 
 // Catch unhandled promise rejections so they don't silently kill operations

@@ -332,10 +332,9 @@ async function handleSalesBot(user, message) {
     logger.info(`[SALES] Triggering website demo for ${user.phone_number}`);
     await updateUserMetadata(user.id, { websiteDemoTriggered: true, returnToSales: true });
 
-    // Try to extract business info from the conversation so we skip redundant questions
+    // Try to extract business info from the conversation — only match explicit mentions
     const conversationText = messages.map(m => m.content).join('\n');
-    const nameMatch = conversationText.match(/(?:business(?:\s+name)?(?:\s+is)?|(?:called|named|it'?s|i(?:'?m| am))\s+)[\s:]*["']?([A-Z][A-Za-z0-9\s&.'-]{1,40}?)["']?\s*(?:[.,!?\n]|$)/m)
-      || conversationText.match(/^([A-Z][A-Za-z0-9\s&.'-]{1,30})$/m);
+    const nameMatch = conversationText.match(/(?:business(?:\s+name)?(?:\s+is)?|(?:called|named|it'?s|i(?:'?m| am))\s+)[\s:]*["']?([A-Z][A-Za-z0-9\s&.'-]{1,40}?)["']?\s*(?:[.,!?\n]|$)/m);
     const businessName = user.metadata?.websiteData?.businessName
       || (nameMatch ? nameMatch[1].trim() : null);
 
