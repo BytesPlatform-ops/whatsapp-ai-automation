@@ -344,29 +344,81 @@ async function handleSalesBot(user, message) {
     logger.info(`[SALES] Triggering website demo for ${user.phone_number}`);
     await updateUserMetadata(user.id, { websiteDemoTriggered: true, returnToSales: true });
 
-    // Try to extract business info from the conversation — only match explicit mentions
-    const conversationText = messages.map(m => m.content).join('\n');
-    const greetings = /^(hello|hi|hey|yo|sup|good\s+(morning|afternoon|evening)|howdy|greetings|what'?s?\s+up)$/i;
-    const nameMatch = conversationText.match(/(?:business(?:\s+name)?(?:\s+is)?|(?:called|named|it'?s)\s+)[\s:]*["']?([A-Z][A-Za-z0-9\s&.'-]{1,40}?)["']?\s*(?:[.,!?\n]|$)/m);
-    const candidate = nameMatch ? nameMatch[1].trim() : null;
-    const businessName = user.metadata?.websiteData?.businessName
-      || (candidate && !greetings.test(candidate) ? candidate : null);
+    // Use LLM to extract business info from the conversation
+    const conversationText = messages.map(m => `${m.role}: ${m.content}`).join('\n');
+    let businessName = user.metadata?.websiteData?.businessName || null;
+    let industry = null;
+
+    try {
+      const extraction = await generateResponse(
+        `Extract business information from this conversation. Return ONLY valid JSON with these fields:
+- "businessName": the business name if explicitly mentioned (null if not mentioned)
+- "industry": the industry/business type if mentioned (e.g. "Restaurant", "Real Estate", "Tech", etc. — null if not mentioned)
+
+Do NOT use greetings like "Hello", "Hi", "Hey" as business names.
+Do NOT guess — only extract what was explicitly stated.
+
+Conversation:
+${conversationText}`,
+        [{ role: 'user', content: 'Extract the business info as JSON.' }]
+      );
+      const jsonMatch = extraction.match(/\{[\s\S]*?\}/);
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[0]);
+        if (parsed.businessName && !businessName) businessName = parsed.businessName;
+        if (parsed.industry) industry = parsed.industry;
+      }
+    } catch (err) {
+      logger.debug('[SALES] Business info extraction failed:', err.message);
+    }
+
+    const { createSite } = require('../../db/sites');
+    const site = await createSite(user.id, 'business-starter');
+
+    if (businessName && industry) {
+      // Have both — skip to services collection
+      await updateUserMetadata(user.id, {
+        currentSiteId: site.id,
+        websiteData: { businessName, industry },
+      });
+      await sendTextMessage(
+        user.phone_number,
+        `Got it, building a *${industry}* site for *${businessName}*! What services or products do you offer? List them separated by commas, or say "skip".`
+      );
+      await logMessage(user.id, `Website demo: pre-filled name="${businessName}", industry="${industry}"`, 'assistant');
+      return STATES.WEB_COLLECT_SERVICES;
+    }
 
     if (businessName) {
-      const { createSite } = require('../../db/sites');
-      const site = await createSite(user.id, 'business-starter');
+      // Have name but not industry
       await updateUserMetadata(user.id, {
         currentSiteId: site.id,
         websiteData: { businessName },
       });
       await sendTextMessage(
         user.phone_number,
-        `Got it, building a site for *${businessName}*! What industry are you in? For example - tech, healthcare, ecommerce, real estate, creative, etc.`
+        `Got it, building a site for *${businessName}*! What industry are you in? For example - tech, healthcare, restaurant, real estate, creative, etc.`
       );
-      await logMessage(user.id, `Website demo: business name pre-filled as "${businessName}"`, 'assistant');
+      await logMessage(user.id, `Website demo: pre-filled name="${businessName}"`, 'assistant');
       return STATES.WEB_COLLECT_INDUSTRY;
     }
 
+    if (industry) {
+      // Have industry but not name
+      await updateUserMetadata(user.id, {
+        currentSiteId: site.id,
+        websiteData: { industry },
+      });
+      await sendTextMessage(
+        user.phone_number,
+        `Got it, a *${industry}* website! What's your business name?`
+      );
+      await logMessage(user.id, `Website demo: pre-filled industry="${industry}"`, 'assistant');
+      return STATES.WEB_COLLECT_NAME;
+    }
+
+    // Have neither
+    await updateUserMetadata(user.id, { currentSiteId: site.id });
     await sendTextMessage(
       user.phone_number,
       "Let's build it - what's your business name?"

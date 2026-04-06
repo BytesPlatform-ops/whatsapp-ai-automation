@@ -99,7 +99,7 @@ Generate the following in JSON format:
 }
 
 IMPORTANT RULES:
-- If the business provided specific services/products, generate exactly 3-6 services with DETAILED content (features, full descriptions) based on what they offer. Use the service names they provided but expand them with rich, specific content. If no services were provided (empty or "General services"), set "services" to an empty array [] and omit "servicesTitle", "servicesPageIntro", and "processSteps".
+- If the business provided specific services/products, generate a service entry for EVERY SINGLE service/product they listed — do NOT skip or combine any. Use the exact service names they provided and expand each one with rich, specific content (features, full descriptions). If no services were provided (empty or "General services"), set "services" to an empty array [] and omit "servicesTitle", "servicesPageIntro", and "processSteps".
 - Generate exactly 3 testimonials with realistic names and specific praise.
 - Generate exactly 4-6 FAQ items relevant to the industry.
 - Generate exactly 3-5 process steps.
@@ -545,8 +545,9 @@ Adapt delivery language to personality mode.
 - Professional: "Great to hear! This website is ready for deployment. It's $300 which includes the full site and custom domain setup. Shall I send the payment link?"
 - Unsure: "awesome! so this is ready to go live whenever you want — it's $300 for the full site with your own domain. want to go ahead?"
 - If they push back on $300, the absolute floor for a bot-generated site is $100: "tell you what — I can do $100 for this site as-is. that's literally just covering the build cost."
-- After payment or agreement, mention the custom domain: "by the way — want to set up your own domain for this? like yourbusiness.com? i can help you find one and get it connected"
 - Send the payment link using [SEND_PAYMENT] tag with the agreed amount.
+- After payment, the system will automatically offer custom domain setup — you don't need to handle this.
+- If the client asks about hosting or domains BEFORE paying, tell them: "once you pay, I'll walk you through getting your own domain like yourbusiness.com — I'll help you find one, buy it, and connect it. the whole thing takes about 5 minutes."
 
 **If the client DOESN'T like the demo website:**
 - First, offer revisions: "no worries — what would you change? I can tweak it right now"

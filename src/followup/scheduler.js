@@ -314,20 +314,50 @@ async function runPaymentPolling() {
 
         // Send payment confirmation
         const amountDisplay = `$${(payment.amount / 100).toLocaleString()}`;
-        await runWithChannel(payment.channel || 'whatsapp', () => sendTextMessage(
-          payment.phone_number,
-          `Payment of *${amountDisplay}* received! Thank you for choosing Bytes Platform.\n\n` +
-            `*Package:* ${payment.description || payment.service_type}\n\n` +
-            `Our team will be in touch shortly to kick things off. If you have any questions in the meantime, just message here.`
-        ));
-        await logMessage(payment.user_id, `Payment confirmed: ${amountDisplay} for ${payment.service_type}`, 'assistant');
+        const isWebsitePayment = /website|web/i.test(payment.service_type || '') || /website|web/i.test(payment.description || '');
 
-        // Update user metadata
-        await updateUserMetadata(payment.user_id, {
-          paymentConfirmed: true,
-          lastPaymentAmount: payment.amount,
-          lastPaymentService: payment.service_type,
-        });
+        if (isWebsitePayment) {
+          // Website payment — confirm and offer custom domain setup
+          await runWithChannel(payment.channel || 'whatsapp', async () => {
+            await sendTextMessage(
+              payment.phone_number,
+              `Payment of *${amountDisplay}* received! Thank you for choosing Bytes Platform.\n\n` +
+                `*Package:* ${payment.description || payment.service_type}\n\n` +
+                `Your website is all set! Would you like to put it on your own custom domain? (e.g., yourbusiness.com)`
+            );
+            const { sendInteractiveButtons } = require('../messages/sender');
+            await sendInteractiveButtons(payment.phone_number, 'Custom domain?', [
+              { id: 'domain_yes', title: 'Yes, set up domain' },
+              { id: 'domain_no', title: 'No, maybe later' },
+            ]);
+          });
+          await logMessage(payment.user_id, `Payment confirmed: ${amountDisplay} for ${payment.service_type}`, 'assistant');
+
+          // Update user metadata and transition to domain offer state
+          await updateUserMetadata(payment.user_id, {
+            paymentConfirmed: true,
+            lastPaymentAmount: payment.amount,
+            lastPaymentService: payment.service_type,
+          });
+          const { updateUserState } = require('../db/users');
+          await updateUserState(payment.user_id, 'DOMAIN_OFFER');
+        } else {
+          // Non-website payment — generic confirmation
+          await runWithChannel(payment.channel || 'whatsapp', () => sendTextMessage(
+            payment.phone_number,
+            `Payment of *${amountDisplay}* received! Thank you for choosing Bytes Platform.\n\n` +
+              `*Package:* ${payment.description || payment.service_type}\n\n` +
+              `Our team will be in touch shortly to kick things off. If you have any questions in the meantime, just message here.`
+          ));
+          await logMessage(payment.user_id, `Payment confirmed: ${amountDisplay} for ${payment.service_type}`, 'assistant');
+
+          // Update user metadata
+          await updateUserMetadata(payment.user_id, {
+            paymentConfirmed: true,
+            lastPaymentAmount: payment.amount,
+            lastPaymentService: payment.service_type,
+          });
+        }
 
         logger.info(`[PAYMENT] Confirmed payment from ${payment.phone_number}: ${amountDisplay} for ${payment.service_type}`);
       } catch (err) {

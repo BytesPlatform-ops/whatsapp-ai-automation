@@ -2,7 +2,6 @@ const {
   sendTextMessage,
   sendInteractiveButtons,
   sendCTAButton,
-  downloadMedia,
 } = require('../../messages/sender');
 const { logMessage, getConversationHistory } = require('../../db/conversations');
 const { updateUserMetadata, updateUserState } = require('../../db/users');
@@ -20,10 +19,9 @@ async function handleWebDev(user, message) {
     case STATES.WEB_COLLECT_SERVICES:
       return handleCollectServices(user, message);
     case STATES.WEB_COLLECT_COLORS:
-      // Legacy: if a user is stuck in this state, skip to logo
-      return STATES.WEB_COLLECT_LOGO;
     case STATES.WEB_COLLECT_LOGO:
-      return handleCollectLogo(user, message);
+      // Legacy: skip straight to contact if stuck in old states
+      return STATES.WEB_COLLECT_CONTACT;
     case STATES.WEB_COLLECT_CONTACT:
       return handleCollectContact(user, message);
     case STATES.WEB_CONFIRM:
@@ -45,12 +43,29 @@ async function handleCollectName(user, message) {
     return STATES.WEB_COLLECT_NAME;
   }
 
-  // Create site record and save business name
-  const site = await createSite(user.id, 'business-starter');
-  await updateUserMetadata(user.id, {
-    currentSiteId: site.id,
-    websiteData: { businessName },
-  });
+  // Create site record (if not already created from sales flow) and save business name
+  const existingWebsiteData = user.metadata?.websiteData || {};
+  if (!user.metadata?.currentSiteId) {
+    const site = await createSite(user.id, 'business-starter');
+    await updateUserMetadata(user.id, {
+      currentSiteId: site.id,
+      websiteData: { ...existingWebsiteData, businessName },
+    });
+  } else {
+    await updateUserMetadata(user.id, {
+      websiteData: { ...existingWebsiteData, businessName },
+    });
+  }
+
+  // If industry was already pre-filled from sales conversation, skip to services
+  if (existingWebsiteData.industry) {
+    await sendTextMessage(
+      user.phone_number,
+      `Got it, *${businessName}*! What services or products do you offer? List them separated by commas, or say "skip".`
+    );
+    await logMessage(user.id, `Business name: ${businessName}, industry already set: ${existingWebsiteData.industry}`, 'assistant');
+    return STATES.WEB_COLLECT_SERVICES;
+  }
 
   await sendTextMessage(
     user.phone_number,
@@ -163,16 +178,15 @@ async function handleCollectServices(user, message) {
   const colors = getColorsForIndustry(industry);
 
   if (skipWords.test(servicesText)) {
-    // User has no services — skip services page entirely
     await updateUserMetadata(user.id, {
       websiteData: { ...(user.metadata?.websiteData || {}), services: [], ...colors },
     });
     await sendTextMessage(
       user.phone_number,
-      'No worries, we\'ll skip the services page! Do you have a logo? Send it as an image, or just say "skip" and we\'ll use a clean text logo.'
+      'No worries, we\'ll skip the services page! Last thing - what contact info do you want on the site? Just send your email, phone, and/or address.'
     );
     await logMessage(user.id, `Services: skipped | Colors auto-assigned for ${industry}`, 'assistant');
-    return STATES.WEB_COLLECT_LOGO;
+    return STATES.WEB_COLLECT_CONTACT;
   }
 
   const services = servicesText.split(',').map((s) => s.trim()).filter(Boolean);
@@ -183,37 +197,11 @@ async function handleCollectServices(user, message) {
 
   await sendTextMessage(
     user.phone_number,
-    'Do you have a logo? Send it as an image, or just say "skip" and we\'ll use a clean text logo.'
+    'Last thing - what contact info do you want on the site? Just send your email, phone, and/or address.'
   );
   await logMessage(user.id, `Services: ${services.join(', ')} | Colors auto-assigned for ${industry}`, 'assistant');
 
-  // Skip color collection - go straight to logo
-  return STATES.WEB_COLLECT_LOGO;
-}
-
-async function handleCollectLogo(user, message) {
-  let logoData = null;
-
-  if (message.type === 'image' && message.mediaId) {
-    try {
-      const media = await downloadMedia(message.mediaId);
-      // Store as base64 in metadata (for small logos)
-      logoData = `data:${media.mimeType};base64,${media.buffer.toString('base64')}`;
-      await updateUserMetadata(user.id, {
-        websiteData: { ...(user.metadata?.websiteData || {}), logo: logoData },
-      });
-    } catch (error) {
-      logger.error('Logo download failed:', error);
-    }
-  }
-
-  // Whether they sent a logo or skipped
-  await sendTextMessage(
-    user.phone_number,
-    'Last thing - what contact info do you want on the site? Just send your email, phone, and/or address.'
-  );
-  await logMessage(user.id, logoData ? 'Logo uploaded' : 'Logo skipped', 'assistant');
-
+  // Skip logo — go straight to contact
   return STATES.WEB_COLLECT_CONTACT;
 }
 
@@ -261,7 +249,8 @@ async function handleCollectContact(user, message) {
 }
 
 async function handleConfirm(user, message) {
-  const text = (message.text || '').trim().toLowerCase();
+  const originalText = (message.text || '').trim();
+  const text = originalText.toLowerCase();
   const confirmWords = /^(yes|yeah|yep|yup|y|ok|okay|sure|go|looks good|lgtm|correct|perfect|proceed|generate|build|do it|let'?s go|go ahead)$/i;
 
   if (confirmWords.test(text)) {
@@ -273,14 +262,14 @@ async function handleConfirm(user, message) {
     return generateWebsite(user);
   }
 
-  // User wants to change something — parse what they want to update
+  // User wants to change something — use originalText to preserve capitalization
   const wd = user.metadata?.websiteData || {};
 
-  // Check for specific field changes
-  const nameChange = text.match(/(?:business\s*)?name\s*(?:to|:|should be|is)\s*(.+)/i);
-  const industryChange = text.match(/industry\s*(?:to|:|should be|is)\s*(.+)/i);
-  const servicesChange = text.match(/services?\s*(?:to|:|should be|are|change)\s*(.+)/i);
-  const contactChange = text.match(/(?:contact|email|phone)\s*(?:to|:|should be|is)\s*(.+)/i);
+  // Check for specific field changes (match on originalText to preserve case)
+  const nameChange = originalText.match(/(?:business\s*)?name\s*(?:to|:|should be|is)\s*(.+)/i);
+  const industryChange = originalText.match(/industry\s*(?:to|:|should be|is)\s*(.+)/i);
+  const servicesChange = originalText.match(/services?\s*(?:to|:|should be|are|change)\s*(.+)/i);
+  const contactChange = originalText.match(/(?:contact|email|phone)\s*(?:to|:|should be|is)\s*(.+)/i);
 
   if (nameChange) {
     wd.businessName = nameChange[1].trim();
