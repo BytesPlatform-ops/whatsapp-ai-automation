@@ -3,3 +3,6 @@ node_modules/
 *.log
 .cache/
 dist/
+
+# Design Automation (separate Next.js project — do not commit here)
+Design-Automation-V2/

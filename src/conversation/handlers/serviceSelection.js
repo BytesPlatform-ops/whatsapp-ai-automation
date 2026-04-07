@@ -25,6 +25,7 @@ async function handleServiceSelection(user, message) {
             { id: 'svc_webdev', title: '🌐 Website Development', description: 'Get a professional website built' },
             { id: 'svc_appdev', title: '📱 App Development', description: 'Mobile & web app development' },
             { id: 'svc_marketing', title: '📈 Digital Marketing', description: 'SEO, ads, social media strategy' },
+            { id: 'svc_adgen', title: '🎨 Marketing Ads', description: 'AI-generated social media ad images' },
             { id: 'svc_chatbot', title: '🤖 AI Chatbot', description: 'Get a 24/7 AI assistant for your business' },
             { id: 'svc_info', title: '❓ FAQ & Support', description: 'Get answers to your questions' },
             { id: 'svc_general', title: '💬 Talk to Sales', description: 'Chat with our sales team' },
@@ -83,6 +84,20 @@ async function handleServiceSelection(user, message) {
       await logMessage(user.id, 'Starting marketing flow', 'assistant');
       return STATES.MARKETING_COLLECT_DETAILS;
 
+    case 'svc_adgen':
+      await sendWithMenuButton(
+        user.phone_number,
+        '🎨 *AI Marketing Ad Generator*\n\n' +
+          'Create professional social media ad images powered by AI — the same technology used by top digital agencies!\n\n' +
+          '✅ Instagram, Facebook & TikTok ready\n' +
+          '✅ Industry-specific creative direction\n' +
+          '✅ Your brand colors, logo & pricing included\n' +
+          '✅ Ready to post in 60 seconds\n\n' +
+          'Let\'s get started!'
+      );
+      await logMessage(user.id, 'Starting ad generation flow', 'assistant');
+      return STATES.AD_COLLECT_BUSINESS;
+
     case 'svc_chatbot':
       await sendWithMenuButton(
         user.phone_number,
@@ -139,7 +154,8 @@ function matchServiceFromText(text) {
   if (/\b(seo|audit|analyz|analys)\b/i.test(text)) return 'svc_seo';
   if (/\b(website|web ?dev|site|redesign)\b/i.test(text)) return 'svc_webdev';
   if (/\b(app|mobile|android|ios)\b/i.test(text)) return 'svc_appdev';
-  if (/\b(market|advertis|ads|social media|ppc|brand)\b/i.test(text)) return 'svc_marketing';
+  if (/\b(market|advertis|social media|ppc|brand)\b/i.test(text)) return 'svc_marketing';
+  if (/\b(ad\s*gen|ads?\s*creat|ad\s*design|ad\s*image|ad\s*maker|create\s*ad|design\s*ad|marketing\s*ad)\b/i.test(text)) return 'svc_adgen';
   if (/\b(chatbot|chat ?bot|ai assistant|virtual assistant|ai chat)\b/i.test(text)) return 'svc_chatbot';
   if (/\b(faq|support|info|question|help|how|what)\b/i.test(text)) return 'svc_info';
   if (/\b(chat|talk|sales|general|buy|start|quote)\b/i.test(text)) return 'svc_general';

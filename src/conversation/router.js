@@ -35,6 +35,7 @@ const { handleSalesBot } = require('./handlers/salesBot');
 const { handleInformativeBot } = require('./handlers/informativeBot');
 const { handleChatbotService } = require('./handlers/chatbotService');
 const { handleCustomDomain } = require('./handlers/customDomain');
+const { handleAdGeneration } = require('./handlers/adGeneration');
 
 // Map states to their handler functions
 const STATE_HANDLERS = {
@@ -101,6 +102,18 @@ const STATE_HANDLERS = {
   [STATES.CB_GENERATING]: handleChatbotService,
   [STATES.CB_DEMO_SENT]: handleChatbotService,
   [STATES.CB_FOLLOW_UP]: handleChatbotService,
+
+  // Marketing Ad Generation flow
+  [STATES.AD_COLLECT_BUSINESS]: handleAdGeneration,
+  [STATES.AD_COLLECT_INDUSTRY]: handleAdGeneration,
+  [STATES.AD_COLLECT_NICHE]: handleAdGeneration,
+  [STATES.AD_COLLECT_TYPE]: handleAdGeneration,
+  [STATES.AD_COLLECT_SLOGAN]: handleAdGeneration,
+  [STATES.AD_COLLECT_PRICING]: handleAdGeneration,
+  [STATES.AD_COLLECT_IMAGE]: handleAdGeneration,
+  [STATES.AD_SELECT_IDEA]: handleAdGeneration,
+  [STATES.AD_CREATING_IMAGE]: handleAdGeneration,
+  [STATES.AD_RESULTS]: handleAdGeneration,
 };
 
 // States that collect free-text input - apply intent checking here
@@ -121,6 +134,12 @@ const COLLECTION_STATES = new Set([
   STATES.CB_COLLECT_SERVICES,
   STATES.CB_COLLECT_HOURS,
   STATES.CB_COLLECT_LOCATION,
+  // Ad generation text-collection states
+  STATES.AD_COLLECT_BUSINESS,
+  STATES.AD_COLLECT_INDUSTRY,
+  STATES.AD_COLLECT_NICHE,
+  STATES.AD_COLLECT_SLOGAN,
+  STATES.AD_COLLECT_PRICING,
 ]);
 
 // Human-readable description of what the bot was asking in each state
@@ -141,6 +160,12 @@ const STATE_QUESTION = {
   [STATES.CB_COLLECT_SERVICES]: 'What services do you offer with their prices?',
   [STATES.CB_COLLECT_HOURS]: 'What are your business hours?',
   [STATES.CB_COLLECT_LOCATION]: 'What is your business address/location?',
+  // Ad generation
+  [STATES.AD_COLLECT_BUSINESS]: 'What is your business name?',
+  [STATES.AD_COLLECT_INDUSTRY]: 'What industry are you in? (e.g. Food & Beverage, Fashion, Tech)',
+  [STATES.AD_COLLECT_NICHE]: 'What product or service is this ad for?',
+  [STATES.AD_COLLECT_SLOGAN]: 'Do you have a brand slogan or tagline? (or type skip)',
+  [STATES.AD_COLLECT_PRICING]: 'Any pricing info to display on the ad? (or type skip)',
 };
 
 /**
