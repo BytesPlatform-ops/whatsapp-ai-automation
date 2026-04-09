@@ -117,6 +117,44 @@ router.get('/api/conversations/:userId', async (req, res) => {
   }
 });
 
+router.post('/api/conversations/:userId/reply', async (req, res) => {
+  try {
+    const { messageText } = req.body;
+    if (!messageText || !messageText.trim()) {
+      return res.status(400).json({ error: 'Message text is required' });
+    }
+
+    const { supabase } = require('../config/database');
+    const { data: user, error: userErr } = await supabase
+      .from('users')
+      .select('id, phone_number, channel')
+      .eq('id', req.params.userId)
+      .single();
+
+    if (userErr || !user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const { logMessage } = require('../db/conversations');
+    const { sendTextMessage } = require('../messages/sender');
+    const { runWithChannel } = require('../messages/channelContext');
+
+    // Send the message via the correct channel
+    await runWithChannel(user.channel || 'whatsapp', () =>
+      sendTextMessage(user.phone_number, messageText.trim())
+    );
+
+    // Log it as an assistant message
+    await logMessage(user.id, messageText.trim(), 'assistant');
+
+    logger.info(`[ADMIN] Manual reply sent to ${user.phone_number} (${user.channel}): "${messageText.trim().slice(0, 50)}..."`);
+    res.json({ success: true });
+  } catch (err) {
+    logger.error('[ADMIN] Reply error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.get('/api/dropoffs', async (req, res) => {
   try {
     const data = await queries.getDropoffs();

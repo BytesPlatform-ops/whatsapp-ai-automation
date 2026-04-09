@@ -119,6 +119,12 @@
           </button>
         </div>
         <div id="conv-modal-body" class="flex-1 overflow-y-auto p-4 space-y-3"></div>
+        <div class="border-t p-3">
+          <form id="admin-reply-form" onsubmit="sendAdminReply(event)" class="flex gap-2">
+            <input id="admin-reply-input" type="text" placeholder="Type a message..." class="flex-1 px-4 py-2.5 border rounded-xl text-sm focus:outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100" autocomplete="off">
+            <button type="submit" id="admin-reply-btn" class="px-5 py-2.5 bg-indigo-600 text-white text-sm font-medium rounded-xl hover:bg-indigo-700 transition disabled:opacity-50 disabled:cursor-not-allowed">Send</button>
+          </form>
+        </div>
       </div>
     </div>
   </div>
@@ -586,13 +592,19 @@ function filterConvList() {
 }
 
 // ─── Conversation Modal ────────────────────────
+var currentConvUserId = null;
+var currentConvPhone = null;
+
 function openConversation(userId, phone, name) {
+  currentConvUserId = userId;
+  currentConvPhone = phone;
   var modal = document.getElementById('conv-modal');
   modal.classList.remove('hidden');
   modal.classList.add('flex');
   document.getElementById('conv-modal-title').textContent = name || phone;
   document.getElementById('conv-modal-subtitle').textContent = phone;
   document.getElementById('conv-modal-body').innerHTML = '<div class="flex justify-center py-8"><div class="loader"></div></div>';
+  document.getElementById('admin-reply-input').value = '';
 
   api('conversations/' + userId).then(function(data) {
     var user = data.user;
@@ -624,6 +636,48 @@ function closeConvModal() {
   var modal = document.getElementById('conv-modal');
   modal.classList.add('hidden');
   modal.classList.remove('flex');
+  currentConvUserId = null;
+  currentConvPhone = null;
+}
+
+function sendAdminReply(e) {
+  e.preventDefault();
+  var input = document.getElementById('admin-reply-input');
+  var btn = document.getElementById('admin-reply-btn');
+  var text = input.value.trim();
+  if (!text || !currentConvUserId) return;
+
+  btn.disabled = true;
+  btn.textContent = 'Sending...';
+
+  fetch('/admin/api/conversations/' + currentConvUserId + '/reply', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ messageText: text }),
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(data) {
+    if (data.success) {
+      // Append the message to the chat immediately
+      var body = document.getElementById('conv-modal-body');
+      var msgDiv = document.createElement('div');
+      msgDiv.className = 'max-w-[85%] rounded-2xl px-4 py-2.5 text-sm chat-bot';
+      msgDiv.innerHTML = '<p class="whitespace-pre-wrap">' + esc(text) + '</p>' +
+        '<p class="text-[10px] text-gray-400 mt-1">Just now (manual)</p>';
+      body.appendChild(msgDiv);
+      body.scrollTop = body.scrollHeight;
+      input.value = '';
+    } else {
+      alert('Failed to send: ' + (data.error || 'Unknown error'));
+    }
+  })
+  .catch(function(err) {
+    alert('Error: ' + err.message);
+  })
+  .finally(function() {
+    btn.disabled = false;
+    btn.textContent = 'Send';
+  });
 }
 
 document.getElementById('conv-modal').addEventListener('click', function(e) {
