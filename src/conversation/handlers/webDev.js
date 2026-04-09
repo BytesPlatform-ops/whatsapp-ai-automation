@@ -657,12 +657,13 @@ async function handleRevisions(user, message) {
         return STATES.WEB_REVISIONS;
       }
 
-      // Merge updates and redeploy
+      // Merge updates and redeploy to the SAME site
       const updatedConfig = { ...currentConfig, ...updates };
 
       await sendTextMessage(user.phone_number, '🔄 Applying your changes and redeploying...');
 
-      const { previewUrl, netlifySiteId, netlifySubdomain } = await deployToNetlify(updatedConfig);
+      const existingSiteId = site?.netlify_site_id || null;
+      const { previewUrl, netlifySiteId, netlifySubdomain } = await deployToNetlify(updatedConfig, existingSiteId);
 
       if (site) {
         await updateSite(site.id, { site_data: updatedConfig, preview_url: previewUrl, netlify_site_id: netlifySiteId, netlify_subdomain: netlifySubdomain });

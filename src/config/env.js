@@ -34,6 +34,10 @@ const optional = [
   'SENDGRID_API_KEY',
   'SENDGRID_FROM_EMAIL',
   'SENDGRID_FROM_NAME',
+  'NAMECHEAP_API_USER',
+  'NAMECHEAP_API_KEY',
+  'NAMECHEAP_CLIENT_IP',
+  'NAMECHEAP_USE_SANDBOX',
 ];
 
 function validateEnv() {
@@ -98,6 +102,18 @@ const env = {
     apiKey: process.env.SENDGRID_API_KEY || '',
     fromEmail: process.env.SENDGRID_FROM_EMAIL || 'developer@bytesplatform.com',
     fromName: process.env.SENDGRID_FROM_NAME || 'Bytes Platform',
+  },
+  // Namecheap
+  namecheap: {
+    apiUser: process.env.NAMECHEAP_API_USER || '',
+    apiKey: process.env.NAMECHEAP_API_KEY || '',
+    clientIp: process.env.NAMECHEAP_CLIENT_IP || '',
+    useSandbox: process.env.NAMECHEAP_USE_SANDBOX === 'true',
+    get baseUrl() {
+      return this.useSandbox
+        ? 'https://api.sandbox.namecheap.com/xml.response'
+        : 'https://api.namecheap.com/xml.response';
+    },
   },
   agentPhone: process.env.AGENT_PHONE_NUMBER || '',
   // Server

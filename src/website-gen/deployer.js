@@ -5,15 +5,28 @@ const { logger } = require('../utils/logger');
 
 const NETLIFY_API = 'https://api.netlify.com/api/v1';
 
-async function deployToNetlify(siteConfig) {
+async function deployToNetlify(siteConfig, existingSiteId = null) {
   if (!env.netlify.token) throw new Error('NETLIFY_TOKEN is not configured');
   const headers = { Authorization: `Bearer ${env.netlify.token}`, 'Content-Type': 'application/json' };
   try {
     const files = generateAllPages(siteConfig);
-    logger.info('[NETLIFY] Creating new site...');
-    const siteResponse = await axios.post(`${NETLIFY_API}/sites`, { name: `preview-${Date.now()}` }, { headers });
-    const siteId = siteResponse.data.id;
-    logger.info(`[NETLIFY] Site created: ${siteResponse.data.name} (${siteId})`);
+    let siteId, siteName;
+
+    if (existingSiteId) {
+      // Redeploy to existing site (same URL)
+      siteId = existingSiteId;
+      const siteInfo = await axios.get(`${NETLIFY_API}/sites/${siteId}`, { headers });
+      siteName = siteInfo.data.name;
+      logger.info(`[NETLIFY] Redeploying to existing site: ${siteName} (${siteId})`);
+    } else {
+      // Create a new site
+      logger.info('[NETLIFY] Creating new site...');
+      const siteResponse = await axios.post(`${NETLIFY_API}/sites`, { name: `preview-${Date.now()}` }, { headers });
+      siteId = siteResponse.data.id;
+      siteName = siteResponse.data.name;
+      logger.info(`[NETLIFY] Site created: ${siteName} (${siteId})`);
+    }
+
     const fileDigests = {};
     for (const [fp, content] of Object.entries(files)) {
       fileDigests[fp] = crypto.createHash('sha1').update(content).digest('hex');
@@ -32,7 +45,7 @@ async function deployToNetlify(siteConfig) {
     logger.info('[NETLIFY] Waiting for deploy to be ready...');
     const previewUrl = await waitForDeploy(deployId, headers);
     logger.info(`[NETLIFY] Deploy ready: ${previewUrl}`);
-    return { previewUrl, netlifySiteId: siteId, netlifySubdomain: siteResponse.data.name };
+    return { previewUrl, netlifySiteId: siteId, netlifySubdomain: siteName };
   } catch (error) {
     logger.error('[NETLIFY] Deployment failed:', { message: error.message, status: error.response?.status, data: JSON.stringify(error.response?.data || {}) });
     throw error;
