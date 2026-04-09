@@ -49,6 +49,7 @@ const STATE_HANDLERS = {
 
   // Web Dev flow
   [STATES.WEB_COLLECT_NAME]: handleWebDev,
+  [STATES.WEB_COLLECT_EMAIL]: handleWebDev,
   [STATES.WEB_COLLECT_INDUSTRY]: handleWebDev,
   [STATES.WEB_COLLECT_SERVICES]: handleWebDev,
   [STATES.WEB_COLLECT_COLORS]: handleWebDev,

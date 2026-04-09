@@ -11,6 +11,7 @@ const chatbotApiRoutes = require('./chatbot/api');
 const chatbotPageRoutes = require('./chatbot/pages/routes');
 const { startChatbotScheduler } = require('./chatbot/jobs/scheduler');
 const { startInstagramTokenRefreshScheduler } = require('./jobs/instagramTokenRefresh');
+const { startUpsellScheduler } = require('./jobs/upsellScheduler');
 const path = require('path');
 
 // Validate environment variables
@@ -110,6 +111,9 @@ app.listen(env.port, () => {
 
   // Start Instagram token auto-refresh (every 50 days)
   startInstagramTokenRefreshScheduler();
+
+  // Start post-sale upsell email scheduler (daily)
+  startUpsellScheduler();
 });
 
 // Catch unhandled promise rejections so they don't silently kill operations

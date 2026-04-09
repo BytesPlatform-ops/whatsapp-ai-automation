@@ -31,6 +31,9 @@ const optional = [
   'META_APP_SECRET',
   'INSTAGRAM_ACCESS_TOKEN',
   'INSTAGRAM_APP_SECRET',
+  'SENDGRID_API_KEY',
+  'SENDGRID_FROM_EMAIL',
+  'SENDGRID_FROM_NAME',
 ];
 
 function validateEnv() {
@@ -89,6 +92,12 @@ const env = {
     appSecret: process.env.META_APP_SECRET || '',
     verifyToken: process.env.WEBHOOK_VERIFY_TOKEN, // reuse the same verify token
     instagramUserId: process.env.INSTAGRAM_USER_ID || '',
+  },
+  // SendGrid
+  sendgrid: {
+    apiKey: process.env.SENDGRID_API_KEY || '',
+    fromEmail: process.env.SENDGRID_FROM_EMAIL || 'developer@bytesplatform.com',
+    fromName: process.env.SENDGRID_FROM_NAME || 'Bytes Platform',
   },
   agentPhone: process.env.AGENT_PHONE_NUMBER || '',
   // Server

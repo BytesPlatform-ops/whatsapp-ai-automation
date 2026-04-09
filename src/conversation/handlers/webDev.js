@@ -14,6 +14,8 @@ async function handleWebDev(user, message) {
   switch (user.state) {
     case STATES.WEB_COLLECT_NAME:
       return handleCollectName(user, message);
+    case STATES.WEB_COLLECT_EMAIL:
+      return handleCollectEmail(user, message);
     case STATES.WEB_COLLECT_INDUSTRY:
       return handleCollectIndustry(user, message);
     case STATES.WEB_COLLECT_SERVICES:
@@ -57,21 +59,59 @@ async function handleCollectName(user, message) {
     });
   }
 
-  // If industry was already pre-filled from sales conversation, skip to services
+  // If email already collected, skip to industry
+  if (user.metadata?.email) {
+    return skipToNextAfterEmail(user, businessName, existingWebsiteData);
+  }
+
+  await sendTextMessage(
+    user.phone_number,
+    `Got it, *${businessName}*! Before we continue, what's your email address? We'll use it to send you updates about your website.`
+  );
+  await logMessage(user.id, `Business name: ${businessName}`, 'assistant');
+
+  return STATES.WEB_COLLECT_EMAIL;
+}
+
+async function handleCollectEmail(user, message) {
+  const text = (message.text || '').trim();
+  const emailMatch = text.match(/[\w.-]+@[\w.-]+\.\w+/);
+  const skipWords = /^(skip|no|none|nah|later|n\/a|na|don'?t have|dont have)$/i;
+
+  if (skipWords.test(text)) {
+    await sendTextMessage(user.phone_number, "No worries! You can share it later.");
+  } else if (emailMatch) {
+    await updateUserMetadata(user.id, { email: emailMatch[0] });
+    await sendTextMessage(user.phone_number, `Got it, saved *${emailMatch[0]}*!`);
+    await logMessage(user.id, `Email collected: ${emailMatch[0]}`, 'assistant');
+  } else {
+    // Not a valid email and not a skip — ask again gently
+    await sendTextMessage(
+      user.phone_number,
+      "That doesn't look like an email address. Could you double-check? Or say *\"skip\"* to continue without it."
+    );
+    return STATES.WEB_COLLECT_EMAIL;
+  }
+
+  const existingWebsiteData = user.metadata?.websiteData || {};
+  const businessName = existingWebsiteData.businessName || '';
+  return skipToNextAfterEmail(user, businessName, existingWebsiteData);
+}
+
+async function skipToNextAfterEmail(user, businessName, existingWebsiteData) {
   if (existingWebsiteData.industry) {
     await sendTextMessage(
       user.phone_number,
-      `Got it, *${businessName}*! What services or products do you offer? List them separated by commas, or say "skip".`
+      'What services or products do you offer? List them separated by commas, or say "skip".'
     );
-    await logMessage(user.id, `Business name: ${businessName}, industry already set: ${existingWebsiteData.industry}`, 'assistant');
+    await logMessage(user.id, `Industry already set: ${existingWebsiteData.industry}, skipping to services`, 'assistant');
     return STATES.WEB_COLLECT_SERVICES;
   }
 
   await sendTextMessage(
     user.phone_number,
-    `Got it, *${businessName}*! What industry are you in? For example - tech, healthcare, ecommerce, real estate, creative, etc.`
+    'What industry are you in? For example - tech, healthcare, restaurant, real estate, creative, etc.'
   );
-  await logMessage(user.id, `Business name: ${businessName}`, 'assistant');
 
   return STATES.WEB_COLLECT_INDUSTRY;
 }
@@ -511,7 +551,63 @@ async function handleRevisions(user, message) {
       return STATES.WEB_REVISIONS;
     }
 
-    // Process the revision request
+    // Process the revision request — track revision count
+    const revisionCount = (user.metadata?.revisionCount || 0) + 1;
+    await updateUserMetadata(user.id, { revisionCount });
+
+    // After 2 free revisions, assess complexity before proceeding
+    if (revisionCount > 2) {
+      try {
+        const { generateResponse: classifyLLM } = require('../../llm/provider');
+        const classifyResponse = await classifyLLM(
+          `Classify this website revision request as LIGHT, MEDIUM, or HEAVY.\nLIGHT: color change, text edit, small tweaks\nMEDIUM: new section, layout change, significant content rewrite, font changes\nHEAVY: completely different design, major restructure, complex features, booking systems, e-commerce\nReturn ONLY one word: LIGHT, MEDIUM, or HEAVY.`,
+          [{ role: 'user', content: revisionText }]
+        );
+        const complexity = (classifyResponse || '').trim().toUpperCase();
+        await updateUserMetadata(user.id, { lastRevisionComplexity: complexity });
+
+        if (complexity === 'HEAVY') {
+          await sendTextMessage(
+            user.phone_number,
+            "This sounds like a custom project — let me set you up with our design team so we can scope it out properly. Pricing is determined on the call based on what you need."
+          );
+          await sendCTAButton(
+            user.phone_number,
+            'Tap below to book a call with our team 👇',
+            '📅 Book a Call',
+            require('../../config/env').env.calendlyUrl
+          );
+          await logMessage(user.id, `Revision ${revisionCount} classified as HEAVY — sent to Calendly`, 'assistant');
+          return STATES.SALES_CHAT;
+        }
+
+        if (complexity === 'MEDIUM' && !user.metadata?.bonusRevisionUsed) {
+          // Allow one more free regeneration for medium changes
+          await updateUserMetadata(user.id, { bonusRevisionUsed: true });
+          await sendTextMessage(user.phone_number, "Let me apply those changes — this will be the last free revision round. After this, customization work starts at $200.");
+          await logMessage(user.id, `Revision ${revisionCount} classified as MEDIUM — bonus revision used`, 'assistant');
+          // Fall through to normal revision processing below
+        } else if (complexity === 'MEDIUM' && user.metadata?.bonusRevisionUsed) {
+          await sendTextMessage(
+            user.phone_number,
+            "For these kinds of changes, we'd need to do a custom build — that starts at $200 on top of the base price. Would you like to proceed, or would you prefer to hop on a call to discuss?"
+          );
+          await sendCTAButton(
+            user.phone_number,
+            'Or book a call to discuss the customization 👇',
+            '📅 Book a Call',
+            require('../../config/env').env.calendlyUrl
+          );
+          await logMessage(user.id, `Revision ${revisionCount} — bonus already used, pitched $200+ customization`, 'assistant');
+          return STATES.SALES_CHAT;
+        }
+        // LIGHT changes continue to normal processing
+      } catch (classifyErr) {
+        logger.error('Revision classification failed:', classifyErr.message);
+        // Fall through to normal processing on error
+      }
+    }
+
     try {
       const { generateResponse } = require('../../llm/provider');
       const { REVISION_PARSER_PROMPT } = require('../../llm/prompts');

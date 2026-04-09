@@ -87,6 +87,16 @@ router.get('/api/leads', async (req, res) => {
   }
 });
 
+router.get('/api/domains', async (req, res) => {
+  try {
+    const data = await queries.getDomainRequests();
+    res.json(data);
+  } catch (err) {
+    logger.error('[ADMIN] Domains error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.get('/api/lead-summaries', async (req, res) => {
   try {
     const data = await queries.getLeadSummaries();

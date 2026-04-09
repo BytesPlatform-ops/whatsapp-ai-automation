@@ -78,6 +78,10 @@
           <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9"/></svg>
           Websites
         </a>
+        <a href="#" class="sidebar-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm" data-section="domains">
+          <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+          Domains
+        </a>
         <a href="#" class="sidebar-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm" data-section="audits">
           <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
           SEO Audits
@@ -226,6 +230,7 @@ function loadSection(section) {
     case 'revenue': promise = Promise.all([api('revenue'), api('payments')]).then(function(r) { renderRevenue(r[0], r[1]); }); break;
     case 'payments': promise = api('payments').then(renderPayments); break;
     case 'leadsummaries': promise = api('lead-summaries').then(renderLeadSummaries); break;
+    case 'domains': promise = api('domains').then(renderDomains); break;
   }
   promise.catch(function(err) {
     document.getElementById('content').innerHTML = '<div class="bg-red-50 text-red-700 rounded-xl p-6"><b>Error loading data:</b> ' + esc(err.message) + '</div>';
@@ -624,6 +629,61 @@ function closeConvModal() {
 document.getElementById('conv-modal').addEventListener('click', function(e) {
   if (e.target === e.currentTarget) closeConvModal();
 });
+
+// ─── Domains ──────────────────────────────────
+function domainStatusBadge(status) {
+  var colors = { domain_setup_pending: 'bg-yellow-100 text-yellow-700', live: 'bg-green-100 text-green-700', preview: 'bg-blue-100 text-blue-700', approved: 'bg-indigo-100 text-indigo-700' };
+  var labels = { domain_setup_pending: 'Pending Setup', live: 'Live', preview: 'Preview', approved: 'Approved' };
+  var c = colors[status] || 'bg-gray-100 text-gray-600';
+  var l = labels[status] || status;
+  return '<span class="badge ' + c + '">' + l + '</span>';
+}
+
+function renderDomains(domains) {
+  var pending = domains.filter(function(d) { return d.status === 'domain_setup_pending'; }).length;
+  var live = domains.filter(function(d) { return d.status === 'live'; }).length;
+
+  var html = '<div class="fade-in">' +
+    '<h2 class="text-2xl font-bold mb-2">Domain Requests</h2>' +
+    '<p class="text-gray-500 text-sm mb-6">Domains selected by customers that need setup</p>' +
+    '<div class="grid grid-cols-3 gap-4 mb-6">' +
+      '<div class="bg-white rounded-xl border p-4 text-center"><p class="text-2xl font-bold text-indigo-600">' + domains.length + '</p><p class="text-xs text-gray-500 mt-1">Total</p></div>' +
+      '<div class="bg-white rounded-xl border p-4 text-center"><p class="text-2xl font-bold text-yellow-500">' + pending + '</p><p class="text-xs text-gray-500 mt-1">Pending Setup</p></div>' +
+      '<div class="bg-white rounded-xl border p-4 text-center"><p class="text-2xl font-bold text-green-500">' + live + '</p><p class="text-xs text-gray-500 mt-1">Live</p></div>' +
+    '</div>';
+
+  if (domains.length === 0) {
+    html += '<div class="bg-white rounded-xl border p-8 text-center text-gray-400">No domain requests yet</div>';
+  } else {
+    html += '<div class="bg-white rounded-xl border overflow-x-auto"><table class="w-full text-left">' +
+      '<thead class="bg-gray-50 text-xs text-gray-500 uppercase"><tr>' +
+        '<th class="p-3">Domain</th>' +
+        '<th class="p-3">Status</th>' +
+        '<th class="p-3">Customer</th>' +
+        '<th class="p-3">Phone</th>' +
+        '<th class="p-3">Email</th>' +
+        '<th class="p-3">Preview</th>' +
+        '<th class="p-3">Requested</th>' +
+      '</tr></thead><tbody>';
+
+    domains.forEach(function(d) {
+      html += '<tr class="border-b border-gray-100 hover:bg-gray-50">' +
+        '<td class="p-3 font-semibold text-sm text-indigo-600">' + esc(d.domain) + '</td>' +
+        '<td class="p-3">' + domainStatusBadge(d.status) + '</td>' +
+        '<td class="p-3 text-sm">' + esc(d.user_name || '-') + '</td>' +
+        '<td class="p-3 text-xs text-gray-500">' + esc(d.user_phone) + '</td>' +
+        '<td class="p-3 text-xs text-gray-500">' + esc(d.user_email || '-') + '</td>' +
+        '<td class="p-3"><a href="' + esc(d.preview_url || '#') + '" target="_blank" class="text-xs text-indigo-600 hover:underline">View</a></td>' +
+        '<td class="p-3 text-xs text-gray-400">' + timeAgo(d.updated_at) + '</td>' +
+      '</tr>';
+    });
+
+    html += '</tbody></table></div>';
+  }
+
+  html += '</div>';
+  document.getElementById('content').innerHTML = html;
+}
 
 // ─── Lead Summaries ───────────────────────────
 var leadSummaryFilter = 'all';

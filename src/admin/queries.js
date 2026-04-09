@@ -636,6 +636,43 @@ Conversation Summary: [2-3 sentence summary of how the conversation went, what w
   }
 }
 
+async function getDomainRequests() {
+  const { data: sites, error } = await supabase
+    .from('generated_sites')
+    .select('id, user_id, custom_domain, preview_url, netlify_site_id, status, created_at, updated_at')
+    .not('custom_domain', 'is', null)
+    .order('updated_at', { ascending: false });
+
+  if (error) throw error;
+  if (!sites || sites.length === 0) return [];
+
+  // Get user info for each site
+  const userIds = [...new Set(sites.map(s => s.user_id))];
+  const { data: users } = await supabase
+    .from('users')
+    .select('id, phone_number, name, metadata')
+    .in('id', userIds);
+
+  const userMap = {};
+  (users || []).forEach(u => { userMap[u.id] = u; });
+
+  return sites.map(s => {
+    const u = userMap[s.user_id] || {};
+    return {
+      id: s.id,
+      domain: s.custom_domain,
+      status: s.status,
+      preview_url: s.preview_url,
+      netlify_site_id: s.netlify_site_id,
+      user_phone: u.phone_number || '',
+      user_name: u.name || u.metadata?.websiteData?.businessName || '',
+      user_email: u.metadata?.email || '',
+      created_at: s.created_at,
+      updated_at: s.updated_at,
+    };
+  });
+}
+
 async function getLeadSummaries() {
   const { data, error } = await supabase
     .from('lead_summaries')
@@ -661,4 +698,5 @@ module.exports = {
   getSalesPrep,
   generateLeadSummary,
   getLeadSummaries,
+  getDomainRequests,
 };

@@ -19,47 +19,37 @@ const { runWithChannel } = require('../messages/channelContext');
 const { logMessage } = require('../db/conversations');
 const { updateUserMetadata } = require('../db/users');
 const { logger } = require('../utils/logger');
-const { env } = require('../config/env');
 const { STATES } = require('../conversation/states');
 
 // Follow-up ladder keyed by step name → hours since last message (capped at 24h window)
 const FOLLOWUP_LADDER = [
   { step: 'followup_2h', afterHours: 2 },
-  { step: 'followup_6h', afterHours: 6 },
   { step: 'followup_12h', afterHours: 12 },
-  { step: 'followup_24h', afterHours: 24 },
+  { step: 'followup_23h', afterHours: 23 },
 ];
 
 // Messages per step × personality mode
-// Each step escalates in VALUE, not urgency (anti-pattern: chasing silence)
 const FOLLOWUP_MESSAGES = {
   followup_2h: {
-    COOL: "yo - just making sure you saw that last msg 👀",
-    PROFESSIONAL: "Just following up on my last message. I'm here when you're ready.",
-    UNSURE: "hey! just checking in - no rush at all, take your time 😊",
-    NEGOTIATOR: "sent you the details. let me know.",
-    DEFAULT: "Hey! Just checking in - I'm here whenever you're ready.",
-  },
-  followup_6h: {
-    COOL: `hey! put together some examples i think you'd vibe with - ${env.portfolio?.website1 || ''} check it out and lmk what you think 🔥`,
-    PROFESSIONAL: `I've prepared a few relevant examples for you: ${env.portfolio?.website1 || ''} - this is similar to what we'd build for your business. Shall I walk you through the approach?`,
-    UNSURE: `hey! i found some examples that might help you picture what we'd build - ${env.portfolio?.website1 || ''} - no pressure, just wanted to share so you have a better idea 😊`,
-    NEGOTIATOR: `got some examples ready. here's one: ${env.portfolio?.website1 || ''} - similar scope to what we discussed.`,
-    DEFAULT: `I've got some examples from similar projects: ${env.portfolio?.website1 || ''} - want me to walk you through them?`,
+    COOL: "hey! just checking — did you get a chance to look at the payment link? your site is ready to go live whenever you are 🔥",
+    PROFESSIONAL: "Just checking in — did you have any questions about getting your website live? Happy to help.",
+    UNSURE: "hey! just wanted to check — everything good? your website is ready to go live whenever you want 😊",
+    NEGOTIATOR: "payment link still open. your site is ready. let me know.",
+    DEFAULT: "Hey! Just checking in — did you get a chance to look at the payment link? Your site is ready to go live!",
   },
   followup_12h: {
-    COOL: "hey just circling back - got some cool ideas for your project if you're still down 🤙",
-    PROFESSIONAL: "Following up once more - I have some additional insights for your project when you have a moment.",
-    UNSURE: "hey! no rush at all, just wanted to make sure you know I'm still here if you have any questions 😊",
-    NEGOTIATOR: "circling back. let me know if you want to move forward.",
-    DEFAULT: "Just wanted to follow up - I have some ideas that might interest you. Let me know when you're free!",
+    COOL: "yo your preview site is still up — ready to lock it in? just $100 and it's yours with a custom domain 🤙",
+    PROFESSIONAL: "Your website preview is still available. Would you like to proceed with getting it live? It's $100 including domain setup.",
+    UNSURE: "hey! your website preview is still saved — just wanted to remind you it's only $100 to get it live with your own domain. no pressure! 😊",
+    NEGOTIATOR: "site's still up. $100 gets it live with your domain. in or out?",
+    DEFAULT: "Your preview site is still up — ready to get it live? Just $100 and it's yours with a custom domain!",
   },
-  followup_24h: {
-    COOL: "last one from me - if the project thing comes back up just hit me anytime 🤙",
-    PROFESSIONAL: "Last message from me - if the project timeline changes, feel free to reach out anytime.",
-    UNSURE: "hey! just my last check-in - whenever you're ready, just send a message and we'll pick right up where we left off 💛",
-    NEGOTIATOR: "final follow-up. you know where to find me.",
-    DEFAULT: "Last check-in from me - whenever you're ready, just message and we'll pick up where we left off.",
+  followup_23h: {
+    COOL: "last call — i can do $80 to get you going. that's the absolute lowest. want me to send a new link? 👀",
+    PROFESSIONAL: "Final follow-up — I can offer a one-time discount of $80 to get your website live today. Shall I send a new payment link?",
+    UNSURE: "hey! last message from me — I got approval to do $80 for your website (normally $100). want me to send the link? 😊",
+    NEGOTIATOR: "last offer — $80. can't go lower. want the link?",
+    DEFAULT: "Last chance — I can do $80 to get your website live (normally $100). Want me to send a new payment link?",
   },
 };
 
@@ -174,6 +164,31 @@ async function processUserFollowup(user) {
 
   await sendTextMessage(user.phone_number, message);
   await logMessage(user.id, message, 'assistant');
+
+  // For the 23h step, also send an $80 payment link
+  if (nextStep.step === 'followup_23h' && !metadata.paymentConfirmed) {
+    try {
+      const { createPaymentLink } = require('../payments/stripe');
+      const { sendCTAButton } = require('../messages/sender');
+      const { env: appEnv } = require('../config/env');
+      if (appEnv.stripe.secretKey) {
+        const result = await createPaymentLink({
+          userId: user.id,
+          phoneNumber: user.phone_number,
+          amount: 80,
+          serviceType: 'website',
+          packageTier: 'discount',
+          description: 'Website — limited time discount',
+          customerName: user.name || '',
+        });
+        await sendCTAButton(user.phone_number, 'Tap below to get your website live for $80', '💳 Pay $80', result.url);
+        await logMessage(user.id, 'Discount payment link sent: $80', 'assistant');
+        logger.info(`[FOLLOWUP] $80 discount payment link sent to ${user.phone_number}`);
+      }
+    } catch (err) {
+      logger.error(`[FOLLOWUP] Failed to send $80 payment link:`, err.message);
+    }
+  }
 
   // Mark this step as completed
   await updateUserMetadata(user.id, {
@@ -353,6 +368,25 @@ async function runPaymentPolling() {
             lastPaymentAmount: payment.amount,
             lastPaymentService: payment.service_type,
           });
+        }
+
+        // Send email notification to team
+        try {
+          const { sendPaymentNotification } = require('../notifications/email');
+          const { getLatestSite } = require('../db/sites');
+          const site = await getLatestSite(payment.user_id);
+          await sendPaymentNotification({
+            userName: paidSession.customer_details?.name || payment.phone_number,
+            userPhone: payment.phone_number,
+            userEmail: paidSession.customer_details?.email || '',
+            amount: payment.amount / 100,
+            serviceType: payment.service_type,
+            description: payment.description,
+            sitePreviewUrl: site?.preview_url || '',
+            channel: payment.channel || 'whatsapp',
+          });
+        } catch (emailErr) {
+          logger.error('[PAYMENT] Email notification failed:', emailErr.message);
         }
 
         logger.info(`[PAYMENT] Confirmed payment from ${payment.phone_number}: ${amountDisplay} for ${payment.service_type}`);
