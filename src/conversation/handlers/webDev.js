@@ -126,6 +126,17 @@ async function handleCollectIndustry(user, message) {
     return STATES.WEB_COLLECT_INDUSTRY;
   }
 
+  // Handle name corrections: "the name should be X" or "change name to X"
+  const nameCorrection = industry.match(/(?:name\s*(?:should be|is|to)|change.*name.*to|actually.*called|it'?s\s+called)\s*["']?(.+?)["']?\s*$/i);
+  if (nameCorrection) {
+    const newName = nameCorrection[1].trim();
+    await updateUserMetadata(user.id, {
+      websiteData: { ...(user.metadata?.websiteData || {}), businessName: newName },
+    });
+    await sendTextMessage(user.phone_number, `Updated to *${newName}*! Now, what industry are you in?`);
+    return STATES.WEB_COLLECT_INDUSTRY;
+  }
+
   // If the user asks the bot to figure it out, infer from conversation context
   const inferPhrases = /figure.?it.?out|you.?tell.?me|i.?don.?t.?know|idk|from.?(the|my).?(idea|description|above|prev)|you.?already.?know|can.?t.?figure|same.?as/i;
   if (inferPhrases.test(industry)) {
@@ -213,7 +224,7 @@ async function handleCollectServices(user, message) {
     return STATES.WEB_COLLECT_SERVICES;
   }
 
-  const skipWords = /^(idk|i don'?t know|skip|none|no|n\/a|na|nah|nothing|not sure|no idea)$/i;
+  const skipWords = /^(idk|i don'?t know|skip|none|no|n\/a|na|nah|nothing|not sure|no idea|no services|no products|don'?t have any|dont have any)$/i;
   const industry = user.metadata?.websiteData?.industry || '';
   const colors = getColorsForIndustry(industry);
 
@@ -404,22 +415,18 @@ async function generateWebsite(user) {
     logger.info(`[WEBGEN] Step 5/5: Sending preview URL to user`);
     await sendTextMessage(
       user.phone_number,
-      `Your website is ready! Here's the preview:\n\n${previewUrl}\n\nHave a look - it's a ${(websiteData.services||[]).length>0?'4-page site with Home, Services, About, and Contact pages':'3-page site with Home, About, and Contact pages'}.`
+      `Your website is ready! Here's the preview:\n\n${previewUrl}\n\nHave a look - it's a ${(siteConfig.services||[]).length>0?'4-page site with Home, Services, About, and Contact pages':'3-page site with Home, About, and Contact pages'}.`
     );
 
     await logMessage(user.id, `Website deployed: ${previewUrl}`, 'assistant');
     logger.info(`[WEBGEN] ✅ Complete! Preview sent to ${user.phone_number}: ${previewUrl}`);
 
-    // If coming from sales flow, return to sales to close the deal
-    const returnToSales = user.metadata?.returnToSales;
-    if (returnToSales) {
-      await sendTextMessage(
-        user.phone_number,
-        "There you go! Have a look and let me know what you think — do you like it?"
-      );
-      await logMessage(user.id, 'Website preview sent, asking for feedback', 'assistant');
-      return STATES.SALES_CHAT;
-    }
+    // Always go to revisions state — user can approve, request changes, or reject
+    await sendTextMessage(
+      user.phone_number,
+      "There you go! Have a look and let me know what you think — want any changes, or are you happy with it?"
+    );
+    await logMessage(user.id, 'Website preview sent, asking for feedback', 'assistant');
 
     return STATES.WEB_REVISIONS;
   } catch (error) {
@@ -496,12 +503,8 @@ async function handleRevisions(user, message) {
 
     await sendTextMessage(
       user.phone_number,
-      '🎉 *Awesome!* Your website is approved.\n\nWould you like to put it on your own custom domain? (e.g., yourbusiness.com)'
+      '🎉 *Awesome!* Your website is approved.\n\nWould you like to put it on your own custom domain? (e.g., yourbusiness.com)\n\nJust say *"yes"* and I\'ll help you find one, or *"no"* if you want to skip it for now.'
     );
-    await sendInteractiveButtons(user.phone_number, 'Custom domain?', [
-      { id: 'domain_yes', title: 'Yes, set up domain' },
-      { id: 'domain_no', title: 'No, maybe later' },
-    ]);
     await logMessage(user.id, 'Website approved, offering custom domain', 'assistant');
     return STATES.DOMAIN_OFFER;
   }
@@ -642,12 +645,8 @@ async function handleRevisions(user, message) {
 
         await sendTextMessage(
           user.phone_number,
-          '🎉 *Awesome!* Your website is approved.\n\nWould you like to put it on your own custom domain? (e.g., yourbusiness.com)'
+          '🎉 *Awesome!* Your website is approved.\n\nWould you like to put it on your own custom domain? (e.g., yourbusiness.com)\n\nJust say *"yes"* and I\'ll help you find one, or *"no"* if you want to skip it for now.'
         );
-        await sendInteractiveButtons(user.phone_number, 'Custom domain?', [
-          { id: 'domain_yes', title: 'Yes, set up domain' },
-          { id: 'domain_no', title: 'No, maybe later' },
-        ]);
         await logMessage(user.id, 'Website approved, offering custom domain', 'assistant');
         return STATES.DOMAIN_OFFER;
       }
