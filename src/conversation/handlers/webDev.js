@@ -225,10 +225,12 @@ async function handleCollectServices(user, message) {
   }
 
   const skipWords = /^(idk|i don'?t know|skip|none|no|n\/a|na|nah|nothing|not sure|no idea|no services|no products|don'?t have any|dont have any)$/i;
+  // Also catch longer phrases like "I don't offer any services"
+  const skipPhrases = /\b(no services|no products|don'?t (offer|have|provide)|dont (offer|have|provide)|nothing to (list|offer)|not applicable)\b/i;
   const industry = user.metadata?.websiteData?.industry || '';
   const colors = getColorsForIndustry(industry);
 
-  if (skipWords.test(servicesText)) {
+  if (skipWords.test(servicesText) || skipPhrases.test(servicesText)) {
     await updateUserMetadata(user.id, {
       websiteData: { ...(user.metadata?.websiteData || {}), services: [], ...colors },
     });
@@ -366,6 +368,10 @@ async function handleConfirm(user, message) {
 }
 
 async function generateWebsite(user) {
+  // Set state to GENERATING immediately to prevent duplicate builds
+  const { updateUserState } = require('../../db/users');
+  await updateUserState(user.id, STATES.WEB_GENERATING);
+
   try {
     const { generateWebsiteContent } = require('../../website-gen/generator');
     const { deployToNetlify } = require('../../website-gen/deployer');

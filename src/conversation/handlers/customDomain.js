@@ -77,26 +77,50 @@ async function handleDomainSearch(user, message) {
   const text = (message.text || '').trim();
 
   const domainOptions = user.metadata?.domainOptions || [];
-  const numMatch = text.match(/^(\d+)$/);
-  if (numMatch && domainOptions.length > 0) {
-    const idx = parseInt(numMatch[1], 10) - 1;
-    if (idx >= 0 && idx < domainOptions.length && domainOptions[idx].available && !domainOptions[idx].premium) {
-      return processDomainSelection(user, domainOptions[idx].domain);
+  const availableOptions = domainOptions.filter(d => d.available && !d.premium);
+
+  if (availableOptions.length > 0) {
+    // Match explicit number: "1", "2", etc.
+    const numMatch = text.match(/^(\d+)$/);
+    if (numMatch) {
+      const idx = parseInt(numMatch[1], 10) - 1;
+      if (idx >= 0 && idx < domainOptions.length && domainOptions[idx].available && !domainOptions[idx].premium) {
+        return processDomainSelection(user, domainOptions[idx].domain);
+      }
+      if (idx >= 0 && idx < domainOptions.length) {
+        await sendTextMessage(user.phone_number, 'That domain is not available. Please pick another one, or type a different name.');
+        return STATES.DOMAIN_SEARCH;
+      }
     }
-    if (idx >= 0 && idx < domainOptions.length) {
-      await sendTextMessage(user.phone_number, 'That domain is not available. Please pick another one, or type a different name.');
-      return STATES.DOMAIN_SEARCH;
+
+    // Match ordinal references: "the first", "first one", "1st", "second", "third", etc.
+    const ordinalMap = { 'first': 0, '1st': 0, 'second': 0 + 1, '2nd': 1, 'third': 2, '3rd': 2, 'fourth': 3, '4th': 3, 'fifth': 4, '5th': 4 };
+    const ordinalMatch = text.toLowerCase().match(/\b(first|1st|second|2nd|third|3rd|fourth|4th|fifth|5th)\b/);
+    if (ordinalMatch) {
+      const idx = ordinalMap[ordinalMatch[1]];
+      if (idx !== undefined && idx < domainOptions.length && domainOptions[idx].available && !domainOptions[idx].premium) {
+        return processDomainSelection(user, domainOptions[idx].domain);
+      }
     }
   }
 
+  // Match full domain: "mybusiness.com"
   const fullDomainMatch = text.match(/([\w-]+\.[\w]{2,})/);
   if (fullDomainMatch) {
     return processDomainSelection(user, fullDomainMatch[1].toLowerCase());
   }
 
+  // Don't search for random phrases — only if it looks like a domain name
   const cleaned = text.toLowerCase().replace(/[^a-z0-9-]/g, '');
-  if (!cleaned || cleaned.length < 2) {
-    await sendTextMessage(user.phone_number, 'Please enter a name for your domain (e.g., mybusiness):');
+  if (!cleaned || cleaned.length < 2 || cleaned.length > 30) {
+    await sendTextMessage(user.phone_number, 'Please reply with the *number* of the domain you want (e.g., *1*), or type a domain name to search:');
+    return STATES.DOMAIN_SEARCH;
+  }
+
+  // Only search if it looks like a plausible domain name (no spaces in original, no common phrases)
+  const isPhrase = /\s/.test(text.trim()) && !/\.(com|co|io|net|org)$/i.test(text.trim());
+  if (isPhrase) {
+    await sendTextMessage(user.phone_number, 'Please reply with the *number* of the domain you want (e.g., *1*), or type a single word for a new domain search:');
     return STATES.DOMAIN_SEARCH;
   }
 
@@ -197,7 +221,7 @@ async function processDomainSelection(user, domain) {
   // Notify team
   notifyTeam(user, domain, site);
 
-  return STATES.SALES_CHAT;
+  return STATES.GENERAL_CHAT;
 }
 
 async function notifyTeam(user, domain, site) {
