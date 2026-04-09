@@ -1,13 +1,15 @@
-const { sendTextMessage } = require('../../messages/sender');
+const { sendTextMessage, sendCTAButton } = require('../../messages/sender');
 const { logMessage } = require('../../db/conversations');
 const { updateUserMetadata } = require('../../db/users');
 const { getLatestSite, updateSite } = require('../../db/sites');
 const { checkDomainAvailability } = require('../../website-gen/domainChecker');
-const { addCustomDomainToNetlify } = require('../../website-gen/deployer');
-const { sendDomainRequestNotification } = require('../../notifications/email');
 const { logger } = require('../../utils/logger');
 const { env } = require('../../config/env');
 const { STATES } = require('../states');
+
+const DOMAIN_COST = 10; // ~$10 for domain registration
+const SITE_COST = 100;  // Total site cost
+const UPFRONT_PERCENT = 0.5; // 50% upfront
 
 async function handleCustomDomain(user, message) {
   switch (user.state) {
@@ -18,12 +20,9 @@ async function handleCustomDomain(user, message) {
     case STATES.DOMAIN_PURCHASE_WAIT:
     case STATES.DOMAIN_DNS_GUIDE:
     case STATES.DOMAIN_VERIFY:
-      // Legacy states — check if domain is set up
+      // Legacy states
       if (user.metadata?.selectedDomain) {
-        await sendTextMessage(user.phone_number, "Your domain setup is in progress. We'll update you when it's live! Anything else I can help with?");
-      } else {
-        await sendTextMessage(user.phone_number, "Would you like to set up a custom domain? Just say *\"yes\"*!");
-        return STATES.DOMAIN_OFFER;
+        await sendTextMessage(user.phone_number, "Your domain setup is in progress. We'll update you when it's live!");
       }
       return STATES.GENERAL_CHAT;
     default:
@@ -39,13 +38,14 @@ async function handleDomainOffer(user, message) {
   const isNo = /^(no|nah|nope|later|not now|n|skip|maybe later)$/i.test(text);
 
   if (isNo) {
-    const returnToSales = user.metadata?.returnToSales;
+    // No domain — offer the site for $100 flat
     await sendTextMessage(
       user.phone_number,
-      "No problem! Your website preview is still live. You can always come back and set up a domain later. Just send a message anytime!"
+      "No worries on the domain! The website itself is *$100*. Want me to send the payment link?"
     );
-    await logMessage(user.id, 'User declined custom domain setup', 'assistant');
-    return returnToSales ? STATES.SALES_CHAT : STATES.GENERAL_CHAT;
+    await logMessage(user.id, 'User declined domain — offering $100 for site only', 'assistant');
+    // Stay in sales to handle the $100 payment
+    return STATES.SALES_CHAT;
   }
 
   if (isYes) {
@@ -60,7 +60,6 @@ async function handleDomainOffer(user, message) {
     return runDomainSearch(user, sanitized);
   }
 
-  // Treat other text as a domain name to search
   const cleaned = text.replace(/[^a-z0-9-]/g, '');
   if (cleaned.length >= 2) {
     return runDomainSearch(user, cleaned);
@@ -68,7 +67,7 @@ async function handleDomainOffer(user, message) {
 
   await sendTextMessage(
     user.phone_number,
-    'Would you like to set up a custom domain? Just say *"yes"* and I\'ll help you find one, or *"no"* if you want to do it later.'
+    'Would you like to set up a custom domain? Just say *"yes"* and I\'ll help you find one, or *"no"* if you want to skip it.'
   );
   return STATES.DOMAIN_OFFER;
 }
@@ -77,21 +76,19 @@ async function handleDomainOffer(user, message) {
 async function handleDomainSearch(user, message) {
   const text = (message.text || '').trim();
 
-  // Check if user picked a number from the list
   const domainOptions = user.metadata?.domainOptions || [];
   const numMatch = text.match(/^(\d+)$/);
   if (numMatch && domainOptions.length > 0) {
     const idx = parseInt(numMatch[1], 10) - 1;
-    if (idx >= 0 && idx < domainOptions.length && domainOptions[idx].available) {
+    if (idx >= 0 && idx < domainOptions.length && domainOptions[idx].available && !domainOptions[idx].premium) {
       return processDomainSelection(user, domainOptions[idx].domain);
     }
-    if (idx >= 0 && idx < domainOptions.length && !domainOptions[idx].available) {
-      await sendTextMessage(user.phone_number, 'That domain is taken. Please pick an available one, or type a different name to search.');
+    if (idx >= 0 && idx < domainOptions.length) {
+      await sendTextMessage(user.phone_number, 'That domain is not available. Please pick another one, or type a different name.');
       return STATES.DOMAIN_SEARCH;
     }
   }
 
-  // Check if user typed a full domain (e.g., mybusiness.com)
   const fullDomainMatch = text.match(/([\w-]+\.[\w]{2,})/);
   if (fullDomainMatch) {
     return processDomainSelection(user, fullDomainMatch[1].toLowerCase());
@@ -115,7 +112,7 @@ async function runDomainSearch(user, baseName) {
   let msg = '*Domain Availability:*\n\n';
   results.forEach((r, i) => {
     if (r.premium) {
-      msg += `${i + 1}. ⚠️ ${r.domain} — Premium (not available for auto-setup)\n`;
+      msg += `${i + 1}. ⚠️ ${r.domain} — Premium (not available)\n`;
     } else {
       msg += r.available ? `${i + 1}. ✅ ${r.domain} — *Available*\n` : `${i + 1}. ❌ ${r.domain} — Taken\n`;
     }
@@ -128,7 +125,6 @@ async function runDomainSearch(user, baseName) {
   }
 
   msg += '\nJust reply with the *number* or *domain name* you want, or type a different name to search again.';
-  msg += '\n\n_The domain is included in your package — we\'ll handle everything for you._';
 
   await sendTextMessage(user.phone_number, msg);
 
@@ -141,100 +137,72 @@ async function runDomainSearch(user, baseName) {
   return STATES.DOMAIN_SEARCH;
 }
 
-// ─── Domain selection + auto-purchase ──────────────────────────────
+// ─── Domain selected → send payment link ───────────────────────────
 async function processDomainSelection(user, domain) {
   const site = await getLatestSite(user.id);
-  const netlifySubdomain = site?.netlify_subdomain || '';
-  const netlifySiteId = site?.netlify_site_id || '';
 
   await updateUserMetadata(user.id, { selectedDomain: domain });
-
-  // Try automated purchase if Namecheap API is configured
-  if (env.namecheap.apiKey) {
-    await sendTextMessage(user.phone_number, `Setting up *${domain}* for you now — this will take a moment...`);
-
-    try {
-      const { purchaseAndConfigureDomain } = require('../../integrations/namecheap');
-      const result = await purchaseAndConfigureDomain(domain, netlifySubdomain);
-
-      if (result.success) {
-        // Add domain to Netlify
-        if (netlifySiteId) {
-          try {
-            await addCustomDomainToNetlify(netlifySiteId, domain);
-          } catch (err) {
-            logger.error(`[DOMAIN] Netlify domain add failed:`, err.message);
-          }
-        }
-
-        // Update DB
-        if (site) {
-          await updateSite(site.id, {
-            custom_domain: domain,
-            status: 'domain_setup_complete',
-          });
-        }
-
-        await updateUserMetadata(user.id, {
-          domainStatus: 'purchased',
-          domainPurchasedAt: new Date().toISOString(),
-          domainChargedAmount: result.chargedAmount,
-        });
-
-        await sendTextMessage(
-          user.phone_number,
-          `✅ *${domain}* has been registered and configured!\n\n` +
-          `DNS is being set up now — your website will be live at *${domain}* within 5-60 minutes (sometimes up to a few hours for DNS to fully propagate).\n\n` +
-          `We'll have it on HTTPS automatically. You don't need to do anything!`
-        );
-        await logMessage(user.id, `Domain auto-purchased: ${domain} ($${result.chargedAmount})`, 'assistant');
-
-        // Still notify team for records
-        notifyTeam(user, domain, site, 'auto_purchased');
-
-        const returnToSales = user.metadata?.returnToSales;
-        return returnToSales ? STATES.SALES_CHAT : STATES.GENERAL_CHAT;
-      } else {
-        // Auto-purchase failed — fall through to manual
-        logger.warn(`[DOMAIN] Auto-purchase failed for ${domain}: ${result.error}`);
-        await sendTextMessage(
-          user.phone_number,
-          `I wasn't able to auto-register *${domain}* (${result.error}). Our team will handle this manually — it'll take about 2 business days.`
-        );
-      }
-    } catch (err) {
-      logger.error(`[DOMAIN] Auto-purchase error for ${domain}:`, err.message);
-      await sendTextMessage(
-        user.phone_number,
-        `There was an issue with the automatic setup. No worries — our team will handle *${domain}* manually within 2 business days.`
-      );
-    }
-  } else {
-    // No Namecheap API — manual flow
-    await sendTextMessage(
-      user.phone_number,
-      `Great choice! We'll set up *${domain}* for your website.\n\n` +
-      `Domain setup takes about *2 business days*. We'll handle everything — purchase, DNS configuration, and SSL.\n\n` +
-      `We'll send you an update once it's live!`
-    );
-  }
-
-  // Manual fallback — notify team
   if (site) {
-    await updateSite(site.id, { custom_domain: domain, status: 'domain_setup_pending' });
+    await updateSite(site.id, { custom_domain: domain, status: 'awaiting_payment' });
   }
-  await logMessage(user.id, `Domain selected: ${domain} — team notified for manual setup`, 'assistant');
-  notifyTeam(user, domain, site, 'manual_setup_needed');
 
-  const returnToSales = user.metadata?.returnToSales;
-  return returnToSales ? STATES.SALES_CHAT : STATES.GENERAL_CHAT;
+  // Default: $100 full payment (website + domain included)
+  const fullAmount = SITE_COST;
+
+  await sendTextMessage(
+    user.phone_number,
+    `Great choice — *${domain}*!\n\n` +
+    `The total is *$${fullAmount}* — that covers the website and domain, everything included.\n\n` +
+    `Once you pay, I'll register your domain, set everything up, and your site will be live at *${domain}* — usually within the hour.\n\n` +
+    `_If you'd prefer to split the payment, just let me know and I can do $60 now and $50 after delivery._`
+  );
+
+  // Create and send payment link for full amount
+  try {
+    if (env.stripe.secretKey) {
+      const { createPaymentLink } = require('../../payments/stripe');
+      const result = await createPaymentLink({
+        userId: user.id,
+        phoneNumber: user.phone_number,
+        amount: fullAmount,
+        serviceType: 'website',
+        packageTier: 'standard',
+        description: `Website + domain (${domain})`,
+        customerName: user.name || user.metadata?.websiteData?.businessName || '',
+      });
+
+      await sendCTAButton(
+        user.phone_number,
+        `Tap below to pay $${fullAmount} and get your site live`,
+        `💳 Pay $${fullAmount}`,
+        result.url
+      );
+
+      await updateUserMetadata(user.id, {
+        lastPaymentLinkId: result.linkId,
+        lastPaymentDbId: result.paymentId,
+        lastPaymentAmount: fullAmount,
+        domainPaymentPending: true,
+        paymentType: 'full', // 'full' or 'split'
+        remainingBalance: 0,
+      });
+
+      await logMessage(user.id, `Payment link sent: $${fullAmount} for website + domain (${domain})`, 'assistant');
+    }
+  } catch (err) {
+    logger.error('[DOMAIN] Payment link creation failed:', err.message);
+    await sendTextMessage(user.phone_number, 'There was an issue creating the payment link. Our team will follow up shortly.');
+  }
+
+  // Notify team
+  notifyTeam(user, domain, site);
+
+  return STATES.SALES_CHAT;
 }
 
-/**
- * Send email notification to the team.
- */
-async function notifyTeam(user, domain, site, type) {
+async function notifyTeam(user, domain, site) {
   try {
+    const { sendDomainRequestNotification } = require('../../notifications/email');
     await sendDomainRequestNotification({
       userName: user.name || user.metadata?.websiteData?.businessName || '',
       userPhone: user.phone_number,

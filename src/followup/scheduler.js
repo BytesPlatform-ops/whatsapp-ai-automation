@@ -38,18 +38,18 @@ const FOLLOWUP_MESSAGES = {
     DEFAULT: "Hey! Just checking in — did you get a chance to look at the payment link? Your site is ready to go live!",
   },
   followup_12h: {
-    COOL: "yo your preview site is still up — ready to lock it in? just $100 and it's yours with a custom domain 🤙",
-    PROFESSIONAL: "Your website preview is still available. Would you like to proceed with getting it live? It's $100 including domain setup.",
-    UNSURE: "hey! your website preview is still saved — just wanted to remind you it's only $100 to get it live with your own domain. no pressure! 😊",
-    NEGOTIATOR: "site's still up. $100 gets it live with your domain. in or out?",
-    DEFAULT: "Your preview site is still up — ready to get it live? Just $100 and it's yours with a custom domain!",
+    COOL: "yo your preview site is still up — $100 gets it live on your own domain, everything included. or i can split it if that helps 🤙",
+    PROFESSIONAL: "Your website preview is still available. It's $100 total including your custom domain. We can also split the payment if that works better.",
+    UNSURE: "hey! your website is still saved — just $100 to get it live with your own domain, everything included. we can split the payment too! 😊",
+    NEGOTIATOR: "site's still up. $100 total, domain included. can split if needed. want the link?",
+    DEFAULT: "Your preview site is still up — $100 gets it live on your own domain, everything included!",
   },
   followup_23h: {
-    COOL: "last call — i can do $80 to get you going. that's the absolute lowest. want me to send a new link? 👀",
-    PROFESSIONAL: "Final follow-up — I can offer a one-time discount of $80 to get your website live today. Shall I send a new payment link?",
-    UNSURE: "hey! last message from me — I got approval to do $80 for your website (normally $100). want me to send the link? 😊",
-    NEGOTIATOR: "last offer — $80. can't go lower. want the link?",
-    DEFAULT: "Last chance — I can do $80 to get your website live (normally $100). Want me to send a new payment link?",
+    COOL: "last call — i can do $80 total instead of $100. domain still included. want me to send a new link? 👀",
+    PROFESSIONAL: "Final follow-up — I can offer $80 total (normally $100), domain included. Shall I send a new payment link?",
+    UNSURE: "hey! last message from me — got approval to do $80 total (normally $100), domain included. want the link? 😊",
+    NEGOTIATOR: "last offer — $80 total. domain included. can't go lower. link?",
+    DEFAULT: "Last chance — $80 total instead of $100, domain included. Want a new payment link?",
   },
 };
 
@@ -166,25 +166,30 @@ async function processUserFollowup(user) {
   await sendTextMessage(user.phone_number, message);
   await logMessage(user.id, message, 'assistant');
 
-  // For the 23h step, also send an $80 payment link
+  // For the 23h step, also send a discounted payment link
   if (nextStep.step === 'followup_23h' && !metadata.paymentConfirmed) {
     try {
       const { createPaymentLink } = require('../payments/stripe');
       const { sendCTAButton } = require('../messages/sender');
       const { env: appEnv } = require('../config/env');
+      // $50 upfront (discounted from $60) — domain included
+      const discountUpfront = metadata.selectedDomain ? 50 : 80;
+      const description = metadata.selectedDomain
+        ? `Website + domain (${metadata.selectedDomain}) — discount`
+        : 'Website — limited time discount';
       if (appEnv.stripe.secretKey) {
         const result = await createPaymentLink({
           userId: user.id,
           phoneNumber: user.phone_number,
-          amount: 80,
+          amount: discountUpfront,
           serviceType: 'website',
           packageTier: 'discount',
-          description: 'Website — limited time discount',
+          description,
           customerName: user.name || '',
         });
-        await sendCTAButton(user.phone_number, 'Tap below to get your website live for $80', '💳 Pay $80', result.url);
-        await logMessage(user.id, 'Discount payment link sent: $80', 'assistant');
-        logger.info(`[FOLLOWUP] $80 discount payment link sent to ${user.phone_number}`);
+        await sendCTAButton(user.phone_number, `Tap below to pay $${discountUpfront}`, `💳 Pay $${discountUpfront}`, result.url);
+        await logMessage(user.id, `Discount payment link sent: $${discountUpfront}`, 'assistant');
+        logger.info(`[FOLLOWUP] $${discountUpfront} discount payment link sent to ${user.phone_number}`);
       }
     } catch (err) {
       logger.error(`[FOLLOWUP] Failed to send $80 payment link:`, err.message);
@@ -333,26 +338,117 @@ async function runPaymentPolling() {
         const isWebsitePayment = /website|web/i.test(payment.service_type || '') || /website|web/i.test(payment.description || '');
 
         if (isWebsitePayment) {
-          // Website payment — confirm and offer custom domain setup
-          await runWithChannel(payment.channel || 'whatsapp', async () => {
-            await sendTextMessage(
-              payment.phone_number,
-              `Payment of *${amountDisplay}* received! Thank you for choosing Bytes Platform.\n\n` +
-                `*Package:* ${payment.description || payment.service_type}\n\n` +
-                `Your website is all set! Would you like to put it on your own custom domain? (e.g., yourbusiness.com)\n\n` +
-                `Just say *"yes"* and I'll help you find and set one up, or *"no"* if you want to do it later.`
-            );
-          });
-          await logMessage(payment.user_id, `Payment confirmed: ${amountDisplay} for ${payment.service_type}`, 'assistant');
+          // Check if this is a domain payment (user already selected a domain)
+          const { data: paidUser } = await supabase.from('users').select('metadata').eq('id', payment.user_id).single();
+          const meta = paidUser?.metadata || {};
+          const selectedDomain = meta.selectedDomain;
+          const { getLatestSite: getSite } = require('../db/sites');
+          const { updateSite } = require('../db/sites');
 
-          // Update user metadata and transition to domain offer state
           await updateUserMetadata(payment.user_id, {
             paymentConfirmed: true,
             lastPaymentAmount: payment.amount,
             lastPaymentService: payment.service_type,
+            paidAt: new Date().toISOString(),
           });
-          const { updateUserState } = require('../db/users');
-          await updateUserState(payment.user_id, 'DOMAIN_OFFER');
+
+          if (selectedDomain && meta.domainPaymentPending) {
+            // Domain payment confirmed — start auto-purchase flow
+            await runWithChannel(payment.channel || 'whatsapp', async () => {
+              await sendTextMessage(
+                payment.phone_number,
+                `Payment of *${amountDisplay}* received! 🎉\n\n` +
+                `Now setting up *${selectedDomain}* for your website — this usually takes a few minutes. I'll keep you updated!`
+              );
+            });
+            await logMessage(payment.user_id, `Payment confirmed: ${amountDisplay} — starting domain setup for ${selectedDomain}`, 'assistant');
+
+            // Auto-purchase domain
+            const site = await getSite(payment.user_id);
+            const netlifySubdomain = site?.netlify_subdomain || '';
+            const netlifySiteId = site?.netlify_site_id || '';
+
+            if (env.namecheap?.apiKey) {
+              try {
+                const { purchaseAndConfigureDomain } = require('../integrations/namecheap');
+                const { addCustomDomainToNetlify } = require('../website-gen/deployer');
+
+                // Progress update 1
+                await runWithChannel(payment.channel || 'whatsapp', () =>
+                  sendTextMessage(payment.phone_number, `⏳ Registering *${selectedDomain}*...`)
+                );
+
+                const result = await purchaseAndConfigureDomain(selectedDomain, netlifySubdomain);
+
+                if (result.success) {
+                  // Add to Netlify
+                  if (netlifySiteId) {
+                    await runWithChannel(payment.channel || 'whatsapp', () =>
+                      sendTextMessage(payment.phone_number, `⏳ Configuring your website on *${selectedDomain}*...`)
+                    );
+                    try { await addCustomDomainToNetlify(netlifySiteId, selectedDomain); } catch (e) {
+                      logger.error('[PAYMENT] Netlify domain add failed:', e.message);
+                    }
+                  }
+
+                  if (site) await updateSite(site.id, { custom_domain: selectedDomain, status: 'domain_setup_complete' });
+                  await updateUserMetadata(payment.user_id, {
+                    domainPaymentPending: false,
+                    domainStatus: 'purchased',
+                    domainPurchasedAt: new Date().toISOString(),
+                  });
+
+                  await runWithChannel(payment.channel || 'whatsapp', () =>
+                    sendTextMessage(
+                      payment.phone_number,
+                      `✅ *${selectedDomain}* is registered and configured!\n\n` +
+                      `DNS is propagating now — your site will be live at *${selectedDomain}* within 5-60 minutes. ` +
+                      `HTTPS is set up automatically.\n\n` +
+                      `I'll send you a message once it's fully live! 🚀`
+                    )
+                  );
+                  await logMessage(payment.user_id, `Domain purchased and configured: ${selectedDomain}`, 'assistant');
+                } else {
+                  // Auto-purchase failed — fallback to manual
+                  if (site) await updateSite(site.id, { custom_domain: selectedDomain, status: 'domain_setup_pending' });
+                  await runWithChannel(payment.channel || 'whatsapp', () =>
+                    sendTextMessage(
+                      payment.phone_number,
+                      `Domain registration for *${selectedDomain}* needs manual setup (${result.error}). Our team will handle it within 2 business days — we'll keep you posted!`
+                    )
+                  );
+                  await logMessage(payment.user_id, `Domain auto-purchase failed: ${result.error} — manual setup needed`, 'assistant');
+                }
+              } catch (err) {
+                logger.error('[PAYMENT] Domain auto-purchase error:', err.message);
+                if (site) await updateSite(site.id, { custom_domain: selectedDomain, status: 'domain_setup_pending' });
+                await runWithChannel(payment.channel || 'whatsapp', () =>
+                  sendTextMessage(payment.phone_number, `Domain setup for *${selectedDomain}* is being handled by our team. We'll update you within 2 business days!`)
+                );
+              }
+            } else {
+              // No Namecheap API — manual flow
+              if (site) await updateSite(site.id, { custom_domain: selectedDomain, status: 'domain_setup_pending' });
+              await runWithChannel(payment.channel || 'whatsapp', () =>
+                sendTextMessage(
+                  payment.phone_number,
+                  `Payment received! Our team will set up *${selectedDomain}* for your website within 2 business days. We'll send you the live link once it's ready!`
+                )
+              );
+            }
+          } else {
+            // Regular website payment (no domain selected)
+            await runWithChannel(payment.channel || 'whatsapp', () => sendTextMessage(
+              payment.phone_number,
+              `Payment of *${amountDisplay}* received! Thank you for choosing Bytes Platform.\n\n` +
+                `*Package:* ${payment.description || payment.service_type}\n\n` +
+                `Your website is all set! Would you like to put it on your own custom domain?\n\n` +
+                `Just say *"yes"* and I'll help you find one, or *"no"* if you're good for now.`
+            ));
+            await logMessage(payment.user_id, `Payment confirmed: ${amountDisplay}`, 'assistant');
+            const { updateUserState } = require('../db/users');
+            await updateUserState(payment.user_id, 'DOMAIN_OFFER');
+          }
         } else {
           // Non-website payment — generic confirmation
           await runWithChannel(payment.channel || 'whatsapp', () => sendTextMessage(
