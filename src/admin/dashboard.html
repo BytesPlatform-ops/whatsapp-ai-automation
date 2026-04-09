@@ -119,7 +119,11 @@
           </button>
         </div>
         <div id="conv-modal-body" class="flex-1 overflow-y-auto p-4 space-y-3"></div>
-        <div class="border-t p-3">
+        <div class="border-t p-3 space-y-2">
+          <div class="flex items-center justify-between">
+            <button id="takeover-btn" onclick="toggleTakeover()" class="px-3 py-1.5 text-xs font-medium rounded-lg transition"></button>
+            <span id="takeover-status" class="text-xs text-gray-400"></span>
+          </div>
           <form id="admin-reply-form" onsubmit="sendAdminReply(event)" class="flex gap-2">
             <input id="admin-reply-input" type="text" placeholder="Type a message..." class="flex-1 px-4 py-2.5 border rounded-xl text-sm focus:outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100" autocomplete="off">
             <button type="submit" id="admin-reply-btn" class="px-5 py-2.5 bg-indigo-600 text-white text-sm font-medium rounded-xl hover:bg-indigo-700 transition disabled:opacity-50 disabled:cursor-not-allowed">Send</button>
@@ -131,7 +135,7 @@
 
 <script>
 // State
-var currentSection = 'overview';
+var currentSection = (window.location.hash || '#overview').slice(1) || 'overview';
 var leadsData = [];
 
 // API helpers
@@ -214,9 +218,20 @@ document.querySelectorAll('.sidebar-link').forEach(function(link) {
     document.querySelectorAll('.sidebar-link').forEach(function(l) { l.classList.remove('active'); });
     link.classList.add('active');
     currentSection = section;
+    window.location.hash = section;
     loadSection(section);
   });
 });
+
+// On page load, activate the correct sidebar link and load the section from hash
+(function() {
+  var initLink = document.querySelector('.sidebar-link[data-section="' + currentSection + '"]');
+  if (initLink) {
+    document.querySelectorAll('.sidebar-link').forEach(function(l) { l.classList.remove('active'); });
+    initLink.classList.add('active');
+  }
+  loadSection(currentSection);
+})();
 
 function loadSection(section) {
   showLoader();
@@ -594,6 +609,8 @@ function filterConvList() {
 // ─── Conversation Modal ────────────────────────
 var currentConvUserId = null;
 var currentConvPhone = null;
+var convPollInterval = null;
+var lastMsgCount = 0;
 
 function openConversation(userId, phone, name) {
   currentConvUserId = userId;
@@ -605,12 +622,15 @@ function openConversation(userId, phone, name) {
   document.getElementById('conv-modal-subtitle').textContent = phone;
   document.getElementById('conv-modal-body').innerHTML = '<div class="flex justify-center py-8"><div class="loader"></div></div>';
   document.getElementById('admin-reply-input').value = '';
+  updateTakeoverButton(false); // default until we know
 
   api('conversations/' + userId).then(function(data) {
     var user = data.user;
     var msgs = data.messages;
+    var isTakenOver = user.metadata && user.metadata.humanTakeover;
+    updateTakeoverButton(isTakenOver);
     var html = '<div class="bg-indigo-50 rounded-lg p-3 mb-4 text-xs space-y-1">' +
-      '<p><b>State:</b> ' + esc(user.state) + '</p>' +
+      '<p><b>State:</b> ' + esc(user.state) + (isTakenOver ? ' <span class="badge bg-red-100 text-red-700 ml-1">Human Control</span>' : '') + '</p>' +
       '<p><b>Joined:</b> ' + fmtDate(user.created_at) + '</p>' +
       (user.metadata && user.metadata.leadBrief ? '<p><b>Lead Brief:</b> ' + esc(user.metadata.leadBrief).slice(0, 300) + '</p>' : '') +
       (user.metadata && user.metadata.adSource ? '<p><b>Ad Source:</b> ' + esc(user.metadata.adSource) + '</p>' : '') +
@@ -627,12 +647,39 @@ function openConversation(userId, phone, name) {
     if (!msgs.length) html += '<p class="text-center text-gray-400 py-8">No messages yet</p>';
     document.getElementById('conv-modal-body').innerHTML = html;
     document.getElementById('conv-modal-body').scrollTop = document.getElementById('conv-modal-body').scrollHeight;
+    lastMsgCount = msgs.length;
+
+    // Start polling for new messages every 5s
+    if (convPollInterval) clearInterval(convPollInterval);
+    convPollInterval = setInterval(function() { pollConversation(); }, 5000);
   }).catch(function(err) {
     document.getElementById('conv-modal-body').innerHTML = '<p class="text-red-500">Failed to load: ' + esc(err.message) + '</p>';
   });
 }
 
+function pollConversation() {
+  if (!currentConvUserId) return;
+  api('conversations/' + currentConvUserId).then(function(data) {
+    var msgs = data.messages;
+    if (msgs.length <= lastMsgCount) return;
+    // New messages — append only the new ones
+    var body = document.getElementById('conv-modal-body');
+    var newMsgs = msgs.slice(0, msgs.length - lastMsgCount);
+    newMsgs.reverse().forEach(function(m) {
+      var isUser = m.role === 'user';
+      var div = document.createElement('div');
+      div.className = 'max-w-[85%] rounded-2xl px-4 py-2.5 text-sm ' + (isUser ? 'chat-user' : 'chat-bot');
+      div.innerHTML = '<p class="whitespace-pre-wrap">' + esc(m.message_text) + '</p>' +
+        '<p class="text-[10px] text-gray-400 mt-1">' + fmtDate(m.created_at) + '</p>';
+      body.appendChild(div);
+    });
+    body.scrollTop = body.scrollHeight;
+    lastMsgCount = msgs.length;
+  }).catch(function() {});
+}
+
 function closeConvModal() {
+  if (convPollInterval) { clearInterval(convPollInterval); convPollInterval = null; }
   var modal = document.getElementById('conv-modal');
   modal.classList.add('hidden');
   modal.classList.remove('flex');
@@ -678,6 +725,49 @@ function sendAdminReply(e) {
     btn.disabled = false;
     btn.textContent = 'Send';
   });
+}
+
+function updateTakeoverButton(isTakenOver) {
+  var btn = document.getElementById('takeover-btn');
+  var status = document.getElementById('takeover-status');
+  if (isTakenOver) {
+    btn.textContent = '🤖 Release to AI';
+    btn.className = 'px-4 py-2 text-xs font-semibold rounded-lg transition bg-green-500 text-white hover:bg-green-600';
+    status.textContent = 'AI is paused — you are in control';
+    status.className = 'text-xs text-red-500 font-medium';
+  } else {
+    btn.textContent = '🙋 Take Over';
+    btn.className = 'px-4 py-2 text-xs font-semibold rounded-lg transition bg-red-500 text-white hover:bg-red-600';
+    status.textContent = 'AI is handling this conversation';
+    status.className = 'text-xs text-green-500 font-medium';
+  }
+  btn.dataset.active = isTakenOver ? '1' : '0';
+}
+
+function toggleTakeover() {
+  if (!currentConvUserId) return;
+  var btn = document.getElementById('takeover-btn');
+  var isCurrentlyTakenOver = btn.dataset.active === '1';
+  var newState = !isCurrentlyTakenOver;
+
+  btn.disabled = true;
+  btn.textContent = 'Updating...';
+
+  fetch('/admin/api/conversations/' + currentConvUserId + '/takeover', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ takeover: newState }),
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(data) {
+    if (data.success) {
+      updateTakeoverButton(newState);
+    } else {
+      alert('Failed: ' + (data.error || 'Unknown error'));
+    }
+  })
+  .catch(function(err) { alert('Error: ' + err.message); })
+  .finally(function() { btn.disabled = false; });
 }
 
 document.getElementById('conv-modal').addEventListener('click', function(e) {
@@ -1574,7 +1664,7 @@ function regenerateSummary(userId, btn) {
 }
 
 // ─── Init ──────────────────────────────────────
-loadSection('overview');
+// Initial load handled above via hash detection
 </script>
 </body>
 </html>

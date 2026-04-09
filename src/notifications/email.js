@@ -21,7 +21,8 @@ async function sendEmail({ to, subject, html, text }) {
     return false;
   }
   try {
-    await sgMail.send({ to, from: FROM, subject, html, text: text || '' });
+    const plainText = text || (html ? html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim() : subject);
+    await sgMail.send({ to, from: FROM, subject, html, text: plainText });
     logger.info(`[EMAIL] Sent to ${to}: ${subject}`);
     return true;
   } catch (err) {

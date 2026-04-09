@@ -241,6 +241,17 @@ async function _routeMessage(message) {
     }
   }
 
+  // Re-fetch user to get latest metadata (takeover flag may have been set from admin)
+  const { supabase } = require('../config/database');
+  const { data: freshMeta } = await supabase.from('users').select('metadata').eq('id', user.id).single();
+  if (freshMeta) user.metadata = freshMeta.metadata;
+
+  // If human has taken over this conversation, just log the message and stop
+  if (user.metadata?.humanTakeover) {
+    logger.info(`[HUMAN TAKEOVER] Message from ${from} logged (bot paused): "${(text || '').slice(0, 50)}"`);
+    return;
+  }
+
   // Check for reset command
   if (text && text.toLowerCase().trim() === '/reset') {
     await updateUserState(user.id, STATES.WELCOME);

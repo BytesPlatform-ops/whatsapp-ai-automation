@@ -130,6 +130,7 @@ async function processUserFollowup(user) {
   if (metadata.meetingBooked) return;
   if (metadata.paymentConfirmed) return;
   if (metadata.followupOptOut) return;
+  if (metadata.humanTakeover) return;
 
   // If all steps are done, skip
   if (completedSteps.length >= FOLLOWUP_LADDER.length) return;

@@ -155,6 +155,19 @@ router.post('/api/conversations/:userId/reply', async (req, res) => {
   }
 });
 
+router.post('/api/conversations/:userId/takeover', async (req, res) => {
+  try {
+    const { takeover } = req.body;
+    const { updateUserMetadata } = require('../db/users');
+    await updateUserMetadata(req.params.userId, { humanTakeover: !!takeover });
+    logger.info(`[ADMIN] ${takeover ? 'Takeover' : 'Release'} for user ${req.params.userId}`);
+    res.json({ success: true });
+  } catch (err) {
+    logger.error('[ADMIN] Takeover error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.get('/api/dropoffs', async (req, res) => {
   try {
     const data = await queries.getDropoffs();
