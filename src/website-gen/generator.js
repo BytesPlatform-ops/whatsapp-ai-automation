@@ -106,10 +106,19 @@ Generate compelling website copy for this business. Return ONLY valid JSON.`;
     };
   }
 
-  // Fetch an industry-matched hero image from Unsplash (null on failure - deployer falls back to gradient)
+  // Build the Unsplash query from LLM-generated keywords first (it sees the full
+  // business context and knows what the company actually DOES), then fall back to
+  // services + industry. Industry alone is often misleading — e.g. a cleaning
+  // company serving "real estate" is cleaning, not real estate.
+  let imageQuery = (generatedContent.heroImageQuery || '').trim();
+  if (!imageQuery) {
+    const servicesPart = hasServices ? services.slice(0, 2).join(' ') : '';
+    imageQuery = [servicesPart, industry].filter(Boolean).join(' ').trim() || 'business';
+  }
+
   let heroImage = null;
   try {
-    heroImage = await getHeroImage(industry);
+    heroImage = await getHeroImage(imageQuery);
   } catch (err) {
     logger.warn(`[WEBGEN] Hero image fetch threw: ${err.message}`);
   }

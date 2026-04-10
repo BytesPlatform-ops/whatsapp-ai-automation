@@ -288,13 +288,38 @@ async function runMeetingReminders() {
  * Polls Stripe for pending payments every 2 minutes.
  * When a payment is detected as paid, sends a WhatsApp confirmation
  * and updates the DB record.
+ *
+ * Two safety rails to prevent ghost receipts from stale dev/test payments:
+ *   1. Only poll payments created in the last PAYMENT_POLL_MAX_AGE_HOURS hours.
+ *   2. Auto-expire anything older so it stops getting polled forever.
  */
+const PAYMENT_POLL_MAX_AGE_HOURS = 48;
+
 async function runPaymentPolling() {
   try {
+    // STEP 1: Auto-expire pending rows that are too old to still be legitimate.
+    // If a user was going to pay, they would have done it within 48 hours.
+    // Leaving them as 'pending' means the poller keeps pinging Stripe forever
+    // and ghost confirmations can fire if the link gets paid much later (e.g.
+    // during unrelated dev testing on another account).
+    const ageCutoff = new Date(Date.now() - PAYMENT_POLL_MAX_AGE_HOURS * 60 * 60 * 1000).toISOString();
+    const { error: expireError, count: expiredCount } = await supabase
+      .from('payments')
+      .update({ status: 'expired' }, { count: 'exact' })
+      .eq('status', 'pending')
+      .lt('created_at', ageCutoff);
+    if (expireError) {
+      logger.warn(`[PAYMENT] Failed to auto-expire stale pending payments: ${expireError.message}`);
+    } else if (expiredCount && expiredCount > 0) {
+      logger.info(`[PAYMENT] Auto-expired ${expiredCount} stale pending payment(s) older than ${PAYMENT_POLL_MAX_AGE_HOURS}h`);
+    }
+
+    // STEP 2: Only look at FRESH pending payments.
     const { data: pending, error } = await supabase
       .from('payments')
-      .select('id, user_id, phone_number, stripe_payment_link_id, amount, currency, service_type, package_tier, description, channel')
+      .select('id, user_id, phone_number, stripe_payment_link_id, amount, currency, service_type, package_tier, description, channel, created_at')
       .eq('status', 'pending')
+      .gte('created_at', ageCutoff)
       .not('stripe_payment_link_id', 'is', null);
 
     if (error || !pending || pending.length === 0) return;
@@ -311,6 +336,32 @@ async function runPaymentPolling() {
 
     for (const payment of pending) {
       try {
+        // Safety rail: if the Stripe payment link has already been deactivated
+        // (e.g. by cancelPendingPaymentsForUser when a new link was issued),
+        // treat this row as superseded and stop polling it. This prevents a
+        // ghost receipt firing from a stale dev test link that someone paid
+        // long ago.
+        try {
+          const linkObj = await stripe.paymentLinks.retrieve(payment.stripe_payment_link_id);
+          if (linkObj && linkObj.active === false) {
+            await supabase
+              .from('payments')
+              .update({ status: 'superseded' })
+              .eq('id', payment.id);
+            logger.info(`[PAYMENT] Skipping inactive Stripe link ${payment.stripe_payment_link_id} (row ${payment.id}) — marked superseded`);
+            continue;
+          }
+        } catch (linkErr) {
+          // If the link can't be retrieved (deleted, etc.), mark the row as
+          // superseded so we don't keep retrying forever.
+          logger.warn(`[PAYMENT] Could not retrieve link ${payment.stripe_payment_link_id}: ${linkErr.message} — marking superseded`);
+          await supabase
+            .from('payments')
+            .update({ status: 'superseded' })
+            .eq('id', payment.id);
+          continue;
+        }
+
         // Check Stripe for completed sessions on this payment link
         const sessions = await stripe.checkout.sessions.list({
           payment_link: payment.stripe_payment_link_id,

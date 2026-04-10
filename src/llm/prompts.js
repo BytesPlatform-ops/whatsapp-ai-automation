@@ -119,7 +119,8 @@ Generate the following in JSON format:
   "ctaText": "CTA supporting text (15-20 words)",
   "ctaButton": "CTA button text (2-4 words)",
   "footerTagline": "Short footer tagline",
-  "contactPageIntro": "1-2 sentence intro for the contact page"
+  "contactPageIntro": "1-2 sentence intro for the contact page",
+  "heroImageQuery": "2-4 concrete visual keywords describing what the hero photo should literally show, based on what this business ACTUALLY DOES. Think: what would a photographer shoot for this company's landing page? Be specific and visual, NOT abstract. If they clean ACs, say 'air conditioner cleaning' (not 'real estate'). If they fix cars, say 'mechanic garage car repair' (not 'automotive industry'). If they bake cakes, say 'bakery cake pastry'. Use the SERVICES to ground the query — the industry field can be misleading (it's who they serve, not what they do). Never return abstract terms like 'business', 'professional', or 'corporate'."
 }
 
 IMPORTANT RULES:
