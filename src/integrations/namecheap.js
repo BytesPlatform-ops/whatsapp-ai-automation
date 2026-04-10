@@ -25,7 +25,7 @@ const REGISTRANT = {
   PostalCode: '10001',
   Country: 'US',
   Phone: '+1.2125551234',
-  Email: 'bytesuite@bytesplatform.com',
+  EmailAddress: 'bytesuite@bytesplatform.com',
 };
 
 /**
