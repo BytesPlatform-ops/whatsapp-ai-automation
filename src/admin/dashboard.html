@@ -612,6 +612,23 @@ var currentConvPhone = null;
 var convPollInterval = null;
 var lastMsgCount = 0;
 
+function renderMessageContent(m) {
+  var html = '';
+  if (m.media_data && m.media_mime) {
+    if (m.media_mime.indexOf('image') === 0) {
+      html += '<img src="' + m.media_data + '" alt="image" class="rounded-lg max-w-full max-h-64 mb-1.5 cursor-pointer" onclick="window.open(this.src)">';
+    } else if (m.media_mime.indexOf('audio') === 0) {
+      html += '<audio controls class="w-full mb-1.5"><source src="' + m.media_data + '" type="' + m.media_mime + '"></audio>';
+    } else if (m.media_mime.indexOf('video') === 0) {
+      html += '<video controls class="rounded-lg max-w-full max-h-64 mb-1.5"><source src="' + m.media_data + '" type="' + m.media_mime + '"></video>';
+    }
+  }
+  if (m.message_text) {
+    html += '<p class="whitespace-pre-wrap">' + esc(m.message_text) + '</p>';
+  }
+  return html;
+}
+
 function openConversation(userId, phone, name) {
   currentConvUserId = userId;
   currentConvPhone = phone;
@@ -639,7 +656,7 @@ function openConversation(userId, phone, name) {
     msgs.forEach(function(m) {
       var isUser = m.role === 'user';
       html += '<div class="max-w-[85%] rounded-2xl px-4 py-2.5 text-sm ' + (isUser ? 'chat-user' : 'chat-bot') + '">' +
-        '<p class="whitespace-pre-wrap">' + esc(m.message_text) + '</p>' +
+        renderMessageContent(m) +
         '<p class="text-[10px] text-gray-400 mt-1">' + fmtDate(m.created_at) + '</p>' +
       '</div>';
     });
@@ -662,14 +679,14 @@ function pollConversation() {
   api('conversations/' + currentConvUserId).then(function(data) {
     var msgs = data.messages;
     if (msgs.length <= lastMsgCount) return;
-    // New messages — append only the new ones
+    // New messages — append only the new ones (slice from the end since msgs are oldest-first)
     var body = document.getElementById('conv-modal-body');
-    var newMsgs = msgs.slice(0, msgs.length - lastMsgCount);
-    newMsgs.reverse().forEach(function(m) {
+    var newMsgs = msgs.slice(lastMsgCount);
+    newMsgs.forEach(function(m) {
       var isUser = m.role === 'user';
       var div = document.createElement('div');
       div.className = 'max-w-[85%] rounded-2xl px-4 py-2.5 text-sm ' + (isUser ? 'chat-user' : 'chat-bot');
-      div.innerHTML = '<p class="whitespace-pre-wrap">' + esc(m.message_text) + '</p>' +
+      div.innerHTML = renderMessageContent(m) +
         '<p class="text-[10px] text-gray-400 mt-1">' + fmtDate(m.created_at) + '</p>';
       body.appendChild(div);
     });

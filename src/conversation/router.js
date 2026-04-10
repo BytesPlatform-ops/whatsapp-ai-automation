@@ -187,6 +187,25 @@ async function _routeMessage(message) {
     // Non-critical - continue processing
   }
 
+  // Save original message type before audio transcription overwrites it
+  const originalType = message.type;
+
+  // Download media (image/audio) for storage in DB so admin can view it
+  let mediaData = null;
+  let mediaMime = null;
+  if ((message.type === 'image' || message.type === 'audio') && message.mediaId) {
+    try {
+      const { downloadMedia } = require('../messages/sender');
+      const media = await downloadMedia(message.mediaId);
+      if (media?.buffer) {
+        mediaData = `data:${media.mimeType};base64,${media.buffer.toString('base64')}`;
+        mediaMime = media.mimeType;
+      }
+    } catch (err) {
+      logger.error('Media download failed:', err.message);
+    }
+  }
+
   // Transcribe audio messages to text
   if (message.type === 'audio' && (message.mediaId || message.mediaUrl)) {
     try {
@@ -227,8 +246,8 @@ async function _routeMessage(message) {
     logger.info(`[AD TRACKING] Platform: ${channel} | Product: ${product} | Ad: ${ref.headline || 'N/A'} | User: ${from}`);
   }
 
-  // Log incoming message
-  await logMessage(user.id, text || '', 'user', message.type, messageId);
+  // Log incoming message — use latest text (may be audio transcript), originalType (so audio shows as audio)
+  await logMessage(user.id, message.text || text || '', 'user', originalType, messageId, mediaData, mediaMime);
 
   // Auto-update lead temperature based on user message count
   const messageCount = (user.metadata?.userMessageCount || 0) + 1;

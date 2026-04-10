@@ -1,6 +1,6 @@
 const { supabase } = require('../config/database');
 
-async function logMessage(userId, messageText, role, messageType = 'text', waMessageId = null) {
+async function logMessage(userId, messageText, role, messageType = 'text', waMessageId = null, mediaData = null, mediaMime = null) {
   const { error } = await supabase
     .from('conversations')
     .insert({
@@ -9,6 +9,8 @@ async function logMessage(userId, messageText, role, messageType = 'text', waMes
       role,
       message_type: messageType,
       whatsapp_message_id: waMessageId ? waMessageId.slice(0, 100) : null,
+      media_data: mediaData,
+      media_mime: mediaMime,
     });
 
   if (error) throw new Error(`Failed to log message: ${error.message}`);
