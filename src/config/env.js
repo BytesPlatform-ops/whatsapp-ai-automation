@@ -38,6 +38,7 @@ const optional = [
   'NAMECHEAP_API_KEY',
   'NAMECHEAP_CLIENT_IP',
   'NAMECHEAP_USE_SANDBOX',
+  'UNSPLASH_ACCESS_KEY',
 ];
 
 function validateEnv() {
@@ -114,6 +115,10 @@ const env = {
         ? 'https://api.sandbox.namecheap.com/xml.response'
         : 'https://api.namecheap.com/xml.response';
     },
+  },
+  // Unsplash (hero images for generated websites)
+  unsplash: {
+    accessKey: process.env.UNSPLASH_ACCESS_KEY || '',
   },
   agentPhone: process.env.AGENT_PHONE_NUMBER || '',
   // Server

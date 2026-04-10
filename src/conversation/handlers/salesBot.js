@@ -108,6 +108,19 @@ async function handleSalesBot(user, message) {
   let websiteDemoTrigger = cleanText.includes('[TRIGGER_WEBSITE_DEMO]');
   let chatbotDemoTrigger = cleanText.includes('[TRIGGER_CHATBOT_DEMO]');
   const seoAuditMatch = cleanText.match(/\[TRIGGER_SEO_AUDIT:\s*(.+?)\]/);
+  let bytescartTrigger = cleanText.includes('[TRIGGER_BYTESCART]');
+
+  // Fallback: if the conversation is clearly about ecommerce/online stores and the bot
+  // hasn't triggered ByteScart yet, force it. The sales bot should never try to sell
+  // paid ecommerce tiers - ByteScart is free and replaces that flow entirely.
+  if (!bytescartTrigger && !user.metadata?.bytescartPitched) {
+    const fullConv = (cleanText + ' ' + messages.map(m => m.content).join(' ')).toLowerCase();
+    const isEcommerceContext = /\b(ecommerce|e-commerce|online store|online shop|shopify|sell online|product catalog|dropship)\b/i.test(fullConv);
+    if (isEcommerceContext) {
+      bytescartTrigger = true;
+      logger.info(`[SALES] Fallback: ByteScart trigger detected for ${user.phone_number}`);
+    }
+  }
 
   logger.debug(`[SALES] Trigger check - websiteTag: ${websiteDemoTrigger}, chatbotTag: ${chatbotDemoTrigger}, seoTag: ${!!seoAuditMatch}, websiteTriggered: ${!!user.metadata?.websiteDemoTriggered}, chatbotTriggered: ${!!user.metadata?.chatbotDemoTriggered}, seoTriggered: ${!!user.metadata?.seoAuditTriggered}`);
   logger.debug(`[SALES] LLM response (first 200): ${cleanText.slice(0, 200)}`);
@@ -188,8 +201,8 @@ async function handleSalesBot(user, message) {
       let service = 'website';
       if (/\bseo\b|search engine|google rank/i.test(convText)) service = 'seo';
       else if (/\bsmm\b|social media|instagram|facebook/i.test(convText)) service = 'smm';
-      else if (/\becommerce|online store|shopif/i.test(convText)) service = 'ecommerce';
       else if (/\bapp\b|mobile app|android|ios/i.test(convText)) service = 'app';
+      // Note: ecommerce is intentionally omitted — we redirect ecommerce leads to ByteScart (free).
 
       // Detect tier from amount
       let tier = 'custom';
@@ -213,6 +226,7 @@ async function handleSalesBot(user, message) {
     .replace(/\[TRIGGER_WEBSITE_DEMO\]/g, '')
     .replace(/\[TRIGGER_CHATBOT_DEMO\]/g, '')
     .replace(/\[TRIGGER_SEO_AUDIT:[^\]]*\]/g, '')
+    .replace(/\[TRIGGER_BYTESCART\]/g, '')
     .replace(/\[SEND_PAYMENT:[^\]]*\]/g, '')
     .trim();
 
@@ -238,6 +252,28 @@ async function handleSalesBot(user, message) {
   if (formatted && !skipLlmResponse) {
     await sendTextMessage(user.phone_number, formatted);
     await logMessage(user.id, formatted, 'assistant');
+  }
+
+  // Send the ByteScart pitch + CTA button for ecommerce leads
+  if (bytescartTrigger && !user.metadata?.bytescartPitched) {
+    const pitch =
+      '🛒 *Want your own online store?*\n\n' +
+      'Great news — you can launch one *today* with *ByteScart*, our done-for-you ecommerce platform. And the best part? It\'s *100% FREE* to get started!\n\n' +
+      '✨ *What you get — completely free:*\n' +
+      '• Free signup — no credit card needed\n' +
+      '• List your first few products at zero cost\n' +
+      '• Ready-to-sell storefront on mobile & desktop\n' +
+      '• Built-in checkout & secure payments\n' +
+      '• No coding, no design work — go live in minutes\n\n' +
+      'Thousands of sellers have already launched their store with ByteScart. Tap the button below to claim yours 👇';
+    await sendCTAButton(
+      user.phone_number,
+      pitch,
+      '🚀 Launch Free Store',
+      'https://www.bytescart.ai'
+    );
+    await logMessage(user.id, 'Sent ByteScart pitch with CTA link (sales bot)', 'assistant');
+    await updateUserMetadata(user.id, { bytescartPitched: true });
   }
 
   // Send the Calendly link as a clickable CTA button so it actually works on WhatsApp

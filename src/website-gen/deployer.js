@@ -299,8 +299,19 @@ function generateHomePage(c) {
       <p style="font-size:14px;color:#666;line-height:1.6">${esc(s.description)}</p>
     </div>`).join('');
 
+  const hasHeroImg = !!(c.heroImage && c.heroImage.url);
+  const heroBg = hasHeroImg
+    ? `background:#0a0a1a url('${c.heroImage.url.replace(/'/g, '%27')}') center/cover no-repeat`
+    : `background:linear-gradient(135deg,${pc} 0%,${pc}dd 40%,${ac}88 100%)`;
+  const heroOverlay = hasHeroImg
+    ? `<div style="position:absolute;inset:0;background:linear-gradient(135deg,${pc}d9 0%,${pc}99 40%,${ac}66 100%),linear-gradient(180deg,rgba(0,0,0,0.45) 0%,rgba(0,0,0,0.25) 40%,rgba(0,0,0,0.55) 100%);background-blend-mode:multiply"></div>`
+    : `<div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,0.12) 0%,transparent 30%,transparent 70%,rgba(0,0,0,0.25) 100%)"></div>`;
+  const heroCredit = hasHeroImg
+    ? `<div style="position:absolute;bottom:12px;right:16px;z-index:11;font-size:11px;color:rgba(255,255,255,0.65);letter-spacing:0.2px">Photo by <a href="${esc(c.heroImage.photographerUrl)}" target="_blank" rel="noopener" style="color:rgba(255,255,255,0.85);text-decoration:underline">${esc(c.heroImage.photographer)}</a> on <a href="${esc(c.heroImage.unsplashUrl)}" target="_blank" rel="noopener" style="color:rgba(255,255,255,0.85);text-decoration:underline">Unsplash</a></div>`
+    : '';
+
   const body = `
-    <section class="hero-section" style="min-height:100vh;display:flex;align-items:center;justify-content:center;text-align:center;color:#fff;position:relative;overflow:hidden;background:linear-gradient(135deg,${pc} 0%,${pc}dd 40%,${ac}88 100%)">
+    <section class="hero-section" style="min-height:100vh;display:flex;align-items:center;justify-content:center;text-align:center;color:#fff;position:relative;overflow:hidden;${heroBg}">
       <div class="noise" style="position:absolute;inset:0;pointer-events:none"></div>
       <div class="dot-grid" style="position:absolute;inset:0;pointer-events:none"></div>
       <div style="position:absolute;inset:0;overflow:hidden">
@@ -312,7 +323,8 @@ function generateHomePage(c) {
         <div style="position:absolute;top:55%;left:25%;width:4px;height:4px;background:rgba(255,255,255,0.2);border-radius:50%;animation:floatSlow 5s ease-in-out infinite"></div>
         <div style="position:absolute;top:70%;right:35%;width:5px;height:5px;background:rgba(255,255,255,0.15);border-radius:50%;animation:float 6s ease-in-out infinite 1s"></div>
       </div>
-      <div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,0.12) 0%,transparent 30%,transparent 70%,rgba(0,0,0,0.25) 100%)"></div>
+      ${heroOverlay}
+      ${heroCredit}
       <div style="position:relative;z-index:10;padding:0 24px;max-width:900px">
         ${badges?`<div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-bottom:32px;animation:fadeDown 0.8s ease-out forwards">${badges}</div>`:''}
         <h1 style="font-size:clamp(36px,7vw,76px);font-weight:900;line-height:1.05;letter-spacing:-2px;margin-bottom:24px;animation:fadeUp 0.8s ease-out 0.2s both">${esc(c.headline)}</h1>

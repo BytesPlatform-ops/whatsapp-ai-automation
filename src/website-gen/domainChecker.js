@@ -14,7 +14,7 @@ async function checkDomainAvailability(baseName) {
   if (env.namecheap.apiKey) {
     try {
       const { checkDomainAvailability: ncCheck } = require('../integrations/namecheap');
-      return ncCheck(sanitized);
+      return await ncCheck(sanitized);
     } catch (err) {
       logger.error('[DOMAIN] Namecheap check failed, falling back to DNS:', err.message);
     }
