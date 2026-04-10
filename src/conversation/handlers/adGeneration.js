@@ -19,7 +19,6 @@
 const {
   sendTextMessage,
   sendInteractiveButtons,
-  sendInteractiveList,
   sendWithMenuButton,
   sendImage,
   downloadMedia,
@@ -75,6 +74,8 @@ async function handleAdGeneration(user, message) {
       return handleCollectSlogan(user, message);
     case STATES.AD_COLLECT_PRICING:
       return handleCollectPricing(user, message);
+    case STATES.AD_COLLECT_COLORS:
+      return handleCollectColors(user, message);
     case STATES.AD_COLLECT_IMAGE:
       return handleCollectImage(user, message);
     case STATES.AD_SELECT_IDEA:
@@ -97,13 +98,13 @@ async function handleAdGeneration(user, message) {
 async function handleStart(user, message) {
   await saveAdData(user, {
     businessName: null, industry: null, niche: null, productType: null,
-    slogan: null, pricing: null, imageBase64: null, ideas: null, selectedIdeaIndex: null,
+    slogan: null, pricing: null, brandColors: null, imageBase64: null, ideas: null, selectedIdeaIndex: null,
   });
 
   await sendWithMenuButton(
     user.phone_number,
     '🎨 *Marketing Ad Generator*\n\n' +
-      'I\'ll create a professional marketing ad image powered by AI — the same technology used by top digital agencies!\n\n' +
+      'I\'ll create a professional marketing ad image for your brand — the same quality used by top digital agencies!\n\n' +
       'Let\'s start with the basics.\n\n' +
       'What is your *business name*?'
   );
@@ -111,10 +112,67 @@ async function handleStart(user, message) {
   return STATES.AD_COLLECT_BUSINESS;
 }
 
+// Words that look like user confirmations, not real brand names
+const CONFIRMATION_WORDS = new Set(['ok', 'okay', 'yes', 'no', 'sure', 'go', 'next', 'start', 'fine', 'done', 'ready', 'yep', 'yeah', 'hi', 'hello', 'hey']);
+
+// Words that mean "use the previously suggested brand name"
+const SAME_BRAND_WORDS = new Set(['same', 'yes', 'yeah', 'yep', 'sure', 'ok', 'okay', 'continue', 'use it', 'that one', 'use that']);
+
 async function handleCollectBusiness(user, message) {
   const name = (message.text || '').trim();
-  if (!name || name.length < 2) {
-    await sendWithMenuButton(user.phone_number, 'Please enter your *business name* to continue:');
+  const adData = getAdData(user);
+  const suggested = adData.suggestedBusinessName;
+
+  // Case 1: We have a suggested business name from a previous flow
+  if (suggested) {
+    const lower = name.toLowerCase();
+
+    // 1a. User confirmed with "same/yes/sure/etc" → use the suggested name
+    if (lower && (SAME_BRAND_WORDS.has(lower) || /\b(same|yes|continue|that\s*one|use\s*(it|that))\b/i.test(lower))) {
+      await saveAdData(user, { businessName: suggested, suggestedBusinessName: null });
+      await sendWithMenuButton(
+        user.phone_number,
+        `Great! Designing a new ad for *${suggested}* 👍\n\nWhat *industry* are you in?\n\n` +
+          'Examples:\n' +
+          '• Food & Beverage\n• Fashion & Apparel\n• Beauty & Skincare\n' +
+          '• Tech / Software\n• Real Estate\n• Fitness & Gym\n• Education\n• Retail / E-commerce\n\n' +
+          'Type your industry:'
+      );
+      await logMessage(user.id, `Business name confirmed (suggested): ${suggested}`, 'assistant');
+      return STATES.AD_COLLECT_INDUSTRY;
+    }
+
+    // 1b. User typed a different business name → use that, clear suggestion
+    if (name && name.length >= 2) {
+      await saveAdData(user, { businessName: name, suggestedBusinessName: null });
+      await sendWithMenuButton(
+        user.phone_number,
+        `Got it — designing a new ad for *${name}* 👍\n\nWhat *industry* are you in?\n\n` +
+          'Examples:\n' +
+          '• Food & Beverage\n• Fashion & Apparel\n• Beauty & Skincare\n' +
+          '• Tech / Software\n• Real Estate\n• Fitness & Gym\n• Education\n• Retail / E-commerce\n\n' +
+          'Type your industry:'
+      );
+      await logMessage(user.id, `Business name (overridden suggestion): ${name}`, 'assistant');
+      return STATES.AD_COLLECT_INDUSTRY;
+    }
+
+    // 1c. Empty/too short → re-prompt
+    await sendWithMenuButton(
+      user.phone_number,
+      `Reply *same* to design for *${suggested}* again, or type a different business name:`
+    );
+    return STATES.AD_COLLECT_BUSINESS;
+  }
+
+  // Case 2: No suggestion — normal validation
+  if (!name || name.length < 2 || CONFIRMATION_WORDS.has(name.toLowerCase())) {
+    await sendWithMenuButton(
+      user.phone_number,
+      'Please enter your *actual business name*:\n\n' +
+        'Examples: _NutreoPak_, _Milan Foods_, _BytesPlatform_\n\n' +
+        '(This will appear on your ad)'
+    );
     return STATES.AD_COLLECT_BUSINESS;
   }
 
@@ -210,9 +268,10 @@ async function handleCollectType(user, message) {
 
   await sendWithMenuButton(
     user.phone_number,
-    'Do you have a *brand slogan* or tagline to display on the ad?\n\n' +
-      'Example: _"Fresh From Farm"_ or _"Style Redefined"_\n\n' +
-      'Type your slogan or type *skip* to continue:'
+    '✍️ *Brand Slogan / Tagline*\n\n' +
+      'Type your slogan to display on the ad:\n\n' +
+      'Examples: _"Fresh From Farm"_ or _"Style Redefined"_\n\n' +
+      'Or type *skip* to continue without one:'
   );
   await logMessage(user.id, `Product type: ${productType}`, 'assistant');
   return STATES.AD_COLLECT_SLOGAN;
@@ -220,7 +279,12 @@ async function handleCollectType(user, message) {
 
 async function handleCollectSlogan(user, message) {
   const text = (message.text || '').trim();
-  const slogan = text.toLowerCase() === 'skip' ? null : text || null;
+  let slogan = text.toLowerCase() === 'skip' ? null : text || null;
+
+  // Strip leading confirmation words: "yes fresh from farm" → "fresh from farm"
+  if (slogan) {
+    slogan = slogan.replace(/^(yes[,!\s]+|yeah[,!\s]+|yep[,!\s]+|sure[,!\s]+|ok[,!\s]+)/i, '').trim() || slogan;
+  }
 
   await saveAdData(user, { slogan });
 
@@ -242,12 +306,29 @@ async function handleCollectPricing(user, message) {
 
   await sendWithMenuButton(
     user.phone_number,
+    '🎨 *Brand Colors*\n\n' +
+      'Do you have specific brand colors?\n\n' +
+      'Examples: _Blue & Gold_, _#1a3a2a & #d4a843_, _Red White Black_\n\n' +
+      'Type your colors — or type *skip* and we\'ll design the perfect palette for your brand automatically:'
+  );
+  await logMessage(user.id, `Pricing: ${pricing || 'skipped'}`, 'assistant');
+  return STATES.AD_COLLECT_COLORS;
+}
+
+async function handleCollectColors(user, message) {
+  const text = (message.text || '').trim();
+  const brandColors = text.toLowerCase() === 'skip' ? null : text || null;
+
+  await saveAdData(user, { brandColors });
+
+  await sendWithMenuButton(
+    user.phone_number,
     '📸 *Optional: Product or Logo Image*\n\n' +
       'Send a photo of your product or logo for a much more personalized ad.\n\n' +
       '_Tip: Good lighting + clear background = better results!_\n\n' +
       'Send an image *or* type *skip* to generate without one:'
   );
-  await logMessage(user.id, `Pricing: ${pricing || 'skipped'}`, 'assistant');
+  await logMessage(user.id, `Brand colors: ${brandColors || 'skipped'}`, 'assistant');
   return STATES.AD_COLLECT_IMAGE;
 }
 
@@ -286,14 +367,15 @@ async function handleCollectImage(user, message) {
 }
 
 /**
- * Generate 3 ad ideas using OpenAI and present them as a WhatsApp list
+ * Generate 5 ad ideas and present them as a friendly text message.
+ * User picks by typing "1" through "5" — no buttons, conversational.
  */
 async function generateAndShowIdeas(user, message) {
   const adData = getAdData(user);
 
   await sendTextMessage(
     user.phone_number,
-    '✨ *Generating your ad concepts...*\n\nOur AI creative director is crafting 3 unique concepts for your brand. This takes about 20-30 seconds...'
+    '✨ Working on 5 unique ad concepts for your brand...\n\nGive me about 30-45 seconds — sketching them out now ☕'
   );
 
   let ideas;
@@ -305,99 +387,105 @@ async function generateAndShowIdeas(user, message) {
       productType: adData.productType,
       slogan: adData.slogan,
       pricing: adData.pricing,
+      brandColors: adData.brandColors,
     });
   } catch (err) {
     logger.error('[AD-GEN] Idea generation failed:', err);
-    await sendInteractiveButtons(
+    await sendTextMessage(
       user.phone_number,
-      '⚠️ Idea generation failed. What would you like to do?',
-      [
-        { id: 'ad_retry_ideas', title: '🔄 Try Again' },
-        { id: 'back_menu', title: '📋 Back to Menu' },
-      ]
+      '⚠️ Something went wrong while generating concepts.\n\nReply *retry* to try again, or *menu* to go back.'
     );
-    return STATES.AD_SELECT_IDEA; // stay — retry handled in handleSelectIdea
+    return STATES.AD_SELECT_IDEA;
   }
 
   // Store ideas in metadata
   await saveAdData(user, { ideas });
 
-  // Present as an interactive list
-  const rows = ideas.map((idea, i) => ({
-    id: `ad_idea_${i}`,
-    title: `${i + 1}. ${idea.title}`.slice(0, 24),
-    description: truncate(idea.description, 72),
-  }));
+  // Build a rich, conversational text message with full concept details
+  const conceptText = ideas.map((idea, i) => {
+    const badge = idea.is3D ? '✦ *3D Render*' : '📸 *Photo*';
+    return `*${i + 1}. ${idea.title}* — ${badge}\n${idea.description}`;
+  }).join('\n\n────────\n\n');
 
-  await sendInteractiveList(
+  await sendTextMessage(
     user.phone_number,
-    '🎨 *3 Ad Concepts Ready!*\n\nOur AI creative director designed these specifically for your brand. Pick the concept you\'d like to generate:',
-    'Pick a Concept',
-    [{ title: 'Ad Concepts', rows }]
+    `🎨 *Here are 5 ad concepts for ${adData.businessName}:*\n\n${conceptText}\n\n────────\n\n` +
+      `Reply with the *number* (1-5) of the concept you want me to generate ✨`
   );
 
-  await logMessage(user.id, '3 ad concepts generated and presented', 'assistant');
+  await logMessage(user.id, '5 ad concepts generated and presented', 'assistant');
   return STATES.AD_SELECT_IDEA;
 }
 
 async function handleSelectIdea(user, message) {
   const listId = message.listId || message.buttonId || '';
+  const text = (message.text || '').trim().toLowerCase();
   const adData = getAdData(user);
 
-  // Handle retry
-  if (listId === 'ad_retry_ideas') {
+  // Handle retry triggers
+  if (listId === 'ad_retry_ideas' || text === 'retry') {
     return await generateAndShowIdeas(user, message);
   }
 
-  if (listId === 'back_menu') {
+  if (listId === 'back_menu' || text === 'menu') {
     const { handleWelcome } = require('./welcome');
     return handleWelcome(user, message);
   }
 
-  // Parse idea selection
-  const match = listId.match(/^ad_idea_(\d+)$/);
-  if (!match) {
-    // Fallback: re-show if ideas exist
+  // Parse idea selection from either:
+  //   1. Legacy button/list ID: "ad_idea_2"
+  //   2. Plain number text: "1", "2", "3", "4", "5"
+  //   3. Text with number: "concept 3", "i pick 2", etc.
+  let ideaIndex = null;
+
+  const idMatch = listId.match(/^ad_idea_(\d+)$/);
+  if (idMatch) {
+    ideaIndex = parseInt(idMatch[1], 10);
+  } else if (text) {
+    const numMatch = text.match(/\b([1-9])\b/);
+    if (numMatch) {
+      ideaIndex = parseInt(numMatch[1], 10) - 1; // user types 1-based, internal is 0-based
+    }
+  }
+
+  if (ideaIndex === null || ideaIndex < 0) {
+    // No valid selection — gently re-prompt
     if (adData.ideas && adData.ideas.length > 0) {
-      const rows = adData.ideas.map((idea, i) => ({
-        id: `ad_idea_${i}`,
-        title: `${i + 1}. ${idea.title}`.slice(0, 24),
-        description: truncate(idea.description, 72),
-      }));
-      await sendInteractiveList(
+      await sendTextMessage(
         user.phone_number,
-        'Please select one of the concepts:',
-        'Pick a Concept',
-        [{ title: 'Ad Concepts', rows }]
+        `Just reply with the *number* (1-${adData.ideas.length}) of the concept you'd like me to generate ✨\n\nOr type *retry* for new concepts, or *menu* to go back.`
       );
     }
     return STATES.AD_SELECT_IDEA;
   }
 
-  const ideaIndex = parseInt(match[1], 10);
   const selectedIdea = adData.ideas?.[ideaIndex];
 
   if (!selectedIdea) {
-    await sendTextMessage(user.phone_number, '⚠️ Could not find that concept. Please try again.');
+    await sendTextMessage(
+      user.phone_number,
+      `That number doesn't match any concept. Please pick between 1 and ${adData.ideas?.length || 5}.`
+    );
     return STATES.AD_SELECT_IDEA;
   }
 
   await saveAdData(user, { selectedIdeaIndex: ideaIndex });
 
-  // Let user know we're working on it
+  // Let user know we're working on it — mention 3D if applicable
+  const is3D = selectedIdea.is3D || false;
   await sendTextMessage(
     user.phone_number,
-    `🎨 *Creating: "${selectedIdea.title}"*\n\n` +
-      'Generating your ad image — this takes 30-60 seconds.\n' +
+    `${is3D ? '✦ *3D Render' : '🎨 *Creating'}: "${selectedIdea.title}"*\n\n` +
+      `${is3D ? 'Generating a photorealistic 3D ad — this takes 45-75 seconds.' : 'Generating your ad image — this takes 30-60 seconds.'}\n` +
       'I\'ll send it the moment it\'s ready! ☕'
   );
-  await logMessage(user.id, `Selected idea: ${selectedIdea.title}`, 'user');
+  await logMessage(user.id, `Selected idea: ${selectedIdea.title}${is3D ? ' (3D)' : ''}`, 'user');
 
   // ── Generate the image ───────────────────────────────────────────────────
   let publicUrl;
   try {
-    // Step 1: Expand the concept into a Gemini prompt
-    const expandedPrompt = await expandIdeaToPrompt(selectedIdea, {
+    // Step 1: Expand the concept into a complete Gemini execution brief
+    const expandedPromptText = await expandIdeaToPrompt(selectedIdea, {
       businessName: adData.businessName,
       industry: adData.industry,
       niche: adData.niche,
@@ -406,7 +494,7 @@ async function handleSelectIdea(user, message) {
       pricing: adData.pricing,
     });
 
-    const promptObj = { ideaTitle: selectedIdea.title, prompt: expandedPrompt };
+    const promptObj = { ideaTitle: selectedIdea.title, prompt: expandedPromptText, is3D };
 
     // Step 2: Generate image with Gemini
     const { imageData, mimeType } = await generateAdImage(promptObj, adData.businessName, {
@@ -415,6 +503,7 @@ async function handleSelectIdea(user, message) {
       productType: adData.productType,
       industry: adData.industry,
       niche: adData.niche,
+      brandColors: adData.brandColors,
       imageBase64: adData.imageBase64,
       aspectRatio: '1:1',
     });
@@ -426,10 +515,10 @@ async function handleSelectIdea(user, message) {
 
     await sendInteractiveButtons(
       user.phone_number,
-      '⚠️ Ad generation failed. This can happen occasionally with AI image models.\n\nWhat would you like to do?',
+      '⚠️ Ad generation failed. This happens occasionally — let\'s try again.\n\nWhat would you like to do?',
       [
         { id: 'ad_retry_same', title: '🔄 Try Again' },
-        { id: 'ad_back_ideas', title: '◀ Pick Different Idea' },
+        { id: 'ad_back_ideas', title: '◀ Pick Different' },
         { id: 'back_menu', title: '📋 Back to Menu' },
       ]
     );
@@ -442,7 +531,7 @@ async function handleSelectIdea(user, message) {
     `🏷 *Brand:* ${adData.businessName}\n` +
     `🎨 *Concept:* ${selectedIdea.title}\n` +
     (adData.industry ? `🏭 *Industry:* ${adData.industry}\n` : '') +
-    `\n_Powered by BytesPlatform AI_`;
+    `\n_Powered by BytesPlatform_`;
 
   await sendImage(user.phone_number, publicUrl, caption);
   await logMessage(user.id, `Ad image generated and sent: ${publicUrl}`, 'assistant');
@@ -473,18 +562,17 @@ async function handleResults(user, message) {
   }
 
   if (btnId === 'ad_back_ideas') {
-    // Re-show the idea list
+    // Re-show the concepts in the same conversational text format
     if (adData.ideas && adData.ideas.length > 0) {
-      const rows = adData.ideas.map((idea, i) => ({
-        id: `ad_idea_${i}`,
-        title: `${i + 1}. ${idea.title}`.slice(0, 24),
-        description: truncate(idea.description, 72),
-      }));
-      await sendInteractiveList(
+      const conceptText = adData.ideas.map((idea, i) => {
+        const badge = idea.is3D ? '✦ *3D Render*' : '📸 *Photo*';
+        return `*${i + 1}. ${idea.title}* — ${badge}\n${idea.description}`;
+      }).join('\n\n────────\n\n');
+
+      await sendTextMessage(
         user.phone_number,
-        'Pick a different concept to generate:',
-        'Pick a Concept',
-        [{ title: 'Ad Concepts', rows }]
+        `🎨 *Pick a different concept:*\n\n${conceptText}\n\n────────\n\n` +
+          `Reply with the *number* (1-${adData.ideas.length}) you'd like me to generate ✨`
       );
       return STATES.AD_SELECT_IDEA;
     }

@@ -1,5 +1,81 @@
 # Integration Changes Log
-## Feature: Marketing Ad Generation (Design-Automation-V2 → WhatsApp Bot)
+
+## Feature 2: AI Logo Maker (NEW)
+
+**Date:** 2026-04-11  
+**Branch:** `designv1`  
+**Purpose:** Add AI-powered logo design as a new service in the WhatsApp bot.
+
+### NEW FILES CREATED (no conflicts possible)
+
+| File | Purpose |
+|---|---|
+| `src/logoGeneration/ideation.js` | GPT-4o generates 5 diverse logo concepts (forced type diversity: combination, wordmark, symbol, lettermark/emblem/mascot, abstract) + expands selected concept into Gemini brief |
+| `src/logoGeneration/imageGen.js` | Gemini `gemini-3-pro-image-preview` generates flat vector logos. Logo-specific prompts (NOT copied from ad generator) — flat design only, no photorealism, no scenes |
+| `src/logoGeneration/imageUploader.js` | Uploads to Supabase Storage `logo-images` bucket (auto-creates) |
+| `src/conversation/handlers/logoGeneration.js` | Full WhatsApp conversation flow handler |
+
+### MODIFIED FILES
+
+#### `src/conversation/states.js`
+Added 10 new `LOGO_*` states at the end of the `STATES` object:
+```js
+LOGO_COLLECT_BUSINESS, LOGO_COLLECT_INDUSTRY, LOGO_COLLECT_DESCRIPTION,
+LOGO_COLLECT_STYLE, LOGO_COLLECT_COLORS, LOGO_COLLECT_SYMBOL,
+LOGO_COLLECT_BACKGROUND, LOGO_SELECT_IDEA, LOGO_CREATING_IMAGE, LOGO_RESULTS
+```
+
+#### `src/conversation/router.js`
+1. Added import: `const { handleLogoGeneration } = require('./handlers/logoGeneration');`
+2. Added all 10 `LOGO_*` states to `STATE_HANDLERS` map
+3. Added 5 text-collection states to `COLLECTION_STATES`: `LOGO_COLLECT_BUSINESS`, `LOGO_COLLECT_INDUSTRY`, `LOGO_COLLECT_DESCRIPTION`, `LOGO_COLLECT_COLORS`, `LOGO_COLLECT_SYMBOL`
+4. Added 5 entries to `STATE_QUESTION` map for intent classifier
+
+#### `src/conversation/handlers/serviceSelection.js`
+1. Added `{ id: 'svc_logo', title: '✨ Logo Maker', description: 'AI-designed brand logos in 60 seconds' }` to More Services list
+2. Added `case 'svc_logo':` handler returning `STATES.LOGO_COLLECT_BUSINESS`
+3. Added `svc_logo` regex to `matchServiceFromText`: `/\b(logo|brand\s*mark|wordmark|brand\s*design|design\s*logo|create\s*logo|make\s*logo|logo\s*maker)\b/i`
+
+### NEW SUPABASE BUCKET REQUIRED
+A new public bucket `logo-images` is auto-created on first use by `imageUploader.js`. No manual setup needed — but if your Supabase service role lacks `storage.createBucket` permission, you'll need to create it manually in the dashboard:
+- Name: `logo-images`
+- Public: ✅ enabled
+- Allowed MIME types: `image/png, image/jpeg, image/webp`
+- File size limit: 10 MB
+
+### NEW DEPENDENCIES
+None — uses existing `@google/generative-ai`, `openai`, `@supabase/supabase-js`, `uuid`.
+
+### CONVERSATION FLOW (10 states, 7 user inputs)
+```
+LOGO_COLLECT_BUSINESS    → "What is your business name?"
+LOGO_COLLECT_INDUSTRY    → "What industry?"
+LOGO_COLLECT_DESCRIPTION → "In one sentence, what does your business do?"
+LOGO_COLLECT_STYLE       → [⚡ Modern] [🏛 Classic] [💎 Luxury]  (also Playful/Bold via fallback)
+LOGO_COLLECT_COLORS      → "Brand colors? (or skip — AI designs)"
+LOGO_COLLECT_SYMBOL      → "Any symbol idea? (or skip)"
+LOGO_COLLECT_BACKGROUND  → [⬜ White] [🔲 Transparent] [⬛ Black]
+        ↓
+LOGO_SELECT_IDEA         → 5 concepts shown as interactive list
+LOGO_CREATING_IMAGE      → handled inline by handleSelectIdea
+LOGO_RESULTS             → [🔄 New Concepts] [📦 Full Branding] [📋 Back to Menu]
+```
+
+### KEY DESIGN DIFFERENCES FROM AD GENERATOR
+Logo generation is fundamentally different from ad generation — the prompts are NOT copied:
+- **Flat vector style** — never photorealistic, never 3D, never scenes
+- **Single centered mark** — no environments, no props, no lighting
+- **Forced type diversity** — concepts 1-5 are 5 DIFFERENT logo types, not variations
+- **No CTA / no pricing / no slogan** — logos are just brand mark + name
+- **Always 1024×1024** — square only, no aspect ratio choices
+- **2-3 colors max** — logos use restraint
+- **130-word brief** vs 150-word ad brief — Gemini works better with focused logo prompts
+- **Lower temperature (0.6)** — precision over creativity for logos
+- **Background as user choice** — White / Transparent / Black
+
+---
+
+## Feature 1: Marketing Ad Generation (Design-Automation-V2 → WhatsApp Bot)
 
 **Date:** 2026-04-07  
 **Author:** Claude (AI assistant)  

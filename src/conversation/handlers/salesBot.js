@@ -107,9 +107,11 @@ async function handleSalesBot(user, message) {
   // Check for trigger tags before sending the response
   let websiteDemoTrigger = cleanText.includes('[TRIGGER_WEBSITE_DEMO]');
   let chatbotDemoTrigger = cleanText.includes('[TRIGGER_CHATBOT_DEMO]');
+  let adGeneratorTrigger = cleanText.includes('[TRIGGER_AD_GENERATOR]');
+  let logoMakerTrigger = cleanText.includes('[TRIGGER_LOGO_MAKER]');
   const seoAuditMatch = cleanText.match(/\[TRIGGER_SEO_AUDIT:\s*(.+?)\]/);
 
-  logger.debug(`[SALES] Trigger check - websiteTag: ${websiteDemoTrigger}, chatbotTag: ${chatbotDemoTrigger}, seoTag: ${!!seoAuditMatch}, websiteTriggered: ${!!user.metadata?.websiteDemoTriggered}, chatbotTriggered: ${!!user.metadata?.chatbotDemoTriggered}, seoTriggered: ${!!user.metadata?.seoAuditTriggered}`);
+  logger.debug(`[SALES] Trigger check - websiteTag: ${websiteDemoTrigger}, chatbotTag: ${chatbotDemoTrigger}, adTag: ${adGeneratorTrigger}, logoTag: ${logoMakerTrigger}, seoTag: ${!!seoAuditMatch}, websiteTriggered: ${!!user.metadata?.websiteDemoTriggered}, chatbotTriggered: ${!!user.metadata?.chatbotDemoTriggered}, adTriggered: ${!!user.metadata?.adGeneratorTriggered}, logoTriggered: ${!!user.metadata?.logoMakerTriggered}, seoTriggered: ${!!user.metadata?.seoAuditTriggered}`);
   logger.debug(`[SALES] LLM response (first 200): ${cleanText.slice(0, 200)}`);
 
   const userAgreed = /\b(yes|yeah|sure|ok|okay|go ahead|let'?s do it|proceed|please|yep|yup|absolutely|do it|go for it|sounds good|let'?s go)\b/i.test(text);
@@ -151,6 +153,41 @@ async function handleSalesBot(user, message) {
   ) {
     websiteDemoTrigger = true;
     logger.info(`[SALES] Fallback: website demo trigger detected for ${user.phone_number}`);
+  }
+
+  // Ad generator fallback: detect ad intent in conversation and trigger when user agrees
+  const fullAdConvText = messages.map(m => m.content).join(' ') + ' ' + cleanText + ' ' + text;
+  const isAdContext = /\b(marketing\s*ad|social\s*media\s*ad|ad\s*creative|ad\s*design|create\s*ad|design\s*ad|make\s*ad|generate\s*ad|ad\s*image|ad\s*post|insta\s*ad|facebook\s*ad|tiktok\s*ad|ad\s*banade|ad\s*banwana|post\s*banade|make\s*(a|an)\s*ad|want.{0,15}ad|need.{0,15}ad)\b/i.test(fullAdConvText);
+  const botOffersAdDemo = /\b(design|generat|creat|build|make|craft|prepar|get).{0,40}(ad|marketing\s*ad|ad\s*image|ad\s*post|creative|ready)\b/i.test(cleanText);
+
+  if (
+    !adGeneratorTrigger &&
+    !user.metadata?.adGeneratorTriggered &&
+    !websiteDemoTrigger &&
+    !chatbotDemoTrigger &&
+    isAdContext &&
+    (botOffersAdDemo || userAgreed)
+  ) {
+    adGeneratorTrigger = true;
+    logger.info(`[SALES] Fallback: ad generator trigger detected for ${user.phone_number}`);
+  }
+
+  // Logo maker fallback: detect logo intent in conversation and trigger when user agrees
+  const fullLogoConvText = messages.map(m => m.content).join(' ') + ' ' + cleanText + ' ' + text;
+  const isLogoContext = /\b(logo|brand\s*mark|brand\s*identity|brand\s*design|design\s*logo|create\s*logo|make\s*logo|logo\s*banade|logo\s*banwana|logo\s*maker|want.{0,15}logo|need.{0,15}logo)\b/i.test(fullLogoConvText);
+  const botOffersLogoDemo = /\b(design|generat|creat|build|make|craft|prepar|get|sketch).{0,40}(logo|brand\s*mark|brand\s*identity|concept|ready)\b/i.test(cleanText);
+
+  if (
+    !logoMakerTrigger &&
+    !user.metadata?.logoMakerTriggered &&
+    !websiteDemoTrigger &&
+    !chatbotDemoTrigger &&
+    !adGeneratorTrigger &&
+    isLogoContext &&
+    (botOffersLogoDemo || userAgreed)
+  ) {
+    logoMakerTrigger = true;
+    logger.info(`[SALES] Fallback: logo maker trigger detected for ${user.phone_number}`);
   }
 
   // Fallback: if the user sent a URL and conversation is about SEO but LLM forgot the tag
@@ -212,6 +249,8 @@ async function handleSalesBot(user, message) {
   let responseText = cleanText
     .replace(/\[TRIGGER_WEBSITE_DEMO\]/g, '')
     .replace(/\[TRIGGER_CHATBOT_DEMO\]/g, '')
+    .replace(/\[TRIGGER_AD_GENERATOR\]/g, '')
+    .replace(/\[TRIGGER_LOGO_MAKER\]/g, '')
     .replace(/\[TRIGGER_SEO_AUDIT:[^\]]*\]/g, '')
     .replace(/\[SEND_PAYMENT:[^\]]*\]/g, '')
     .trim();
@@ -232,7 +271,9 @@ async function handleSalesBot(user, message) {
 
   // Skip sending the LLM text if a demo trigger is about to fire - the handler sends its own message
   const skipLlmResponse = (websiteDemoTrigger && !user.metadata?.websiteDemoTriggered)
-    || (chatbotDemoTrigger && !user.metadata?.chatbotDemoTriggered);
+    || (chatbotDemoTrigger && !user.metadata?.chatbotDemoTriggered)
+    || (adGeneratorTrigger && !user.metadata?.adGeneratorTriggered)
+    || (logoMakerTrigger && !user.metadata?.logoMakerTriggered);
 
   const formatted = formatWhatsApp(textWithoutLink);
   if (formatted && !skipLlmResponse) {
@@ -429,6 +470,109 @@ ${conversationText}`,
     );
     await logMessage(user.id, 'Starting website demo flow', 'assistant');
     return STATES.WEB_COLLECT_NAME;
+  }
+
+  // Trigger ad generator flow
+  if (adGeneratorTrigger && !user.metadata?.adGeneratorTriggered) {
+    logger.info(`[SALES] Triggering ad generator for ${user.phone_number}`);
+    await updateUserMetadata(user.id, { adGeneratorTriggered: true, returnToSales: true });
+
+    // Look for a previously-used business name from any other flow as a SUGGESTION only.
+    // Do NOT auto-fill — ask the user to confirm or override, since they may be designing
+    // for a different brand than last time.
+    const lastUsedName = user.metadata?.adData?.businessName
+      || user.metadata?.logoData?.businessName
+      || user.metadata?.websiteData?.businessName
+      || user.metadata?.chatbotData?.businessName
+      || null;
+
+    const { updateUserState } = require('../../db/users');
+
+    // Always start at AD_COLLECT_BUSINESS — the handler will check for `suggestedBusinessName`
+    // in metadata and treat short confirmations like "yes/same/sure" as approval.
+    await updateUserMetadata(user.id, {
+      adData: {
+        businessName: null,
+        suggestedBusinessName: lastUsedName, // hint for the handler
+        industry: null,
+        niche: null,
+        productType: null,
+        slogan: null,
+        pricing: null,
+        brandColors: null,
+        imageBase64: null,
+        ideas: null,
+        selectedIdeaIndex: null,
+      },
+    });
+    await updateUserState(user.id, STATES.AD_COLLECT_BUSINESS);
+
+    if (lastUsedName) {
+      await sendTextMessage(
+        user.phone_number,
+        `🎨 Let's design your marketing ad!\n\n*Which business is this ad for?*\n\n_Last time you worked with me on **${lastUsedName}** — reply *same* to design for that brand again, or just type a different business name._`
+      );
+      await logMessage(user.id, `Ad generator: asked for business confirmation (suggested: "${lastUsedName}")`, 'assistant');
+    } else {
+      await sendTextMessage(
+        user.phone_number,
+        "🎨 Let's design your marketing ad!\n\nWhat's your *business name*?"
+      );
+      await logMessage(user.id, 'Starting ad generator flow from sales', 'assistant');
+    }
+
+    return STATES.AD_COLLECT_BUSINESS;
+  }
+
+  // Trigger logo maker flow
+  if (logoMakerTrigger && !user.metadata?.logoMakerTriggered) {
+    logger.info(`[SALES] Triggering logo maker for ${user.phone_number}`);
+    await updateUserMetadata(user.id, { logoMakerTriggered: true, returnToSales: true });
+
+    // Look for a previously-used business name from any other flow as a SUGGESTION only.
+    // Do NOT auto-fill — ask the user to confirm or override, since they may be designing
+    // for a different brand than last time.
+    const lastUsedName = user.metadata?.logoData?.businessName
+      || user.metadata?.adData?.businessName
+      || user.metadata?.websiteData?.businessName
+      || user.metadata?.chatbotData?.businessName
+      || null;
+
+    const { updateUserState } = require('../../db/users');
+
+    // Always start at LOGO_COLLECT_BUSINESS — the handler will check for `suggestedBusinessName`
+    // in metadata and treat short confirmations like "yes/same/sure" as approval.
+    await updateUserMetadata(user.id, {
+      logoData: {
+        businessName: null,
+        suggestedBusinessName: lastUsedName, // hint for the handler
+        industry: null,
+        description: null,
+        style: null,
+        brandColors: null,
+        symbolIdea: null,
+        background: null,
+        ideas: null,
+        selectedIdeaIndex: null,
+      },
+    });
+    await updateUserState(user.id, STATES.LOGO_COLLECT_BUSINESS);
+
+    if (lastUsedName) {
+      await sendTextMessage(
+        user.phone_number,
+        `✨ Let's design your logo!\n\n*Which business is this logo for?*\n\n_Last time you worked with me on **${lastUsedName}** — reply *same* to design for that brand again, or just type a different business name._\n\n_(This will be the actual text on your logo)_`
+      );
+      await logMessage(user.id, `Logo maker: asked for business confirmation (suggested: "${lastUsedName}")`, 'assistant');
+    } else {
+      await sendTextMessage(
+        user.phone_number,
+        "✨ Let's design your logo! What's your *business name*?\n\n_(This will be the actual text on your logo, so spell it exactly as you want it to appear)_"
+      );
+      await logMessage(user.id, 'Starting logo maker flow from sales', 'assistant');
+    }
+
+    return STATES.LOGO_COLLECT_BUSINESS;
   }
 
   // Trigger SEO audit flow

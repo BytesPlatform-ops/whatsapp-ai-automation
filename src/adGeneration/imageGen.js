@@ -1,9 +1,14 @@
 /**
  * Ad Image Generation Service
- * Ported from Design-Automation-V2/src/lib/gemini.ts
  *
- * Uses Google Gemini (gemini-3-pro-image-preview) to generate
- * professional marketing ad images from expanded prompts.
+ * Ports the proven Design-Automation-V2 Gemini prompts (gemini.ts) to CommonJS.
+ * Modifications from the original:
+ *   - Adds a 3D-render path when expandedPrompt.is3D is true (commercial CGI mode)
+ *   - Single-image generation (the WhatsApp flow generates one ad at a time)
+ *   - Uses Supabase Storage upload via imageUploader (not in this file)
+ *
+ * Uses Nano Banana Pro (gemini-3-pro-image-preview) — Google's best model for
+ * accurate text rendering, high-fidelity visuals, and following intricate instructions.
  */
 
 const { GoogleGenerativeAI } = require('@google/generative-ai');
@@ -21,16 +26,41 @@ function getGenAI() {
 }
 
 /**
- * Smart CTA text based on industry + product type
+ * Get image dimensions for an aspect ratio
+ */
+function getImageDimensions(aspectRatio) {
+  switch (aspectRatio) {
+    case '1:1':  return { width: 1024, height: 1024 };
+    case '4:5':  return { width: 1024, height: 1280 };
+    case '9:16': return { width: 1024, height: 1820 };
+    case '16:9': return { width: 1820, height: 1024 };
+    default:     return { width: 1024, height: 1024 };
+  }
+}
+
+/**
+ * Extract base64 + mimeType from a data URL string
+ */
+function extractBase64FromDataUrl(dataUrl) {
+  if (!dataUrl || !dataUrl.startsWith('data:')) return null;
+  const matches = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
+  if (!matches) return null;
+  return { mimeType: matches[1], data: matches[2] };
+}
+
+/**
+ * Get a smart CTA text based on industry and product type.
+ * Tailored to the business context — never the literal word "CTA".
  */
 function getSmartCTA(productType, industry) {
   const ind = (industry || '').toLowerCase();
 
   if (productType === 'service') {
-    if (ind.includes('restaurant') || ind.includes('food') || ind.includes('cafe') || ind.includes('bakery')) return 'Order Now';
-    if (ind.includes('salon') || ind.includes('beauty') || ind.includes('spa')) return 'Book Now';
+    if (ind.includes('restaurant') || ind.includes('food')) return 'Order Now';
     if (ind.includes('fitness') || ind.includes('gym')) return 'Start Training';
+    if (ind.includes('salon') || ind.includes('beauty') || ind.includes('spa')) return 'Book Now';
     if (ind.includes('education') || ind.includes('course') || ind.includes('training')) return 'Enroll Now';
+    if (ind.includes('consult') || ind.includes('agency')) return 'Get Started';
     if (ind.includes('health') || ind.includes('medical') || ind.includes('dental')) return 'Book Appointment';
     if (ind.includes('real estate') || ind.includes('property')) return 'Schedule a Visit';
     if (ind.includes('travel') || ind.includes('hotel')) return 'Book Now';
@@ -50,21 +80,25 @@ function getSmartCTA(productType, industry) {
   if (ind.includes('food') || ind.includes('restaurant') || ind.includes('beverage')) return 'Order Now';
   if (ind.includes('fashion') || ind.includes('clothing') || ind.includes('apparel')) return 'Shop Now';
   if (ind.includes('electronics') || ind.includes('tech') || ind.includes('gadget')) return 'Buy Now';
-  if (ind.includes('jewelry') || ind.includes('luxury')) return 'Explore Collection';
-  if (ind.includes('beauty') || ind.includes('cosmetic') || ind.includes('skincare')) return 'Shop Now';
   if (ind.includes('automotive') || ind.includes('car')) return 'Book Test Drive';
   if (ind.includes('furniture') || ind.includes('home') || ind.includes('decor')) return 'Shop Collection';
+  if (ind.includes('jewelry') || ind.includes('luxury')) return 'Explore Collection';
+  if (ind.includes('sport') || ind.includes('fitness')) return 'Shop Now';
+  if (ind.includes('pet')) return 'Shop Now';
+  if (ind.includes('beauty') || ind.includes('cosmetic') || ind.includes('skincare')) return 'Shop Now';
+
   return 'Shop Now';
 }
 
 /**
- * Industry-appropriate mood and scene guidance for Gemini
+ * Get industry-appropriate mood and scene guidance.
+ * Gives Gemini direction without being overly prescriptive.
  */
 function getIndustryMoodGuide(industry, productType) {
   const ind = (industry || '').toLowerCase();
 
   if (ind.includes('food') || ind.includes('restaurant') || ind.includes('bakery') || ind.includes('beverage') || ind.includes('cafe')) {
-    return 'Think: appetite appeal — warm golden lighting, rich textures, product looking absolutely delicious and irresistible. Evoke the sensory experience of taste and aroma.';
+    return 'Think: appetite appeal — warm golden lighting, rich textures, the product looking absolutely delicious and irresistible. Evoke the sensory experience of taste and aroma.';
   }
   if (ind.includes('fashion') || ind.includes('clothing') || ind.includes('apparel') || ind.includes('streetwear')) {
     return 'Think: editorial fashion photography — bold poses, dramatic lighting, runway/street style aesthetic. The clothing should look aspirational and trendsetting.';
@@ -81,46 +115,47 @@ function getIndustryMoodGuide(industry, productType) {
   if (ind.includes('real estate') || ind.includes('property') || ind.includes('construction')) {
     return "Think: architectural photography — dramatic angles, golden hour exterior lighting, spacious interiors. Luxury living aspiration. Sotheby's level presentation.";
   }
+  if (ind.includes('automotive') || ind.includes('car') || ind.includes('vehicle')) {
+    return 'Think: premium automotive — dramatic studio lighting, reflective surfaces, speed and luxury. BMW/Mercedes campaign quality. Power and precision.';
+  }
   if (ind.includes('jewelry') || ind.includes('luxury') || ind.includes('watch')) {
     return 'Think: ultra-luxury — macro detail, sparkle and reflection, velvet/silk textures, dramatic dark backgrounds. Cartier/Rolex ad quality.';
   }
-  if (ind.includes('health') || ind.includes('medical') || ind.includes('dental') || ind.includes('wellness')) {
+  if (ind.includes('education') || ind.includes('course') || ind.includes('learning') || ind.includes('school')) {
+    return 'Think: empowerment and growth — bright, optimistic lighting, knowledge and achievement imagery. Aspirational but approachable.';
+  }
+  if (ind.includes('health') || ind.includes('medical') || ind.includes('pharma') || ind.includes('dental') || ind.includes('wellness')) {
     return 'Think: trust and care — clean, clinical yet warm lighting, professional but comforting. Convey expertise and compassion.';
   }
-  if (ind.includes('travel') || ind.includes('hotel') || ind.includes('hospitality')) {
+  if (ind.includes('travel') || ind.includes('hotel') || ind.includes('tourism') || ind.includes('hospitality')) {
     return 'Think: wanderlust — breathtaking destinations, golden hour, dreamy atmospherics. The viewer should want to book immediately.';
-  }
-  if (ind.includes('education') || ind.includes('course') || ind.includes('learning')) {
-    return 'Think: empowerment and growth — bright, optimistic lighting, knowledge and achievement imagery. Aspirational but approachable.';
   }
   if (ind.includes('finance') || ind.includes('bank') || ind.includes('insurance') || ind.includes('invest')) {
     return 'Think: trust, stability, prosperity — sophisticated, corporate-premium, deep rich colors. Convey financial confidence and growth.';
   }
-  if (ind.includes('automotive') || ind.includes('car')) {
-    return 'Think: premium automotive — dramatic studio lighting, reflective surfaces, speed and luxury. BMW/Mercedes campaign quality. Power and precision.';
+  if (ind.includes('pet') || ind.includes('animal')) {
+    return 'Think: warmth and joy — adorable, heartwarming, the bond between pets and owners. Bright, happy, lifestyle photography feel.';
+  }
+  if (ind.includes('gaming') || ind.includes('esport')) {
+    return 'Think: epic and immersive — neon accents, dramatic dark environments, high-energy. The excitement of gaming culture.';
+  }
+  if (ind.includes('music') || ind.includes('entertainment') || ind.includes('event')) {
+    return 'Think: vibrant energy — stage lighting, dynamic colors, the thrill of live experiences. Electric atmosphere.';
+  }
+  if (ind.includes('furniture') || ind.includes('home') || ind.includes('interior') || ind.includes('decor')) {
+    return 'Think: lifestyle aspiration — beautifully styled rooms, natural lighting, warm and inviting spaces. Pottery Barn/West Elm aesthetic.';
   }
 
-  return `Think: premium ${industry} brand campaign — study what the BEST brands in ${industry} do and create something equally compelling. Dramatic lighting, professional composition, aspirational mood.`;
+  return `Think: premium ${industry} brand campaign — study what the BEST brands in ${industry} do for their advertising and create something at that level. Dramatic lighting, professional composition, aspirational mood.`;
 }
 
 /**
- * Extract base64 data and mimeType from a data URL string
- * Returns null if invalid
- */
-function extractFromDataUrl(dataUrl) {
-  if (!dataUrl || !dataUrl.startsWith('data:')) return null;
-  const matches = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
-  if (!matches) return null;
-  return { mimeType: matches[1], data: matches[2] };
-}
-
-/**
- * Generate a marketing ad image using Google Gemini
+ * Generate a single marketing ad image using Gemini.
  *
- * @param {object} expandedPrompt - { ideaTitle: string, prompt: string }
- * @param {string} brandName
- * @param {object} options - { slogan?, pricing?, productType, industry, niche?, imageBase64?, aspectRatio? }
- * @returns {Promise<{imageData: string, mimeType: string}>} Raw base64 image data (no data: prefix)
+ * @param {object} expandedPrompt - { ideaTitle: string, prompt: string, is3D?: boolean }
+ * @param {string} brandName - Exact brand name to enforce
+ * @param {object} options - { slogan?, pricing?, productType, industry, niche?, brandColors?, imageBase64?, aspectRatio? }
+ * @returns {Promise<{imageData: string, mimeType: string}>}
  */
 async function generateAdImage(expandedPrompt, brandName, options = {}) {
   const {
@@ -129,135 +164,234 @@ async function generateAdImage(expandedPrompt, brandName, options = {}) {
     productType = 'physical',
     industry = 'general',
     niche,
-    imageBase64,      // full data URL: "data:image/jpeg;base64,..."
+    brandColors,
+    imageBase64,
     aspectRatio = '1:1',
   } = options;
 
-  const dimMap = {
-    '1:1': [1024, 1024],
-    '4:5': [1024, 1280],
-    '9:16': [1024, 1820],
-    '16:9': [1820, 1024],
-  };
-  const [width, height] = dimMap[aspectRatio] || [1024, 1024];
+  const { width, height } = getImageDimensions(aspectRatio);
 
-  const smartCTA = getSmartCTA(productType, industry);
-  const industryMoodGuide = getIndustryMoodGuide(industry, productType);
+  const is3D = expandedPrompt.is3D || false;
   const styleContext = (expandedPrompt.prompt || '').trim();
-  const nicheLabel = niche || brandName;
-  const colorDirective = `NO BRAND COLORS PROVIDED: You have FULL creative freedom. Choose a color palette that feels authentic, premium, and appropriate for the ${industry} industry. Study what top ${industry} brands use.`;
+  const ideaTitle = expandedPrompt.ideaTitle || '';
 
-  // Build parts array — images FIRST, then text (Gemini requires this order)
+  // Industry context for smart prompting
+  const industryLabel = industry || 'general';
+  const nicheLabel = niche || brandName;
+
+  // Smart CTA text based on industry + product type (NEVER the literal word "CTA")
+  const smartCTA = getSmartCTA(productType, industryLabel);
+
+  // Industry-aware mood guide
+  const industryMoodGuide = getIndustryMoodGuide(industryLabel, productType);
+
+  // Color directive — only use custom colors if provided
+  const colorDirective = brandColors
+    ? `BRAND COLORS PROVIDED: Use these as the dominant palette: ${brandColors}. Ensure contrast and readability while incorporating them into backgrounds, typography, and accents.`
+    : `NO BRAND COLORS PROVIDED: You have FULL creative freedom. Analyze the ${industryLabel} industry aesthetic and choose a color palette that feels authentic, premium, and appropriate. Study what top brands in ${industryLabel} use and create something equally compelling.`;
+
+  // 3D-specific override section that gets injected into all branches when is3D is true
+  const threeDOverride = is3D
+    ? `
+
+✦ === 3D COMMERCIAL RENDER MODE === ✦
+This ad must be rendered as a PHOTOREALISTIC 3D CGI scene — NOT photography.
+- Use ray-traced lighting, physically-based rendering (PBR materials), subsurface scattering on organic surfaces
+- Cinematic depth of field, premium render quality (8K detail, sharp materials)
+- Think: Apple iPhone launch keyframe, Tesla product reveal, luxury watch brand commercial CGI
+- The product/brand must be cleanly hero-rendered as the dominant focal point
+- This is COMMERCIAL CGI for a brand launch — NOT surreal art, NOT abstract, NOT fantasy
+- Materials must look real (glass refraction, metal reflection, organic translucency) — not flat/cartoon`
+    : '';
+
+  // Build parts array — uploaded images FIRST (Gemini requirement)
   const parts = [];
+  let hasProductImage = false;
 
   if (imageBase64) {
-    const extracted = extractFromDataUrl(imageBase64);
+    const extracted = extractBase64FromDataUrl(imageBase64);
     if (extracted) {
       parts.push({ inlineData: { mimeType: extracted.mimeType, data: extracted.data } });
-      logger.debug(`[AD-GEN] Added user image (${extracted.mimeType}, ${Math.round(extracted.data.length / 1024)}KB)`);
+      hasProductImage = true;
+      logger.debug(`[AD-GEN] Added product image (${extracted.mimeType}, ${Math.round(extracted.data.length / 1024)}KB)`);
     }
   }
 
-  const hasImage = parts.length > 0;
-
-  // ── Build the creative brief text prompt ────────────────────────────────────
+  // Build the prompt — branches based on whether a product image was uploaded
   let textPrompt;
 
-  if (hasImage) {
-    textPrompt = `You are a world-class advertising creative director with 20+ years experience at top agencies. Your typography, composition, and visual storytelling are legendary.
+  if (hasProductImage) {
+    // Branch 1: User uploaded a product image
+    textPrompt = `You are a world-class advertising creative director with 20+ years experience at top agencies. You've created iconic campaigns across every industry. Your typography, composition, and visual storytelling are legendary.
 
 === YOUR CREATIVE BRIEF ===
 
-INDUSTRY: ${industry}
+INDUSTRY: ${industryLabel}
 PRODUCT/SERVICE: ${nicheLabel}
 PRODUCT TYPE: ${productType}
 
-UPLOADED IMAGE (use as the HERO element):
-- Preserve its exact appearance, colors, and design perfectly
-- Enhance with premium studio lighting and realistic shadows appropriate to ${industry}
-- Position as the dominant focal point of the composition
+PRODUCT (uploaded image):
+- This is the HERO product — preserve its exact appearance, colors, packaging, and design perfectly
+- Enhance with premium ${is3D ? '3D studio lighting (ray-traced reflections, soft shadows)' : 'studio lighting and realistic shadows'} appropriate to this product category
+- Position as the dominant focal point
 
 ${colorDirective}
 
 BACKGROUND & SCENE:
-- Create a scene authentic to the ${industry} industry
+- Study the product and create a scene that feels AUTHENTIC to the ${industryLabel} industry
 - ${industryMoodGuide}
+- The scene should feel like a premium ${industryLabel} brand campaign
 - Dramatic lighting, depth, and cinematic quality
-
-Campaign Theme: ${expandedPrompt.ideaTitle}
-${styleContext ? `\n=== CREATIVE DIRECTION FROM ART DIRECTOR ===\n${styleContext}\n` : ''}
-=== TYPOGRAPHY (Use Your Expert Judgment) ===
+- The background MUST fill the entire frame — never plain white unless brief explicitly requests it
 
 BRAND NAME: "${brandName}"
-- Make it commanding and memorable
-- Choose typography native to ${industry}
-- Position prominently${slogan ? `\n\nHEADLINE: "${slogan}"\n- Perfect contrast with your scene\n- Bold, readable at any size` : ''}${pricing ? `\n\nPRICE: "${pricing}"\n- Design a price element native to this ad — badge, ribbon, tag, or elegant callout\n- Noticeable but elegant` : ''}
+- Include the brand name prominently in the ad
+- Choose a placement and style that feels natural for ${industryLabel} advertising
 
-CTA: "${smartCTA}"
-- Natural next step for a ${industry} customer
-- Premium feel, prominent bottom placement
+Campaign Theme: ${ideaTitle}
+${styleContext ? `\n=== CREATIVE DIRECTION FROM ART DIRECTOR ===\n${styleContext}` : ''}
+${threeDOverride}
 
-=== PRINCIPLES ===
-- Visual hierarchy: Hero Image → Brand → Headline → Price → CTA
+=== TYPOGRAPHY DIRECTION (Use Your Expert Judgment) ===
+
+You have FULL CREATIVE FREEDOM for typography:
+
+${slogan ? `HEADLINE: "${slogan}"
+- Typography that feels NATIVE to ${industryLabel}
+- Analyze scene colors → pick PERFECT CONTRAST
+- Bold, commanding, readable at any size` : ''}
+
+${pricing ? `PRICE ELEMENT: "${pricing}"
+- Design a price presentation NATIVE to this ad's aesthetic and ${industryLabel} norms
+- Shape, colors, position — all your creative call
+- Must be noticeable but elegant` : ''}
+
+CTA BUTTON: The button text MUST be exactly the words "${smartCTA}" — write these exact words inside the button. Do NOT write "CTA", do NOT write a placeholder, do NOT write any other phrase.
+- Design the button with a premium feel that matches the ad aesthetic
+- Natural next step for a ${industryLabel} customer
+- Prominent placement, sized for impact
+
+=== YOUR EXPERTISE PRINCIPLES ===
+- Visual hierarchy: Product → Brand → Headline → Price → CTA
+- Color theory for readability, breathing room for text
 - Every element readable at thumbnail size
-- Industry-authentic: looks like a top ${industry} brand created this
+- This should look like an ad FROM a top ${industryLabel} brand
 
-CRITICAL: Each text element appears EXACTLY ONCE. No duplicates.
-⚠️ Brand name is EXACTLY: "${brandName}" — spell as shown, appears ONCE only.
+AVOID: Duplicating elements, clutter, text lost in busy areas, plain white backgrounds.
 
-CREATE: A scroll-stopping ${industry} advertisement worthy of awards.`;
+⚠️ TEXT ACCURACY — READ CAREFULLY:
+- The brand name is EXACTLY: "${brandName}" — spell each word exactly as shown, do NOT repeat, skip, rearrange, or add any words
+- The CTA button text is EXACTLY: "${smartCTA}" — these exact words inside the button, never "CTA"
+- Each text string (brand name${slogan ? ', slogan' : ''}${pricing ? ', price' : ''}, CTA) must appear EXACTLY ONCE in the image
+- Do NOT add product specifications (weight, volume, dimensions, calories) unless they were in the uploaded product image OR explicitly stated in the brief above
+
+CREATE: A scroll-stopping ${industryLabel} advertisement worthy of industry awards.`;
   } else {
-    textPrompt = `You are a world-class advertising creative director with 20+ years experience at top agencies. Create a complete advertisement from SCRATCH — your visual creativity must shine.
+    // Branch 2: No product image — pure text-to-image
+    textPrompt = `You are a world-class advertising creative director with 20+ years experience at top agencies. You've created iconic campaigns across every industry — fashion, food, tech, fitness, real estate, automotive, beauty, finance, and more.
+
+THIS IS YOUR MOST CHALLENGING BRIEF: Create a complete advertisement from SCRATCH — no product photos provided. Your visual creativity must shine.
 
 === BRAND CONTEXT ===
 Brand: ${brandName}
-Industry: ${industry}
+Industry: ${industryLabel}
 Product/Service: ${nicheLabel}
 Product Type: ${productType}
-Campaign Theme: ${expandedPrompt.ideaTitle}
-${styleContext ? `\n=== CREATIVE DIRECTION FROM ART DIRECTOR ===\n${styleContext}\n` : ''}
+Campaign Theme: ${ideaTitle}
+${styleContext ? `\n=== CREATIVE DIRECTION FROM ART DIRECTOR ===\n${styleContext}` : ''}
+${threeDOverride}
+
 ${colorDirective}
 
 === VISUAL CREATION ===
-Create a stunning visual representing this ${industry} brand. ${industryMoodGuide}
 
-The visual must make ${brandName} feel like a PREMIUM ${industry} brand.
-NOT generic stock photo — this must feel CUSTOM and PREMIUM.
-Create a scene so visually striking people stop scrolling immediately.
+You must CREATE a stunning visual that represents this ${industryLabel} brand. Study what the TOP brands in ${industryLabel} do and create something equally compelling.
+
+YOUR CREATIVE APPROACH (choose the best for this ${industryLabel} ${productType}):
+
+OPTION A — PRODUCT/BRAND VISUALIZATION:
+- Imagine and CREATE what this ${nicheLabel} product/service looks like
+- Place it in a premium, industry-authentic environment
+- ${industryMoodGuide}
+- Make the viewer DESIRE this product/service
+
+OPTION B — LIFESTYLE & ASPIRATION:
+- Show the LIFESTYLE or OUTCOME this ${nicheLabel} enables
+- Create a scene showing what life looks like WITH this brand
+- Aspirational but believable — the viewer should say "I want that"
+- Use environments authentic to ${industryLabel}
+
+OPTION C — ABSTRACT PREMIUM:
+- Create a visually stunning abstract/artistic representation
+- Rich textures, dramatic lighting, premium materials relevant to ${industryLabel}
+- The environment itself should FEEL like the brand's values
+- Sophisticated, high-end, scroll-stopping
+
+Choose whichever approach creates the most STUNNING, SCROLL-STOPPING visual for a ${industryLabel} brand.
+
+=== CRITICAL VISUAL REQUIREMENTS ===
+- This ad must be SCROLL-STOPPING on social media
+- Create a scene so visually striking people pause immediately
+- The visual should feel AUTHENTIC to the ${industryLabel} industry — NOT generic
+- NOT a stock photo look — this must feel CUSTOM and PREMIUM
+- The visual should make ${brandName} feel like a billion-dollar ${industryLabel} company
+- Background MUST fill the entire frame with the described scene — NEVER plain white unless intentional
 
 === TYPOGRAPHY (Your Expert Judgment) ===
 
 BRAND NAME: "${brandName}"
-- Make it ICONIC — typography fitting for a top ${industry} brand
-- Position prominently${slogan ? `\n\nTAGLINE: "${slogan}"\n- Complements the brand name, native to ${industry}\n- Perfect contrast with your scene` : ''}${pricing ? `\n\nPRICE/OFFER: "${pricing}"\n- Design that feels PREMIUM, not cheap\n- Badge, ribbon, or elegant callout` : ''}
+- This is the STAR — make it ICONIC and memorable
+- Choose typography that would work as a premium ${industryLabel} brand identity
+- Position prominently
+- Must feel like a brand people would TRUST
 
-CTA: "${smartCTA}"
-- Premium feel matching the overall ad aesthetic
-- Prominent bottom placement
+${slogan ? `TAGLINE: "${slogan}"
+- Supporting text that reinforces the brand promise
+- Style that COMPLEMENTS the brand name and feels native to ${industryLabel}
+- Perfect contrast with your scene` : ''}
 
-=== PRINCIPLES ===
-- Scene → Brand Name → Tagline → Price → CTA
+${pricing ? `PRICE/OFFER: "${pricing}"
+- Design a price presentation that feels PREMIUM, not cheap
+- Badge, ribbon, or elegant callout based on what fits YOUR scene and ${industryLabel} norms
+- Noticeable but not overwhelming` : ''}
+
+CTA BUTTON: The button text MUST be exactly the words "${smartCTA}" — write these exact words inside the button. Do NOT write "CTA", do NOT write a placeholder, do NOT write any other phrase.
+- Design the button with a premium feel matching the overall ad aesthetic
+- Prominent but not garish
+
+=== YOUR CREATIVE PRINCIPLES ===
+- Visual hierarchy: Scene → Brand Name → Tagline → Price → CTA
+- The SCENE is as important as the text — make it STUNNING
+- Color harmony between visual and typography
 - Every element readable at thumbnail size
-- Looks like a premium ${industry} advertising campaign
+- This should look like a premium ${industryLabel} advertising campaign, not a template
 
-CRITICAL: Each text element appears EXACTLY ONCE.
-⚠️ Brand name is EXACTLY: "${brandName}" — spell as shown, appears ONCE only.
+CRITICAL: Each text element appears EXACTLY ONCE. No duplicates.
 
-CREATE: An advertisement so visually striking it would trend on social media.`;
+⚠️ TEXT ACCURACY — READ CAREFULLY:
+- The brand name is EXACTLY: "${brandName}" — spell each word exactly as shown, do NOT repeat, skip, rearrange, or add any words
+- The CTA button text is EXACTLY: "${smartCTA}" — these exact words inside the button, never "CTA"
+- Each text string (brand name${slogan ? ', slogan' : ''}${pricing ? ', price' : ''}, CTA) must appear EXACTLY ONCE in the image
+- Do NOT add product specifications (weight, volume, dimensions, calories, ingredients) unless explicitly stated in the brief above
+
+CREATE: An advertisement so visually striking it would trend on social media and make ${brandName} look like the #1 brand in ${industryLabel}.`;
   }
 
   // Aspect ratio enforcement
-  const ratioLabels = {
-    '1:1': 'a PERFECT SQUARE image — equal width and height. NOT wide, NOT tall.',
-    '4:5': 'a PORTRAIT (vertical) image — taller than wide.',
-    '9:16': 'a TALL VERTICAL image — much taller than wide, like a phone screen.',
-    '16:9': 'a WIDE LANDSCAPE image — much wider than tall.',
-  };
-  textPrompt += `\n\n⚠️ IMAGE DIMENSIONS — MANDATORY:\n- Generate at EXACTLY ${width}×${height} pixels (${aspectRatio} ratio)\n- This MUST be ${ratioLabels[aspectRatio] || 'a square image'}`;
+  const ratioLabel =
+    aspectRatio === '1:1' ? 'This MUST be a PERFECT SQUARE image — equal width and height. NOT wide, NOT tall.' :
+    aspectRatio === '4:5' ? 'This MUST be a PORTRAIT (vertical) image — taller than wide.' :
+    aspectRatio === '9:16' ? 'This MUST be a TALL VERTICAL image — much taller than wide, like a phone screen.' :
+    'This MUST be a WIDE LANDSCAPE image — much wider than tall.';
+
+  textPrompt += `\n\n⚠️ IMAGE DIMENSIONS — MANDATORY:
+- Generate this image at EXACTLY ${width}x${height} pixels (${aspectRatio} aspect ratio)
+- ${ratioLabel}
+- DO NOT generate a wide/landscape image if the ratio is 1:1 or vertical`;
 
   parts.push({ text: textPrompt });
 
-  logger.info(`[AD-GEN] Generating image | brand: "${brandName}" | industry: ${industry} | hasImage: ${hasImage} | aspectRatio: ${aspectRatio}`);
+  logger.info(`[AD-GEN] Generating image | brand: "${brandName}" | industry: ${industryLabel} | type: ${productType} | is3D: ${is3D} | hasImage: ${hasProductImage} | ratio: ${aspectRatio} | CTA: "${smartCTA}"`);
 
   const model = getGenAI().getGenerativeModel({
     model: 'gemini-3-pro-image-preview',
@@ -283,8 +417,8 @@ CREATE: An advertisement so visually striking it would trend on social media.`;
   logger.info(`[AD-GEN] Image generated successfully for "${brandName}"`);
 
   return {
-    imageData: imagePart.inlineData.data,   // raw base64, no data: prefix
-    mimeType: imagePart.inlineData.mimeType, // e.g. "image/png"
+    imageData: imagePart.inlineData.data,
+    mimeType: imagePart.inlineData.mimeType,
   };
 }
 

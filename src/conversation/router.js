@@ -36,6 +36,7 @@ const { handleInformativeBot } = require('./handlers/informativeBot');
 const { handleChatbotService } = require('./handlers/chatbotService');
 const { handleCustomDomain } = require('./handlers/customDomain');
 const { handleAdGeneration } = require('./handlers/adGeneration');
+const { handleLogoGeneration } = require('./handlers/logoGeneration');
 
 // Map states to their handler functions
 const STATE_HANDLERS = {
@@ -110,10 +111,23 @@ const STATE_HANDLERS = {
   [STATES.AD_COLLECT_TYPE]: handleAdGeneration,
   [STATES.AD_COLLECT_SLOGAN]: handleAdGeneration,
   [STATES.AD_COLLECT_PRICING]: handleAdGeneration,
+  [STATES.AD_COLLECT_COLORS]: handleAdGeneration,
   [STATES.AD_COLLECT_IMAGE]: handleAdGeneration,
   [STATES.AD_SELECT_IDEA]: handleAdGeneration,
   [STATES.AD_CREATING_IMAGE]: handleAdGeneration,
   [STATES.AD_RESULTS]: handleAdGeneration,
+
+  // Logo Generation flow
+  [STATES.LOGO_COLLECT_BUSINESS]: handleLogoGeneration,
+  [STATES.LOGO_COLLECT_INDUSTRY]: handleLogoGeneration,
+  [STATES.LOGO_COLLECT_DESCRIPTION]: handleLogoGeneration,
+  [STATES.LOGO_COLLECT_STYLE]: handleLogoGeneration,
+  [STATES.LOGO_COLLECT_COLORS]: handleLogoGeneration,
+  [STATES.LOGO_COLLECT_SYMBOL]: handleLogoGeneration,
+  [STATES.LOGO_COLLECT_BACKGROUND]: handleLogoGeneration,
+  [STATES.LOGO_SELECT_IDEA]: handleLogoGeneration,
+  [STATES.LOGO_CREATING_IMAGE]: handleLogoGeneration,
+  [STATES.LOGO_RESULTS]: handleLogoGeneration,
 };
 
 // States that collect free-text input - apply intent checking here
@@ -140,6 +154,13 @@ const COLLECTION_STATES = new Set([
   STATES.AD_COLLECT_NICHE,
   STATES.AD_COLLECT_SLOGAN,
   STATES.AD_COLLECT_PRICING,
+  STATES.AD_COLLECT_COLORS,
+  // Logo generation text-collection states
+  STATES.LOGO_COLLECT_BUSINESS,
+  STATES.LOGO_COLLECT_INDUSTRY,
+  STATES.LOGO_COLLECT_DESCRIPTION,
+  STATES.LOGO_COLLECT_COLORS,
+  STATES.LOGO_COLLECT_SYMBOL,
 ]);
 
 // Human-readable description of what the bot was asking in each state
@@ -164,8 +185,15 @@ const STATE_QUESTION = {
   [STATES.AD_COLLECT_BUSINESS]: 'What is your business name?',
   [STATES.AD_COLLECT_INDUSTRY]: 'What industry are you in? (e.g. Food & Beverage, Fashion, Tech)',
   [STATES.AD_COLLECT_NICHE]: 'What product or service is this ad for?',
-  [STATES.AD_COLLECT_SLOGAN]: 'Do you have a brand slogan or tagline? (or type skip)',
-  [STATES.AD_COLLECT_PRICING]: 'Any pricing info to display on the ad? (or type skip)',
+  [STATES.AD_COLLECT_SLOGAN]: 'Type your brand slogan or tagline, or skip',
+  [STATES.AD_COLLECT_PRICING]: 'Any pricing info to display on the ad? (or skip)',
+  [STATES.AD_COLLECT_COLORS]: 'What are your brand colors? (or skip)',
+  // Logo generation
+  [STATES.LOGO_COLLECT_BUSINESS]: 'What is your business name? (this will appear on the logo)',
+  [STATES.LOGO_COLLECT_INDUSTRY]: 'What industry are you in?',
+  [STATES.LOGO_COLLECT_DESCRIPTION]: 'In one sentence, what does your business do?',
+  [STATES.LOGO_COLLECT_COLORS]: 'What are your brand colors? (or skip)',
+  [STATES.LOGO_COLLECT_SYMBOL]: 'Any symbol idea for your logo? (e.g. "a bee" or skip)',
 };
 
 /**
@@ -264,6 +292,8 @@ async function _routeMessage(message) {
       seoAuditTriggered: false,
       chatbotDemoTriggered: false,
       chatbotDemoAgreed: false,
+      adGeneratorTriggered: false,
+      logoMakerTriggered: false,
       returnToSales: false,
       leadClosed: false,
       meetingBooked: false,
@@ -272,6 +302,8 @@ async function _routeMessage(message) {
       lastSeoAnalysis: null,
       lastSeoUrl: null,
       chatbotData: null,
+      adData: null,
+      logoData: null,
       chatbotDemoSentAt: null,
       chatbotDemoFollowedUp: false,
       chatbotTrialActivated: false,
