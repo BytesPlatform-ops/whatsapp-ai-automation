@@ -333,14 +333,28 @@ async function runPaymentPolling() {
           paid_at: new Date().toISOString(),
         }).eq('id', payment.id);
 
+        // SOURCE OF TRUTH for where to send the confirmation: the user record, NOT the
+        // payment row. The payment.phone_number field can be stale (old test sessions,
+        // prior number, etc.), and in some cases the scheduler would end up sending the
+        // receipt to a different phone than the one currently having the conversation.
+        const { data: paidUserRecord } = await supabase
+          .from('users')
+          .select('phone_number, channel, metadata')
+          .eq('id', payment.user_id)
+          .single();
+        const targetPhone = paidUserRecord?.phone_number || payment.phone_number;
+        const targetChannel = paidUserRecord?.channel || payment.channel || 'whatsapp';
+        if (paidUserRecord?.phone_number && paidUserRecord.phone_number !== payment.phone_number) {
+          logger.warn(`[PAYMENT] Phone mismatch for payment ${payment.id}: payment row=${payment.phone_number}, user record=${paidUserRecord.phone_number}. Sending to user record.`);
+        }
+
         // Send payment confirmation
         const amountDisplay = `$${(payment.amount / 100).toLocaleString()}`;
         const isWebsitePayment = /website|web/i.test(payment.service_type || '') || /website|web/i.test(payment.description || '');
 
         if (isWebsitePayment) {
           // Check if this is a domain payment (user already selected a domain)
-          const { data: paidUser } = await supabase.from('users').select('metadata').eq('id', payment.user_id).single();
-          const meta = paidUser?.metadata || {};
+          const meta = paidUserRecord?.metadata || {};
           const selectedDomain = meta.selectedDomain;
           const { getLatestSite: getSite } = require('../db/sites');
           const { updateSite } = require('../db/sites');
@@ -354,9 +368,9 @@ async function runPaymentPolling() {
 
           if (selectedDomain && meta.domainPaymentPending) {
             // Domain payment confirmed — start auto-purchase flow
-            await runWithChannel(payment.channel || 'whatsapp', async () => {
+            await runWithChannel(targetChannel, async () => {
               await sendTextMessage(
-                payment.phone_number,
+                targetPhone,
                 `Payment of *${amountDisplay}* received! 🎉\n\n` +
                 `Now setting up *${selectedDomain}* for your website — this usually takes a few minutes. I'll keep you updated!`
               );
@@ -374,8 +388,8 @@ async function runPaymentPolling() {
                 const { addCustomDomainToNetlify } = require('../website-gen/deployer');
 
                 // Progress update 1
-                await runWithChannel(payment.channel || 'whatsapp', () =>
-                  sendTextMessage(payment.phone_number, `⏳ Registering *${selectedDomain}*...`)
+                await runWithChannel(targetChannel, () =>
+                  sendTextMessage(targetPhone, `⏳ Registering *${selectedDomain}*...`)
                 );
 
                 const result = await purchaseAndConfigureDomain(selectedDomain, netlifySubdomain);
@@ -383,8 +397,8 @@ async function runPaymentPolling() {
                 if (result.success) {
                   // Add to Netlify
                   if (netlifySiteId) {
-                    await runWithChannel(payment.channel || 'whatsapp', () =>
-                      sendTextMessage(payment.phone_number, `⏳ Configuring your website on *${selectedDomain}*...`)
+                    await runWithChannel(targetChannel, () =>
+                      sendTextMessage(targetPhone, `⏳ Configuring your website on *${selectedDomain}*...`)
                     );
                     try { await addCustomDomainToNetlify(netlifySiteId, selectedDomain); } catch (e) {
                       logger.error('[PAYMENT] Netlify domain add failed:', e.message);
@@ -398,9 +412,9 @@ async function runPaymentPolling() {
                     domainPurchasedAt: new Date().toISOString(),
                   });
 
-                  await runWithChannel(payment.channel || 'whatsapp', () =>
+                  await runWithChannel(targetChannel, () =>
                     sendTextMessage(
-                      payment.phone_number,
+                      targetPhone,
                       `✅ *${selectedDomain}* is registered and configured!\n\n` +
                       `DNS is propagating now — your site will be live at *${selectedDomain}* within 5-60 minutes. ` +
                       `HTTPS is set up automatically.\n\n` +
@@ -411,9 +425,9 @@ async function runPaymentPolling() {
                 } else {
                   // Auto-purchase failed — fallback to manual
                   if (site) await updateSite(site.id, { custom_domain: selectedDomain, status: 'domain_setup_pending' });
-                  await runWithChannel(payment.channel || 'whatsapp', () =>
+                  await runWithChannel(targetChannel, () =>
                     sendTextMessage(
-                      payment.phone_number,
+                      targetPhone,
                       `Domain registration for *${selectedDomain}* needs manual setup (${result.error}). Our team will handle it within 2 business days — we'll keep you posted!`
                     )
                   );
@@ -422,24 +436,24 @@ async function runPaymentPolling() {
               } catch (err) {
                 logger.error('[PAYMENT] Domain auto-purchase error:', err.message);
                 if (site) await updateSite(site.id, { custom_domain: selectedDomain, status: 'domain_setup_pending' });
-                await runWithChannel(payment.channel || 'whatsapp', () =>
-                  sendTextMessage(payment.phone_number, `Domain setup for *${selectedDomain}* is being handled by our team. We'll update you within 2 business days!`)
+                await runWithChannel(targetChannel, () =>
+                  sendTextMessage(targetPhone, `Domain setup for *${selectedDomain}* is being handled by our team. We'll update you within 2 business days!`)
                 );
               }
             } else {
               // No Namecheap API — manual flow
               if (site) await updateSite(site.id, { custom_domain: selectedDomain, status: 'domain_setup_pending' });
-              await runWithChannel(payment.channel || 'whatsapp', () =>
+              await runWithChannel(targetChannel, () =>
                 sendTextMessage(
-                  payment.phone_number,
+                  targetPhone,
                   `Payment received! Our team will set up *${selectedDomain}* for your website within 2 business days. We'll send you the live link once it's ready!`
                 )
               );
             }
           } else {
             // Regular website payment (no domain selected)
-            await runWithChannel(payment.channel || 'whatsapp', () => sendTextMessage(
-              payment.phone_number,
+            await runWithChannel(targetChannel, () => sendTextMessage(
+              targetPhone,
               `Payment of *${amountDisplay}* received! Thank you for choosing Bytes Platform.\n\n` +
                 `*Package:* ${payment.description || payment.service_type}\n\n` +
                 `Your website is all set! Would you like to put it on your own custom domain?\n\n` +
@@ -451,8 +465,8 @@ async function runPaymentPolling() {
           }
         } else {
           // Non-website payment — generic confirmation
-          await runWithChannel(payment.channel || 'whatsapp', () => sendTextMessage(
-            payment.phone_number,
+          await runWithChannel(targetChannel, () => sendTextMessage(
+            targetPhone,
             `Payment of *${amountDisplay}* received! Thank you for choosing Bytes Platform.\n\n` +
               `*Package:* ${payment.description || payment.service_type}\n\n` +
               `Our team will be in touch shortly to kick things off. If you have any questions in the meantime, just message here.`
@@ -473,20 +487,20 @@ async function runPaymentPolling() {
           const { getLatestSite } = require('../db/sites');
           const site = await getLatestSite(payment.user_id);
           await sendPaymentNotification({
-            userName: paidSession.customer_details?.name || payment.phone_number,
-            userPhone: payment.phone_number,
+            userName: paidSession.customer_details?.name || targetPhone,
+            userPhone: targetPhone,
             userEmail: paidSession.customer_details?.email || '',
             amount: payment.amount / 100,
             serviceType: payment.service_type,
             description: payment.description,
             sitePreviewUrl: site?.preview_url || '',
-            channel: payment.channel || 'whatsapp',
+            channel: targetChannel,
           });
         } catch (emailErr) {
           logger.error('[PAYMENT] Email notification failed:', emailErr.message);
         }
 
-        logger.info(`[PAYMENT] Confirmed payment from ${payment.phone_number}: ${amountDisplay} for ${payment.service_type}`);
+        logger.info(`[PAYMENT] Confirmed payment from ${targetPhone}: ${amountDisplay} for ${payment.service_type}`);
       } catch (err) {
         logger.error(`[PAYMENT] Error checking payment ${payment.id}:`, err.message);
       }

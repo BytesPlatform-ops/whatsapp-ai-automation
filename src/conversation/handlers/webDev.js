@@ -258,6 +258,41 @@ async function handleCollectServices(user, message) {
   return STATES.WEB_COLLECT_CONTACT;
 }
 
+/**
+ * Parse a free-text contact blob into { contactEmail, contactPhone, contactAddress }.
+ * Handles both labeled input ("email: x, phone: y, address: z") and unlabeled input.
+ */
+function parseContactFields(text) {
+  const emailMatch = text.match(/[\w.-]+@[\w.-]+\.\w+/);
+  const phoneMatch = text.match(/[\+]?[\d][\d\s\-()]{6,}/);
+
+  // Try labeled address first — handles "address: 123 Main St" on its own line or inline.
+  // Stops at the next known label or end of string.
+  const labeledAddressMatch = text.match(
+    /(?:address|location|addr)\s*[:\-]?\s*([^\n]+?)(?=\s*(?:email|phone|tel|mobile|e-?mail)\s*[:\-]|$)/i
+  );
+
+  let addressValue = '';
+  if (labeledAddressMatch) {
+    addressValue = labeledAddressMatch[1].trim();
+  } else {
+    // Fallback: strip the matched email/phone and any leftover label words, return the rest.
+    addressValue = text
+      .replace(emailMatch?.[0] || '', '')
+      .replace(phoneMatch?.[0] || '', '')
+      .replace(/\b(email|e-?mail|phone|tel|mobile|address|location|addr)\s*[:\-]?/gi, '')
+      .replace(/[,\n\r]+/g, ' ')
+      .replace(/\s{2,}/g, ' ')
+      .trim();
+  }
+
+  return {
+    contactEmail: emailMatch?.[0] || '',
+    contactPhone: phoneMatch?.[0]?.trim() || '',
+    contactAddress: addressValue,
+  };
+}
+
 async function handleCollectContact(user, message) {
   const contactText = (message.text || '').trim();
   const skipWords = /^(nothing|none|no|skip|n\/a|na|nah|nope|don'?t|dont|no thanks)$/i;
@@ -266,15 +301,7 @@ async function handleCollectContact(user, message) {
   if (!contactText || contactText.length < 3 || skipWords.test(contactText)) {
     contactData = { contactEmail: '', contactPhone: '', contactAddress: '' };
   } else {
-    const emailMatch = contactText.match(/[\w.-]+@[\w.-]+\.\w+/);
-    const phoneMatch = contactText.match(/[\+]?[\d\s\-()]{7,}/);
-    const addressMatch = contactText.replace(emailMatch?.[0] || '', '').replace(phoneMatch?.[0] || '', '').trim();
-
-    contactData = {
-      contactEmail: emailMatch?.[0] || '',
-      contactPhone: phoneMatch?.[0]?.trim() || '',
-      contactAddress: addressMatch || '',
-    };
+    contactData = parseContactFields(contactText);
   }
 
   await updateUserMetadata(user.id, {
@@ -321,7 +348,10 @@ async function handleConfirm(user, message) {
   const nameChange = originalText.match(/(?:business\s*)?name\s*(?:to|:|should be|is)\s*(.+)/i);
   const industryChange = originalText.match(/industry\s*(?:to|:|should be|is)\s*(.+)/i);
   const servicesChange = originalText.match(/services?\s*(?:to|:|should be|are|change)\s*(.+)/i);
-  const contactChange = originalText.match(/(?:contact|email|phone)\s*(?:to|:|should be|is)\s*(.+)/i);
+  const emailChange = originalText.match(/e-?mail\s*(?:to|:|should be|is)\s*(.+)/i);
+  const phoneChange = originalText.match(/(?:phone|tel|mobile|number)\s*(?:to|:|should be|is)\s*(.+)/i);
+  const addressChange = originalText.match(/(?:address|location|addr)\s*(?:to|:|should be|is)\s*(.+)/i);
+  const contactChange = originalText.match(/contact\s*(?:to|:|should be|is)\s*(.+)/i);
 
   if (nameChange) {
     wd.businessName = nameChange[1].trim();
@@ -341,14 +371,31 @@ async function handleConfirm(user, message) {
     await sendTextMessage(user.phone_number, `Updated services to *${wd.services.join(', ')}*. Anything else, or say *"yes"* to proceed.`);
     return STATES.WEB_CONFIRM;
   }
+  if (emailChange) {
+    const val = emailChange[1].trim();
+    const m = val.match(/[\w.-]+@[\w.-]+\.\w+/);
+    wd.contactEmail = m ? m[0] : val;
+    await updateUserMetadata(user.id, { websiteData: wd });
+    await sendTextMessage(user.phone_number, `Updated email to *${wd.contactEmail}*. Anything else, or say *"yes"* to proceed.`);
+    return STATES.WEB_CONFIRM;
+  }
+  if (phoneChange) {
+    wd.contactPhone = phoneChange[1].trim();
+    await updateUserMetadata(user.id, { websiteData: wd });
+    await sendTextMessage(user.phone_number, `Updated phone to *${wd.contactPhone}*. Anything else, or say *"yes"* to proceed.`);
+    return STATES.WEB_CONFIRM;
+  }
+  if (addressChange) {
+    wd.contactAddress = addressChange[1].trim();
+    await updateUserMetadata(user.id, { websiteData: wd });
+    await sendTextMessage(user.phone_number, `Updated address to *${wd.contactAddress}*. Anything else, or say *"yes"* to proceed.`);
+    return STATES.WEB_CONFIRM;
+  }
   if (contactChange) {
-    const val = contactChange[1].trim();
-    const emailMatch = val.match(/[\w.-]+@[\w.-]+\.\w+/);
-    const phoneMatch = val.match(/[\+]?[\d\s\-()]{7,}/);
-    if (emailMatch) wd.contactEmail = emailMatch[0];
-    if (phoneMatch) wd.contactPhone = phoneMatch[0].trim();
-    const rest = val.replace(emailMatch?.[0] || '', '').replace(phoneMatch?.[0] || '', '').trim();
-    if (rest) wd.contactAddress = rest;
+    const parsed = parseContactFields(contactChange[1].trim());
+    if (parsed.contactEmail) wd.contactEmail = parsed.contactEmail;
+    if (parsed.contactPhone) wd.contactPhone = parsed.contactPhone;
+    if (parsed.contactAddress) wd.contactAddress = parsed.contactAddress;
     await updateUserMetadata(user.id, { websiteData: wd });
     await sendTextMessage(user.phone_number, `Updated contact info. Anything else, or say *"yes"* to proceed.`);
     return STATES.WEB_CONFIRM;
@@ -361,7 +408,9 @@ async function handleConfirm(user, message) {
       '• "Name to MyBusiness"\n' +
       '• "Industry to Tech"\n' +
       '• "Services to Web Design, SEO, Branding"\n' +
-      '• "Email to hello@example.com"\n\n' +
+      '• "Email to hello@example.com"\n' +
+      '• "Phone to +1 555 123 4567"\n' +
+      '• "Address to 123 Main St, City"\n\n' +
       'Or say *"yes"* to proceed with the current details.'
   );
   return STATES.WEB_CONFIRM;

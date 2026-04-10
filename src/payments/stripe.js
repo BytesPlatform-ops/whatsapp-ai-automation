@@ -23,6 +23,10 @@ async function createPaymentLink({ userId, phoneNumber, amount, serviceType, pac
   const amountCents = Math.round(amount * 100);
   const productName = `${description || `${serviceType} - ${packageTier}`}`;
 
+  // Deactivate any prior pending payment links for this user so stale links
+  // can't be paid later and trigger confirmations to the wrong conversation.
+  await cancelPendingPaymentsForUser(userId, s);
+
   try {
     // Create a one-time price
     const price = await s.prices.create({
@@ -155,9 +159,51 @@ async function syncAllPendingPayments() {
   return { synced, total: pending.length };
 }
 
+/**
+ * Mark any prior pending payments for a user as superseded and deactivate
+ * the corresponding Stripe payment links. This prevents a user from paying
+ * an old link (which could route the confirmation to the wrong conversation).
+ */
+async function cancelPendingPaymentsForUser(userId, stripeClient = null) {
+  const { supabase } = require('../config/database');
+  const { data: stale, error } = await supabase
+    .from('payments')
+    .select('id, stripe_payment_link_id')
+    .eq('user_id', userId)
+    .eq('status', 'pending');
+
+  if (error) {
+    logger.warn(`[STRIPE] Failed to query stale pending payments for user ${userId}: ${error.message}`);
+    return;
+  }
+  if (!stale || stale.length === 0) return;
+
+  const s = stripeClient || getStripe();
+
+  for (const row of stale) {
+    // Deactivate the old Stripe payment link so it can't be paid
+    if (s && row.stripe_payment_link_id) {
+      try {
+        await s.paymentLinks.update(row.stripe_payment_link_id, { active: false });
+      } catch (err) {
+        // Common: link already inactive, or already completed. Not fatal.
+        logger.debug(`[STRIPE] Could not deactivate link ${row.stripe_payment_link_id}: ${err.message}`);
+      }
+    }
+    // Mark the DB row so the scheduler ignores it
+    await supabase
+      .from('payments')
+      .update({ status: 'superseded' })
+      .eq('id', row.id);
+  }
+
+  logger.info(`[STRIPE] Superseded ${stale.length} prior pending payment(s) for user ${userId}`);
+}
+
 module.exports = {
   createPaymentLink,
   checkPaymentStatus,
   syncPaymentStatus,
   syncAllPendingPayments,
+  cancelPendingPaymentsForUser,
 };
