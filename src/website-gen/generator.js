@@ -1,6 +1,7 @@
 const { generateResponse } = require('../llm/provider');
 const { WEBSITE_CONTENT_PROMPT } = require('../llm/prompts');
 const { logger } = require('../utils/logger');
+const { getHeroImage } = require('./heroImage');
 
 /**
  * Generate website content using LLM based on collected business info.
@@ -105,6 +106,14 @@ Generate compelling website copy for this business. Return ONLY valid JSON.`;
     };
   }
 
+  // Fetch an industry-matched hero image from Unsplash (null on failure - deployer falls back to gradient)
+  let heroImage = null;
+  try {
+    heroImage = await getHeroImage(industry);
+  } catch (err) {
+    logger.warn(`[WEBGEN] Hero image fetch threw: ${err.message}`);
+  }
+
   // Merge generated content with business data to create full config
   const siteConfig = {
     businessName,
@@ -116,10 +125,11 @@ Generate compelling website copy for this business. Return ONLY valid JSON.`;
     contactPhone: contactPhone || '',
     contactAddress: contactAddress || '',
     logo: logo || null,
+    heroImage,
     ...generatedContent,
   };
 
-  logger.info(`Generated website content for ${businessName}`);
+  logger.info(`Generated website content for ${businessName}${heroImage ? ' (with Unsplash hero)' : ''}`);
   return siteConfig;
 }
 

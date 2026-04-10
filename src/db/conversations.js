@@ -1,7 +1,7 @@
 const { supabase } = require('../config/database');
 const { withRetry, throwIfNetworkError } = require('./retry');
 
-async function logMessage(userId, messageText, role, messageType = 'text', waMessageId = null) {
+async function logMessage(userId, messageText, role, messageType = 'text', waMessageId = null, mediaData = null, mediaMime = null) {
   await withRetry(async () => {
     const { error } = await supabase
       .from('conversations')
@@ -11,6 +11,8 @@ async function logMessage(userId, messageText, role, messageType = 'text', waMes
         role,
         message_type: messageType,
         whatsapp_message_id: waMessageId ? waMessageId.slice(0, 100) : null,
+        media_data: mediaData,
+        media_mime: mediaMime,
       });
     throwIfNetworkError(error);
     if (error) throw new Error(`Failed to log message: ${error.message}`);

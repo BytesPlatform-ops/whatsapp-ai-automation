@@ -14,6 +14,8 @@ async function handleWebDev(user, message) {
   switch (user.state) {
     case STATES.WEB_COLLECT_NAME:
       return handleCollectName(user, message);
+    case STATES.WEB_COLLECT_EMAIL:
+      return handleCollectEmail(user, message);
     case STATES.WEB_COLLECT_INDUSTRY:
       return handleCollectIndustry(user, message);
     case STATES.WEB_COLLECT_SERVICES:
@@ -57,21 +59,59 @@ async function handleCollectName(user, message) {
     });
   }
 
-  // If industry was already pre-filled from sales conversation, skip to services
+  // If email already collected, skip to industry
+  if (user.metadata?.email) {
+    return skipToNextAfterEmail(user, businessName, existingWebsiteData);
+  }
+
+  await sendTextMessage(
+    user.phone_number,
+    `Got it, *${businessName}*! Before we continue, what's your email address? We'll use it to send you updates about your website.`
+  );
+  await logMessage(user.id, `Business name: ${businessName}`, 'assistant');
+
+  return STATES.WEB_COLLECT_EMAIL;
+}
+
+async function handleCollectEmail(user, message) {
+  const text = (message.text || '').trim();
+  const emailMatch = text.match(/[\w.-]+@[\w.-]+\.\w+/);
+  const skipWords = /^(skip|no|none|nah|later|n\/a|na|don'?t have|dont have)$/i;
+
+  if (skipWords.test(text)) {
+    await sendTextMessage(user.phone_number, "No worries! You can share it later.");
+  } else if (emailMatch) {
+    await updateUserMetadata(user.id, { email: emailMatch[0] });
+    await sendTextMessage(user.phone_number, `Got it, saved *${emailMatch[0]}*!`);
+    await logMessage(user.id, `Email collected: ${emailMatch[0]}`, 'assistant');
+  } else {
+    // Not a valid email and not a skip — ask again gently
+    await sendTextMessage(
+      user.phone_number,
+      "That doesn't look like an email address. Could you double-check? Or say *\"skip\"* to continue without it."
+    );
+    return STATES.WEB_COLLECT_EMAIL;
+  }
+
+  const existingWebsiteData = user.metadata?.websiteData || {};
+  const businessName = existingWebsiteData.businessName || '';
+  return skipToNextAfterEmail(user, businessName, existingWebsiteData);
+}
+
+async function skipToNextAfterEmail(user, businessName, existingWebsiteData) {
   if (existingWebsiteData.industry) {
     await sendTextMessage(
       user.phone_number,
-      `Got it, *${businessName}*! What services or products do you offer? List them separated by commas, or say "skip".`
+      'What services or products do you offer? List them separated by commas, or say "skip".'
     );
-    await logMessage(user.id, `Business name: ${businessName}, industry already set: ${existingWebsiteData.industry}`, 'assistant');
+    await logMessage(user.id, `Industry already set: ${existingWebsiteData.industry}, skipping to services`, 'assistant');
     return STATES.WEB_COLLECT_SERVICES;
   }
 
   await sendTextMessage(
     user.phone_number,
-    `Got it, *${businessName}*! What industry are you in? For example - tech, healthcare, ecommerce, real estate, creative, etc.`
+    'What industry are you in? For example - tech, healthcare, restaurant, real estate, creative, etc.'
   );
-  await logMessage(user.id, `Business name: ${businessName}`, 'assistant');
 
   return STATES.WEB_COLLECT_INDUSTRY;
 }
@@ -83,6 +123,17 @@ async function handleCollectIndustry(user, message) {
 
   if (!industry) {
     await sendTextMessage(user.phone_number, 'Please select or type your industry:');
+    return STATES.WEB_COLLECT_INDUSTRY;
+  }
+
+  // Handle name corrections: "the name should be X" or "change name to X"
+  const nameCorrection = industry.match(/(?:name\s*(?:should be|is|to)|change.*name.*to|actually.*called|it'?s\s+called)\s*["']?(.+?)["']?\s*$/i);
+  if (nameCorrection) {
+    const newName = nameCorrection[1].trim();
+    await updateUserMetadata(user.id, {
+      websiteData: { ...(user.metadata?.websiteData || {}), businessName: newName },
+    });
+    await sendTextMessage(user.phone_number, `Updated to *${newName}*! Now, what industry are you in?`);
     return STATES.WEB_COLLECT_INDUSTRY;
   }
 
@@ -173,11 +224,13 @@ async function handleCollectServices(user, message) {
     return STATES.WEB_COLLECT_SERVICES;
   }
 
-  const skipWords = /^(idk|i don'?t know|skip|none|no|n\/a|na|nah|nothing|not sure|no idea)$/i;
+  const skipWords = /^(idk|i don'?t know|skip|none|no|n\/a|na|nah|nothing|not sure|no idea|no services|no products|don'?t have any|dont have any)$/i;
+  // Also catch longer phrases like "I don't offer any services"
+  const skipPhrases = /\b(no services|no products|don'?t (offer|have|provide)|dont (offer|have|provide)|nothing to (list|offer)|not applicable)\b/i;
   const industry = user.metadata?.websiteData?.industry || '';
   const colors = getColorsForIndustry(industry);
 
-  if (skipWords.test(servicesText)) {
+  if (skipWords.test(servicesText) || skipPhrases.test(servicesText)) {
     await updateUserMetadata(user.id, {
       websiteData: { ...(user.metadata?.websiteData || {}), services: [], ...colors },
     });
@@ -205,6 +258,41 @@ async function handleCollectServices(user, message) {
   return STATES.WEB_COLLECT_CONTACT;
 }
 
+/**
+ * Parse a free-text contact blob into { contactEmail, contactPhone, contactAddress }.
+ * Handles both labeled input ("email: x, phone: y, address: z") and unlabeled input.
+ */
+function parseContactFields(text) {
+  const emailMatch = text.match(/[\w.-]+@[\w.-]+\.\w+/);
+  const phoneMatch = text.match(/[\+]?[\d][\d\s\-()]{6,}/);
+
+  // Try labeled address first — handles "address: 123 Main St" on its own line or inline.
+  // Stops at the next known label or end of string.
+  const labeledAddressMatch = text.match(
+    /(?:address|location|addr)\s*[:\-]?\s*([^\n]+?)(?=\s*(?:email|phone|tel|mobile|e-?mail)\s*[:\-]|$)/i
+  );
+
+  let addressValue = '';
+  if (labeledAddressMatch) {
+    addressValue = labeledAddressMatch[1].trim();
+  } else {
+    // Fallback: strip the matched email/phone and any leftover label words, return the rest.
+    addressValue = text
+      .replace(emailMatch?.[0] || '', '')
+      .replace(phoneMatch?.[0] || '', '')
+      .replace(/\b(email|e-?mail|phone|tel|mobile|address|location|addr)\s*[:\-]?/gi, '')
+      .replace(/[,\n\r]+/g, ' ')
+      .replace(/\s{2,}/g, ' ')
+      .trim();
+  }
+
+  return {
+    contactEmail: emailMatch?.[0] || '',
+    contactPhone: phoneMatch?.[0]?.trim() || '',
+    contactAddress: addressValue,
+  };
+}
+
 async function handleCollectContact(user, message) {
   const contactText = (message.text || '').trim();
   const skipWords = /^(nothing|none|no|skip|n\/a|na|nah|nope|don'?t|dont|no thanks)$/i;
@@ -213,15 +301,7 @@ async function handleCollectContact(user, message) {
   if (!contactText || contactText.length < 3 || skipWords.test(contactText)) {
     contactData = { contactEmail: '', contactPhone: '', contactAddress: '' };
   } else {
-    const emailMatch = contactText.match(/[\w.-]+@[\w.-]+\.\w+/);
-    const phoneMatch = contactText.match(/[\+]?[\d\s\-()]{7,}/);
-    const addressMatch = contactText.replace(emailMatch?.[0] || '', '').replace(phoneMatch?.[0] || '', '').trim();
-
-    contactData = {
-      contactEmail: emailMatch?.[0] || '',
-      contactPhone: phoneMatch?.[0]?.trim() || '',
-      contactAddress: addressMatch || '',
-    };
+    contactData = parseContactFields(contactText);
   }
 
   await updateUserMetadata(user.id, {
@@ -268,7 +348,10 @@ async function handleConfirm(user, message) {
   const nameChange = originalText.match(/(?:business\s*)?name\s*(?:to|:|should be|is)\s*(.+)/i);
   const industryChange = originalText.match(/industry\s*(?:to|:|should be|is)\s*(.+)/i);
   const servicesChange = originalText.match(/services?\s*(?:to|:|should be|are|change)\s*(.+)/i);
-  const contactChange = originalText.match(/(?:contact|email|phone)\s*(?:to|:|should be|is)\s*(.+)/i);
+  const emailChange = originalText.match(/e-?mail\s*(?:to|:|should be|is)\s*(.+)/i);
+  const phoneChange = originalText.match(/(?:phone|tel|mobile|number)\s*(?:to|:|should be|is)\s*(.+)/i);
+  const addressChange = originalText.match(/(?:address|location|addr)\s*(?:to|:|should be|is)\s*(.+)/i);
+  const contactChange = originalText.match(/contact\s*(?:to|:|should be|is)\s*(.+)/i);
 
   if (nameChange) {
     wd.businessName = nameChange[1].trim();
@@ -288,14 +371,31 @@ async function handleConfirm(user, message) {
     await sendTextMessage(user.phone_number, `Updated services to *${wd.services.join(', ')}*. Anything else, or say *"yes"* to proceed.`);
     return STATES.WEB_CONFIRM;
   }
+  if (emailChange) {
+    const val = emailChange[1].trim();
+    const m = val.match(/[\w.-]+@[\w.-]+\.\w+/);
+    wd.contactEmail = m ? m[0] : val;
+    await updateUserMetadata(user.id, { websiteData: wd });
+    await sendTextMessage(user.phone_number, `Updated email to *${wd.contactEmail}*. Anything else, or say *"yes"* to proceed.`);
+    return STATES.WEB_CONFIRM;
+  }
+  if (phoneChange) {
+    wd.contactPhone = phoneChange[1].trim();
+    await updateUserMetadata(user.id, { websiteData: wd });
+    await sendTextMessage(user.phone_number, `Updated phone to *${wd.contactPhone}*. Anything else, or say *"yes"* to proceed.`);
+    return STATES.WEB_CONFIRM;
+  }
+  if (addressChange) {
+    wd.contactAddress = addressChange[1].trim();
+    await updateUserMetadata(user.id, { websiteData: wd });
+    await sendTextMessage(user.phone_number, `Updated address to *${wd.contactAddress}*. Anything else, or say *"yes"* to proceed.`);
+    return STATES.WEB_CONFIRM;
+  }
   if (contactChange) {
-    const val = contactChange[1].trim();
-    const emailMatch = val.match(/[\w.-]+@[\w.-]+\.\w+/);
-    const phoneMatch = val.match(/[\+]?[\d\s\-()]{7,}/);
-    if (emailMatch) wd.contactEmail = emailMatch[0];
-    if (phoneMatch) wd.contactPhone = phoneMatch[0].trim();
-    const rest = val.replace(emailMatch?.[0] || '', '').replace(phoneMatch?.[0] || '', '').trim();
-    if (rest) wd.contactAddress = rest;
+    const parsed = parseContactFields(contactChange[1].trim());
+    if (parsed.contactEmail) wd.contactEmail = parsed.contactEmail;
+    if (parsed.contactPhone) wd.contactPhone = parsed.contactPhone;
+    if (parsed.contactAddress) wd.contactAddress = parsed.contactAddress;
     await updateUserMetadata(user.id, { websiteData: wd });
     await sendTextMessage(user.phone_number, `Updated contact info. Anything else, or say *"yes"* to proceed.`);
     return STATES.WEB_CONFIRM;
@@ -308,13 +408,19 @@ async function handleConfirm(user, message) {
       '• "Name to MyBusiness"\n' +
       '• "Industry to Tech"\n' +
       '• "Services to Web Design, SEO, Branding"\n' +
-      '• "Email to hello@example.com"\n\n' +
+      '• "Email to hello@example.com"\n' +
+      '• "Phone to +1 555 123 4567"\n' +
+      '• "Address to 123 Main St, City"\n\n' +
       'Or say *"yes"* to proceed with the current details.'
   );
   return STATES.WEB_CONFIRM;
 }
 
 async function generateWebsite(user) {
+  // Set state to GENERATING immediately to prevent duplicate builds
+  const { updateUserState } = require('../../db/users');
+  await updateUserState(user.id, STATES.WEB_GENERATING);
+
   try {
     const { generateWebsiteContent } = require('../../website-gen/generator');
     const { deployToNetlify } = require('../../website-gen/deployer');
@@ -364,22 +470,18 @@ async function generateWebsite(user) {
     logger.info(`[WEBGEN] Step 5/5: Sending preview URL to user`);
     await sendTextMessage(
       user.phone_number,
-      `Your website is ready! Here's the preview:\n\n${previewUrl}\n\nHave a look - it's a ${(websiteData.services||[]).length>0?'4-page site with Home, Services, About, and Contact pages':'3-page site with Home, About, and Contact pages'}.`
+      `Your website is ready! Here's the preview:\n\n${previewUrl}\n\nHave a look - it's a ${(siteConfig.services||[]).length>0?'4-page site with Home, Services, About, and Contact pages':'3-page site with Home, About, and Contact pages'}.`
     );
 
     await logMessage(user.id, `Website deployed: ${previewUrl}`, 'assistant');
     logger.info(`[WEBGEN] ✅ Complete! Preview sent to ${user.phone_number}: ${previewUrl}`);
 
-    // If coming from sales flow, return to sales to close the deal
-    const returnToSales = user.metadata?.returnToSales;
-    if (returnToSales) {
-      await sendTextMessage(
-        user.phone_number,
-        "There you go! Have a look and let me know what you think — do you like it?"
-      );
-      await logMessage(user.id, 'Website preview sent, asking for feedback', 'assistant');
-      return STATES.SALES_CHAT;
-    }
+    // Always go to revisions state — user can approve, request changes, or reject
+    await sendTextMessage(
+      user.phone_number,
+      "There you go! Have a look and let me know what you think — want any changes, or are you happy with it?"
+    );
+    await logMessage(user.id, 'Website preview sent, asking for feedback', 'assistant');
 
     return STATES.WEB_REVISIONS;
   } catch (error) {
@@ -456,12 +558,8 @@ async function handleRevisions(user, message) {
 
     await sendTextMessage(
       user.phone_number,
-      '🎉 *Awesome!* Your website is approved.\n\nWould you like to put it on your own custom domain? (e.g., yourbusiness.com)'
+      '🎉 *Awesome!* Your website is approved.\n\nWould you like to put it on your own custom domain? (e.g., yourbusiness.com)\n\nJust say *"yes"* and I\'ll help you find one, or *"no"* if you want to skip it for now.'
     );
-    await sendInteractiveButtons(user.phone_number, 'Custom domain?', [
-      { id: 'domain_yes', title: 'Yes, set up domain' },
-      { id: 'domain_no', title: 'No, maybe later' },
-    ]);
     await logMessage(user.id, 'Website approved, offering custom domain', 'assistant');
     return STATES.DOMAIN_OFFER;
   }
@@ -511,7 +609,63 @@ async function handleRevisions(user, message) {
       return STATES.WEB_REVISIONS;
     }
 
-    // Process the revision request
+    // Process the revision request — track revision count
+    const revisionCount = (user.metadata?.revisionCount || 0) + 1;
+    await updateUserMetadata(user.id, { revisionCount });
+
+    // After 2 free revisions, assess complexity before proceeding
+    if (revisionCount > 2) {
+      try {
+        const { generateResponse: classifyLLM } = require('../../llm/provider');
+        const classifyResponse = await classifyLLM(
+          `Classify this website revision request as LIGHT, MEDIUM, or HEAVY.\nLIGHT: color change, text edit, small tweaks\nMEDIUM: new section, layout change, significant content rewrite, font changes\nHEAVY: completely different design, major restructure, complex features, booking systems, e-commerce\nReturn ONLY one word: LIGHT, MEDIUM, or HEAVY.`,
+          [{ role: 'user', content: revisionText }]
+        );
+        const complexity = (classifyResponse || '').trim().toUpperCase();
+        await updateUserMetadata(user.id, { lastRevisionComplexity: complexity });
+
+        if (complexity === 'HEAVY') {
+          await sendTextMessage(
+            user.phone_number,
+            "This sounds like a custom project — let me set you up with our design team so we can scope it out properly. Pricing is determined on the call based on what you need."
+          );
+          await sendCTAButton(
+            user.phone_number,
+            'Tap below to book a call with our team 👇',
+            '📅 Book a Call',
+            require('../../config/env').env.calendlyUrl
+          );
+          await logMessage(user.id, `Revision ${revisionCount} classified as HEAVY — sent to Calendly`, 'assistant');
+          return STATES.SALES_CHAT;
+        }
+
+        if (complexity === 'MEDIUM' && !user.metadata?.bonusRevisionUsed) {
+          // Allow one more free regeneration for medium changes
+          await updateUserMetadata(user.id, { bonusRevisionUsed: true });
+          await sendTextMessage(user.phone_number, "Let me apply those changes — this will be the last free revision round. After this, customization work starts at $200.");
+          await logMessage(user.id, `Revision ${revisionCount} classified as MEDIUM — bonus revision used`, 'assistant');
+          // Fall through to normal revision processing below
+        } else if (complexity === 'MEDIUM' && user.metadata?.bonusRevisionUsed) {
+          await sendTextMessage(
+            user.phone_number,
+            "For these kinds of changes, we'd need to do a custom build — that starts at $200 on top of the base price. Would you like to proceed, or would you prefer to hop on a call to discuss?"
+          );
+          await sendCTAButton(
+            user.phone_number,
+            'Or book a call to discuss the customization 👇',
+            '📅 Book a Call',
+            require('../../config/env').env.calendlyUrl
+          );
+          await logMessage(user.id, `Revision ${revisionCount} — bonus already used, pitched $200+ customization`, 'assistant');
+          return STATES.SALES_CHAT;
+        }
+        // LIGHT changes continue to normal processing
+      } catch (classifyErr) {
+        logger.error('Revision classification failed:', classifyErr.message);
+        // Fall through to normal processing on error
+      }
+    }
+
     try {
       const { generateResponse } = require('../../llm/provider');
       const { REVISION_PARSER_PROMPT } = require('../../llm/prompts');
@@ -546,12 +700,8 @@ async function handleRevisions(user, message) {
 
         await sendTextMessage(
           user.phone_number,
-          '🎉 *Awesome!* Your website is approved.\n\nWould you like to put it on your own custom domain? (e.g., yourbusiness.com)'
+          '🎉 *Awesome!* Your website is approved.\n\nWould you like to put it on your own custom domain? (e.g., yourbusiness.com)\n\nJust say *"yes"* and I\'ll help you find one, or *"no"* if you want to skip it for now.'
         );
-        await sendInteractiveButtons(user.phone_number, 'Custom domain?', [
-          { id: 'domain_yes', title: 'Yes, set up domain' },
-          { id: 'domain_no', title: 'No, maybe later' },
-        ]);
         await logMessage(user.id, 'Website approved, offering custom domain', 'assistant');
         return STATES.DOMAIN_OFFER;
       }
@@ -561,12 +711,13 @@ async function handleRevisions(user, message) {
         return STATES.WEB_REVISIONS;
       }
 
-      // Merge updates and redeploy
+      // Merge updates and redeploy to the SAME site
       const updatedConfig = { ...currentConfig, ...updates };
 
       await sendTextMessage(user.phone_number, '🔄 Applying your changes and redeploying...');
 
-      const { previewUrl, netlifySiteId, netlifySubdomain } = await deployToNetlify(updatedConfig);
+      const existingSiteId = site?.netlify_site_id || null;
+      const { previewUrl, netlifySiteId, netlifySubdomain } = await deployToNetlify(updatedConfig, existingSiteId);
 
       if (site) {
         await updateSite(site.id, { site_data: updatedConfig, preview_url: previewUrl, netlify_site_id: netlifySiteId, netlify_subdomain: netlifySubdomain });

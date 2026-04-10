@@ -110,6 +110,19 @@ async function handleSalesBot(user, message) {
   let adGeneratorTrigger = cleanText.includes('[TRIGGER_AD_GENERATOR]');
   let logoMakerTrigger = cleanText.includes('[TRIGGER_LOGO_MAKER]');
   const seoAuditMatch = cleanText.match(/\[TRIGGER_SEO_AUDIT:\s*(.+?)\]/);
+  let bytescartTrigger = cleanText.includes('[TRIGGER_BYTESCART]');
+
+  // Fallback: if the conversation is clearly about ecommerce/online stores and the bot
+  // hasn't triggered ByteScart yet, force it. The sales bot should never try to sell
+  // paid ecommerce tiers - ByteScart is free and replaces that flow entirely.
+  if (!bytescartTrigger && !user.metadata?.bytescartPitched) {
+    const fullConv = (cleanText + ' ' + messages.map(m => m.content).join(' ')).toLowerCase();
+    const isEcommerceContext = /\b(ecommerce|e-commerce|online store|online shop|shopify|sell online|product catalog|dropship)\b/i.test(fullConv);
+    if (isEcommerceContext) {
+      bytescartTrigger = true;
+      logger.info(`[SALES] Fallback: ByteScart trigger detected for ${user.phone_number}`);
+    }
+  }
 
   logger.debug(`[SALES] Trigger check - websiteTag: ${websiteDemoTrigger}, chatbotTag: ${chatbotDemoTrigger}, adTag: ${adGeneratorTrigger}, logoTag: ${logoMakerTrigger}, seoTag: ${!!seoAuditMatch}, websiteTriggered: ${!!user.metadata?.websiteDemoTriggered}, chatbotTriggered: ${!!user.metadata?.chatbotDemoTriggered}, adTriggered: ${!!user.metadata?.adGeneratorTriggered}, logoTriggered: ${!!user.metadata?.logoMakerTriggered}, seoTriggered: ${!!user.metadata?.seoAuditTriggered}`);
   logger.debug(`[SALES] LLM response (first 200): ${cleanText.slice(0, 200)}`);
@@ -225,8 +238,8 @@ async function handleSalesBot(user, message) {
       let service = 'website';
       if (/\bseo\b|search engine|google rank/i.test(convText)) service = 'seo';
       else if (/\bsmm\b|social media|instagram|facebook/i.test(convText)) service = 'smm';
-      else if (/\becommerce|online store|shopif/i.test(convText)) service = 'ecommerce';
       else if (/\bapp\b|mobile app|android|ios/i.test(convText)) service = 'app';
+      // Note: ecommerce is intentionally omitted — we redirect ecommerce leads to ByteScart (free).
 
       // Detect tier from amount
       let tier = 'custom';
@@ -252,6 +265,7 @@ async function handleSalesBot(user, message) {
     .replace(/\[TRIGGER_AD_GENERATOR\]/g, '')
     .replace(/\[TRIGGER_LOGO_MAKER\]/g, '')
     .replace(/\[TRIGGER_SEO_AUDIT:[^\]]*\]/g, '')
+    .replace(/\[TRIGGER_BYTESCART\]/g, '')
     .replace(/\[SEND_PAYMENT:[^\]]*\]/g, '')
     .trim();
 
@@ -279,6 +293,28 @@ async function handleSalesBot(user, message) {
   if (formatted && !skipLlmResponse) {
     await sendTextMessage(user.phone_number, formatted);
     await logMessage(user.id, formatted, 'assistant');
+  }
+
+  // Send the ByteScart pitch + CTA button for ecommerce leads
+  if (bytescartTrigger && !user.metadata?.bytescartPitched) {
+    const pitch =
+      '🛒 *Want your own online store?*\n\n' +
+      'Great news — you can launch one *today* with *ByteScart*, our done-for-you ecommerce platform. And the best part? It\'s *100% FREE* to get started!\n\n' +
+      '✨ *What you get — completely free:*\n' +
+      '• Free signup — no credit card needed\n' +
+      '• List your first few products at zero cost\n' +
+      '• Ready-to-sell storefront on mobile & desktop\n' +
+      '• Built-in checkout & secure payments\n' +
+      '• No coding, no design work — go live in minutes\n\n' +
+      'Thousands of sellers have already launched their store with ByteScart. Tap the button below to claim yours 👇';
+    await sendCTAButton(
+      user.phone_number,
+      pitch,
+      '🚀 Launch Free Store',
+      'https://www.bytescart.ai'
+    );
+    await logMessage(user.id, 'Sent ByteScart pitch with CTA link (sales bot)', 'assistant');
+    await updateUserMetadata(user.id, { bytescartPitched: true });
   }
 
   // Send the Calendly link as a clickable CTA button so it actually works on WhatsApp
@@ -389,84 +425,14 @@ async function handleSalesBot(user, message) {
     logger.info(`[SALES] Triggering website demo for ${user.phone_number}`);
     await updateUserMetadata(user.id, { websiteDemoTriggered: true, returnToSales: true });
 
-    // Use LLM to extract business info from the conversation
-    const conversationText = messages.map(m => `${m.role}: ${m.content}`).join('\n');
-    let businessName = user.metadata?.websiteData?.businessName || null;
-    let industry = null;
-
-    try {
-      const extraction = await generateResponse(
-        `Extract business information from this conversation. Return ONLY valid JSON with these fields:
-- "businessName": the business name if explicitly mentioned (null if not mentioned)
-- "industry": the industry/business type if mentioned (e.g. "Restaurant", "Real Estate", "Tech", etc. — null if not mentioned)
-
-Do NOT use greetings like "Hello", "Hi", "Hey" as business names.
-Do NOT guess — only extract what was explicitly stated.
-
-Conversation:
-${conversationText}`,
-        [{ role: 'user', content: 'Extract the business info as JSON.' }]
-      );
-      const jsonMatch = extraction.match(/\{[\s\S]*?\}/);
-      if (jsonMatch) {
-        const parsed = JSON.parse(jsonMatch[0]);
-        if (parsed.businessName && !businessName) businessName = parsed.businessName;
-        if (parsed.industry) industry = parsed.industry;
-      }
-    } catch (err) {
-      logger.debug('[SALES] Business info extraction failed:', err.message);
-    }
-
     const { createSite } = require('../../db/sites');
     const site = await createSite(user.id, 'business-starter');
-
-    if (businessName && industry) {
-      // Have both — skip to services collection
-      await updateUserMetadata(user.id, {
-        currentSiteId: site.id,
-        websiteData: { businessName, industry },
-      });
-      await sendTextMessage(
-        user.phone_number,
-        `Got it, building a *${industry}* site for *${businessName}*! What services or products do you offer? List them separated by commas, or say "skip".`
-      );
-      await logMessage(user.id, `Website demo: pre-filled name="${businessName}", industry="${industry}"`, 'assistant');
-      return STATES.WEB_COLLECT_SERVICES;
-    }
-
-    if (businessName) {
-      // Have name but not industry
-      await updateUserMetadata(user.id, {
-        currentSiteId: site.id,
-        websiteData: { businessName },
-      });
-      await sendTextMessage(
-        user.phone_number,
-        `Got it, building a site for *${businessName}*! What industry are you in? For example - tech, healthcare, restaurant, real estate, creative, etc.`
-      );
-      await logMessage(user.id, `Website demo: pre-filled name="${businessName}"`, 'assistant');
-      return STATES.WEB_COLLECT_INDUSTRY;
-    }
-
-    if (industry) {
-      // Have industry but not name
-      await updateUserMetadata(user.id, {
-        currentSiteId: site.id,
-        websiteData: { industry },
-      });
-      await sendTextMessage(
-        user.phone_number,
-        `Got it, a *${industry}* website! What's your business name?`
-      );
-      await logMessage(user.id, `Website demo: pre-filled industry="${industry}"`, 'assistant');
-      return STATES.WEB_COLLECT_NAME;
-    }
-
-    // Have neither
     await updateUserMetadata(user.id, { currentSiteId: site.id });
+
+    // Always ask — don't try to auto-extract. Prevents wrong names.
     await sendTextMessage(
       user.phone_number,
-      "Let's build it - what's your business name?"
+      "Let's build it! What's your business name?"
     );
     await logMessage(user.id, 'Starting website demo flow', 'assistant');
     return STATES.WEB_COLLECT_NAME;

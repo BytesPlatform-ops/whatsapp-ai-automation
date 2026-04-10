@@ -51,6 +51,7 @@ const STATE_HANDLERS = {
 
   // Web Dev flow
   [STATES.WEB_COLLECT_NAME]: handleWebDev,
+  [STATES.WEB_COLLECT_EMAIL]: handleWebDev,
   [STATES.WEB_COLLECT_INDUSTRY]: handleWebDev,
   [STATES.WEB_COLLECT_SERVICES]: handleWebDev,
   [STATES.WEB_COLLECT_COLORS]: handleWebDev,
@@ -239,6 +240,25 @@ async function _routeMessage(message) {
     // Non-critical - continue processing
   }
 
+  // Save original message type before audio transcription overwrites it
+  const originalType = message.type;
+
+  // Download media (image/audio) for storage in DB so admin can view it
+  let mediaData = null;
+  let mediaMime = null;
+  if ((message.type === 'image' || message.type === 'audio') && message.mediaId) {
+    try {
+      const { downloadMedia } = require('../messages/sender');
+      const media = await downloadMedia(message.mediaId);
+      if (media?.buffer) {
+        mediaData = `data:${media.mimeType};base64,${media.buffer.toString('base64')}`;
+        mediaMime = media.mimeType;
+      }
+    } catch (err) {
+      logger.error('Media download failed:', err.message);
+    }
+  }
+
   // Transcribe audio messages to text
   if (message.type === 'audio' && (message.mediaId || message.mediaUrl)) {
     try {
@@ -279,8 +299,30 @@ async function _routeMessage(message) {
     logger.info(`[AD TRACKING] Platform: ${channel} | Product: ${product} | Ad: ${ref.headline || 'N/A'} | User: ${from}`);
   }
 
-  // Log incoming message
-  await logMessage(user.id, text || '', 'user', message.type, messageId);
+  // Log incoming message — use latest text (may be audio transcript), originalType (so audio shows as audio)
+  await logMessage(user.id, message.text || text || '', 'user', originalType, messageId, mediaData, mediaMime);
+
+  // Auto-update lead temperature based on user message count
+  const messageCount = (user.metadata?.userMessageCount || 0) + 1;
+  const currentTemp = user.metadata?.leadTemperature || 'COLD';
+  const newTemp = messageCount >= 10 ? 'HOT' : messageCount >= 5 ? 'WARM' : currentTemp;
+  if (newTemp !== currentTemp || messageCount !== user.metadata?.userMessageCount) {
+    await updateUserMetadata(user.id, { userMessageCount: messageCount, leadTemperature: newTemp });
+    if (newTemp !== currentTemp) {
+      logger.info(`[LEAD] ${from} temperature: ${currentTemp} → ${newTemp} (${messageCount} messages)`);
+    }
+  }
+
+  // Re-fetch user to get latest metadata (takeover flag may have been set from admin)
+  const { supabase } = require('../config/database');
+  const { data: freshMeta } = await supabase.from('users').select('metadata').eq('id', user.id).single();
+  if (freshMeta) user.metadata = freshMeta.metadata;
+
+  // If human has taken over this conversation, just log the message and stop
+  if (user.metadata?.humanTakeover) {
+    logger.info(`[HUMAN TAKEOVER] Message from ${from} logged (bot paused): "${(text || '').slice(0, 50)}"`);
+    return;
+  }
 
   // Check for reset command
   if (text && text.toLowerCase().trim() === '/reset') {

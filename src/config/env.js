@@ -31,6 +31,14 @@ const optional = [
   'META_APP_SECRET',
   'INSTAGRAM_ACCESS_TOKEN',
   'INSTAGRAM_APP_SECRET',
+  'SENDGRID_API_KEY',
+  'SENDGRID_FROM_EMAIL',
+  'SENDGRID_FROM_NAME',
+  'NAMECHEAP_API_USER',
+  'NAMECHEAP_API_KEY',
+  'NAMECHEAP_CLIENT_IP',
+  'NAMECHEAP_USE_SANDBOX',
+  'UNSPLASH_ACCESS_KEY',
 ];
 
 function validateEnv() {
@@ -89,6 +97,28 @@ const env = {
     appSecret: process.env.META_APP_SECRET || '',
     verifyToken: process.env.WEBHOOK_VERIFY_TOKEN, // reuse the same verify token
     instagramUserId: process.env.INSTAGRAM_USER_ID || '',
+  },
+  // SendGrid
+  sendgrid: {
+    apiKey: process.env.SENDGRID_API_KEY || '',
+    fromEmail: process.env.SENDGRID_FROM_EMAIL || 'developer@bytesplatform.com',
+    fromName: process.env.SENDGRID_FROM_NAME || 'Bytes Platform',
+  },
+  // Namecheap
+  namecheap: {
+    apiUser: process.env.NAMECHEAP_API_USER || '',
+    apiKey: process.env.NAMECHEAP_API_KEY || '',
+    clientIp: process.env.NAMECHEAP_CLIENT_IP || '',
+    useSandbox: process.env.NAMECHEAP_USE_SANDBOX === 'true',
+    get baseUrl() {
+      return this.useSandbox
+        ? 'https://api.sandbox.namecheap.com/xml.response'
+        : 'https://api.namecheap.com/xml.response';
+    },
+  },
+  // Unsplash (hero images for generated websites)
+  unsplash: {
+    accessKey: process.env.UNSPLASH_ACCESS_KEY || '',
   },
   agentPhone: process.env.AGENT_PHONE_NUMBER || '',
   // Server

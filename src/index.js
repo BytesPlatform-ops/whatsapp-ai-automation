@@ -11,6 +11,9 @@ const chatbotApiRoutes = require('./chatbot/api');
 const chatbotPageRoutes = require('./chatbot/pages/routes');
 const { startChatbotScheduler } = require('./chatbot/jobs/scheduler');
 const { startInstagramTokenRefreshScheduler } = require('./jobs/instagramTokenRefresh');
+const { startUpsellScheduler } = require('./jobs/upsellScheduler');
+const { startDomainVerifier } = require('./jobs/domainVerifier');
+const { startSiteCleanup } = require('./jobs/siteCleanup');
 const path = require('path');
 
 // Validate environment variables
@@ -110,6 +113,15 @@ app.listen(env.port, () => {
 
   // Start Instagram token auto-refresh (every 50 days)
   startInstagramTokenRefreshScheduler();
+
+  // Start post-sale upsell email scheduler (daily)
+  startUpsellScheduler();
+
+  // Start domain DNS verification job (every 5 min)
+  startDomainVerifier();
+
+  // Start site cleanup job — watermark after 24h, delete after 60 days (every 6h)
+  startSiteCleanup();
 });
 
 // Catch unhandled promise rejections so they don't silently kill operations

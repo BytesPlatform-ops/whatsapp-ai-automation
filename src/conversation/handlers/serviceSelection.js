@@ -24,6 +24,7 @@ async function handleServiceSelection(user, message) {
           rows: [
             { id: 'svc_seo', title: '🔍 Free SEO Audit', description: 'Get a free analysis of your website' },
             { id: 'svc_webdev', title: '🌐 Website Development', description: 'Get a professional website built' },
+            { id: 'svc_ecommerce', title: '🛒 Online Store', description: 'Launch a free store with ByteScart' },
             { id: 'svc_appdev', title: '📱 App Development', description: 'Mobile & web app development' },
             { id: 'svc_marketing', title: '📈 Digital Marketing', description: 'SEO, ads, social media strategy' },
             { id: 'svc_adgen', title: '🎨 Marketing Ads', description: 'Custom social media ad images for your brand' },
@@ -65,6 +66,32 @@ async function handleServiceSelection(user, message) {
       );
       await logMessage(user.id, 'Starting website development flow', 'assistant');
       return STATES.WEB_COLLECT_NAME;
+
+    case 'svc_ecommerce': {
+      const pitch =
+        '🛒 *Want your own online store?*\n\n' +
+        'Great news — you can launch one *today* with *ByteScart*, our done-for-you ecommerce platform. And the best part? It\'s *100% FREE* to get started!\n\n' +
+        '✨ *What you get — completely free:*\n' +
+        '• Free signup — no credit card needed\n' +
+        '• List your first few products at zero cost\n' +
+        '• Ready-to-sell storefront on mobile & desktop\n' +
+        '• Built-in checkout & secure payments\n' +
+        '• No coding, no design work — go live in minutes\n\n' +
+        'Thousands of sellers have already launched their store with ByteScart. Tap the button below to claim yours 👇';
+      await sendCTAButton(
+        user.phone_number,
+        pitch,
+        '🚀 Launch Free Store',
+        'https://www.bytescart.ai'
+      );
+      await logMessage(user.id, 'Sent ByteScart ecommerce pitch with CTA link', 'assistant');
+      await sendWithMenuButton(
+        user.phone_number,
+        'Once you\'ve had a look, let me know if you want help setting it up — or tap the menu button to explore our other services.'
+      );
+      await logMessage(user.id, 'Offered ByteScart follow-up + menu', 'assistant');
+      return STATES.SERVICE_SELECTION;
+    }
 
     case 'svc_appdev':
       await sendWithMenuButton(
@@ -172,6 +199,7 @@ async function handleServiceSelection(user, message) {
  */
 function matchServiceFromText(text) {
   if (/\b(seo|audit|analyz|analys)\b/i.test(text)) return 'svc_seo';
+  if (/\b(ecommerce|e-commerce|online store|store|shop|shopify|sell online|product catalog|dropship)\b/i.test(text)) return 'svc_ecommerce';
   if (/\b(website|web ?dev|site|redesign)\b/i.test(text)) return 'svc_webdev';
   if (/\b(app|mobile|android|ios)\b/i.test(text)) return 'svc_appdev';
   if (/\b(market|advertis|social media|ppc|brand)\b/i.test(text)) return 'svc_marketing';

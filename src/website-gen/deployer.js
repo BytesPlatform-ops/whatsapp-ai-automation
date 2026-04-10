@@ -5,15 +5,28 @@ const { logger } = require('../utils/logger');
 
 const NETLIFY_API = 'https://api.netlify.com/api/v1';
 
-async function deployToNetlify(siteConfig) {
+async function deployToNetlify(siteConfig, existingSiteId = null, { watermark = false } = {}) {
   if (!env.netlify.token) throw new Error('NETLIFY_TOKEN is not configured');
   const headers = { Authorization: `Bearer ${env.netlify.token}`, 'Content-Type': 'application/json' };
   try {
-    const files = generateAllPages(siteConfig);
-    logger.info('[NETLIFY] Creating new site...');
-    const siteResponse = await axios.post(`${NETLIFY_API}/sites`, { name: `preview-${Date.now()}` }, { headers });
-    const siteId = siteResponse.data.id;
-    logger.info(`[NETLIFY] Site created: ${siteResponse.data.name} (${siteId})`);
+    const files = generateAllPages(siteConfig, watermark);
+    let siteId, siteName;
+
+    if (existingSiteId) {
+      // Redeploy to existing site (same URL)
+      siteId = existingSiteId;
+      const siteInfo = await axios.get(`${NETLIFY_API}/sites/${siteId}`, { headers });
+      siteName = siteInfo.data.name;
+      logger.info(`[NETLIFY] Redeploying to existing site: ${siteName} (${siteId})`);
+    } else {
+      // Create a new site
+      logger.info('[NETLIFY] Creating new site...');
+      const siteResponse = await axios.post(`${NETLIFY_API}/sites`, { name: `preview-${Date.now()}` }, { headers });
+      siteId = siteResponse.data.id;
+      siteName = siteResponse.data.name;
+      logger.info(`[NETLIFY] Site created: ${siteName} (${siteId})`);
+    }
+
     const fileDigests = {};
     for (const [fp, content] of Object.entries(files)) {
       fileDigests[fp] = crypto.createHash('sha1').update(content).digest('hex');
@@ -32,7 +45,7 @@ async function deployToNetlify(siteConfig) {
     logger.info('[NETLIFY] Waiting for deploy to be ready...');
     const previewUrl = await waitForDeploy(deployId, headers);
     logger.info(`[NETLIFY] Deploy ready: ${previewUrl}`);
-    return { previewUrl, netlifySiteId: siteId, netlifySubdomain: siteResponse.data.name };
+    return { previewUrl, netlifySiteId: siteId, netlifySubdomain: siteName };
   } catch (error) {
     logger.error('[NETLIFY] Deployment failed:', { message: error.message, status: error.response?.status, data: JSON.stringify(error.response?.data || {}) });
     throw error;
@@ -286,8 +299,19 @@ function generateHomePage(c) {
       <p style="font-size:14px;color:#666;line-height:1.6">${esc(s.description)}</p>
     </div>`).join('');
 
+  const hasHeroImg = !!(c.heroImage && c.heroImage.url);
+  const heroBg = hasHeroImg
+    ? `background:#0a0a1a url('${c.heroImage.url.replace(/'/g, '%27')}') center/cover no-repeat`
+    : `background:linear-gradient(135deg,${pc} 0%,${pc}dd 40%,${ac}88 100%)`;
+  const heroOverlay = hasHeroImg
+    ? `<div style="position:absolute;inset:0;background:linear-gradient(135deg,${pc}d9 0%,${pc}99 40%,${ac}66 100%),linear-gradient(180deg,rgba(0,0,0,0.45) 0%,rgba(0,0,0,0.25) 40%,rgba(0,0,0,0.55) 100%);background-blend-mode:multiply"></div>`
+    : `<div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,0.12) 0%,transparent 30%,transparent 70%,rgba(0,0,0,0.25) 100%)"></div>`;
+  const heroCredit = hasHeroImg
+    ? `<div style="position:absolute;bottom:12px;right:16px;z-index:11;font-size:11px;color:rgba(255,255,255,0.65);letter-spacing:0.2px">Photo by <a href="${esc(c.heroImage.photographerUrl)}" target="_blank" rel="noopener" style="color:rgba(255,255,255,0.85);text-decoration:underline">${esc(c.heroImage.photographer)}</a> on <a href="${esc(c.heroImage.unsplashUrl)}" target="_blank" rel="noopener" style="color:rgba(255,255,255,0.85);text-decoration:underline">Unsplash</a></div>`
+    : '';
+
   const body = `
-    <section class="hero-section" style="min-height:100vh;display:flex;align-items:center;justify-content:center;text-align:center;color:#fff;position:relative;overflow:hidden;background:linear-gradient(135deg,${pc} 0%,${pc}dd 40%,${ac}88 100%)">
+    <section class="hero-section" style="min-height:100vh;display:flex;align-items:center;justify-content:center;text-align:center;color:#fff;position:relative;overflow:hidden;${heroBg}">
       <div class="noise" style="position:absolute;inset:0;pointer-events:none"></div>
       <div class="dot-grid" style="position:absolute;inset:0;pointer-events:none"></div>
       <div style="position:absolute;inset:0;overflow:hidden">
@@ -299,7 +323,8 @@ function generateHomePage(c) {
         <div style="position:absolute;top:55%;left:25%;width:4px;height:4px;background:rgba(255,255,255,0.2);border-radius:50%;animation:floatSlow 5s ease-in-out infinite"></div>
         <div style="position:absolute;top:70%;right:35%;width:5px;height:5px;background:rgba(255,255,255,0.15);border-radius:50%;animation:float 6s ease-in-out infinite 1s"></div>
       </div>
-      <div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,0.12) 0%,transparent 30%,transparent 70%,rgba(0,0,0,0.25) 100%)"></div>
+      ${heroOverlay}
+      ${heroCredit}
       <div style="position:relative;z-index:10;padding:0 24px;max-width:900px">
         ${badges?`<div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-bottom:32px;animation:fadeDown 0.8s ease-out forwards">${badges}</div>`:''}
         <h1 style="font-size:clamp(36px,7vw,76px);font-weight:900;line-height:1.05;letter-spacing:-2px;margin-bottom:24px;animation:fadeUp 0.8s ease-out 0.2s both">${esc(c.headline)}</h1>
@@ -615,7 +640,9 @@ function generateContactPage(c) {
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
-function generateAllPages(config) {
+const WATERMARK_HTML = `<div style="position:fixed;bottom:0;left:0;right:0;background:rgba(0,0,0,0.9);color:#fff;text-align:center;padding:14px 20px;z-index:99999;font-family:sans-serif;font-size:14px;backdrop-filter:blur(8px)">Preview Only — <a href="https://bytesplatform.com" style="color:#818cf8;text-decoration:underline;font-weight:600">Built by Bytes Platform</a></div>`;
+
+function generateAllPages(config, watermark = false) {
   const pages = {
     '/index.html': generateHomePage(config),
     '/about/index.html': generateAboutPage(config),
@@ -623,6 +650,11 @@ function generateAllPages(config) {
   };
   if ((config.services || []).length > 0) {
     pages['/services/index.html'] = generateServicesPage(config);
+  }
+  if (watermark) {
+    for (const [path, html] of Object.entries(pages)) {
+      pages[path] = html.replace('</body>', WATERMARK_HTML + '</body>');
+    }
   }
   return pages;
 }

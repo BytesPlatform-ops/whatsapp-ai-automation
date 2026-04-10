@@ -19,47 +19,37 @@ const { runWithChannel } = require('../messages/channelContext');
 const { logMessage } = require('../db/conversations');
 const { updateUserMetadata } = require('../db/users');
 const { logger } = require('../utils/logger');
-const { env } = require('../config/env');
 const { STATES } = require('../conversation/states');
 
 // Follow-up ladder keyed by step name → hours since last message (capped at 24h window)
 const FOLLOWUP_LADDER = [
   { step: 'followup_2h', afterHours: 2 },
-  { step: 'followup_6h', afterHours: 6 },
   { step: 'followup_12h', afterHours: 12 },
-  { step: 'followup_24h', afterHours: 24 },
+  { step: 'followup_23h', afterHours: 23 },
 ];
 
 // Messages per step × personality mode
-// Each step escalates in VALUE, not urgency (anti-pattern: chasing silence)
 const FOLLOWUP_MESSAGES = {
   followup_2h: {
-    COOL: "yo - just making sure you saw that last msg 👀",
-    PROFESSIONAL: "Just following up on my last message. I'm here when you're ready.",
-    UNSURE: "hey! just checking in - no rush at all, take your time 😊",
-    NEGOTIATOR: "sent you the details. let me know.",
-    DEFAULT: "Hey! Just checking in - I'm here whenever you're ready.",
-  },
-  followup_6h: {
-    COOL: `hey! put together some examples i think you'd vibe with - ${env.portfolio?.website1 || ''} check it out and lmk what you think 🔥`,
-    PROFESSIONAL: `I've prepared a few relevant examples for you: ${env.portfolio?.website1 || ''} - this is similar to what we'd build for your business. Shall I walk you through the approach?`,
-    UNSURE: `hey! i found some examples that might help you picture what we'd build - ${env.portfolio?.website1 || ''} - no pressure, just wanted to share so you have a better idea 😊`,
-    NEGOTIATOR: `got some examples ready. here's one: ${env.portfolio?.website1 || ''} - similar scope to what we discussed.`,
-    DEFAULT: `I've got some examples from similar projects: ${env.portfolio?.website1 || ''} - want me to walk you through them?`,
+    COOL: "hey! just checking — did you get a chance to look at the payment link? your site is ready to go live whenever you are 🔥",
+    PROFESSIONAL: "Just checking in — did you have any questions about getting your website live? Happy to help.",
+    UNSURE: "hey! just wanted to check — everything good? your website is ready to go live whenever you want 😊",
+    NEGOTIATOR: "payment link still open. your site is ready. let me know.",
+    DEFAULT: "Hey! Just checking in — did you get a chance to look at the payment link? Your site is ready to go live!",
   },
   followup_12h: {
-    COOL: "hey just circling back - got some cool ideas for your project if you're still down 🤙",
-    PROFESSIONAL: "Following up once more - I have some additional insights for your project when you have a moment.",
-    UNSURE: "hey! no rush at all, just wanted to make sure you know I'm still here if you have any questions 😊",
-    NEGOTIATOR: "circling back. let me know if you want to move forward.",
-    DEFAULT: "Just wanted to follow up - I have some ideas that might interest you. Let me know when you're free!",
+    COOL: "yo your preview site is still up — $100 gets it live on your own domain, everything included. or i can split it if that helps 🤙",
+    PROFESSIONAL: "Your website preview is still available. It's $100 total including your custom domain. We can also split the payment if that works better.",
+    UNSURE: "hey! your website is still saved — just $100 to get it live with your own domain, everything included. we can split the payment too! 😊",
+    NEGOTIATOR: "site's still up. $100 total, domain included. can split if needed. want the link?",
+    DEFAULT: "Your preview site is still up — $100 gets it live on your own domain, everything included!",
   },
-  followup_24h: {
-    COOL: "last one from me - if the project thing comes back up just hit me anytime 🤙",
-    PROFESSIONAL: "Last message from me - if the project timeline changes, feel free to reach out anytime.",
-    UNSURE: "hey! just my last check-in - whenever you're ready, just send a message and we'll pick right up where we left off 💛",
-    NEGOTIATOR: "final follow-up. you know where to find me.",
-    DEFAULT: "Last check-in from me - whenever you're ready, just message and we'll pick up where we left off.",
+  followup_23h: {
+    COOL: "last call — i can do $80 total instead of $100. domain still included. want me to send a new link? 👀",
+    PROFESSIONAL: "Final follow-up — I can offer $80 total (normally $100), domain included. Shall I send a new payment link?",
+    UNSURE: "hey! last message from me — got approval to do $80 total (normally $100), domain included. want the link? 😊",
+    NEGOTIATOR: "last offer — $80 total. domain included. can't go lower. link?",
+    DEFAULT: "Last chance — $80 total instead of $100, domain included. Want a new payment link?",
   },
 };
 
@@ -140,6 +130,7 @@ async function processUserFollowup(user) {
   if (metadata.meetingBooked) return;
   if (metadata.paymentConfirmed) return;
   if (metadata.followupOptOut) return;
+  if (metadata.humanTakeover) return;
 
   // If all steps are done, skip
   if (completedSteps.length >= FOLLOWUP_LADDER.length) return;
@@ -174,6 +165,36 @@ async function processUserFollowup(user) {
 
   await sendTextMessage(user.phone_number, message);
   await logMessage(user.id, message, 'assistant');
+
+  // For the 23h step, also send a discounted payment link
+  if (nextStep.step === 'followup_23h' && !metadata.paymentConfirmed) {
+    try {
+      const { createPaymentLink } = require('../payments/stripe');
+      const { sendCTAButton } = require('../messages/sender');
+      const { env: appEnv } = require('../config/env');
+      // $50 upfront (discounted from $60) — domain included
+      const discountUpfront = metadata.selectedDomain ? 50 : 80;
+      const description = metadata.selectedDomain
+        ? `Website + domain (${metadata.selectedDomain}) — discount`
+        : 'Website — limited time discount';
+      if (appEnv.stripe.secretKey) {
+        const result = await createPaymentLink({
+          userId: user.id,
+          phoneNumber: user.phone_number,
+          amount: discountUpfront,
+          serviceType: 'website',
+          packageTier: 'discount',
+          description,
+          customerName: user.name || '',
+        });
+        await sendCTAButton(user.phone_number, `Tap below to pay $${discountUpfront}`, `💳 Pay $${discountUpfront}`, result.url);
+        await logMessage(user.id, `Discount payment link sent: $${discountUpfront}`, 'assistant');
+        logger.info(`[FOLLOWUP] $${discountUpfront} discount payment link sent to ${user.phone_number}`);
+      }
+    } catch (err) {
+      logger.error(`[FOLLOWUP] Failed to send $80 payment link:`, err.message);
+    }
+  }
 
   // Mark this step as completed
   await updateUserMetadata(user.id, {
@@ -312,35 +333,140 @@ async function runPaymentPolling() {
           paid_at: new Date().toISOString(),
         }).eq('id', payment.id);
 
+        // SOURCE OF TRUTH for where to send the confirmation: the user record, NOT the
+        // payment row. The payment.phone_number field can be stale (old test sessions,
+        // prior number, etc.), and in some cases the scheduler would end up sending the
+        // receipt to a different phone than the one currently having the conversation.
+        const { data: paidUserRecord } = await supabase
+          .from('users')
+          .select('phone_number, channel, metadata')
+          .eq('id', payment.user_id)
+          .single();
+        const targetPhone = paidUserRecord?.phone_number || payment.phone_number;
+        const targetChannel = paidUserRecord?.channel || payment.channel || 'whatsapp';
+        if (paidUserRecord?.phone_number && paidUserRecord.phone_number !== payment.phone_number) {
+          logger.warn(`[PAYMENT] Phone mismatch for payment ${payment.id}: payment row=${payment.phone_number}, user record=${paidUserRecord.phone_number}. Sending to user record.`);
+        }
+
         // Send payment confirmation
         const amountDisplay = `$${(payment.amount / 100).toLocaleString()}`;
         const isWebsitePayment = /website|web/i.test(payment.service_type || '') || /website|web/i.test(payment.description || '');
 
         if (isWebsitePayment) {
-          // Website payment — confirm and offer custom domain setup
-          await runWithChannel(payment.channel || 'whatsapp', async () => {
-            await sendTextMessage(
-              payment.phone_number,
-              `Payment of *${amountDisplay}* received! Thank you for choosing Bytes Platform.\n\n` +
-                `*Package:* ${payment.description || payment.service_type}\n\n` +
-                `Your website is all set! Would you like to put it on your own custom domain? (e.g., yourbusiness.com)\n\n` +
-                `Just say *"yes"* and I'll help you find and set one up, or *"no"* if you want to do it later.`
-            );
-          });
-          await logMessage(payment.user_id, `Payment confirmed: ${amountDisplay} for ${payment.service_type}`, 'assistant');
+          // Check if this is a domain payment (user already selected a domain)
+          const meta = paidUserRecord?.metadata || {};
+          const selectedDomain = meta.selectedDomain;
+          const { getLatestSite: getSite } = require('../db/sites');
+          const { updateSite } = require('../db/sites');
 
-          // Update user metadata and transition to domain offer state
           await updateUserMetadata(payment.user_id, {
             paymentConfirmed: true,
             lastPaymentAmount: payment.amount,
             lastPaymentService: payment.service_type,
+            paidAt: new Date().toISOString(),
           });
-          const { updateUserState } = require('../db/users');
-          await updateUserState(payment.user_id, 'DOMAIN_OFFER');
+
+          if (selectedDomain && meta.domainPaymentPending) {
+            // Domain payment confirmed — start auto-purchase flow
+            await runWithChannel(targetChannel, async () => {
+              await sendTextMessage(
+                targetPhone,
+                `Payment of *${amountDisplay}* received! 🎉\n\n` +
+                `Now setting up *${selectedDomain}* for your website — this usually takes a few minutes. I'll keep you updated!`
+              );
+            });
+            await logMessage(payment.user_id, `Payment confirmed: ${amountDisplay} — starting domain setup for ${selectedDomain}`, 'assistant');
+
+            // Auto-purchase domain
+            const site = await getSite(payment.user_id);
+            const netlifySubdomain = site?.netlify_subdomain || '';
+            const netlifySiteId = site?.netlify_site_id || '';
+
+            if (env.namecheap?.apiKey) {
+              try {
+                const { purchaseAndConfigureDomain } = require('../integrations/namecheap');
+                const { addCustomDomainToNetlify } = require('../website-gen/deployer');
+
+                // Progress update 1
+                await runWithChannel(targetChannel, () =>
+                  sendTextMessage(targetPhone, `⏳ Registering *${selectedDomain}*...`)
+                );
+
+                const result = await purchaseAndConfigureDomain(selectedDomain, netlifySubdomain);
+
+                if (result.success) {
+                  // Add to Netlify
+                  if (netlifySiteId) {
+                    await runWithChannel(targetChannel, () =>
+                      sendTextMessage(targetPhone, `⏳ Configuring your website on *${selectedDomain}*...`)
+                    );
+                    try { await addCustomDomainToNetlify(netlifySiteId, selectedDomain); } catch (e) {
+                      logger.error('[PAYMENT] Netlify domain add failed:', e.message);
+                    }
+                  }
+
+                  if (site) await updateSite(site.id, { custom_domain: selectedDomain, status: 'domain_setup_complete' });
+                  await updateUserMetadata(payment.user_id, {
+                    domainPaymentPending: false,
+                    domainStatus: 'purchased',
+                    domainPurchasedAt: new Date().toISOString(),
+                  });
+
+                  await runWithChannel(targetChannel, () =>
+                    sendTextMessage(
+                      targetPhone,
+                      `✅ *${selectedDomain}* is registered and configured!\n\n` +
+                      `DNS is propagating now — your site will be live at *${selectedDomain}* within 5-60 minutes. ` +
+                      `HTTPS is set up automatically.\n\n` +
+                      `I'll send you a message once it's fully live! 🚀`
+                    )
+                  );
+                  await logMessage(payment.user_id, `Domain purchased and configured: ${selectedDomain}`, 'assistant');
+                } else {
+                  // Auto-purchase failed — fallback to manual
+                  if (site) await updateSite(site.id, { custom_domain: selectedDomain, status: 'domain_setup_pending' });
+                  await runWithChannel(targetChannel, () =>
+                    sendTextMessage(
+                      targetPhone,
+                      `Domain registration for *${selectedDomain}* needs manual setup (${result.error}). Our team will handle it within 2 business days — we'll keep you posted!`
+                    )
+                  );
+                  await logMessage(payment.user_id, `Domain auto-purchase failed: ${result.error} — manual setup needed`, 'assistant');
+                }
+              } catch (err) {
+                logger.error('[PAYMENT] Domain auto-purchase error:', err.message);
+                if (site) await updateSite(site.id, { custom_domain: selectedDomain, status: 'domain_setup_pending' });
+                await runWithChannel(targetChannel, () =>
+                  sendTextMessage(targetPhone, `Domain setup for *${selectedDomain}* is being handled by our team. We'll update you within 2 business days!`)
+                );
+              }
+            } else {
+              // No Namecheap API — manual flow
+              if (site) await updateSite(site.id, { custom_domain: selectedDomain, status: 'domain_setup_pending' });
+              await runWithChannel(targetChannel, () =>
+                sendTextMessage(
+                  targetPhone,
+                  `Payment received! Our team will set up *${selectedDomain}* for your website within 2 business days. We'll send you the live link once it's ready!`
+                )
+              );
+            }
+          } else {
+            // Regular website payment (no domain selected)
+            await runWithChannel(targetChannel, () => sendTextMessage(
+              targetPhone,
+              `Payment of *${amountDisplay}* received! Thank you for choosing Bytes Platform.\n\n` +
+                `*Package:* ${payment.description || payment.service_type}\n\n` +
+                `Your website is all set! Would you like to put it on your own custom domain?\n\n` +
+                `Just say *"yes"* and I'll help you find one, or *"no"* if you're good for now.`
+            ));
+            await logMessage(payment.user_id, `Payment confirmed: ${amountDisplay}`, 'assistant');
+            const { updateUserState } = require('../db/users');
+            await updateUserState(payment.user_id, 'DOMAIN_OFFER');
+          }
         } else {
           // Non-website payment — generic confirmation
-          await runWithChannel(payment.channel || 'whatsapp', () => sendTextMessage(
-            payment.phone_number,
+          await runWithChannel(targetChannel, () => sendTextMessage(
+            targetPhone,
             `Payment of *${amountDisplay}* received! Thank you for choosing Bytes Platform.\n\n` +
               `*Package:* ${payment.description || payment.service_type}\n\n` +
               `Our team will be in touch shortly to kick things off. If you have any questions in the meantime, just message here.`
@@ -355,7 +481,26 @@ async function runPaymentPolling() {
           });
         }
 
-        logger.info(`[PAYMENT] Confirmed payment from ${payment.phone_number}: ${amountDisplay} for ${payment.service_type}`);
+        // Send email notification to team
+        try {
+          const { sendPaymentNotification } = require('../notifications/email');
+          const { getLatestSite } = require('../db/sites');
+          const site = await getLatestSite(payment.user_id);
+          await sendPaymentNotification({
+            userName: paidSession.customer_details?.name || targetPhone,
+            userPhone: targetPhone,
+            userEmail: paidSession.customer_details?.email || '',
+            amount: payment.amount / 100,
+            serviceType: payment.service_type,
+            description: payment.description,
+            sitePreviewUrl: site?.preview_url || '',
+            channel: targetChannel,
+          });
+        } catch (emailErr) {
+          logger.error('[PAYMENT] Email notification failed:', emailErr.message);
+        }
+
+        logger.info(`[PAYMENT] Confirmed payment from ${targetPhone}: ${amountDisplay} for ${payment.service_type}`);
       } catch (err) {
         logger.error(`[PAYMENT] Error checking payment ${payment.id}:`, err.message);
       }

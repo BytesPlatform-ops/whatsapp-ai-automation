@@ -1,11 +1,15 @@
-const { sendTextMessage, sendInteractiveButtons } = require('../../messages/sender');
+const { sendTextMessage, sendCTAButton } = require('../../messages/sender');
 const { logMessage } = require('../../db/conversations');
 const { updateUserMetadata } = require('../../db/users');
 const { getLatestSite, updateSite } = require('../../db/sites');
-const { checkDomainAvailability, getPurchaseLinks, verifyDNS } = require('../../website-gen/domainChecker');
-const { addCustomDomainToNetlify } = require('../../website-gen/deployer');
+const { checkDomainAvailability } = require('../../website-gen/domainChecker');
 const { logger } = require('../../utils/logger');
+const { env } = require('../../config/env');
 const { STATES } = require('../states');
+
+const DOMAIN_COST = 10; // ~$10 for domain registration
+const SITE_COST = 100;  // Total site cost
+const UPFRONT_PERCENT = 0.5; // 50% upfront
 
 async function handleCustomDomain(user, message) {
   switch (user.state) {
@@ -14,11 +18,13 @@ async function handleCustomDomain(user, message) {
     case STATES.DOMAIN_SEARCH:
       return handleDomainSearch(user, message);
     case STATES.DOMAIN_PURCHASE_WAIT:
-      return handlePurchaseWait(user, message);
     case STATES.DOMAIN_DNS_GUIDE:
-      return handleDNSGuide(user, message);
     case STATES.DOMAIN_VERIFY:
-      return handleVerify(user, message);
+      // Legacy states
+      if (user.metadata?.selectedDomain) {
+        await sendTextMessage(user.phone_number, "Your domain setup is in progress. We'll update you when it's live!");
+      }
+      return STATES.GENERAL_CHAT;
     default:
       return STATES.GENERAL_CHAT;
   }
@@ -26,24 +32,23 @@ async function handleCustomDomain(user, message) {
 
 // ─── DOMAIN_OFFER ──────────────────────────────────────────────────
 async function handleDomainOffer(user, message) {
-  const buttonId = message.buttonId || '';
   const text = (message.text || '').trim().toLowerCase();
 
-  const isYes = buttonId === 'domain_yes' || /^(yes|yeah|yep|sure|ok|okay|y)$/i.test(text);
-  const isNo = buttonId === 'domain_no' || /^(no|nah|nope|later|not now|n|skip)$/i.test(text);
+  const isYes = /^(yes|yeah|yep|sure|ok|okay|y|domain|set up|set it up)$/i.test(text);
+  const isNo = /^(no|nah|nope|later|not now|n|skip|maybe later)$/i.test(text);
 
   if (isNo) {
-    const returnToSales = user.metadata?.returnToSales;
+    // No domain — offer the site for $100 flat
     await sendTextMessage(
       user.phone_number,
-      "No problem! Your website preview is still live. You can always come back and set up a domain later. Just send a message anytime!"
+      "No worries on the domain! The website itself is *$100*. Want me to send the payment link?"
     );
-    await logMessage(user.id, 'User declined custom domain setup', 'assistant');
-    return returnToSales ? STATES.SALES_CHAT : STATES.GENERAL_CHAT;
+    await logMessage(user.id, 'User declined domain — offering $100 for site only', 'assistant');
+    // Stay in sales to handle the $100 payment
+    return STATES.SALES_CHAT;
   }
 
   if (isYes) {
-    // Use existing business name to search for domains
     const businessName = user.metadata?.websiteData?.businessName || '';
     const sanitized = businessName.toLowerCase().replace(/[^a-z0-9]/g, '');
 
@@ -55,26 +60,67 @@ async function handleDomainOffer(user, message) {
     return runDomainSearch(user, sanitized);
   }
 
-  // If user typed something else, treat it as a domain name to search
   const cleaned = text.replace(/[^a-z0-9-]/g, '');
   if (cleaned.length >= 2) {
     return runDomainSearch(user, cleaned);
   }
 
-  await sendInteractiveButtons(user.phone_number, 'Would you like to set up a custom domain?', [
-    { id: 'domain_yes', title: 'Yes, set up domain' },
-    { id: 'domain_no', title: 'No, maybe later' },
-  ]);
+  await sendTextMessage(
+    user.phone_number,
+    'Would you like to set up a custom domain? Just say *"yes"* and I\'ll help you find one, or *"no"* if you want to skip it.'
+  );
   return STATES.DOMAIN_OFFER;
 }
 
 // ─── DOMAIN_SEARCH ─────────────────────────────────────────────────
 async function handleDomainSearch(user, message) {
-  const text = (message.text || '').trim().toLowerCase();
-  const cleaned = text.replace(/[^a-z0-9-]/g, '');
+  const text = (message.text || '').trim();
 
-  if (!cleaned || cleaned.length < 2) {
-    await sendTextMessage(user.phone_number, "Please enter a name for your domain (e.g., mybusiness):");
+  const domainOptions = user.metadata?.domainOptions || [];
+  const availableOptions = domainOptions.filter(d => d.available && !d.premium);
+
+  if (availableOptions.length > 0) {
+    // Match explicit number: "1", "2", etc.
+    const numMatch = text.match(/^(\d+)$/);
+    if (numMatch) {
+      const idx = parseInt(numMatch[1], 10) - 1;
+      if (idx >= 0 && idx < domainOptions.length && domainOptions[idx].available && !domainOptions[idx].premium) {
+        return processDomainSelection(user, domainOptions[idx].domain);
+      }
+      if (idx >= 0 && idx < domainOptions.length) {
+        await sendTextMessage(user.phone_number, 'That domain is not available. Please pick another one, or type a different name.');
+        return STATES.DOMAIN_SEARCH;
+      }
+    }
+
+    // Match ordinal references: "the first", "first one", "1st", "second", "third", etc.
+    const ordinalMap = { 'first': 0, '1st': 0, 'second': 0 + 1, '2nd': 1, 'third': 2, '3rd': 2, 'fourth': 3, '4th': 3, 'fifth': 4, '5th': 4 };
+    const ordinalMatch = text.toLowerCase().match(/\b(first|1st|second|2nd|third|3rd|fourth|4th|fifth|5th)\b/);
+    if (ordinalMatch) {
+      const idx = ordinalMap[ordinalMatch[1]];
+      if (idx !== undefined && idx < domainOptions.length && domainOptions[idx].available && !domainOptions[idx].premium) {
+        return processDomainSelection(user, domainOptions[idx].domain);
+      }
+    }
+  }
+
+  // Match full domain: "mybusiness.com"
+  const fullDomainMatch = text.match(/([\w-]+\.[\w]{2,})/);
+  if (fullDomainMatch) {
+    return processDomainSelection(user, fullDomainMatch[1].toLowerCase());
+  }
+
+  // Don't search for random phrases — only if it looks like a domain name
+  const cleaned = text.toLowerCase().replace(/[^a-z0-9-]/g, '');
+  if (!cleaned || cleaned.length < 2 || cleaned.length > 30) {
+    await sendTextMessage(user.phone_number, 'Please reply with the *number* of the domain you want (e.g., *1*), or type a domain name to search:');
+    return STATES.DOMAIN_SEARCH;
+  }
+
+  // Only search if it looks like a plausible domain name (no spaces in original, no common phrases)
+  const isPhrase = /\s/.test(text.trim()) && !/\.(com|co|io|net|org)$/i.test(text.trim());
+  if (isPhrase) {
+    await sendTextMessage(user.phone_number, 'Please reply with the *number* of the domain you want (e.g., *1*), or type a single word for a new domain search:');
     return STATES.DOMAIN_SEARCH;
   }
 
@@ -85,12 +131,15 @@ async function runDomainSearch(user, baseName) {
   await sendTextMessage(user.phone_number, `Checking domain availability for *${baseName}*...`);
 
   const results = await checkDomainAvailability(baseName);
-  const available = results.filter(r => r.available);
-  const taken = results.filter(r => !r.available);
+  const available = results.filter(r => r.available && !r.premium);
 
   let msg = '*Domain Availability:*\n\n';
-  results.forEach(r => {
-    msg += r.available ? `✅ ${r.domain} — *Available*\n` : `❌ ${r.domain} — Taken\n`;
+  results.forEach((r, i) => {
+    if (r.premium) {
+      msg += `${i + 1}. ⚠️ ${r.domain} — Premium (not available)\n`;
+    } else {
+      msg += r.available ? `${i + 1}. ✅ ${r.domain} — *Available*\n` : `${i + 1}. ❌ ${r.domain} — Taken\n`;
+    }
   });
 
   if (available.length === 0) {
@@ -99,223 +148,96 @@ async function runDomainSearch(user, baseName) {
     return STATES.DOMAIN_SEARCH;
   }
 
-  // Generate purchase links for available domains
-  const topDomain = available[0];
-  const links = getPurchaseLinks(topDomain.domain);
-
-  msg += '\n*To purchase a domain:*\n\n';
-  msg += `1. Namecheap:\n${links.namecheap}\n\n`;
-  msg += `2. Porkbun:\n${links.porkbun}\n\n`;
-
-  if (available.length > 1) {
-    msg += '_You can search for any of the available domains above on either site._\n\n';
-  }
-
-  msg += 'Once you\'ve purchased your domain, just send me the domain name (e.g., mybusiness.com) and I\'ll help you connect it!';
+  msg += '\nJust reply with the *number* or *domain name* you want, or type a different name to search again.';
 
   await sendTextMessage(user.phone_number, msg);
 
-  // Store domain options in metadata
   await updateUserMetadata(user.id, {
     domainOptions: results,
     domainSearchName: baseName,
   });
 
   await logMessage(user.id, `Domain search: ${available.map(r => r.domain).join(', ')} available`, 'assistant');
-  return STATES.DOMAIN_PURCHASE_WAIT;
+  return STATES.DOMAIN_SEARCH;
 }
 
-// ─── DOMAIN_PURCHASE_WAIT ──────────────────────────────────────────
-async function handlePurchaseWait(user, message) {
-  const text = (message.text || '').trim();
-
-  // Check if user wants to search for a different name
-  const searchAgain = /\b(try|search|different|another|change)\b/i.test(text);
-  if (searchAgain) {
-    await sendTextMessage(user.phone_number, "No problem! What name would you like to search for?");
-    return STATES.DOMAIN_SEARCH;
-  }
-
-  // Try to extract a domain from their message
-  const domainMatch = text.match(/([\w-]+\.[\w]{2,})/);
-  if (!domainMatch) {
-    await sendTextMessage(
-      user.phone_number,
-      "Waiting for you to purchase your domain! Once you've bought it, send me the domain name (e.g., mybusiness.com) and I'll help you set it up.\n\nOr type *\"search\"* to look for a different domain name."
-    );
-    return STATES.DOMAIN_PURCHASE_WAIT;
-  }
-
-  const domain = domainMatch[1].toLowerCase();
-
-  // Store the custom domain
-  await updateUserMetadata(user.id, { customDomain: domain });
-
-  // Get the site's Netlify info
+// ─── Domain selected → send payment link ───────────────────────────
+async function processDomainSelection(user, domain) {
   const site = await getLatestSite(user.id);
-  let netlifySubdomain = site?.netlify_subdomain || '';
-  let netlifySiteId = site?.netlify_site_id || '';
 
-  // Fallback: extract subdomain from preview URL if not stored
-  if (!netlifySubdomain && site?.preview_url) {
-    const match = site.preview_url.match(/https?:\/\/([^.]+)\.netlify\.app/);
-    if (match) netlifySubdomain = match[1];
+  await updateUserMetadata(user.id, { selectedDomain: domain });
+  if (site) {
+    await updateSite(site.id, { custom_domain: domain, status: 'awaiting_payment' });
   }
 
-  // Fallback: look up site ID from Netlify API using subdomain
-  if (!netlifySiteId && netlifySubdomain) {
-    try {
-      const axios = require('axios');
-      const { env } = require('../../config/env');
-      const res = await axios.get(`https://api.netlify.com/api/v1/sites/${netlifySubdomain}.netlify.app`, {
-        headers: { Authorization: `Bearer ${env.netlify.token}` },
-      });
-      netlifySiteId = res.data.id;
-      // Save it for future use
-      if (site) await updateSite(site.id, { netlify_site_id: netlifySiteId, netlify_subdomain: netlifySubdomain });
-      logger.info(`[DOMAIN] Resolved Netlify site ID from subdomain: ${netlifySiteId}`);
-    } catch (err) {
-      logger.error('[DOMAIN] Could not resolve Netlify site ID:', err.response?.data || err.message);
-    }
-  }
+  // Default: $100 full payment (website + domain included)
+  const fullAmount = SITE_COST;
 
-  if (!netlifySubdomain) netlifySubdomain = 'your-site';
+  await sendTextMessage(
+    user.phone_number,
+    `Great choice — *${domain}*!\n\n` +
+    `The total is *$${fullAmount}* — that covers the website and domain, everything included.\n\n` +
+    `Once you pay, I'll register your domain, set everything up, and your site will be live at *${domain}* — usually within the hour.\n\n` +
+    `_If you'd prefer to split the payment, just let me know and I can do $60 now and $50 after delivery._`
+  );
 
-  // Add the custom domain to Netlify
+  // Create and send payment link for full amount
   try {
-    if (netlifySiteId) {
-      await addCustomDomainToNetlify(netlifySiteId, domain);
-      await updateSite(site.id, { custom_domain: domain });
-    } else {
-      logger.warn(`[DOMAIN] No Netlify site ID found for user ${user.phone_number} — skipping API call`);
+    if (env.stripe.secretKey) {
+      const { createPaymentLink } = require('../../payments/stripe');
+      const result = await createPaymentLink({
+        userId: user.id,
+        phoneNumber: user.phone_number,
+        amount: fullAmount,
+        serviceType: 'website',
+        packageTier: 'standard',
+        description: `Website + domain (${domain})`,
+        customerName: user.name || user.metadata?.websiteData?.businessName || '',
+      });
+
+      await sendCTAButton(
+        user.phone_number,
+        `Tap below to pay $${fullAmount} and get your site live`,
+        `💳 Pay $${fullAmount}`,
+        result.url
+      );
+
+      await updateUserMetadata(user.id, {
+        lastPaymentLinkId: result.linkId,
+        lastPaymentDbId: result.paymentId,
+        lastPaymentAmount: fullAmount,
+        domainPaymentPending: true,
+        paymentType: 'full', // 'full' or 'split'
+        remainingBalance: 0,
+      });
+
+      await logMessage(user.id, `Payment link sent: $${fullAmount} for website + domain (${domain})`, 'assistant');
     }
-  } catch (error) {
-    logger.error('Failed to add domain to Netlify:', error.response?.data || error.message);
-    // Continue anyway — the DNS instructions are still valid
+  } catch (err) {
+    logger.error('[DOMAIN] Payment link creation failed:', err.message);
+    await sendTextMessage(user.phone_number, 'There was an issue creating the payment link. Our team will follow up shortly.');
   }
 
-  // Send DNS instructions
-  const instructions =
-    `Great! Let's connect *${domain}* to your website.\n\n` +
-    `*Follow these steps:*\n\n` +
-    `*Step 1:* Log into the site where you bought your domain (Namecheap, Porkbun, etc.)\n\n` +
-    `*Step 2:* Go to *DNS Settings* (sometimes called "DNS Management" or "DNS Records")\n\n` +
-    `*Step 3:* Add these 2 records:\n\n` +
-    `📌 *Record 1 (for www):*\n` +
-    `  • Type: *CNAME*\n` +
-    `  • Name/Host: *www*\n` +
-    `  • Value: *${netlifySubdomain}.netlify.app*\n\n` +
-    `📌 *Record 2 (for root domain):*\n` +
-    `  • Type: *A*\n` +
-    `  • Name/Host: *@*\n` +
-    `  • Value: *75.2.60.5*\n\n` +
-    `DNS changes usually take 5-30 minutes to work. Once you've added them, let me know and I'll verify the connection!\n\n` +
-    `_Need help? Just send "help" and I'll guide you step by step._`;
+  // Notify team
+  notifyTeam(user, domain, site);
 
-  await sendTextMessage(user.phone_number, instructions);
-  await logMessage(user.id, `Custom domain ${domain} — DNS instructions sent`, 'assistant');
-
-  return STATES.DOMAIN_DNS_GUIDE;
+  return STATES.GENERAL_CHAT;
 }
 
-// ─── DOMAIN_DNS_GUIDE ──────────────────────────────────────────────
-async function handleDNSGuide(user, message) {
-  const text = (message.text || '').trim().toLowerCase();
-
-  if (/help/i.test(text)) {
-    const domain = user.metadata?.customDomain || 'yourdomain.com';
-    const registrar = domain.includes('.') ? '' : '';
-
-    const helpMsg =
-      `Here's a more detailed guide:\n\n` +
-      `*For Namecheap:*\n` +
-      `1. Go to namecheap.com → Dashboard → Domain List\n` +
-      `2. Click "Manage" next to your domain\n` +
-      `3. Click "Advanced DNS" tab\n` +
-      `4. Click "Add New Record" and add the 2 records I sent above\n` +
-      `5. If there's an existing A record pointing to a parking page, delete it\n\n` +
-      `*For Porkbun:*\n` +
-      `1. Go to porkbun.com → Domain Management\n` +
-      `2. Click "DNS" next to your domain\n` +
-      `3. Add the 2 records from my previous message\n` +
-      `4. Delete any default A/CNAME records that were pre-set\n\n` +
-      `Once you're done, just say *"done"* or *"check"* and I'll verify!`;
-
-    await sendTextMessage(user.phone_number, helpMsg);
-    return STATES.DOMAIN_DNS_GUIDE;
+async function notifyTeam(user, domain, site) {
+  try {
+    const { sendDomainRequestNotification } = require('../../notifications/email');
+    await sendDomainRequestNotification({
+      userName: user.name || user.metadata?.websiteData?.businessName || '',
+      userPhone: user.phone_number,
+      userEmail: user.metadata?.email || '',
+      selectedDomain: domain,
+      sitePreviewUrl: site?.preview_url || '',
+      netlifySiteId: site?.netlify_site_id || '',
+    });
+  } catch (err) {
+    logger.error('[DOMAIN] Email notification failed:', err.message);
   }
-
-  const done = /\b(done|check|verify|finished|updated|added|set|ready|configured)\b/i.test(text);
-  if (done) {
-    return runVerification(user);
-  }
-
-  await sendTextMessage(
-    user.phone_number,
-    'Hey, I can only help with domain setup right now! Just send *"done"* when you\'ve updated the DNS records and I\'ll check the connection, or *"help"* if you need guidance.'
-  );
-  return STATES.DOMAIN_DNS_GUIDE;
-}
-
-// ─── DOMAIN_VERIFY ─────────────────────────────────────────────────
-async function handleVerify(user, message) {
-  const text = (message.text || '').trim().toLowerCase();
-
-  if (/\b(check|verify|again|retry|try)\b/i.test(text)) {
-    return runVerification(user);
-  }
-
-  await sendTextMessage(
-    user.phone_number,
-    'I can only help with your domain setup at the moment. Send *"check"* when you\'re ready and I\'ll verify the DNS connection.'
-  );
-  return STATES.DOMAIN_VERIFY;
-}
-
-async function runVerification(user) {
-  const domain = user.metadata?.customDomain;
-  if (!domain) {
-    await sendTextMessage(user.phone_number, "I don't have a domain on file. What domain did you purchase?");
-    return STATES.DOMAIN_PURCHASE_WAIT;
-  }
-
-  const site = await getLatestSite(user.id);
-  const netlifySubdomain = site?.netlify_subdomain || '';
-
-  await sendTextMessage(user.phone_number, `Checking DNS for *${domain}*...`);
-
-  const result = await verifyDNS(domain, netlifySubdomain);
-
-  if (result.verified) {
-    const returnToSales = user.metadata?.returnToSales;
-
-    await sendTextMessage(
-      user.phone_number,
-      `✅ *DNS verified!* Your website is now live at:\n\n` +
-      `🌐 *https://${domain}*\n\n` +
-      `Netlify will automatically set up HTTPS (SSL) — this may take a few minutes.\n\n` +
-      `Congratulations on launching your website! 🎉`
-    );
-    await logMessage(user.id, `Custom domain verified: ${domain}`, 'assistant');
-
-    if (site) {
-      await updateSite(site.id, { custom_domain: domain, status: 'live' });
-    }
-
-    return returnToSales ? STATES.SALES_CHAT : STATES.GENERAL_CHAT;
-  }
-
-  await sendTextMessage(
-    user.phone_number,
-    `DNS hasn't propagated yet for *${domain}*. This is normal — it can take 5-30 minutes (sometimes up to a few hours).\n\n` +
-    `Just send *"check"* again in a few minutes and I'll verify it.\n\n` +
-    `_Make sure you've added both records:_\n` +
-    `• CNAME: www → ${netlifySubdomain}.netlify.app\n` +
-    `• A: @ → 75.2.60.5`
-  );
-  await logMessage(user.id, `DNS verification pending for ${domain}`, 'assistant');
-
-  return STATES.DOMAIN_VERIFY;
 }
 
 module.exports = { handleCustomDomain };
