@@ -1,0 +1,132 @@
+Bot kaam kar raha hai! Problem woh old server (PID 4796) tha. Ab logs mein clearly dikh raha hai:
+
+
+✅ Signature valid: true
+✅ Parsed message: text from 923333246545  
+✅ Message sent successfully
+✅ Delivered status aa gaya
+Lekin ek cheez — user abhi MARKETING_COLLECT_DETAILS state mein phansa hua hai (purana marketing flow). Debug code hata kar /reset karo:
+
+Edit c:\Users\devel\OneDrive\Desktop\whatsapp-ai-automation\src\webhook\routes.js
+Removed 13 lines
+Bash Restart clean server
+IN
+powershell.exe -Command "Stop-Process -Id (Get-NetTCPConnection -LocalPort 3000 -ErrorAction SilentlyContinue).OwningProcess -Force -ErrorAction SilentlyContinue" 2>&1
+sleep 2
+cd "c:\Users\devel\OneDrive\Desktop\whatsapp-ai-automation" && node src/index.js > /tmp/clean_server.txt 2>&1 &
+sleep 3 && cat /tmp/clean_server.txt | grep -v "^$" | tail -8
+
+OUT
+[dotenv@17.3.1] injecting env (21) from .env -- tip: ⚙️  load multiple .env files with { path: ['.env.local', '.env'] }
+[32minfo[39m: Server running on port 3000 (development) {"timestamp":"2026-04-06T23:33:56.622Z"}
+[32minfo[39m: Webhook URL: https://your-domain.com/webhook {"timestamp":"2026-04-06T23:33:56.624Z"}
+[32minfo[39m: Follow-up scheduler started (interval: 30 min) {"timestamp":"2026-04-06T23:33:56.624Z"}
+[32minfo[39m: Meeting reminder checker started (interval: 5 min) {"timestamp":"2026-04-06T23:33:56.625Z"}
+[32minfo[39m: Payment polling started (interval: 2 min) {"timestamp":"2026-04-06T23:33:56.625Z"}
+[32minfo[39m: [CHATBOT-JOBS] Chatbot scheduler started {"timestamp":"2026-04-06T23:33:56.627Z"}
+[32minfo[39m: Incoming message {"from":"923333246545","text":"/reset","timestamp":"2026-04-06T23:33:58.610Z","type":"text"}
+[rerun: b19]
+/reset ka message aa gaya! Bot ab live hai.
+
+Ab WhatsApp pe test karo:
+/reset bhejo → fresh start hoga
+Kuch bhi type karo → welcome message aayega
+📋 More Services → 🎨 Marketing Ads select karo
+Bot now fully working hai. Jo pehle issue tha woh purana server process (PID 4796) tha jo close nahi hua tha — woh old code ke saath chal raha tha. Ab fresh server chal raha hai naye code ke saath.
+
+Note: Jab bhi server restart karo Windows pe, pehle PowerShell se old process kill karo:
+
+
+Stop-Process -Id (Get-NetTCPConnection -LocalPort 3000).OwningProcess -Force
+Ya directly apne terminal mein npm start karo — woh khud hi port check karega.
+
+
+
+
+
+
+Testing Guide: WhatsApp Bot
+Step 1: Meta Developer Console — Get credentials
+Go to developers.facebook.com → Your App → WhatsApp → API Setup
+You'll see:
+Temporary access token (top of page) — expires every 24 hours, copy it
+Phone Number ID — copy it (your test number's ID)
+Scroll down to "To" field → enter your personal WhatsApp number → click Add number (you must do this to receive test messages)
+Step 2: Update .env
+
+WHATSAPP_ACCESS_TOKEN='paste_new_token_here'   ← changes every 24h
+WHATSAPP_PHONE_NUMBER_ID='your_phone_number_id' ← stays the same
+WHATSAPP_APP_SECRET='your_app_secret'           ← stays the same
+                                                  (App Settings → Basic → App Secret)
+Step 3: Set Webhook URL in Meta
+WhatsApp → Configuration → Webhook Edit
+URL: https://YOUR-NGROK-URL.ngrok-free.dev/webhook
+Verify token: my_secret_verify_token (your WEBHOOK_VERIFY_TOKEN value)
+Subscribe to: messages
+Step 4: Start server correctly (every time)
+
+# 1. Kill any old server first (run in PowerShell)
+Stop-Process -Id (Get-NetTCPConnection -LocalPort 3000).OwningProcess -Force
+
+# 2. Start ngrok (if not running)
+ngrok http 3000
+
+# 3. Start server (new terminal)
+npm start
+Important: If you restart the server, update the webhook URL in Meta IF ngrok URL changed. If you use ngrok's free static domain, it stays the same.
+
+Step 5: Test checklist
+ Ngrok is running: http://localhost:4040
+ Server is running: http://localhost:3000/health returns {"status":"ok"}
+ Webhook URL in Meta matches your current ngrok URL
+ Access token in .env was copied within last 24 hours
+ Your personal number is added as a test recipient in Meta console
+ After any .env change, restart the server (kill old PID first)
+Current ngrok URL: https://lactiferous-apocryphally-velma.ngrok-free.dev
+
+Current status: Server running fresh ✅ — try messaging now
+
+
+
+
+
+Testing Guide: WhatsApp Bot
+Step 1: Meta Developer Console — Get credentials
+Go to developers.facebook.com → Your App → WhatsApp → API Setup
+You'll see:
+Temporary access token (top of page) — expires every 24 hours, copy it
+Phone Number ID — copy it (your test number's ID)
+Scroll down to "To" field → enter your personal WhatsApp number → click Add number (you must do this to receive test messages)
+Step 2: Update .env
+
+WHATSAPP_ACCESS_TOKEN='paste_new_token_here'   ← changes every 24h
+WHATSAPP_PHONE_NUMBER_ID='your_phone_number_id' ← stays the same
+WHATSAPP_APP_SECRET='your_app_secret'           ← stays the same
+                                                  (App Settings → Basic → App Secret)
+Step 3: Set Webhook URL in Meta
+WhatsApp → Configuration → Webhook Edit
+URL: https://YOUR-NGROK-URL.ngrok-free.dev/webhook
+Verify token: my_secret_verify_token (your WEBHOOK_VERIFY_TOKEN value)
+Subscribe to: messages
+Step 4: Start server correctly (every time)
+
+# 1. Kill any old server first (run in PowerShell)
+Stop-Process -Id (Get-NetTCPConnection -LocalPort 3000).OwningProcess -Force
+
+# 2. Start ngrok (if not running)
+ngrok http 3000
+
+# 3. Start server (new terminal)
+npm start
+Important: If you restart the server, update the webhook URL in Meta IF ngrok URL changed. If you use ngrok's free static domain, it stays the same.
+
+Step 5: Test checklist
+ Ngrok is running: http://localhost:4040
+ Server is running: http://localhost:3000/health returns {"status":"ok"}
+ Webhook URL in Meta matches your current ngrok URL
+ Access token in .env was copied within last 24 hours
+ Your personal number is added as a test recipient in Meta console
+ After any .env change, restart the server (kill old PID first)
+Current ngrok URL: https://lactiferous-apocryphally-velma.ngrok-free.dev
+
+Current status: Server running fresh ✅ — try messaging now

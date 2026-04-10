@@ -5,6 +5,7 @@ const {
   sendWithMenuButton,
 } = require('../../messages/sender');
 const { logMessage } = require('../../db/conversations');
+const { updateUserMetadata } = require('../../db/users');
 const { STATES, SERVICE_IDS } = require('../states');
 
 async function handleServiceSelection(user, message) {
@@ -26,6 +27,8 @@ async function handleServiceSelection(user, message) {
             { id: 'svc_ecommerce', title: '🛒 Online Store', description: 'Launch a free store with ByteScart' },
             { id: 'svc_appdev', title: '📱 App Development', description: 'Mobile & web app development' },
             { id: 'svc_marketing', title: '📈 Digital Marketing', description: 'SEO, ads, social media strategy' },
+            { id: 'svc_adgen', title: '🎨 Marketing Ads', description: 'Custom social media ad images for your brand' },
+            { id: 'svc_logo', title: '✨ Logo Maker', description: 'Professional brand logos in 60 seconds' },
             { id: 'svc_chatbot', title: '🤖 AI Chatbot', description: 'Get a 24/7 AI assistant for your business' },
             { id: 'svc_info', title: '❓ FAQ & Support', description: 'Get answers to your questions' },
             { id: 'svc_general', title: '💬 Talk to Sales', description: 'Chat with our sales team' },
@@ -110,6 +113,38 @@ async function handleServiceSelection(user, message) {
       await logMessage(user.id, 'Starting marketing flow', 'assistant');
       return STATES.MARKETING_COLLECT_DETAILS;
 
+    case 'svc_adgen':
+      // Clear any stale ad data from previous sessions so the new ad starts fresh
+      await updateUserMetadata(user.id, { adData: null });
+      await sendWithMenuButton(
+        user.phone_number,
+        '🎨 *Marketing Ad Generator*\n\n' +
+          'Create professional social media ad images for your brand — the same quality used by top digital agencies!\n\n' +
+          '✅ Instagram, Facebook & TikTok ready\n' +
+          '✅ Industry-specific creative direction\n' +
+          '✅ Your brand colors, logo & pricing included\n' +
+          '✅ Ready to post in 60 seconds\n\n' +
+          'Let\'s get started!'
+      );
+      await logMessage(user.id, 'Starting ad generation flow', 'assistant');
+      return STATES.AD_COLLECT_BUSINESS;
+
+    case 'svc_logo':
+      // Clear any stale logo data from previous sessions so the new logo starts fresh
+      await updateUserMetadata(user.id, { logoData: null });
+      await sendWithMenuButton(
+        user.phone_number,
+        '✨ *Logo Maker*\n\n' +
+          'Get a professional brand logo designed for you — like having a top branding agency at your fingertips!\n\n' +
+          '✅ 5 unique logo concepts to choose from\n' +
+          '✅ Wordmark, symbol, combination & more\n' +
+          '✅ Industry-authentic style direction\n' +
+          '✅ Ready to use in 60 seconds\n\n' +
+          'Let\'s design your brand!'
+      );
+      await logMessage(user.id, 'Starting logo generation flow', 'assistant');
+      return STATES.LOGO_COLLECT_BUSINESS;
+
     case 'svc_chatbot':
       await sendWithMenuButton(
         user.phone_number,
@@ -167,7 +202,9 @@ function matchServiceFromText(text) {
   if (/\b(ecommerce|e-commerce|online store|store|shop|shopify|sell online|product catalog|dropship)\b/i.test(text)) return 'svc_ecommerce';
   if (/\b(website|web ?dev|site|redesign)\b/i.test(text)) return 'svc_webdev';
   if (/\b(app|mobile|android|ios)\b/i.test(text)) return 'svc_appdev';
-  if (/\b(market|advertis|ads|social media|ppc|brand)\b/i.test(text)) return 'svc_marketing';
+  if (/\b(market|advertis|social media|ppc|brand)\b/i.test(text)) return 'svc_marketing';
+  if (/\b(ad\s*gen|ads?\s*creat|ad\s*design|ad\s*image|ad\s*maker|create\s*ad|design\s*ad|marketing\s*ad)\b/i.test(text)) return 'svc_adgen';
+  if (/\b(logo|brand\s*mark|wordmark|brand\s*design|design\s*logo|create\s*logo|make\s*logo|logo\s*maker)\b/i.test(text)) return 'svc_logo';
   if (/\b(chatbot|chat ?bot|ai assistant|virtual assistant|ai chat)\b/i.test(text)) return 'svc_chatbot';
   if (/\b(faq|support|info|question|help|how|what)\b/i.test(text)) return 'svc_info';
   if (/\b(chat|talk|sales|general|buy|start|quote)\b/i.test(text)) return 'svc_general';

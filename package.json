@@ -18,6 +18,8 @@
   "type": "commonjs",
   "dependencies": {
     "@anthropic-ai/sdk": "^0.80.0",
+    "@google/generative-ai": "^0.24.1",
+    "@napi-rs/canvas": "^0.1.97",
     "@sendgrid/mail": "^8.1.6",
     "@supabase/supabase-js": "^2.100.0",
     "axios": "^1.13.6",
