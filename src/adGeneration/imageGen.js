@@ -398,15 +398,36 @@ CREATE: An advertisement so visually striking it would trend on social media and
     generationConfig: { temperature: 0.7 },
   });
 
-  const result = await model.generateContent({
-    contents: [{ role: 'user', parts }],
-    generationConfig: {
-      responseModalities: ['image', 'text'],
-    },
-  });
+  let result;
+  try {
+    result = await model.generateContent({
+      contents: [{ role: 'user', parts }],
+      generationConfig: {
+        responseModalities: ['image', 'text'],
+      },
+    });
+  } catch (geminiErr) {
+    // Gemini SDK throws non-standard errors — extract the real message
+    const msg = geminiErr?.message
+      || geminiErr?.response?.text?.()
+      || geminiErr?.errorDetails?.map(d => d.reason || d.message).join('; ')
+      || JSON.stringify(geminiErr)
+      || 'Unknown Gemini error';
+    const status = geminiErr?.status || geminiErr?.response?.status || 'unknown';
+    logger.error(`[AD-GEN] Gemini API error (status: ${status}): ${msg}`);
+    throw new Error(`Gemini API error: ${msg}`);
+  }
 
-  const responseParts = result.response.candidates?.[0]?.content?.parts;
-  if (!responseParts) throw new Error('Gemini returned empty response — no image generated');
+  const responseParts = result.response?.candidates?.[0]?.content?.parts;
+
+  // Check for blocked/filtered responses
+  if (!responseParts) {
+    const blockReason = result.response?.candidates?.[0]?.finishReason
+      || result.response?.promptFeedback?.blockReason
+      || 'no candidates returned';
+    logger.error(`[AD-GEN] Gemini returned no content. Reason: ${blockReason}`);
+    throw new Error(`Gemini blocked or empty response: ${blockReason}`);
+  }
 
   const imagePart = responseParts.find((p) => p.inlineData?.mimeType?.startsWith('image/'));
   if (!imagePart) {

@@ -511,7 +511,8 @@ async function handleSelectIdea(user, message) {
     // Step 3: Upload to Supabase Storage → get public URL
     publicUrl = await uploadAdImage(imageData, mimeType);
   } catch (err) {
-    logger.error('[AD-GEN] Image generation failed:', err.message);
+    const errMsg = err?.message || JSON.stringify(err) || 'Unknown error';
+    logger.error(`[AD-GEN] Image generation failed: ${errMsg}`);
 
     await sendInteractiveButtons(
       user.phone_number,
