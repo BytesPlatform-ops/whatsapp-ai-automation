@@ -84,18 +84,31 @@ app.get('/widget.js', (req, res) => {
 // Chatbot SaaS - demo and standalone pages
 app.use('/', chatbotPageRoutes);
 
-// Landing page — Next.js static export (landing/out/) when available locally.
-// In production the landing is deployed separately to Vercel, so on Render the
-// folder won't exist and we just redirect the root URL there instead.
+// Landing page — served from Next.js static export (landing/out/) when built
+// locally. In production the landing is deployed separately (Vercel). If
+// LANDING_URL is set we redirect there; otherwise show a minimal placeholder
+// so the API host URL doesn't send visitors to an unrelated domain.
 const landingOutDir = path.join(__dirname, '..', 'landing', 'out');
-const LANDING_URL = process.env.LANDING_URL || 'https://bytesplatform.com';
 const landingIndex = path.join(landingOutDir, 'index.html');
 if (require('fs').existsSync(landingIndex)) {
   app.use('/_next', express.static(path.join(landingOutDir, '_next'), { maxAge: '1y', immutable: true }));
   app.use(express.static(landingOutDir));
   app.get('/', (_req, res) => res.sendFile(landingIndex));
+} else if (process.env.LANDING_URL) {
+  app.get('/', (_req, res) => res.redirect(302, process.env.LANDING_URL));
 } else {
-  app.get('/', (_req, res) => res.redirect(302, LANDING_URL));
+  app.get('/', (_req, res) => {
+    res
+      .status(200)
+      .type('html')
+      .send(
+        `<!doctype html><meta charset="utf-8"><title>BytesPlatform API</title>` +
+          `<style>body{font-family:system-ui;background:#0A1628;color:#fff;min-height:100vh;display:flex;align-items:center;justify-content:center;margin:0;padding:24px;text-align:center}a{color:#25D366}</style>` +
+          `<div><h1 style="font-weight:800;letter-spacing:-.02em">BytesPlatform API</h1>` +
+          `<p style="opacity:.7">This is the bot backend. The public site lives elsewhere.</p>` +
+          `<p style="margin-top:24px;font-size:14px;opacity:.5">Health: <a href="/health">/health</a></p></div>`
+      );
+  });
 }
 
 // 404 handler
