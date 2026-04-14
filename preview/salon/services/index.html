@@ -1,7 +1,7 @@
 <!DOCTYPE html><html lang="en"><head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>Glow Studio — Services</title>
-<meta name="description" content="Expert stylists, premium products, an unhurried space — a salon that treats every visit as a small ritual.">
+<meta name="description" content="Transformamos tu apariencia y elevamos tu confianza en un ambiente acogedor y elegante.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
@@ -110,7 +110,7 @@ img{max-width:100%;display:block}
 .svc-overlay{position:absolute;inset:0;background:linear-gradient(180deg,transparent 55%,rgba(14,13,12,0.55));opacity:0;transition:opacity 0.5s;display:flex;align-items:flex-end;padding:22px;pointer-events:none}
 .svc:hover .svc-overlay{opacity:1}
 .svc-cat{position:absolute;top:16px;left:16px;font-size:10px;font-weight:500;letter-spacing:0.3em;text-transform:uppercase;color:#fff;background:rgba(14,13,12,0.4);backdrop-filter:blur(6px);padding:7px 12px;border:1px solid rgba(255,255,255,0.18)}
-.svc-credit{position:absolute;bottom:10px;right:10px;font-size:9px;color:rgba(255,255,255,0.7);background:rgba(0,0,0,0.35);padding:3px 7px;text-decoration:underline;text-underline-offset:2px;letter-spacing:0.05em}
+/* Per-image photographer credit is consolidated into the footer; no overlay on the image. */
 .svc-body{display:flex;align-items:flex-start;justify-content:space-between;gap:18px}
 .svc-name{font-family:'Cormorant Garamond',serif;font-size:26px;font-weight:500;letter-spacing:-0.01em;line-height:1.15;margin-bottom:6px}
 .svc-meta{font-size:12px;color:var(--mute);letter-spacing:0.14em;text-transform:uppercase}
@@ -155,7 +155,11 @@ img{max-width:100%;display:block}
 .foot h4{font-family:'Inter',sans-serif;font-size:11px;letter-spacing:0.28em;text-transform:uppercase;color:#fff;font-weight:500;margin-bottom:18px}
 .foot a{display:block;padding:5px 0;font-size:14px;color:#beb3a6;transition:color 0.2s;font-weight:300}
 .foot a:hover{color:#fff}
-.foot-bottom{max-width:1280px;margin:30px auto 0;display:flex;justify-content:space-between;align-items:center;font-size:12px;color:#6d655d;letter-spacing:0.06em;flex-wrap:wrap;gap:12px}
+.foot-credits{max-width:1280px;margin:26px auto 0;padding:20px 0;font-size:11px;color:#6d655d;letter-spacing:0.08em;line-height:1.8;display:flex;flex-wrap:wrap;gap:6px 10px;border-bottom:1px solid rgba(255,255,255,0.06)}
+.foot-credits a{display:inline;padding:0;color:#8a8179;text-decoration:underline;text-underline-offset:3px;text-decoration-color:rgba(255,255,255,0.15)}
+.foot-credits a:hover{color:#fff;text-decoration-color:#fff}
+.foot-credits .sep{opacity:0.4}
+.foot-bottom{max-width:1280px;margin:22px auto 0;display:flex;justify-content:space-between;align-items:center;font-size:12px;color:#6d655d;letter-spacing:0.06em;flex-wrap:wrap;gap:12px}
 
 /* Page headers (Services / About / etc) */
 .page-head{padding:160px 40px 80px;background:var(--bone)}
@@ -217,7 +221,7 @@ img{max-width:100%;display:block}
 <section class="page-head">
   <div class="page-head-inner">
     <p class="eyebrow rv">— The Menu —</p>
-    <h1 class="rv d1">The Menu<em>.</em></h1>
+    <h1 class="rv d1">Services<em>.</em></h1>
     <p class="rv d2" style="max-width:560px;margin-top:32px;color:var(--mute);font-size:17px;line-height:1.75;font-weight:300">Every treatment below is handled by a trained stylist. Reserve one online, or give us a call — we are happy to help you pick the right one.</p>
   </div>
 </section>
@@ -229,7 +233,6 @@ img{max-width:100%;display:block}
     <div class="svc-media">
          <img src="https://images.unsplash.com/photo-1763741141049-352dfafcc64f?crop=entropy&amp;cs=tinysrgb&amp;fit=max&amp;fm=jpg&amp;ixid=M3w4NjQwMjJ8MHwxfHNlYXJjaHwzfHxoYWlyY3V0JTIwc2Fsb258ZW58MXwyfHx8MTc3NjIwMjEwNHww&amp;ixlib=rb-4.1.0&amp;q=80&amp;w=1080&amp;w=800&amp;q=80&amp;auto=format&amp;fit=crop" alt="Women&#039;s Cut &amp; Blow Dry" loading="lazy">
          <span class="svc-cat">Hair</span>
-         <a href="https://unsplash.com/@phuongtography?utm_source=bytes_platform&amp;utm_medium=referral" target="_blank" rel="noopener" class="svc-credit">Phuong Nguyen / Unsplash</a>
          <div class="svc-overlay"></div>
        </div>
     <div class="svc-body">
@@ -246,7 +249,6 @@ img{max-width:100%;display:block}
     <div class="svc-media">
          <img src="https://images.unsplash.com/photo-1763741141049-352dfafcc64f?crop=entropy&amp;cs=tinysrgb&amp;fit=max&amp;fm=jpg&amp;ixid=M3w4NjQwMjJ8MHwxfHNlYXJjaHwzfHxoYWlyY3V0JTIwc2Fsb258ZW58MXwyfHx8MTc3NjIwMjEwNHww&amp;ixlib=rb-4.1.0&amp;q=80&amp;w=1080&amp;w=800&amp;q=80&amp;auto=format&amp;fit=crop" alt="Men&#039;s Cut" loading="lazy">
          <span class="svc-cat">Hair</span>
-         <a href="https://unsplash.com/@phuongtography?utm_source=bytes_platform&amp;utm_medium=referral" target="_blank" rel="noopener" class="svc-credit">Phuong Nguyen / Unsplash</a>
          <div class="svc-overlay"></div>
        </div>
     <div class="svc-body">
@@ -261,9 +263,8 @@ img{max-width:100%;display:block}
   <a href="/booking" class="svc rv">
     <span class="svc-num">03<span class="sr-only"> —</span></span>
     <div class="svc-media">
-         <img src="https://images.unsplash.com/photo-1680670500665-22e480bcb0fa?crop=entropy&amp;cs=tinysrgb&amp;fit=max&amp;fm=jpg&amp;ixid=M3w4NjQwMjJ8MHwxfHNlYXJjaHwxfHxoYWlyJTIwY29sb3IlMjBzYWxvbnxlbnwxfDJ8fHwxNzc2MjAyMTA0fDA&amp;ixlib=rb-4.1.0&amp;q=80&amp;w=1080&amp;w=800&amp;q=80&amp;auto=format&amp;fit=crop" alt="Full Head Colour" loading="lazy">
+         <img src="https://images.unsplash.com/photo-1730573520149-7a5b97d35ccc?crop=entropy&amp;cs=tinysrgb&amp;fit=max&amp;fm=jpg&amp;ixid=M3w4NjQwMjJ8MHwxfHNlYXJjaHwzfHxoYWlyJTIwY29sb3IlMjBzYWxvbnxlbnwxfDJ8fHwxNzc2MjAyMTA0fDA&amp;ixlib=rb-4.1.0&amp;q=80&amp;w=1080&amp;w=800&amp;q=80&amp;auto=format&amp;fit=crop" alt="Full Head Colour" loading="lazy">
          <span class="svc-cat">Hair</span>
-         <a href="https://unsplash.com/@theskinandthebeardstory?utm_source=bytes_platform&amp;utm_medium=referral" target="_blank" rel="noopener" class="svc-credit">The Skin and The Beard Story / Unsplash</a>
          <div class="svc-overlay"></div>
        </div>
     <div class="svc-body">
@@ -280,7 +281,6 @@ img{max-width:100%;display:block}
     <div class="svc-media">
          <img src="https://images.unsplash.com/photo-1658932447624-152eaf36cf4e?crop=entropy&amp;cs=tinysrgb&amp;fit=max&amp;fm=jpg&amp;ixid=M3w4NjQwMjJ8MHwxfHNlYXJjaHwzfHxiYWxheWFnZSUyMGhhaXIlMjBjb2xvcnxlbnwxfDJ8fHwxNzc2MjAyMTA0fDA&amp;ixlib=rb-4.1.0&amp;q=80&amp;w=1080&amp;w=800&amp;q=80&amp;auto=format&amp;fit=crop" alt="Balayage / Highlights" loading="lazy">
          <span class="svc-cat">Hair</span>
-         <a href="https://unsplash.com/@mlapergolaphoto?utm_source=bytes_platform&amp;utm_medium=referral" target="_blank" rel="noopener" class="svc-credit">Mario La Pergola / Unsplash</a>
          <div class="svc-overlay"></div>
        </div>
     <div class="svc-body">
@@ -295,9 +295,8 @@ img{max-width:100%;display:block}
   <a href="/booking" class="svc rv">
     <span class="svc-num">05<span class="sr-only"> —</span></span>
     <div class="svc-media">
-         <img src="https://images.unsplash.com/photo-1754272465517-40a81b4b9f13?crop=entropy&amp;cs=tinysrgb&amp;fit=max&amp;fm=jpg&amp;ixid=M3w4NjQwMjJ8MHwxfHNlYXJjaHwxfHxrZXJhdGluJTIwaGFpciUyMHRyZWF0bWVudHxlbnwxfDJ8fHwxNzc2MjAyMTA0fDA&amp;ixlib=rb-4.1.0&amp;q=80&amp;w=1080&amp;w=800&amp;q=80&amp;auto=format&amp;fit=crop" alt="Keratin Treatment" loading="lazy">
+         <img src="https://images.unsplash.com/photo-1740341382410-32134074935f?crop=entropy&amp;cs=tinysrgb&amp;fit=max&amp;fm=jpg&amp;ixid=M3w4NjQwMjJ8MHwxfHNlYXJjaHwyfHxrZXJhdGluJTIwaGFpciUyMHRyZWF0bWVudHxlbnwxfDJ8fHwxNzc2MjAyMTA0fDA&amp;ixlib=rb-4.1.0&amp;q=80&amp;w=1080&amp;w=800&amp;q=80&amp;auto=format&amp;fit=crop" alt="Keratin Treatment" loading="lazy">
          <span class="svc-cat">Hair</span>
-         <a href="https://unsplash.com/@eladepure?utm_source=bytes_platform&amp;utm_medium=referral" target="_blank" rel="noopener" class="svc-credit">Ela De Pure / Unsplash</a>
          <div class="svc-overlay"></div>
        </div>
     <div class="svc-body">
@@ -314,7 +313,6 @@ img{max-width:100%;display:block}
     <div class="svc-media">
          <img src="https://images.unsplash.com/photo-1693776526826-f5e105c54da3?crop=entropy&amp;cs=tinysrgb&amp;fit=max&amp;fm=jpg&amp;ixid=M3w4NjQwMjJ8MHwxfHNlYXJjaHwxfHxtYW5pY3VyZSUyMG5haWxzfGVufDF8Mnx8fDE3NzYyMDIxMDR8MA&amp;ixlib=rb-4.1.0&amp;q=80&amp;w=1080&amp;w=800&amp;q=80&amp;auto=format&amp;fit=crop" alt="Gel Manicure" loading="lazy">
          <span class="svc-cat">Nails</span>
-         <a href="https://unsplash.com/@anyutakejbalo?utm_source=bytes_platform&amp;utm_medium=referral" target="_blank" rel="noopener" class="svc-credit">Anna Keibalo / Unsplash</a>
          <div class="svc-overlay"></div>
        </div>
     <div class="svc-body">
@@ -329,9 +327,8 @@ img{max-width:100%;display:block}
   <a href="/booking" class="svc rv">
     <span class="svc-num">07<span class="sr-only"> —</span></span>
     <div class="svc-media">
-         <img src="https://images.unsplash.com/photo-1529982412356-901cc3a363cf?crop=entropy&amp;cs=tinysrgb&amp;fit=max&amp;fm=jpg&amp;ixid=M3w4NjQwMjJ8MHwxfHNlYXJjaHwzfHxwZWRpY3VyZSUyMG5haWxzfGVufDF8Mnx8fDE3NzYyMDIxMDV8MA&amp;ixlib=rb-4.1.0&amp;q=80&amp;w=1080&amp;w=800&amp;q=80&amp;auto=format&amp;fit=crop" alt="Gel Pedicure" loading="lazy">
+         <img src="https://images.unsplash.com/photo-1736695995203-742c1fce647f?crop=entropy&amp;cs=tinysrgb&amp;fit=max&amp;fm=jpg&amp;ixid=M3w4NjQwMjJ8MHwxfHNlYXJjaHwyfHxwZWRpY3VyZSUyMG5haWxzfGVufDF8Mnx8fDE3NzYyMDIxMDV8MA&amp;ixlib=rb-4.1.0&amp;q=80&amp;w=1080&amp;w=800&amp;q=80&amp;auto=format&amp;fit=crop" alt="Gel Pedicure" loading="lazy">
          <span class="svc-cat">Nails</span>
-         <a href="https://unsplash.com/@billiebodybrand?utm_source=bytes_platform&amp;utm_medium=referral" target="_blank" rel="noopener" class="svc-credit">Billie / Unsplash</a>
          <div class="svc-overlay"></div>
        </div>
     <div class="svc-body">
@@ -346,9 +343,8 @@ img{max-width:100%;display:block}
   <a href="/booking" class="svc rv">
     <span class="svc-num">08<span class="sr-only"> —</span></span>
     <div class="svc-media">
-         <img src="https://images.unsplash.com/photo-1728463087166-eb456bbde541?crop=entropy&amp;cs=tinysrgb&amp;fit=max&amp;fm=jpg&amp;ixid=M3w4NjQwMjJ8MHwxfHNlYXJjaHwzfHxmYWNpYWwlMjB0cmVhdG1lbnQlMjBzcGF8ZW58MXwyfHx8MTc3NjIwMjEwNXww&amp;ixlib=rb-4.1.0&amp;q=80&amp;w=1080&amp;w=800&amp;q=80&amp;auto=format&amp;fit=crop" alt="Classic Facial" loading="lazy">
+         <img src="https://images.unsplash.com/photo-1773565744218-d8d11de58362?crop=entropy&amp;cs=tinysrgb&amp;fit=max&amp;fm=jpg&amp;ixid=M3w4NjQwMjJ8MHwxfHNlYXJjaHwxfHxmYWNpYWwlMjB0cmVhdG1lbnQlMjBzcGF8ZW58MXwyfHx8MTc3NjIwMjEwNXww&amp;ixlib=rb-4.1.0&amp;q=80&amp;w=1080&amp;w=800&amp;q=80&amp;auto=format&amp;fit=crop" alt="Classic Facial" loading="lazy">
          <span class="svc-cat">Skin</span>
-         <a href="https://unsplash.com/@branislavrodman?utm_source=bytes_platform&amp;utm_medium=referral" target="_blank" rel="noopener" class="svc-credit">Branislav Rodman / Unsplash</a>
          <div class="svc-overlay"></div>
        </div>
     <div class="svc-body">
@@ -365,7 +361,6 @@ img{max-width:100%;display:block}
     <div class="svc-media">
          <img src="https://images.unsplash.com/photo-1663330789058-c7b4c491c88d?crop=entropy&amp;cs=tinysrgb&amp;fit=max&amp;fm=jpg&amp;ixid=M3w4NjQwMjJ8MHwxfHNlYXJjaHwzfHxsYXNoJTIwZXh0ZW5zaW9ucyUyMGV5ZWxhc2h8ZW58MXwyfHx8MTc3NjIwMjEwNXww&amp;ixlib=rb-4.1.0&amp;q=80&amp;w=1080&amp;w=800&amp;q=80&amp;auto=format&amp;fit=crop" alt="Lash Extensions" loading="lazy">
          <span class="svc-cat">Lash &amp; Brow</span>
-         <a href="https://unsplash.com/@loreleiweb?utm_source=bytes_platform&amp;utm_medium=referral" target="_blank" rel="noopener" class="svc-credit">Liz Lorelei / Unsplash</a>
          <div class="svc-overlay"></div>
        </div>
     <div class="svc-body">
@@ -382,7 +377,6 @@ img{max-width:100%;display:block}
     <div class="svc-media">
          <img src="https://images.unsplash.com/photo-1645477120165-a9f27bcb19d2?crop=entropy&amp;cs=tinysrgb&amp;fit=max&amp;fm=jpg&amp;ixid=M3w4NjQwMjJ8MHwxfHNlYXJjaHwzfHxleWVicm93JTIwYmVhdXR5fGVufDF8Mnx8fDE3NzYyMDIxMDV8MA&amp;ixlib=rb-4.1.0&amp;q=80&amp;w=1080&amp;w=800&amp;q=80&amp;auto=format&amp;fit=crop" alt="Brow Lamination" loading="lazy">
          <span class="svc-cat">Lash &amp; Brow</span>
-         <a href="https://unsplash.com/@luwadlinbosman?utm_source=bytes_platform&amp;utm_medium=referral" target="_blank" rel="noopener" class="svc-credit">Luwadlin Bosman / Unsplash</a>
          <div class="svc-overlay"></div>
        </div>
     <div class="svc-body">
@@ -400,7 +394,7 @@ img{max-width:100%;display:block}
   <div class="foot-inner">
     <div>
       <p class="foot-brand">Glow Studio</p>
-      <p class="foot-tag">Thoughtful service, done right. 12 Grafton Lane, Dublin 2.</p>
+      <p class="foot-tag">Donde la Belleza se Ilumina.</p>
     </div>
     <div>
       <h4>Visit</h4>
@@ -418,6 +412,12 @@ img{max-width:100%;display:block}
       <a href="/booking">Book a visit</a>
     </div>
   </div>
+  <div class="foot-credits">
+         <span>Photography —</span>
+         <a href="https://unsplash.com/@giorgiotrovato?utm_source=bytes_platform&amp;utm_medium=referral" target="_blank" rel="noopener">Giorgio Trovato</a><span class="sep">·</span><a href="https://unsplash.com/@phuongtography?utm_source=bytes_platform&amp;utm_medium=referral" target="_blank" rel="noopener">Phuong Nguyen</a><span class="sep">·</span><a href="https://unsplash.com/@mlapergolaphoto?utm_source=bytes_platform&amp;utm_medium=referral" target="_blank" rel="noopener">Mario La Pergola</a><span class="sep">·</span><a href="https://unsplash.com/@eladepure?utm_source=bytes_platform&amp;utm_medium=referral" target="_blank" rel="noopener">Ela De Pure</a><span class="sep">·</span><a href="https://unsplash.com/@anyutakejbalo?utm_source=bytes_platform&amp;utm_medium=referral" target="_blank" rel="noopener">Anna Keibalo</a><span class="sep">·</span><a href="https://unsplash.com/@diana_h?utm_source=bytes_platform&amp;utm_medium=referral" target="_blank" rel="noopener">Diana H</a><span class="sep">·</span><a href="https://unsplash.com/@loreleiweb?utm_source=bytes_platform&amp;utm_medium=referral" target="_blank" rel="noopener">Liz Lorelei</a><span class="sep">·</span><a href="https://unsplash.com/@luwadlinbosman?utm_source=bytes_platform&amp;utm_medium=referral" target="_blank" rel="noopener">Luwadlin Bosman</a>
+         <span class="sep">·</span>
+         <a href="https://unsplash.com/?utm_source=bytes_platform&amp;utm_medium=referral" target="_blank" rel="noopener">Unsplash</a>
+       </div>
   <div class="foot-bottom">
     <span>© 2026 Glow Studio — All rights reserved.</span>
     <span>Handcrafted in  Ireland</span>

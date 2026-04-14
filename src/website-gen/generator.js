@@ -5,6 +5,54 @@ const { getHeroImage } = require('./heroImage');
 const { attachServiceImages } = require('./serviceImages');
 const { inferTimezoneFromAddress } = require('./timezone');
 
+// Luxury-biased hero queries, grouped by salon sub-type. One is picked at
+// random at generation time so two similar salons get different heroes.
+const SALON_HERO_QUERIES = {
+  hair: [
+    'luxury hair salon interior',
+    'minimalist hair salon',
+    'editorial hair salon',
+    'upscale hair salon',
+  ],
+  nails: [
+    'minimalist nail studio interior',
+    'luxury nail salon',
+    'modern nail bar interior',
+  ],
+  barber: [
+    'luxury barber shop interior',
+    'modern barber shop',
+    'editorial barber shop',
+  ],
+  spa: [
+    'luxury spa interior',
+    'minimalist spa',
+    'serene spa interior',
+  ],
+  beauty: [
+    'luxury beauty salon interior',
+    'minimalist beauty studio',
+    'editorial beauty salon',
+  ],
+  default: [
+    'luxury salon interior',
+    'minimalist salon',
+    'editorial beauty studio',
+    'upscale beauty salon',
+  ],
+};
+
+function pickSalonHeroQuery(industry) {
+  const s = String(industry || '').toLowerCase();
+  let bucket = SALON_HERO_QUERIES.default;
+  if (/nail/.test(s)) bucket = SALON_HERO_QUERIES.nails;
+  else if (/barber/.test(s)) bucket = SALON_HERO_QUERIES.barber;
+  else if (/spa|massage|wellness/.test(s)) bucket = SALON_HERO_QUERIES.spa;
+  else if (/hair/.test(s)) bucket = SALON_HERO_QUERIES.hair;
+  else if (/beauty|skin|facial|lash|brow|makeup/.test(s)) bucket = SALON_HERO_QUERIES.beauty;
+  return bucket[Math.floor(Math.random() * bucket.length)];
+}
+
 /**
  * Generate website content using LLM based on collected business info.
  * @param {Object} businessData - Collected business information
@@ -120,10 +168,19 @@ Generate compelling website copy for this business. Return ONLY valid JSON.`;
   // business context and knows what the company actually DOES), then fall back to
   // services + industry. Industry alone is often misleading — e.g. a cleaning
   // company serving "real estate" is cleaning, not real estate.
-  let imageQuery = (generatedContent.heroImageQuery || '').trim();
-  if (!imageQuery) {
-    const servicesPart = hasServices ? services.slice(0, 2).join(' ') : '';
-    imageQuery = [servicesPart, industry].filter(Boolean).join(' ').trim() || 'business';
+  let imageQuery;
+  if (extras.templateId === 'salon') {
+    // Salon sites get a luxury-biased hero query regardless of what the LLM
+    // suggested — the editorial template leans heavily on a single dramatic
+    // photo, so we prefer curated aesthetic language. One query chosen at
+    // random so two similar salons don't end up with identical heroes.
+    imageQuery = pickSalonHeroQuery(industry);
+  } else {
+    imageQuery = (generatedContent.heroImageQuery || '').trim();
+    if (!imageQuery) {
+      const servicesPart = hasServices ? services.slice(0, 2).join(' ') : '';
+      imageQuery = [servicesPart, industry].filter(Boolean).join(' ').trim() || 'business';
+    }
   }
 
   let heroImage = null;

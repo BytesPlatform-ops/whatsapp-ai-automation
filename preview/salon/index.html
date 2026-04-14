@@ -1,7 +1,7 @@
 <!DOCTYPE html><html lang="en"><head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>Glow Studio</title>
-<meta name="description" content="Expert stylists, premium products, an unhurried space — a salon that treats every visit as a small ritual.">
+<meta name="description" content="Transformamos tu apariencia y elevamos tu confianza en un ambiente acogedor y elegante.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
@@ -110,7 +110,7 @@ img{max-width:100%;display:block}
 .svc-overlay{position:absolute;inset:0;background:linear-gradient(180deg,transparent 55%,rgba(14,13,12,0.55));opacity:0;transition:opacity 0.5s;display:flex;align-items:flex-end;padding:22px;pointer-events:none}
 .svc:hover .svc-overlay{opacity:1}
 .svc-cat{position:absolute;top:16px;left:16px;font-size:10px;font-weight:500;letter-spacing:0.3em;text-transform:uppercase;color:#fff;background:rgba(14,13,12,0.4);backdrop-filter:blur(6px);padding:7px 12px;border:1px solid rgba(255,255,255,0.18)}
-.svc-credit{position:absolute;bottom:10px;right:10px;font-size:9px;color:rgba(255,255,255,0.7);background:rgba(0,0,0,0.35);padding:3px 7px;text-decoration:underline;text-underline-offset:2px;letter-spacing:0.05em}
+/* Per-image photographer credit is consolidated into the footer; no overlay on the image. */
 .svc-body{display:flex;align-items:flex-start;justify-content:space-between;gap:18px}
 .svc-name{font-family:'Cormorant Garamond',serif;font-size:26px;font-weight:500;letter-spacing:-0.01em;line-height:1.15;margin-bottom:6px}
 .svc-meta{font-size:12px;color:var(--mute);letter-spacing:0.14em;text-transform:uppercase}
@@ -155,7 +155,11 @@ img{max-width:100%;display:block}
 .foot h4{font-family:'Inter',sans-serif;font-size:11px;letter-spacing:0.28em;text-transform:uppercase;color:#fff;font-weight:500;margin-bottom:18px}
 .foot a{display:block;padding:5px 0;font-size:14px;color:#beb3a6;transition:color 0.2s;font-weight:300}
 .foot a:hover{color:#fff}
-.foot-bottom{max-width:1280px;margin:30px auto 0;display:flex;justify-content:space-between;align-items:center;font-size:12px;color:#6d655d;letter-spacing:0.06em;flex-wrap:wrap;gap:12px}
+.foot-credits{max-width:1280px;margin:26px auto 0;padding:20px 0;font-size:11px;color:#6d655d;letter-spacing:0.08em;line-height:1.8;display:flex;flex-wrap:wrap;gap:6px 10px;border-bottom:1px solid rgba(255,255,255,0.06)}
+.foot-credits a{display:inline;padding:0;color:#8a8179;text-decoration:underline;text-underline-offset:3px;text-decoration-color:rgba(255,255,255,0.15)}
+.foot-credits a:hover{color:#fff;text-decoration-color:#fff}
+.foot-credits .sep{opacity:0.4}
+.foot-bottom{max-width:1280px;margin:22px auto 0;display:flex;justify-content:space-between;align-items:center;font-size:12px;color:#6d655d;letter-spacing:0.06em;flex-wrap:wrap;gap:12px}
 
 /* Page headers (Services / About / etc) */
 .page-head{padding:160px 40px 80px;background:var(--bone)}
@@ -215,16 +219,16 @@ img{max-width:100%;display:block}
   <a href="/booking">Reserve</a>
 </div><main>
 <section class="hero">
-  <div class="hero-bg"><img src="https://images.unsplash.com/photo-1618803210491-008ee18f7bab?crop=entropy&amp;cs=tinysrgb&amp;fit=max&amp;fm=jpg&amp;ixid=M3w4NjQwMjJ8MHwxfHNlYXJjaHwzfHxsdXh1cnklMjBoYWlyJTIwc2Fsb258ZW58MXwwfHx8MTc3NjIwMjY0Nnww&amp;ixlib=rb-4.1.0&amp;q=80&amp;w=1080&amp;w=1600&amp;q=80&amp;auto=format&amp;fit=crop" alt=""></div>
+  <div class="hero-bg"><img src="https://images.unsplash.com/photo-1626383137804-ff908d2753a2?crop=entropy&amp;cs=tinysrgb&amp;fit=max&amp;fm=jpg&amp;ixid=M3w4NjQwMjJ8MHwxfHNlYXJjaHwzfHxtaW5pbWFsaXN0JTIwaGFpciUyMHNhbG9ufGVufDF8MHx8fDE3NzYyMDMxOTB8MA&amp;ixlib=rb-4.1.0&amp;q=80&amp;w=1080&amp;w=1600&amp;q=80&amp;auto=format&amp;fit=crop" alt=""></div>
   <div class="hero-overlay"></div>
-  <div class="hero-credit">Photograph: <a href="https://unsplash.com/@brianwangenheim?utm_source=bytes_platform&amp;utm_medium=referral" target="_blank" rel="noopener">Brian Wangenheim</a> · <a href="https://unsplash.com/?utm_source=bytes_platform&amp;utm_medium=referral" target="_blank" rel="noopener">Unsplash</a></div>
+  
   <div class="hero-inner">
     <div class="hero-kicker">
       <span class="divider divider--light"></span>
-      <span class="eyebrow eyebrow--light">Hair &amp; Beauty Atelier</span>
+      <span class="eyebrow eyebrow--light">Hair &amp; Beauty Salon</span>
     </div>
-    <h1 class="hero-h1 rv">A modern salon, thoughtfully made.</h1>
-    <p class="hero-tag rv d1">Expert stylists, premium products, an unhurried space — a salon that treats every visit as a small ritual.</p>
+    <h1 class="hero-h1 rv">Ilumina tu Belleza Natural</h1>
+    <p class="hero-tag rv d1">Transformamos tu apariencia y elevamos tu confianza en un ambiente acogedor y elegante.</p>
     <div class="hero-ctas rv d2">
       <a href="/booking" class="btn btn-w">Reserve a Visit <svg class="arr" viewBox="0 0 14 10" fill="currentColor"><path d="M8.5 0l4.8 5L8.5 10l-.7-.7L11.4 5.7H0v-1.4h11.4L7.8.7z"/></svg></a>
       <a href="/services" class="btn btn-g">The Menu</a>
@@ -241,8 +245,8 @@ img{max-width:100%;display:block}
 
 <section class="intro">
   <div class="intro-grid">
-    <p class="intro-label rv">— Our Story.</p>
-    <h2 class="intro-h rv d1">Founded in 2022 by three friends who wanted to create a salon where people feel truly taken care of.</h2>
+    <p class="intro-label rv">— Tu Refugio de Belleza en Dublín.</p>
+    <h2 class="intro-h rv d1">En Glow Studio, nuestra pasión por la belleza se traduce en cada servicio que ofrecemos.</h2>
   </div>
 </section>
 
@@ -251,7 +255,7 @@ img{max-width:100%;display:block}
   <div class="sig-head rv">
     <div>
       <p class="eyebrow" style="margin-bottom:18px">— Signature Services —</p>
-      <h2 class="sig-title">The Menu</h2>
+      <h2 class="sig-title">The treatments we are known for</h2>
     </div>
     <p class="sig-sub">A curated list of the treatments our regulars return for. Every appointment is handled by a senior stylist — no shortcuts.</p>
   </div>
@@ -261,7 +265,6 @@ img{max-width:100%;display:block}
     <div class="svc-media">
          <img src="https://images.unsplash.com/photo-1763741141049-352dfafcc64f?crop=entropy&amp;cs=tinysrgb&amp;fit=max&amp;fm=jpg&amp;ixid=M3w4NjQwMjJ8MHwxfHNlYXJjaHwzfHxoYWlyY3V0JTIwc2Fsb258ZW58MXwyfHx8MTc3NjIwMjEwNHww&amp;ixlib=rb-4.1.0&amp;q=80&amp;w=1080&amp;w=800&amp;q=80&amp;auto=format&amp;fit=crop" alt="Women&#039;s Cut &amp; Blow Dry" loading="lazy">
          <span class="svc-cat">Hair</span>
-         <a href="https://unsplash.com/@phuongtography?utm_source=bytes_platform&amp;utm_medium=referral" target="_blank" rel="noopener" class="svc-credit">Phuong Nguyen / Unsplash</a>
          <div class="svc-overlay"></div>
        </div>
     <div class="svc-body">
@@ -278,7 +281,6 @@ img{max-width:100%;display:block}
     <div class="svc-media">
          <img src="https://images.unsplash.com/photo-1763741141049-352dfafcc64f?crop=entropy&amp;cs=tinysrgb&amp;fit=max&amp;fm=jpg&amp;ixid=M3w4NjQwMjJ8MHwxfHNlYXJjaHwzfHxoYWlyY3V0JTIwc2Fsb258ZW58MXwyfHx8MTc3NjIwMjEwNHww&amp;ixlib=rb-4.1.0&amp;q=80&amp;w=1080&amp;w=800&amp;q=80&amp;auto=format&amp;fit=crop" alt="Men&#039;s Cut" loading="lazy">
          <span class="svc-cat">Hair</span>
-         <a href="https://unsplash.com/@phuongtography?utm_source=bytes_platform&amp;utm_medium=referral" target="_blank" rel="noopener" class="svc-credit">Phuong Nguyen / Unsplash</a>
          <div class="svc-overlay"></div>
        </div>
     <div class="svc-body">
@@ -293,9 +295,8 @@ img{max-width:100%;display:block}
   <a href="/booking" class="svc rv">
     <span class="svc-num">03<span class="sr-only"> —</span></span>
     <div class="svc-media">
-         <img src="https://images.unsplash.com/photo-1680670500665-22e480bcb0fa?crop=entropy&amp;cs=tinysrgb&amp;fit=max&amp;fm=jpg&amp;ixid=M3w4NjQwMjJ8MHwxfHNlYXJjaHwxfHxoYWlyJTIwY29sb3IlMjBzYWxvbnxlbnwxfDJ8fHwxNzc2MjAyMTA0fDA&amp;ixlib=rb-4.1.0&amp;q=80&amp;w=1080&amp;w=800&amp;q=80&amp;auto=format&amp;fit=crop" alt="Full Head Colour" loading="lazy">
+         <img src="https://images.unsplash.com/photo-1730573520149-7a5b97d35ccc?crop=entropy&amp;cs=tinysrgb&amp;fit=max&amp;fm=jpg&amp;ixid=M3w4NjQwMjJ8MHwxfHNlYXJjaHwzfHxoYWlyJTIwY29sb3IlMjBzYWxvbnxlbnwxfDJ8fHwxNzc2MjAyMTA0fDA&amp;ixlib=rb-4.1.0&amp;q=80&amp;w=1080&amp;w=800&amp;q=80&amp;auto=format&amp;fit=crop" alt="Full Head Colour" loading="lazy">
          <span class="svc-cat">Hair</span>
-         <a href="https://unsplash.com/@theskinandthebeardstory?utm_source=bytes_platform&amp;utm_medium=referral" target="_blank" rel="noopener" class="svc-credit">The Skin and The Beard Story / Unsplash</a>
          <div class="svc-overlay"></div>
        </div>
     <div class="svc-body">
@@ -312,7 +313,6 @@ img{max-width:100%;display:block}
     <div class="svc-media">
          <img src="https://images.unsplash.com/photo-1658932447624-152eaf36cf4e?crop=entropy&amp;cs=tinysrgb&amp;fit=max&amp;fm=jpg&amp;ixid=M3w4NjQwMjJ8MHwxfHNlYXJjaHwzfHxiYWxheWFnZSUyMGhhaXIlMjBjb2xvcnxlbnwxfDJ8fHwxNzc2MjAyMTA0fDA&amp;ixlib=rb-4.1.0&amp;q=80&amp;w=1080&amp;w=800&amp;q=80&amp;auto=format&amp;fit=crop" alt="Balayage / Highlights" loading="lazy">
          <span class="svc-cat">Hair</span>
-         <a href="https://unsplash.com/@mlapergolaphoto?utm_source=bytes_platform&amp;utm_medium=referral" target="_blank" rel="noopener" class="svc-credit">Mario La Pergola / Unsplash</a>
          <div class="svc-overlay"></div>
        </div>
     <div class="svc-body">
@@ -327,9 +327,8 @@ img{max-width:100%;display:block}
   <a href="/booking" class="svc rv">
     <span class="svc-num">05<span class="sr-only"> —</span></span>
     <div class="svc-media">
-         <img src="https://images.unsplash.com/photo-1754272465517-40a81b4b9f13?crop=entropy&amp;cs=tinysrgb&amp;fit=max&amp;fm=jpg&amp;ixid=M3w4NjQwMjJ8MHwxfHNlYXJjaHwxfHxrZXJhdGluJTIwaGFpciUyMHRyZWF0bWVudHxlbnwxfDJ8fHwxNzc2MjAyMTA0fDA&amp;ixlib=rb-4.1.0&amp;q=80&amp;w=1080&amp;w=800&amp;q=80&amp;auto=format&amp;fit=crop" alt="Keratin Treatment" loading="lazy">
+         <img src="https://images.unsplash.com/photo-1740341382410-32134074935f?crop=entropy&amp;cs=tinysrgb&amp;fit=max&amp;fm=jpg&amp;ixid=M3w4NjQwMjJ8MHwxfHNlYXJjaHwyfHxrZXJhdGluJTIwaGFpciUyMHRyZWF0bWVudHxlbnwxfDJ8fHwxNzc2MjAyMTA0fDA&amp;ixlib=rb-4.1.0&amp;q=80&amp;w=1080&amp;w=800&amp;q=80&amp;auto=format&amp;fit=crop" alt="Keratin Treatment" loading="lazy">
          <span class="svc-cat">Hair</span>
-         <a href="https://unsplash.com/@eladepure?utm_source=bytes_platform&amp;utm_medium=referral" target="_blank" rel="noopener" class="svc-credit">Ela De Pure / Unsplash</a>
          <div class="svc-overlay"></div>
        </div>
     <div class="svc-body">
@@ -346,7 +345,6 @@ img{max-width:100%;display:block}
     <div class="svc-media">
          <img src="https://images.unsplash.com/photo-1693776526826-f5e105c54da3?crop=entropy&amp;cs=tinysrgb&amp;fit=max&amp;fm=jpg&amp;ixid=M3w4NjQwMjJ8MHwxfHNlYXJjaHwxfHxtYW5pY3VyZSUyMG5haWxzfGVufDF8Mnx8fDE3NzYyMDIxMDR8MA&amp;ixlib=rb-4.1.0&amp;q=80&amp;w=1080&amp;w=800&amp;q=80&amp;auto=format&amp;fit=crop" alt="Gel Manicure" loading="lazy">
          <span class="svc-cat">Nails</span>
-         <a href="https://unsplash.com/@anyutakejbalo?utm_source=bytes_platform&amp;utm_medium=referral" target="_blank" rel="noopener" class="svc-credit">Anna Keibalo / Unsplash</a>
          <div class="svc-overlay"></div>
        </div>
     <div class="svc-body">
@@ -362,7 +360,7 @@ img{max-width:100%;display:block}
 </div></section>
 
 <section class="manifesto">
-  <p class="manifesto-q rv">Founded in 2022 by three friends who wanted to create a salon where people feel truly taken care of</p>
+  <p class="manifesto-q rv">En Glow Studio, nuestra pasión por la belleza se traduce en cada servicio que ofrecemos</p>
   <p class="manifesto-attr rv d1"><span class="divider divider--light"></span> Glow Studio <span class="divider divider--light"></span></p>
 </section>
 
@@ -385,15 +383,15 @@ img{max-width:100%;display:block}
 
 <section class="close-cta">
   <p class="eyebrow eyebrow--light rv" style="margin-bottom:22px">— Appointments now open —</p>
-  <h2 class="rv d1">Reserve your ritual.</h2>
-  <p class="rv d2">Online in under a minute. We will confirm by email and send a reminder the day before.</p>
+  <h2 class="rv d1">¡Reserva tu Experiencia de Belleza Hoy!</h2>
+  <p class="rv d2">No esperes más para rejuvenecer tu imagen. Contáctanos ahora y agenda tu cita.</p>
   <a href="/booking" class="btn btn-w rv d3">Reserve a Visit <svg class="arr" viewBox="0 0 14 10" fill="currentColor"><path d="M8.5 0l4.8 5L8.5 10l-.7-.7L11.4 5.7H0v-1.4h11.4L7.8.7z"/></svg></a>
 </section></main>
 <footer class="foot">
   <div class="foot-inner">
     <div>
       <p class="foot-brand">Glow Studio</p>
-      <p class="foot-tag">Thoughtful service, done right. 12 Grafton Lane, Dublin 2.</p>
+      <p class="foot-tag">Donde la Belleza se Ilumina.</p>
     </div>
     <div>
       <h4>Visit</h4>
@@ -411,6 +409,12 @@ img{max-width:100%;display:block}
       <a href="/booking">Book a visit</a>
     </div>
   </div>
+  <div class="foot-credits">
+         <span>Photography —</span>
+         <a href="https://unsplash.com/@giorgiotrovato?utm_source=bytes_platform&amp;utm_medium=referral" target="_blank" rel="noopener">Giorgio Trovato</a><span class="sep">·</span><a href="https://unsplash.com/@phuongtography?utm_source=bytes_platform&amp;utm_medium=referral" target="_blank" rel="noopener">Phuong Nguyen</a><span class="sep">·</span><a href="https://unsplash.com/@mlapergolaphoto?utm_source=bytes_platform&amp;utm_medium=referral" target="_blank" rel="noopener">Mario La Pergola</a><span class="sep">·</span><a href="https://unsplash.com/@eladepure?utm_source=bytes_platform&amp;utm_medium=referral" target="_blank" rel="noopener">Ela De Pure</a><span class="sep">·</span><a href="https://unsplash.com/@anyutakejbalo?utm_source=bytes_platform&amp;utm_medium=referral" target="_blank" rel="noopener">Anna Keibalo</a><span class="sep">·</span><a href="https://unsplash.com/@diana_h?utm_source=bytes_platform&amp;utm_medium=referral" target="_blank" rel="noopener">Diana H</a><span class="sep">·</span><a href="https://unsplash.com/@loreleiweb?utm_source=bytes_platform&amp;utm_medium=referral" target="_blank" rel="noopener">Liz Lorelei</a><span class="sep">·</span><a href="https://unsplash.com/@luwadlinbosman?utm_source=bytes_platform&amp;utm_medium=referral" target="_blank" rel="noopener">Luwadlin Bosman</a>
+         <span class="sep">·</span>
+         <a href="https://unsplash.com/?utm_source=bytes_platform&amp;utm_medium=referral" target="_blank" rel="noopener">Unsplash</a>
+       </div>
   <div class="foot-bottom">
     <span>© 2026 Glow Studio — All rights reserved.</span>
     <span>Handcrafted in  Ireland</span>

@@ -7,7 +7,7 @@ const { STATES } = require('../states');
 
 /**
  * Informative / FAQ bot handler.
- * Unlike the sales bot (Mike), this bot is purely informational -
+ * Unlike the sales bot (Pixie), this bot is purely informational -
  * it answers customer queries, provides support, and helps with FAQs
  * without pushing toward a sale.
  *

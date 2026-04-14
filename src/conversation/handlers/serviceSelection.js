@@ -173,7 +173,7 @@ async function handleServiceSelection(user, message) {
     case 'svc_general':
       await sendWithMenuButton(
         user.phone_number,
-        '💬 Sure! I\'m Mike from Bytes Platform. What can I help you with?'
+        '💬 Sure! I\'m Pixie from Bytes Platform. What can I help you with?'
       );
       await logMessage(user.id, 'Entering sales chat', 'assistant');
       return STATES.SALES_CHAT;

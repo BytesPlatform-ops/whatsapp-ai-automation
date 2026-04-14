@@ -158,7 +158,7 @@ img{max-width:100%;display:block}
 .svc-overlay{position:absolute;inset:0;background:linear-gradient(180deg,transparent 55%,rgba(14,13,12,0.55));opacity:0;transition:opacity 0.5s;display:flex;align-items:flex-end;padding:22px;pointer-events:none}
 .svc:hover .svc-overlay{opacity:1}
 .svc-cat{position:absolute;top:16px;left:16px;font-size:10px;font-weight:500;letter-spacing:0.3em;text-transform:uppercase;color:#fff;background:rgba(14,13,12,0.4);backdrop-filter:blur(6px);padding:7px 12px;border:1px solid rgba(255,255,255,0.18)}
-.svc-credit{position:absolute;bottom:10px;right:10px;font-size:9px;color:rgba(255,255,255,0.7);background:rgba(0,0,0,0.35);padding:3px 7px;text-decoration:underline;text-underline-offset:2px;letter-spacing:0.05em}
+/* Per-image photographer credit is consolidated into the footer; no overlay on the image. */
 .svc-body{display:flex;align-items:flex-start;justify-content:space-between;gap:18px}
 .svc-name{font-family:'Cormorant Garamond',serif;font-size:26px;font-weight:500;letter-spacing:-0.01em;line-height:1.15;margin-bottom:6px}
 .svc-meta{font-size:12px;color:var(--mute);letter-spacing:0.14em;text-transform:uppercase}
@@ -203,7 +203,11 @@ img{max-width:100%;display:block}
 .foot h4{font-family:'Inter',sans-serif;font-size:11px;letter-spacing:0.28em;text-transform:uppercase;color:#fff;font-weight:500;margin-bottom:18px}
 .foot a{display:block;padding:5px 0;font-size:14px;color:#beb3a6;transition:color 0.2s;font-weight:300}
 .foot a:hover{color:#fff}
-.foot-bottom{max-width:1280px;margin:30px auto 0;display:flex;justify-content:space-between;align-items:center;font-size:12px;color:#6d655d;letter-spacing:0.06em;flex-wrap:wrap;gap:12px}
+.foot-credits{max-width:1280px;margin:26px auto 0;padding:20px 0;font-size:11px;color:#6d655d;letter-spacing:0.08em;line-height:1.8;display:flex;flex-wrap:wrap;gap:6px 10px;border-bottom:1px solid rgba(255,255,255,0.06)}
+.foot-credits a{display:inline;padding:0;color:#8a8179;text-decoration:underline;text-underline-offset:3px;text-decoration-color:rgba(255,255,255,0.15)}
+.foot-credits a:hover{color:#fff;text-decoration-color:#fff}
+.foot-credits .sep{opacity:0.4}
+.foot-bottom{max-width:1280px;margin:22px auto 0;display:flex;justify-content:space-between;align-items:center;font-size:12px;color:#6d655d;letter-spacing:0.06em;flex-wrap:wrap;gap:12px}
 
 /* Page headers (Services / About / etc) */
 .page-head{padding:160px 40px 80px;background:var(--bone)}
@@ -298,8 +302,38 @@ function getNav(c, cur, opts = {}) {
 </div>`;
 }
 
+// Collect all distinct Unsplash photographers used on the site, for the
+// consolidated footer attribution. De-duped by photographer name so a busy
+// salon doesn't end up with a wall of credits.
+function collectUnsplashCredits(c) {
+  const all = [];
+  if (c.heroImage && c.heroImage.photographer) all.push(c.heroImage);
+  for (const s of (c.salonServices || [])) {
+    if (s.image && s.image.photographer) all.push(s.image);
+  }
+  const seen = new Set();
+  const unique = [];
+  for (const img of all) {
+    const key = img.photographer;
+    if (!seen.has(key)) {
+      seen.add(key);
+      unique.push(img);
+    }
+  }
+  return unique;
+}
+
 function getFooter(c) {
   const ps = pages(c);
+  const credits = collectUnsplashCredits(c);
+  const creditsHtml = credits.length > 0
+    ? `<div class="foot-credits">
+         <span>Photography —</span>
+         ${credits.map((img) => `<a href="${attr(img.photographerUrl)}" target="_blank" rel="noopener">${esc(img.photographer)}</a>`).join('<span class="sep">·</span>')}
+         <span class="sep">·</span>
+         <a href="${attr(credits[0].unsplashUrl)}" target="_blank" rel="noopener">Unsplash</a>
+       </div>`
+    : '';
   return `
 <footer class="foot">
   <div class="foot-inner">
@@ -323,6 +357,7 @@ function getFooter(c) {
       <a href="/booking">Book a visit</a>
     </div>
   </div>
+  ${creditsHtml}
   <div class="foot-bottom">
     <span>© ${new Date().getFullYear()} ${esc(c.businessName)} — All rights reserved.</span>
     <span>Handcrafted in ${esc((c.contactAddress || '').split(',').pop() || 'the studio')}</span>
@@ -340,7 +375,6 @@ function renderServiceCard(s, index) {
     ? `<div class="svc-media">
          <img src="${attr(s.image.url)}" alt="${attr(s.name)}" loading="lazy">
          <span class="svc-cat">${esc(cat)}</span>
-         ${s.image.photographer ? `<a href="${attr(s.image.photographerUrl)}" target="_blank" rel="noopener" class="svc-credit">${esc(s.image.photographer)} / Unsplash</a>` : ''}
          <div class="svc-overlay"></div>
        </div>`
     : `<div class="svc-media">
@@ -386,9 +420,8 @@ function generateHomePage(c) {
   const heroImg = hasHero
     ? `<div class="hero-bg"><img src="${attr(c.heroImage.url)}" alt=""></div>`
     : `<div class="hero-bg" style="background:linear-gradient(135deg,var(--pc),var(--ac))"></div>`;
-  const credit = hasHero
-    ? `<div class="hero-credit">Photograph: <a href="${attr(c.heroImage.photographerUrl)}" target="_blank" rel="noopener">${esc(c.heroImage.photographer)}</a> · <a href="${attr(c.heroImage.unsplashUrl)}" target="_blank" rel="noopener">Unsplash</a></div>`
-    : '';
+  // Hero credit is consolidated into the footer along with service-image credits.
+  const credit = '';
 
   const featured = (c.salonServices || []).slice(0, 6);
   const featuredCards = featured.map((s, i) => renderServiceCard(s, i)).join('');
