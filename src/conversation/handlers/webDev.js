@@ -301,6 +301,56 @@ async function startSalonFlow(user) {
   return STATES.SALON_BOOKING_TOOL;
 }
 
+/**
+ * Finish the salon sub-flow. If we entered from the confirm step (industry
+ * correction), return to WEB_CONFIRM with a refreshed summary instead of
+ * asking for contact info again. Otherwise proceed to contact collection.
+ */
+async function finishSalonFlow(user) {
+  const origin = user.metadata?.salonFlowOrigin;
+  if (origin === 'CONFIRM') {
+    // Clear the flag, re-show the updated summary so they can approve.
+    await updateUserMetadata(user.id, { salonFlowOrigin: null });
+    return showConfirmSummary(user);
+  }
+  await sendTextMessage(
+    user.phone_number,
+    'Last thing — what contact info do you want on the site? Just send your email, phone, and/or address.'
+  );
+  return STATES.WEB_COLLECT_CONTACT;
+}
+
+/**
+ * Re-render the confirmation summary (used when we loop back to CONFIRM after
+ * collecting salon-specific details mid-flow). Mirrors the message in
+ * handleCollectContact so users see the same structure.
+ */
+async function showConfirmSummary(user) {
+  const freshUser = await require('../../db/users').findOrCreateUser(user.phone_number);
+  const wd = freshUser.metadata?.websiteData || {};
+  const servicesList = (wd.services || []).length > 0 ? wd.services.join(', ') : 'None (skipped)';
+  const contactInfo = [wd.contactEmail, wd.contactPhone, wd.contactAddress].filter(Boolean).join(' | ') || 'None';
+  const bookingLine = wd.bookingMode === 'embed'
+    ? `\n*Booking:* External link (${wd.bookingUrl || 'set'})`
+    : wd.bookingMode === 'native'
+      ? `\n*Booking:* Built-in system${wd.weeklyHours ? ' · hours set' : ''}${Array.isArray(wd.salonServices) && wd.salonServices.length > 0 ? ` · ${wd.salonServices.length} priced services` : ''}`
+      : '';
+  const igLine = wd.instagramHandle ? `\n*Instagram:* @${wd.instagramHandle}` : '';
+
+  const summary =
+    `Updated. Here's the current summary:\n\n` +
+    `*Business Name:* ${wd.businessName || '-'}\n` +
+    `*Industry:* ${wd.industry || '-'}\n` +
+    `*Services:* ${servicesList}` +
+    bookingLine +
+    igLine +
+    `\n*Contact:* ${contactInfo}\n\n` +
+    `Say *"yes"* to build the site, or tell me what else to change.`;
+
+  await sendTextMessage(user.phone_number, summary);
+  return STATES.WEB_CONFIRM;
+}
+
 async function handleSalonBookingTool(user, message) {
   const text = (message.text || '').trim();
   const wd = { ...(user.metadata?.websiteData || {}) };
@@ -361,12 +411,8 @@ async function handleSalonInstagram(user, message) {
     return STATES.SALON_HOURS;
   }
 
-  // Embed mode — skip hours/durations and go to contact.
-  await sendTextMessage(
-    user.phone_number,
-    'Last thing — what contact info do you want on the site? Just send your email, phone, and/or address.'
-  );
-  return STATES.WEB_COLLECT_CONTACT;
+  // Embed mode — skip hours/durations and finish the salon sub-flow.
+  return finishSalonFlow(user);
 }
 
 async function handleSalonHours(user, message) {
@@ -383,36 +429,71 @@ async function handleSalonHours(user, message) {
     : `Got it:\n${formatHoursForDisplay(hours)}\n\n`;
   const services = (wd.services || []);
   if (services.length === 0) {
-    // No services to duration-tag — jump to contact.
-    await sendTextMessage(user.phone_number, prefix + 'Last thing — email, phone, and/or address for the site?');
-    return STATES.WEB_COLLECT_CONTACT;
+    // No services to price/tag — wrap up the salon flow.
+    await sendTextMessage(user.phone_number, prefix.trim());
+    return finishSalonFlow(user);
   }
   await sendTextMessage(
     user.phone_number,
     prefix +
-      `How long does each service take? Example: *"Haircut 30min, Colour 90min, Nails 45min"*.\n\n` +
+      `How long does each service take, and what's the price?\n\n` +
+      `Example: *"Haircut 30min €25, Colour 90min €85, Nails 45min €35"*.\n\n` +
       `Your services: ${services.join(', ')}.\n\n` +
-      `Say *"default"* to use 30min for each.`
+      `Say *"default"* to use 30min with no price.`
   );
   return STATES.SALON_SERVICE_DURATIONS;
 }
 
+// Extract optional currency-prefixed or suffixed prices from the remainder of
+// a parsed service chunk. Accepts €25, $30, £40, ₹500, "25 euro", "from €20".
+const PRICE_RE = /(from\s*)?([€$£₹]\s*\d{1,5}(?:\.\d{1,2})?|\d{1,5}(?:\.\d{1,2})?\s*(?:eur|usd|gbp|inr|aed|euros?|dollars?|pounds?|rupees?))/i;
+
 function parseServiceDurations(text, servicesList) {
-  // Match pairs: "name NN min" or "name: NN min". Returns a map by lowercased name.
-  const map = {};
-  const pairRe = /([a-zA-Z][\w\s&/'-]*?)\s*[:\-]?\s*(\d{1,3})\s*(?:mins?|minutes|m)\b/gi;
-  let m;
-  while ((m = pairRe.exec(text))) {
-    const name = m[1].trim().replace(/,+$/, '').toLowerCase();
-    const mins = parseInt(m[2], 10);
-    if (name && mins > 0 && mins <= 600) map[name] = mins;
+  // Split the message into chunks by comma or newline and try to extract
+  // duration + price per chunk. Each chunk is matched back to a service name
+  // by lowercased exact/partial match.
+  const chunks = String(text || '')
+    .split(/[,;\n]+|\s+\|\s+/)
+    .map((c) => c.trim())
+    .filter(Boolean);
+
+  const byName = {}; // { loweredName: { duration, price } }
+
+  for (const chunk of chunks) {
+    const durMatch = chunk.match(/(\d{1,3})\s*(?:mins?|minutes|m)\b/i);
+    const priceMatch = chunk.match(PRICE_RE);
+
+    // The "name" is whatever precedes the duration or, failing that, the price.
+    let name = chunk;
+    const firstMeta = [durMatch?.index, priceMatch?.index].filter((x) => typeof x === 'number').sort((a, b) => a - b)[0];
+    if (typeof firstMeta === 'number') name = chunk.slice(0, firstMeta);
+    name = name.replace(/[:\-—]\s*$/, '').trim().toLowerCase();
+    if (!name) continue;
+
+    const entry = {};
+    if (durMatch) {
+      const mins = parseInt(durMatch[1], 10);
+      if (mins > 0 && mins <= 600) entry.duration = mins;
+    }
+    if (priceMatch) {
+      // Normalise: keep the raw symbol+number, strip trailing comma/period.
+      entry.price = priceMatch[0].trim().replace(/[,.]$/, '');
+    }
+    if (Object.keys(entry).length > 0) byName[name] = entry;
   }
+
   return servicesList.map((s) => {
     const key = s.toLowerCase();
-    // Try exact, then partial match.
-    const hit = map[key] || Object.keys(map).find((k) => key.includes(k) || k.includes(key));
-    const mins = typeof hit === 'number' ? hit : (hit ? map[hit] : null);
-    return { name: s, durationMinutes: mins || 30, priceText: '' };
+    let hit = byName[key];
+    if (!hit) {
+      const partial = Object.keys(byName).find((k) => key.includes(k) || k.includes(key));
+      if (partial) hit = byName[partial];
+    }
+    return {
+      name: s,
+      durationMinutes: hit?.duration || 30,
+      priceText: hit?.price || '',
+    };
   });
 }
 
@@ -428,14 +509,10 @@ async function handleSalonServiceDurations(user, message) {
   await updateUserMetadata(user.id, { websiteData: wd });
   await logMessage(
     user.id,
-    `Service durations: ${salonServices.map((s) => `${s.name} ${s.durationMinutes}m`).join(', ')}`,
+    `Salon services: ${salonServices.map((s) => `${s.name} ${s.durationMinutes}m${s.priceText ? ' ' + s.priceText : ''}`).join(', ')}`,
     'assistant'
   );
-  await sendTextMessage(
-    user.phone_number,
-    'Perfect. Last thing — what contact info do you want on the site? Just send your email, phone, and/or address.'
-  );
-  return STATES.WEB_COLLECT_CONTACT;
+  return finishSalonFlow(user);
 }
 
 /**
@@ -540,8 +617,21 @@ async function handleConfirm(user, message) {
     return STATES.WEB_CONFIRM;
   }
   if (industryChange) {
-    wd.industry = industryChange[1].trim();
+    const newIndustry = industryChange[1].trim();
+    wd.industry = newIndustry;
     await updateUserMetadata(user.id, { websiteData: wd });
+    // If the user just switched into a salon industry and we haven't yet
+    // collected the salon-specific details (booking tool, hours, prices),
+    // pivot into the salon sub-flow and return to CONFIRM when it's done.
+    const needsSalonFlow =
+      isSalonIndustry(newIndustry) &&
+      !wd.bookingMode &&
+      (!Array.isArray(wd.salonServices) || wd.salonServices.length === 0);
+    if (needsSalonFlow) {
+      await updateUserMetadata(user.id, { salonFlowOrigin: 'CONFIRM' });
+      await sendTextMessage(user.phone_number, `Updated industry to *${newIndustry}* — a few quick salon-specific questions, then we'll build it.`);
+      return startSalonFlow(user);
+    }
     await sendTextMessage(user.phone_number, `Updated industry to *${wd.industry}*. Anything else, or say *"yes"* to proceed.`);
     return STATES.WEB_CONFIRM;
   }

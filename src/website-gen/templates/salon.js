@@ -107,7 +107,7 @@ img{max-width:100%;display:block}
 @media(max-width:820px){.nav-ls{display:none}.mm-btn{display:inline-flex}.nav{padding:20px 22px}}
 
 /* Hero */
-.hero{position:relative;min-height:100vh;display:flex;align-items:flex-end;color:#fff;overflow:hidden;padding:0 40px 100px}
+.hero{position:relative;min-height:100vh;display:flex;align-items:flex-end;color:#fff;overflow:hidden;padding:160px 40px 100px}
 .hero-bg{position:absolute;inset:0;z-index:-2}
 .hero-bg img{width:100%;height:100%;object-fit:cover}
 .hero-overlay{position:absolute;inset:0;z-index:-1;background:linear-gradient(180deg,rgba(14,13,12,0.25) 0%,rgba(14,13,12,0.55) 70%,rgba(14,13,12,0.85) 100%)}
@@ -124,7 +124,7 @@ img{max-width:100%;display:block}
 .hero-scroll{position:absolute;right:40px;bottom:40px;display:flex;flex-direction:column;align-items:center;gap:12px;color:rgba(255,255,255,0.55);font-size:10px;letter-spacing:0.3em;text-transform:uppercase}
 .hero-scroll::after{content:'';width:1px;height:44px;background:rgba(255,255,255,0.35);animation:scrollLine 2.4s ease-in-out infinite}
 @keyframes scrollLine{0%,100%{transform:scaleY(0.3);transform-origin:top}50%{transform:scaleY(1)}}
-@media(max-width:720px){.hero{padding:0 22px 60px}.hero-scroll{display:none}.hero-meta{gap:18px}}
+@media(max-width:720px){.hero{padding:130px 22px 60px}.hero-scroll{display:none}.hero-meta{gap:18px}}
 
 /* Marquee credit */
 .hero-credit{position:absolute;top:20px;right:44px;font-size:10px;color:rgba(255,255,255,0.55);letter-spacing:0.1em;z-index:1}

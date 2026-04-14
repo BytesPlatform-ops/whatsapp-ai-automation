@@ -186,17 +186,42 @@ Generate compelling website copy for this business. Return ONLY valid JSON.`;
   let heroImage = null;
   try {
     heroImage = await getHeroImage(imageQuery);
+    if (!heroImage) {
+      logger.warn(`[WEBGEN] No hero image returned for "${imageQuery}" — check UNSPLASH_ACCESS_KEY or rate limits`);
+    }
   } catch (err) {
     logger.warn(`[WEBGEN] Hero image fetch threw: ${err.message}`);
   }
 
-  // For salon sites, fetch a per-service Unsplash image so we can render
-  // visual service cards on the home + services pages. This runs in parallel
-  // after the hero image; failures per-service are silent.
-  let enrichedSalonServices = salonServices || null;
-  if (extras.templateId === 'salon' && Array.isArray(salonServices) && salonServices.length > 0) {
+  // For salon sites, make sure we always have a populated salonServices list
+  // for the template. Two paths lead here:
+  //   - The happy path: user went through the salon flow, which collected
+  //     durations, so `salonServices` is already shaped.
+  //   - The fallback path: user corrected the industry to "salon" at the
+  //     confirmation step (so template_id=salon) but never ran the salon
+  //     flow — we'd only have the plain `services` string array. Derive a
+  //     default-duration salonServices list so the menu actually renders.
+  let effectiveSalonServices = salonServices;
+  if (
+    extras.templateId === 'salon' &&
+    (!Array.isArray(effectiveSalonServices) || effectiveSalonServices.length === 0) &&
+    Array.isArray(services) &&
+    services.length > 0
+  ) {
+    effectiveSalonServices = services.map((s) => ({
+      name: typeof s === 'string' ? s : (s?.name || ''),
+      durationMinutes: 30,
+      priceText: '',
+    })).filter((s) => s.name);
+    logger.info(`[WEBGEN] Salon fallback: derived ${effectiveSalonServices.length} services from plain services[]`);
+  }
+
+  // Fetch per-service Unsplash images for the visual service cards. Failures
+  // per-service are silent (each card falls back to a gradient tile).
+  let enrichedSalonServices = effectiveSalonServices || null;
+  if (extras.templateId === 'salon' && Array.isArray(effectiveSalonServices) && effectiveSalonServices.length > 0) {
     try {
-      enrichedSalonServices = await attachServiceImages(salonServices);
+      enrichedSalonServices = await attachServiceImages(effectiveSalonServices);
     } catch (err) {
       logger.warn(`[WEBGEN] Service image fetch failed: ${err.message}`);
     }

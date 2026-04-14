@@ -356,6 +356,14 @@ async function _routeMessage(message) {
       chatbotTrialActivated: false,
       chatbotSlug: null,
       chatbotTrialEndsAt: null,
+      // Website builder state — without these, a fresh /reset would still
+      // reuse the last business name, industry, services, contact info, and
+      // the half-built site record, skipping collection questions on restart.
+      websiteData: null,
+      currentSiteId: null,
+      revisionCount: 0,
+      bonusRevisionUsed: false,
+      lastRevisionComplexity: null,
     });
     // Clear conversation history so the sales bot starts fresh
     const { clearHistory } = require('../db/conversations');
