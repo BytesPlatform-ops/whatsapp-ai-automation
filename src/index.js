@@ -26,7 +26,7 @@ app.set('trust proxy', 1);
 
 // Security middleware (skip helmet on /admin — it uses Tailwind CDN + inline scripts)
 app.use((req, res, next) => {
-  if (req.path === '/' || req.path.startsWith('/admin') || req.path === '/widget.js' || req.path.startsWith('/chat/') || req.path.startsWith('/demo/')) return next();
+  if (req.path === '/' || req.path.startsWith('/_next/') || req.path.startsWith('/admin') || req.path === '/widget.js' || req.path.startsWith('/chat/') || req.path.startsWith('/demo/')) return next();
   helmet()(req, res, next);
 });
 
@@ -84,9 +84,12 @@ app.get('/widget.js', (req, res) => {
 // Chatbot SaaS - demo and standalone pages
 app.use('/', chatbotPageRoutes);
 
-// Landing page
+// Landing page — Next.js static export served from landing/out/
+const landingOutDir = path.join(__dirname, '..', 'landing', 'out');
+app.use('/_next', express.static(path.join(landingOutDir, '_next'), { maxAge: '1y', immutable: true }));
+app.use(express.static(landingOutDir));
 app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'landing.html'));
+  res.sendFile(path.join(landingOutDir, 'index.html'));
 });
 
 // 404 handler
