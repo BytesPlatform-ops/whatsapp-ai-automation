@@ -84,13 +84,19 @@ app.get('/widget.js', (req, res) => {
 // Chatbot SaaS - demo and standalone pages
 app.use('/', chatbotPageRoutes);
 
-// Landing page — Next.js static export served from landing/out/
+// Landing page — Next.js static export (landing/out/) when available locally.
+// In production the landing is deployed separately to Vercel, so on Render the
+// folder won't exist and we just redirect the root URL there instead.
 const landingOutDir = path.join(__dirname, '..', 'landing', 'out');
-app.use('/_next', express.static(path.join(landingOutDir, '_next'), { maxAge: '1y', immutable: true }));
-app.use(express.static(landingOutDir));
-app.get('/', (req, res) => {
-  res.sendFile(path.join(landingOutDir, 'index.html'));
-});
+const LANDING_URL = process.env.LANDING_URL || 'https://bytesplatform.com';
+const landingIndex = path.join(landingOutDir, 'index.html');
+if (require('fs').existsSync(landingIndex)) {
+  app.use('/_next', express.static(path.join(landingOutDir, '_next'), { maxAge: '1y', immutable: true }));
+  app.use(express.static(landingOutDir));
+  app.get('/', (_req, res) => res.sendFile(landingIndex));
+} else {
+  app.get('/', (_req, res) => res.redirect(302, LANDING_URL));
+}
 
 // 404 handler
 app.use((req, res) => {

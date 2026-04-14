@@ -7,8 +7,7 @@
     "start": "node src/index.js",
     "dev": "node --watch src/index.js",
     "embed": "node src/knowledge/loader.js",
-    "build:landing": "cd landing && npm install --include=dev && npm run build",
-    "postinstall": "npm run build:landing"
+    "build:landing": "cd landing && npm install --include=dev && npm run build"
   },
   "keywords": [
     "whatsapp",
