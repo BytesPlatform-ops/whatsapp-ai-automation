@@ -1,0 +1,131 @@
+<!DOCTYPE html><html lang="en"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Glow Studio — Contact</title>
+<meta name="description" content="Expert stylists, premium products, a warm space — the salon you actually look forward to visiting.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;700;900&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Inter',system-ui,sans-serif;color:#1a1a1a;background:#fff;-webkit-font-smoothing:antialiased}
+h1,h2,h3,.display{font-family:'Playfair Display',Georgia,serif;letter-spacing:-0.01em}
+a{color:inherit}
+.ctn{max-width:1140px;margin:0 auto;padding:0 24px}
+.sect{padding:88px 24px}
+.btn-p{display:inline-flex;align-items:center;gap:8px;background:#1F2937;color:#fff;padding:14px 32px;border-radius:999px;text-decoration:none;font-size:15px;font-weight:600;transition:transform 0.2s,box-shadow 0.2s;border:none;cursor:pointer}
+.btn-p:hover{transform:translateY(-2px);box-shadow:0 14px 30px #1F293733}
+.btn-w{display:inline-flex;align-items:center;gap:8px;background:#fff;color:#1F2937;padding:14px 32px;border-radius:999px;text-decoration:none;font-size:15px;font-weight:700;box-shadow:0 6px 24px rgba(0,0,0,0.08)}
+.btn-w:hover{transform:translateY(-2px)}
+.btn-s{display:inline-flex;align-items:center;gap:8px;background:transparent;color:#1F2937;padding:14px 32px;border-radius:999px;text-decoration:none;font-size:15px;font-weight:600;border:1px solid #1F2937}
+.nav{position:sticky;top:0;background:rgba(255,255,255,0.88);backdrop-filter:blur(14px);border-bottom:1px solid #f2ebe6;z-index:100}
+.nav-i{display:flex;align-items:center;justify-content:space-between;padding:18px 28px;max-width:1280px;margin:0 auto}
+.nav-b{font-family:'Playfair Display',serif;font-size:22px;font-weight:700;color:#1F2937;text-decoration:none}
+.nav-ls{display:flex;align-items:center;gap:28px}
+.nav-l{color:#1a1a1a;text-decoration:none;font-size:14px;font-weight:500;transition:color 0.2s}
+.nav-l:hover{color:#1F2937}
+.nav-l.active{color:#1F2937}
+.mm-btn{display:none;background:none;border:none;cursor:pointer;padding:8px;font-size:22px;color:#1F2937}
+.mm{display:none;flex-direction:column;padding:12px 28px 20px;border-top:1px solid #f2ebe6;background:#fff;gap:14px}
+.mm a{color:#1a1a1a;text-decoration:none;font-size:15px;font-weight:500}
+.mm.open{display:flex}
+@media (max-width:760px){.nav-ls{display:none}.mm-btn{display:inline-block}}
+.hero{min-height:84vh;display:flex;align-items:center;justify-content:center;text-align:center;color:#fff;padding:80px 24px;position:relative;overflow:hidden}
+.hero-bg{position:absolute;inset:0;z-index:-1}
+.hero-overlay{position:absolute;inset:0;background:linear-gradient(135deg,#1F2937ee 0%,#EC4899bb 100%);z-index:-1}
+.hero-credit{position:absolute;bottom:12px;right:16px;font-size:11px;color:rgba(255,255,255,0.65)}
+.hero-credit a{color:rgba(255,255,255,0.85);text-decoration:underline}
+.kicker{letter-spacing:6px;font-size:11px;text-transform:uppercase;opacity:0.9;margin-bottom:20px}
+.fade-up{animation:fadeUp 0.8s ease-out both}
+@keyframes fadeUp{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:translateY(0)}}
+.service-row{display:grid;grid-template-columns:1fr auto;gap:18px;padding:22px 0;border-bottom:1px solid #f2ebe6;align-items:center}
+.service-row:last-child{border-bottom:none}
+.price{font-weight:700;color:#1F2937;font-size:17px}
+.svc-card{background:#fff;border-radius:20px;overflow:hidden;border:1px solid #f2ebe6;transition:transform 0.35s cubic-bezier(.16,1,.3,1),box-shadow 0.35s;display:flex;flex-direction:column;position:relative}
+.svc-card:hover{transform:translateY(-6px);box-shadow:0 22px 50px rgba(20,12,18,0.12)}
+.svc-media{aspect-ratio:4/3;background:linear-gradient(135deg,#1F2937 0%,#EC4899 120%);position:relative;overflow:hidden}
+.svc-media img{width:100%;height:100%;object-fit:cover;display:block;transition:transform 0.8s ease}
+.svc-card:hover .svc-media img{transform:scale(1.06)}
+.svc-fallback{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#fff;font-family:'Playfair Display',serif;font-size:72px;font-weight:700;letter-spacing:-2px;opacity:0.9}
+.svc-pill{position:absolute;top:14px;left:14px;background:rgba(255,255,255,0.92);backdrop-filter:blur(6px);color:#1F2937;font-size:11px;font-weight:600;letter-spacing:1.4px;text-transform:uppercase;padding:6px 12px;border-radius:999px;z-index:2}
+.svc-body{padding:22px 22px 24px;display:flex;flex-direction:column;flex:1}
+.svc-name{font-family:'Playfair Display',serif;font-size:21px;font-weight:700;color:#1a1a1a;margin-bottom:6px;line-height:1.25}
+.svc-meta{font-size:13px;color:#888;margin-bottom:18px}
+.svc-bottom{margin-top:auto;display:flex;align-items:center;justify-content:space-between;gap:12px;padding-top:14px;border-top:1px dashed #f2ebe6}
+.svc-price{font-weight:800;color:#1F2937;font-size:19px}
+.svc-book{background:#1F2937;color:#fff;padding:9px 18px;border-radius:999px;font-size:13px;font-weight:600;text-decoration:none;transition:background 0.2s}
+.svc-book:hover{background:#EC4899}
+.svc-credit{position:absolute;bottom:8px;right:10px;font-size:10px;color:rgba(255,255,255,0.85);background:rgba(0,0,0,0.35);padding:3px 8px;border-radius:999px;text-decoration:none;z-index:2}
+.svc-credit:hover{color:#fff;background:rgba(0,0,0,0.55)}
+.svc-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:24px}
+.stats-strip{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:24px;background:#fff;border-radius:24px;padding:36px 32px;box-shadow:0 18px 60px rgba(20,12,18,0.08)}
+.stat-n{font-family:'Playfair Display',serif;font-size:clamp(32px,4vw,44px);font-weight:700;background:linear-gradient(135deg,#1F2937,#EC4899);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;line-height:1}
+.stat-l{font-size:13px;color:#888;margin-top:6px;text-transform:uppercase;letter-spacing:1.5px}
+.cat-bar{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;margin:0 0 40px}
+.cat-bar span{padding:8px 18px;border-radius:999px;background:#faf8f6;color:#555;font-size:13px;font-weight:500;border:1px solid #f2ebe6}
+.trust-bar{display:inline-flex;align-items:center;gap:18px;padding:10px 22px;background:rgba(255,255,255,0.12);backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,0.18);border-radius:999px;font-size:13px;letter-spacing:0.3px;margin-top:28px}
+.trust-bar span{display:inline-flex;align-items:center;gap:6px}
+.trust-bar svg{flex-shrink:0}
+.ig-cta{background:linear-gradient(135deg,#1F2937 0%,#EC4899 100%);border-radius:24px;padding:48px 32px;color:#fff;text-align:center}
+input,select,textarea{font:inherit}
+.book-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px}
+@media (max-width:560px){.book-grid{grid-template-columns:1fr}}
+.slots{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px;margin-bottom:24px}
+.slot{padding:12px;border-radius:10px;border:1px solid #e6dcd3;background:#fff;cursor:pointer;font-size:14px;font-weight:500;transition:all 0.15s}
+.slot:hover{border-color:#1F2937}
+.slot.selected{background:#1F2937;color:#fff;border-color:#1F2937}
+.slot:disabled{opacity:0.35;cursor:not-allowed}
+.bk-input{width:100%;padding:14px;border-radius:10px;border:1px solid #e6dcd3;background:#fff;font-size:15px}
+.bk-input:focus{outline:none;border-color:#1F2937}
+.loading{color:#999;font-size:14px;padding:12px 0}
+.error{color:#c0392b;font-size:14px;padding:10px 14px;background:#fff5f3;border-radius:10px;margin-bottom:12px}
+.success{background:#f3faf5;border-radius:18px;padding:32px;text-align:center;color:#1a1a1a}
+</style>
+</head><body>
+<nav class="nav"><div class="nav-i">
+  <a href="/" class="nav-b">Glow Studio</a>
+  <div class="nav-ls">
+    <a href="/" class="nav-l">Home</a><a href="/services" class="nav-l">Services</a><a href="/booking" class="nav-l">Booking</a><a href="/about" class="nav-l">About</a><a href="/contact" class="nav-l active">Contact</a>
+    <a href="/booking" class="btn-p" style="padding:10px 22px;font-size:13px">Book Now</a>
+  </div>
+  <button class="mm-btn" aria-label="Menu" onclick="document.getElementById('mm').classList.toggle('open')">☰</button>
+</div>
+<div class="mm" id="mm">
+  <a href="/">Home</a><a href="/services">Services</a><a href="/booking">Booking</a><a href="/about">About</a><a href="/contact">Contact</a>
+  <a href="/booking" class="btn-p" style="align-self:flex-start">Book Now</a>
+</div>
+</nav><main>
+<section class="sect" style="background:#fff"><div class="ctn" style="max-width:960px">
+  <div style="text-align:center;margin-bottom:48px">
+    <p style="letter-spacing:4px;font-size:11px;text-transform:uppercase;color:#1F2937;margin-bottom:12px">Visit</p>
+    <h1 style="font-size:clamp(36px,6vw,56px);font-weight:800">Find Us</h1>
+  </div>
+  <div style="display:grid;grid-template-columns:1fr;gap:40px" class="md2">
+    <div>
+      <h3 style="font-size:20px;font-weight:700;margin-bottom:16px">Contact</h3>
+      <div style="display:flex;flex-direction:column;gap:10px;color:#555">
+        <p>12 Grafton Lane, Dublin 2, Ireland</p>
+        <p><a href="tel:+353 1 555 0123" style="color:#1F2937;font-weight:600">+353 1 555 0123</a></p>
+        <p><a href="mailto:hello@glowstudio.example" style="color:#1F2937;font-weight:600">hello@glowstudio.example</a></p>
+        <p><a href="https://instagram.com/glowstudio" target="_blank" rel="noopener" style="color:#1F2937;font-weight:600">Instagram @glowstudio</a></p>
+      </div>
+      <div style="margin-top:24px"><a href="/booking" class="btn-p">Book Appointment →</a></div>
+    </div>
+    
+    <div>
+      <h3 style="font-size:20px;font-weight:700;margin-bottom:16px">Opening Hours</h3>
+      <ul style="list-style:none;padding:0"><li style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid #f2ebe6;color:#555"><span style="font-weight:600;color:#1a1a1a">Mon</span><span>Closed</span></li><li style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid #f2ebe6;color:#555"><span style="font-weight:600;color:#1a1a1a">Tue</span><span>09:00–19:00</span></li><li style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid #f2ebe6;color:#555"><span style="font-weight:600;color:#1a1a1a">Wed</span><span>09:00–19:00</span></li><li style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid #f2ebe6;color:#555"><span style="font-weight:600;color:#1a1a1a">Thu</span><span>09:00–20:00</span></li><li style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid #f2ebe6;color:#555"><span style="font-weight:600;color:#1a1a1a">Fri</span><span>09:00–20:00</span></li><li style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid #f2ebe6;color:#555"><span style="font-weight:600;color:#1a1a1a">Sat</span><span>09:00–18:00</span></li><li style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid #f2ebe6;color:#555"><span style="font-weight:600;color:#1a1a1a">Sun</span><span>Closed</span></li></ul>
+    </div>
+  </div>
+</div>
+<style>@media(min-width:760px){.md2{grid-template-columns:1fr 1fr!important}}</style>
+</section></main>
+<footer style="background:#0f0f12;color:#999;padding:48px 24px 24px;text-align:center">
+  <p class="display" style="font-size:22px;color:#fff;margin-bottom:10px">Glow Studio</p>
+  <p style="font-size:13px;opacity:0.7;max-width:520px;margin:0 auto 16px">Thoughtful service, done right. Dublin 2.</p>
+  <div style="display:flex;gap:18px;justify-content:center;margin-top:12px;flex-wrap:wrap">
+    <a href="tel:+353 1 555 0123" style="color:#ddd;text-decoration:none;font-size:13px">+353 1 555 0123</a>
+    <a href="mailto:hello@glowstudio.example" style="color:#ddd;text-decoration:none;font-size:13px">hello@glowstudio.example</a>
+    <a href="https://instagram.com/glowstudio" target="_blank" rel="noopener" style="color:#ddd;text-decoration:none;font-size:13px">Instagram @glowstudio</a>
+  </div>
+  <p style="font-size:12px;opacity:0.5;margin-top:24px">© 2026 Glow Studio</p>
+</footer></body></html>

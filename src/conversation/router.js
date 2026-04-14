@@ -37,6 +37,7 @@ const { handleChatbotService } = require('./handlers/chatbotService');
 const { handleCustomDomain } = require('./handlers/customDomain');
 const { handleAdGeneration } = require('./handlers/adGeneration');
 const { handleLogoGeneration } = require('./handlers/logoGeneration');
+const { tryHandleSalonOwnerCommand } = require('./handlers/salonOwnerCommands');
 
 // Map states to their handler functions
 const STATE_HANDLERS = {
@@ -57,6 +58,10 @@ const STATE_HANDLERS = {
   [STATES.WEB_COLLECT_COLORS]: handleWebDev,
   [STATES.WEB_COLLECT_LOGO]: handleWebDev,
   [STATES.WEB_COLLECT_CONTACT]: handleWebDev,
+  [STATES.SALON_BOOKING_TOOL]: handleWebDev,
+  [STATES.SALON_INSTAGRAM]: handleWebDev,
+  [STATES.SALON_HOURS]: handleWebDev,
+  [STATES.SALON_SERVICE_DURATIONS]: handleWebDev,
   [STATES.WEB_CONFIRM]: handleWebDev,
   [STATES.WEB_GENERATING]: handleWebDev,
   [STATES.WEB_GENERATION_FAILED]: handleGenerationFailed,
@@ -363,6 +368,18 @@ async function _routeMessage(message) {
   if ((text && text.toLowerCase().trim() === '/menu') || message.buttonId === 'menu_main') {
     await updateUserState(user.id, STATES.SERVICE_SELECTION);
     user.state = STATES.SERVICE_SELECTION;
+  }
+
+  // ── Salon owner commands (run before state routing) ───────────────────────
+  // Lets salon owners query/cancel bookings from any state via plain text:
+  // "bookings", "bookings today", "cancel 123".
+  if (text && !message.buttonId && !message.listId && message.type === 'text') {
+    try {
+      const handled = await tryHandleSalonOwnerCommand(user, message);
+      if (handled) return;
+    } catch (err) {
+      logger.error('Salon owner command interceptor failed:', err);
+    }
   }
 
   // ── Intent interceptor ─────────────────────────────────────────────────────

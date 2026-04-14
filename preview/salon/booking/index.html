@@ -1,0 +1,216 @@
+<!DOCTYPE html><html lang="en"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Glow Studio — Booking</title>
+<meta name="description" content="Expert stylists, premium products, a warm space — the salon you actually look forward to visiting.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;700;900&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Inter',system-ui,sans-serif;color:#1a1a1a;background:#fff;-webkit-font-smoothing:antialiased}
+h1,h2,h3,.display{font-family:'Playfair Display',Georgia,serif;letter-spacing:-0.01em}
+a{color:inherit}
+.ctn{max-width:1140px;margin:0 auto;padding:0 24px}
+.sect{padding:88px 24px}
+.btn-p{display:inline-flex;align-items:center;gap:8px;background:#1F2937;color:#fff;padding:14px 32px;border-radius:999px;text-decoration:none;font-size:15px;font-weight:600;transition:transform 0.2s,box-shadow 0.2s;border:none;cursor:pointer}
+.btn-p:hover{transform:translateY(-2px);box-shadow:0 14px 30px #1F293733}
+.btn-w{display:inline-flex;align-items:center;gap:8px;background:#fff;color:#1F2937;padding:14px 32px;border-radius:999px;text-decoration:none;font-size:15px;font-weight:700;box-shadow:0 6px 24px rgba(0,0,0,0.08)}
+.btn-w:hover{transform:translateY(-2px)}
+.btn-s{display:inline-flex;align-items:center;gap:8px;background:transparent;color:#1F2937;padding:14px 32px;border-radius:999px;text-decoration:none;font-size:15px;font-weight:600;border:1px solid #1F2937}
+.nav{position:sticky;top:0;background:rgba(255,255,255,0.88);backdrop-filter:blur(14px);border-bottom:1px solid #f2ebe6;z-index:100}
+.nav-i{display:flex;align-items:center;justify-content:space-between;padding:18px 28px;max-width:1280px;margin:0 auto}
+.nav-b{font-family:'Playfair Display',serif;font-size:22px;font-weight:700;color:#1F2937;text-decoration:none}
+.nav-ls{display:flex;align-items:center;gap:28px}
+.nav-l{color:#1a1a1a;text-decoration:none;font-size:14px;font-weight:500;transition:color 0.2s}
+.nav-l:hover{color:#1F2937}
+.nav-l.active{color:#1F2937}
+.mm-btn{display:none;background:none;border:none;cursor:pointer;padding:8px;font-size:22px;color:#1F2937}
+.mm{display:none;flex-direction:column;padding:12px 28px 20px;border-top:1px solid #f2ebe6;background:#fff;gap:14px}
+.mm a{color:#1a1a1a;text-decoration:none;font-size:15px;font-weight:500}
+.mm.open{display:flex}
+@media (max-width:760px){.nav-ls{display:none}.mm-btn{display:inline-block}}
+.hero{min-height:84vh;display:flex;align-items:center;justify-content:center;text-align:center;color:#fff;padding:80px 24px;position:relative;overflow:hidden}
+.hero-bg{position:absolute;inset:0;z-index:-1}
+.hero-overlay{position:absolute;inset:0;background:linear-gradient(135deg,#1F2937ee 0%,#EC4899bb 100%);z-index:-1}
+.hero-credit{position:absolute;bottom:12px;right:16px;font-size:11px;color:rgba(255,255,255,0.65)}
+.hero-credit a{color:rgba(255,255,255,0.85);text-decoration:underline}
+.kicker{letter-spacing:6px;font-size:11px;text-transform:uppercase;opacity:0.9;margin-bottom:20px}
+.fade-up{animation:fadeUp 0.8s ease-out both}
+@keyframes fadeUp{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:translateY(0)}}
+.service-row{display:grid;grid-template-columns:1fr auto;gap:18px;padding:22px 0;border-bottom:1px solid #f2ebe6;align-items:center}
+.service-row:last-child{border-bottom:none}
+.price{font-weight:700;color:#1F2937;font-size:17px}
+.svc-card{background:#fff;border-radius:20px;overflow:hidden;border:1px solid #f2ebe6;transition:transform 0.35s cubic-bezier(.16,1,.3,1),box-shadow 0.35s;display:flex;flex-direction:column;position:relative}
+.svc-card:hover{transform:translateY(-6px);box-shadow:0 22px 50px rgba(20,12,18,0.12)}
+.svc-media{aspect-ratio:4/3;background:linear-gradient(135deg,#1F2937 0%,#EC4899 120%);position:relative;overflow:hidden}
+.svc-media img{width:100%;height:100%;object-fit:cover;display:block;transition:transform 0.8s ease}
+.svc-card:hover .svc-media img{transform:scale(1.06)}
+.svc-fallback{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#fff;font-family:'Playfair Display',serif;font-size:72px;font-weight:700;letter-spacing:-2px;opacity:0.9}
+.svc-pill{position:absolute;top:14px;left:14px;background:rgba(255,255,255,0.92);backdrop-filter:blur(6px);color:#1F2937;font-size:11px;font-weight:600;letter-spacing:1.4px;text-transform:uppercase;padding:6px 12px;border-radius:999px;z-index:2}
+.svc-body{padding:22px 22px 24px;display:flex;flex-direction:column;flex:1}
+.svc-name{font-family:'Playfair Display',serif;font-size:21px;font-weight:700;color:#1a1a1a;margin-bottom:6px;line-height:1.25}
+.svc-meta{font-size:13px;color:#888;margin-bottom:18px}
+.svc-bottom{margin-top:auto;display:flex;align-items:center;justify-content:space-between;gap:12px;padding-top:14px;border-top:1px dashed #f2ebe6}
+.svc-price{font-weight:800;color:#1F2937;font-size:19px}
+.svc-book{background:#1F2937;color:#fff;padding:9px 18px;border-radius:999px;font-size:13px;font-weight:600;text-decoration:none;transition:background 0.2s}
+.svc-book:hover{background:#EC4899}
+.svc-credit{position:absolute;bottom:8px;right:10px;font-size:10px;color:rgba(255,255,255,0.85);background:rgba(0,0,0,0.35);padding:3px 8px;border-radius:999px;text-decoration:none;z-index:2}
+.svc-credit:hover{color:#fff;background:rgba(0,0,0,0.55)}
+.svc-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:24px}
+.stats-strip{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:24px;background:#fff;border-radius:24px;padding:36px 32px;box-shadow:0 18px 60px rgba(20,12,18,0.08)}
+.stat-n{font-family:'Playfair Display',serif;font-size:clamp(32px,4vw,44px);font-weight:700;background:linear-gradient(135deg,#1F2937,#EC4899);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;line-height:1}
+.stat-l{font-size:13px;color:#888;margin-top:6px;text-transform:uppercase;letter-spacing:1.5px}
+.cat-bar{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;margin:0 0 40px}
+.cat-bar span{padding:8px 18px;border-radius:999px;background:#faf8f6;color:#555;font-size:13px;font-weight:500;border:1px solid #f2ebe6}
+.trust-bar{display:inline-flex;align-items:center;gap:18px;padding:10px 22px;background:rgba(255,255,255,0.12);backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,0.18);border-radius:999px;font-size:13px;letter-spacing:0.3px;margin-top:28px}
+.trust-bar span{display:inline-flex;align-items:center;gap:6px}
+.trust-bar svg{flex-shrink:0}
+.ig-cta{background:linear-gradient(135deg,#1F2937 0%,#EC4899 100%);border-radius:24px;padding:48px 32px;color:#fff;text-align:center}
+input,select,textarea{font:inherit}
+.book-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px}
+@media (max-width:560px){.book-grid{grid-template-columns:1fr}}
+.slots{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px;margin-bottom:24px}
+.slot{padding:12px;border-radius:10px;border:1px solid #e6dcd3;background:#fff;cursor:pointer;font-size:14px;font-weight:500;transition:all 0.15s}
+.slot:hover{border-color:#1F2937}
+.slot.selected{background:#1F2937;color:#fff;border-color:#1F2937}
+.slot:disabled{opacity:0.35;cursor:not-allowed}
+.bk-input{width:100%;padding:14px;border-radius:10px;border:1px solid #e6dcd3;background:#fff;font-size:15px}
+.bk-input:focus{outline:none;border-color:#1F2937}
+.loading{color:#999;font-size:14px;padding:12px 0}
+.error{color:#c0392b;font-size:14px;padding:10px 14px;background:#fff5f3;border-radius:10px;margin-bottom:12px}
+.success{background:#f3faf5;border-radius:18px;padding:32px;text-align:center;color:#1a1a1a}
+</style>
+</head><body>
+<nav class="nav"><div class="nav-i">
+  <a href="/" class="nav-b">Glow Studio</a>
+  <div class="nav-ls">
+    <a href="/" class="nav-l">Home</a><a href="/services" class="nav-l">Services</a><a href="/booking" class="nav-l active">Booking</a><a href="/about" class="nav-l">About</a><a href="/contact" class="nav-l">Contact</a>
+    <a href="/booking" class="btn-p" style="padding:10px 22px;font-size:13px">Book Now</a>
+  </div>
+  <button class="mm-btn" aria-label="Menu" onclick="document.getElementById('mm').classList.toggle('open')">☰</button>
+</div>
+<div class="mm" id="mm">
+  <a href="/">Home</a><a href="/services">Services</a><a href="/booking">Booking</a><a href="/about">About</a><a href="/contact">Contact</a>
+  <a href="/booking" class="btn-p" style="align-self:flex-start">Book Now</a>
+</div>
+</nav><main>
+<section class="sect" style="padding-top:56px;background:#fff"><div class="ctn" style="max-width:720px">
+  <div style="text-align:center;margin-bottom:40px">
+    <p style="letter-spacing:4px;font-size:11px;text-transform:uppercase;color:#1F2937;margin-bottom:12px">Appointments</p>
+    <h1 style="font-size:clamp(36px,6vw,56px);font-weight:800">Book with us</h1>
+    <p style="color:#777;margin-top:14px">Times shown in Europe/Dublin.</p>
+  </div>
+  
+      <div id="booking-root">
+        <div id="bk-error" class="error" style="display:none"></div>
+        <div class="book-grid">
+          <select id="bk-service" class="bk-input"></select>
+          <input id="bk-date" type="date" class="bk-input" />
+        </div>
+        <p id="bk-loading" class="loading" style="display:none">Loading available times…</p>
+        <div id="bk-slots" class="slots"></div>
+        <div id="bk-form" style="display:none;background:#faf8f6;border-radius:16px;padding:24px">
+          <p style="font-weight:600;margin-bottom:14px">Your details</p>
+          <div style="display:grid;gap:10px">
+            <input id="bk-name" class="bk-input" placeholder="Full name" />
+            <input id="bk-email" class="bk-input" type="email" placeholder="Email (for your confirmation)" />
+            <input id="bk-phone" class="bk-input" placeholder="Phone number" />
+            <textarea id="bk-notes" class="bk-input" placeholder="Notes (optional)" style="min-height:70px;resize:vertical"></textarea>
+            <button id="bk-submit" class="btn-p" type="button" style="justify-content:center;margin-top:4px">Confirm booking</button>
+          </div>
+          <p style="font-size:12px;color:#888;margin-top:12px;text-align:center">Free cancellation up to 24 hours before your appointment.</p>
+        </div>
+        <div id="bk-done" class="success" style="display:none">
+          <h3 style="font-size:26px;font-weight:800;margin-bottom:10px">You're booked! ✨</h3>
+          <p id="bk-done-msg" style="color:#555"></p>
+          <p style="color:#999;font-size:13px;margin-top:16px">A confirmation email (with a cancellation link) is on its way.</p>
+        </div>
+      </div>
+      <script>
+      (function(){
+        var API="http://localhost:3000";
+        var SITE="11111111-1111-1111-1111-111111111111";
+        var SERVICES=[{"name":"Women's Cut & Blow Dry","durationMinutes":60,"priceText":"€55","image":{"url":"https://images.unsplash.com/photo-1659036354224-48dd0a9a6b86?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w4NjQwMjJ8MHwxfHNlYXJjaHwxfHxoYWlyY3V0JTIwc2Fsb258ZW58MXwyfHx8MTc3NjIwMjEwNHww&ixlib=rb-4.1.0&q=80&w=1080&w=800&q=80&auto=format&fit=crop","photographer":"Fabien Maurin","photographerUrl":"https://unsplash.com/@fabienmaurin?utm_source=bytes_platform&utm_medium=referral","unsplashUrl":"https://unsplash.com/?utm_source=bytes_platform&utm_medium=referral"}},{"name":"Men's Cut","durationMinutes":30,"priceText":"€25","image":{"url":"https://images.unsplash.com/photo-1680670500665-22e480bcb0fa?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w4NjQwMjJ8MHwxfHNlYXJjaHwyfHxoYWlyY3V0JTIwc2Fsb258ZW58MXwyfHx8MTc3NjIwMjEwNHww&ixlib=rb-4.1.0&q=80&w=1080&w=800&q=80&auto=format&fit=crop","photographer":"The Skin and The Beard Story","photographerUrl":"https://unsplash.com/@theskinandthebeardstory?utm_source=bytes_platform&utm_medium=referral","unsplashUrl":"https://unsplash.com/?utm_source=bytes_platform&utm_medium=referral"}},{"name":"Full Head Colour","durationMinutes":90,"priceText":"€85","image":{"url":"https://images.unsplash.com/photo-1658932447624-152eaf36cf4e?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w4NjQwMjJ8MHwxfHNlYXJjaHwyfHxoYWlyJTIwY29sb3IlMjBzYWxvbnxlbnwxfDJ8fHwxNzc2MjAyMTA0fDA&ixlib=rb-4.1.0&q=80&w=1080&w=800&q=80&auto=format&fit=crop","photographer":"Mario La Pergola","photographerUrl":"https://unsplash.com/@mlapergolaphoto?utm_source=bytes_platform&utm_medium=referral","unsplashUrl":"https://unsplash.com/?utm_source=bytes_platform&utm_medium=referral"}},{"name":"Balayage / Highlights","durationMinutes":120,"priceText":"From €120","image":{"url":"https://images.unsplash.com/photo-1658932447624-152eaf36cf4e?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w4NjQwMjJ8MHwxfHNlYXJjaHwzfHxiYWxheWFnZSUyMGhhaXIlMjBjb2xvcnxlbnwxfDJ8fHwxNzc2MjAyMTA0fDA&ixlib=rb-4.1.0&q=80&w=1080&w=800&q=80&auto=format&fit=crop","photographer":"Mario La Pergola","photographerUrl":"https://unsplash.com/@mlapergolaphoto?utm_source=bytes_platform&utm_medium=referral","unsplashUrl":"https://unsplash.com/?utm_source=bytes_platform&utm_medium=referral"}},{"name":"Keratin Treatment","durationMinutes":90,"priceText":"€150","image":{"url":"https://images.unsplash.com/photo-1740341382410-32134074935f?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w4NjQwMjJ8MHwxfHNlYXJjaHwyfHxrZXJhdGluJTIwaGFpciUyMHRyZWF0bWVudHxlbnwxfDJ8fHwxNzc2MjAyMTA0fDA&ixlib=rb-4.1.0&q=80&w=1080&w=800&q=80&auto=format&fit=crop","photographer":"Ela De Pure","photographerUrl":"https://unsplash.com/@eladepure?utm_source=bytes_platform&utm_medium=referral","unsplashUrl":"https://unsplash.com/?utm_source=bytes_platform&utm_medium=referral"}},{"name":"Gel Manicure","durationMinutes":45,"priceText":"€35","image":{"url":"https://images.unsplash.com/photo-1693776526826-f5e105c54da3?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w4NjQwMjJ8MHwxfHNlYXJjaHwxfHxtYW5pY3VyZSUyMG5haWxzfGVufDF8Mnx8fDE3NzYyMDIxMDR8MA&ixlib=rb-4.1.0&q=80&w=1080&w=800&q=80&auto=format&fit=crop","photographer":"Anna Keibalo","photographerUrl":"https://unsplash.com/@anyutakejbalo?utm_source=bytes_platform&utm_medium=referral","unsplashUrl":"https://unsplash.com/?utm_source=bytes_platform&utm_medium=referral"}},{"name":"Gel Pedicure","durationMinutes":60,"priceText":"€45","image":{"url":"https://images.unsplash.com/photo-1628610726537-6e9d2799f871?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w4NjQwMjJ8MHwxfHNlYXJjaHwxfHxwZWRpY3VyZSUyMG5haWxzfGVufDF8Mnx8fDE3NzYyMDIxMDV8MA&ixlib=rb-4.1.0&q=80&w=1080&w=800&q=80&auto=format&fit=crop","photographer":"sq lim","photographerUrl":"https://unsplash.com/@sql?utm_source=bytes_platform&utm_medium=referral","unsplashUrl":"https://unsplash.com/?utm_source=bytes_platform&utm_medium=referral"}},{"name":"Classic Facial","durationMinutes":60,"priceText":"€65","image":{"url":"https://images.unsplash.com/photo-1773565744218-d8d11de58362?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w4NjQwMjJ8MHwxfHNlYXJjaHwxfHxmYWNpYWwlMjB0cmVhdG1lbnQlMjBzcGF8ZW58MXwyfHx8MTc3NjIwMjEwNXww&ixlib=rb-4.1.0&q=80&w=1080&w=800&q=80&auto=format&fit=crop","photographer":"Ela De Pure","photographerUrl":"https://unsplash.com/@eladepure?utm_source=bytes_platform&utm_medium=referral","unsplashUrl":"https://unsplash.com/?utm_source=bytes_platform&utm_medium=referral"}},{"name":"Lash Extensions","durationMinutes":90,"priceText":"€80","image":{"url":"https://images.unsplash.com/photo-1581389042184-bfc74c8af48e?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w4NjQwMjJ8MHwxfHNlYXJjaHwxfHxsYXNoJTIwZXh0ZW5zaW9ucyUyMGV5ZWxhc2h8ZW58MXwyfHx8MTc3NjIwMjEwNXww&ixlib=rb-4.1.0&q=80&w=1080&w=800&q=80&auto=format&fit=crop","photographer":"Giorgio Trovato","photographerUrl":"https://unsplash.com/@giorgiotrovato?utm_source=bytes_platform&utm_medium=referral","unsplashUrl":"https://unsplash.com/?utm_source=bytes_platform&utm_medium=referral"}},{"name":"Brow Lamination","durationMinutes":30,"priceText":"€35","image":{"url":"https://images.unsplash.com/photo-1730226995158-da5125905b03?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w4NjQwMjJ8MHwxfHNlYXJjaHwyfHxleWVicm93JTIwYmVhdXR5fGVufDF8Mnx8fDE3NzYyMDIxMDV8MA&ixlib=rb-4.1.0&q=80&w=1080&w=800&q=80&auto=format&fit=crop","photographer":"Mary Borozdina","photographerUrl":"https://unsplash.com/@mbacloud?utm_source=bytes_platform&utm_medium=referral","unsplashUrl":"https://unsplash.com/?utm_source=bytes_platform&utm_medium=referral"}}];
+        var TZ="Europe/Dublin";
+        var PC="#1F2937";
+        var state={service:SERVICES[0]&&SERVICES[0].name||'',date:'',slot:null};
+        var svcSel=document.getElementById('bk-service');
+        var dateInp=document.getElementById('bk-date');
+        var slotsEl=document.getElementById('bk-slots');
+        var errEl=document.getElementById('bk-error');
+        var loadingEl=document.getElementById('bk-loading');
+        var formEl=document.getElementById('bk-form');
+        var doneEl=document.getElementById('bk-done');
+        var doneMsg=document.getElementById('bk-done-msg');
+        var submitBtn=document.getElementById('bk-submit');
+        SERVICES.forEach(function(s){
+          var o=document.createElement('option');o.value=s.name;
+          o.textContent=s.name+' — '+s.durationMinutes+' min'+(s.priceText?' · '+s.priceText:'');
+          svcSel.appendChild(o);
+        });
+        dateInp.value=new Date().toISOString().slice(0,10);
+        dateInp.min=new Date().toISOString().slice(0,10);
+        state.date=dateInp.value;
+        function showError(m){errEl.style.display='block';errEl.textContent=m;}
+        function clearError(){errEl.style.display='none';errEl.textContent='';}
+        function resetSlots(){slotsEl.innerHTML='';formEl.style.display='none';state.slot=null;}
+        function loadSlots(){
+          clearError();resetSlots();loadingEl.style.display='block';
+          var url=API+'/api/booking/'+SITE+'/availability?service='+encodeURIComponent(state.service)+'&date='+state.date;
+          fetch(url).then(function(r){return r.json().then(function(j){return {ok:r.ok,j:j}})}).then(function(x){
+            loadingEl.style.display='none';
+            if(!x.ok){showError(x.j.error||'Could not load available times');return;}
+            var slots=x.j.slots||[];
+            if(slots.length===0){slotsEl.innerHTML='<p style="grid-column:1/-1;color:#888;text-align:center;padding:14px">No open slots on this day.</p>';return;}
+            slots.forEach(function(s){
+              var b=document.createElement('button');b.type='button';b.className='slot';b.textContent=s.label;b.dataset.start=s.startAt;
+              b.addEventListener('click',function(){
+                state.slot=s.startAt;
+                [].forEach.call(slotsEl.querySelectorAll('.slot'),function(el){el.classList.remove('selected')});
+                b.classList.add('selected');
+                formEl.style.display='block';
+                formEl.scrollIntoView({behavior:'smooth',block:'center'});
+              });
+              slotsEl.appendChild(b);
+            });
+          }).catch(function(e){loadingEl.style.display='none';showError('Network error: '+e.message);});
+        }
+        svcSel.addEventListener('change',function(){state.service=svcSel.value;loadSlots();});
+        dateInp.addEventListener('change',function(){state.date=dateInp.value;loadSlots();});
+        submitBtn.addEventListener('click',function(){
+          clearError();
+          if(!state.slot){showError('Please pick a time.');return;}
+          var name=document.getElementById('bk-name').value.trim();
+          var email=document.getElementById('bk-email').value.trim();
+          var phone=document.getElementById('bk-phone').value.trim();
+          var notes=document.getElementById('bk-notes').value.trim();
+          if(!name){showError('Please enter your name.');return;}
+          if(!email&&!phone){showError('Please enter an email or phone so we can confirm.');return;}
+          submitBtn.disabled=true;submitBtn.textContent='Booking…';
+          fetch(API+'/api/booking/'+SITE,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+            service:state.service,startAt:state.slot,customerName:name,customerEmail:email,customerPhone:phone,notes:notes
+          })}).then(function(r){return r.json().then(function(j){return {ok:r.ok,j:j}})}).then(function(x){
+            submitBtn.disabled=false;submitBtn.textContent='Confirm booking';
+            if(!x.ok){showError(x.j.error||'Booking failed');return;}
+            document.getElementById('booking-root').querySelectorAll('*').forEach(function(el){el.style.display='none';});
+            doneEl.style.display='block';
+            doneMsg.textContent=state.service+' on '+x.j.displayTime+' ('+TZ+')';
+          }).catch(function(e){
+            submitBtn.disabled=false;submitBtn.textContent='Confirm booking';
+            showError('Network error: '+e.message);
+          });
+        });
+        loadSlots();
+      })();
+      </script>
+</div></section></main>
+<footer style="background:#0f0f12;color:#999;padding:48px 24px 24px;text-align:center">
+  <p class="display" style="font-size:22px;color:#fff;margin-bottom:10px">Glow Studio</p>
+  <p style="font-size:13px;opacity:0.7;max-width:520px;margin:0 auto 16px">Thoughtful service, done right. Dublin 2.</p>
+  <div style="display:flex;gap:18px;justify-content:center;margin-top:12px;flex-wrap:wrap">
+    <a href="tel:+353 1 555 0123" style="color:#ddd;text-decoration:none;font-size:13px">+353 1 555 0123</a>
+    <a href="mailto:hello@glowstudio.example" style="color:#ddd;text-decoration:none;font-size:13px">hello@glowstudio.example</a>
+    <a href="https://instagram.com/glowstudio" target="_blank" rel="noopener" style="color:#ddd;text-decoration:none;font-size:13px">Instagram @glowstudio</a>
+  </div>
+  <p style="font-size:12px;opacity:0.5;margin-top:24px">© 2026 Glow Studio</p>
+</footer></body></html>

@@ -35,4 +35,16 @@ async function getLatestSite(userId) {
   return data || null;
 }
 
-module.exports = { createSite, updateSite, getLatestSite };
+async function getSiteById(siteId) {
+  const { data, error } = await supabase
+    .from('generated_sites')
+    .select('*')
+    .eq('id', siteId)
+    .single();
+  if (error && error.code !== 'PGRST116') {
+    throw new Error(`Failed to get site: ${error.message}`);
+  }
+  return data || null;
+}
+
+module.exports = { createSite, updateSite, getLatestSite, getSiteById };

@@ -2,13 +2,16 @@ const { generateResponse } = require('../llm/provider');
 const { WEBSITE_CONTENT_PROMPT } = require('../llm/prompts');
 const { logger } = require('../utils/logger');
 const { getHeroImage } = require('./heroImage');
+const { attachServiceImages } = require('./serviceImages');
+const { inferTimezoneFromAddress } = require('./timezone');
 
 /**
  * Generate website content using LLM based on collected business info.
  * @param {Object} businessData - Collected business information
+ * @param {Object} [extras] - Extra context (templateId, siteId) that flows through to siteConfig
  * @returns {Promise<Object>} Complete site configuration
  */
-async function generateWebsiteContent(businessData) {
+async function generateWebsiteContent(businessData, extras = {}) {
   const {
     businessName,
     industry,
@@ -20,6 +23,13 @@ async function generateWebsiteContent(businessData) {
     contactPhone,
     contactAddress,
     logo,
+    // Salon-specific — pass-through to the salon template.
+    bookingMode,
+    bookingUrl,
+    instagramHandle,
+    weeklyHours,
+    salonServices,
+    timezone,
   } = businessData;
 
   const hasServices = Array.isArray(services) && services.length > 0;
@@ -123,6 +133,30 @@ Generate compelling website copy for this business. Return ONLY valid JSON.`;
     logger.warn(`[WEBGEN] Hero image fetch threw: ${err.message}`);
   }
 
+  // For salon sites, fetch a per-service Unsplash image so we can render
+  // visual service cards on the home + services pages. This runs in parallel
+  // after the hero image; failures per-service are silent.
+  let enrichedSalonServices = salonServices || null;
+  if (extras.templateId === 'salon' && Array.isArray(salonServices) && salonServices.length > 0) {
+    try {
+      enrichedSalonServices = await attachServiceImages(salonServices);
+    } catch (err) {
+      logger.warn(`[WEBGEN] Service image fetch failed: ${err.message}`);
+    }
+  }
+
+  // Auto-infer timezone for salon native bookings if not already set.
+  let resolvedTimezone = timezone || null;
+  if (extras.templateId === 'salon' && bookingMode === 'native' && !resolvedTimezone) {
+    try {
+      resolvedTimezone = await inferTimezoneFromAddress(contactAddress);
+      logger.info(`[WEBGEN] Inferred timezone "${resolvedTimezone}" for ${businessName}`);
+    } catch (err) {
+      logger.warn(`[WEBGEN] Timezone inference failed: ${err.message}`);
+      resolvedTimezone = 'Europe/Dublin';
+    }
+  }
+
   // Merge generated content with business data to create full config
   const siteConfig = {
     businessName,
@@ -136,6 +170,15 @@ Generate compelling website copy for this business. Return ONLY valid JSON.`;
     logo: logo || null,
     heroImage,
     ...generatedContent,
+    // Template selector + salon pass-through (harmless for non-salon templates).
+    templateId: extras.templateId || 'business-starter',
+    siteId: extras.siteId || null,
+    bookingMode: bookingMode || null,
+    bookingUrl: bookingUrl || null,
+    instagramHandle: instagramHandle || null,
+    weeklyHours: weeklyHours || null,
+    salonServices: enrichedSalonServices,
+    timezone: resolvedTimezone,
   };
 
   logger.info(`Generated website content for ${businessName}${heroImage ? ' (with Unsplash hero)' : ''}`);

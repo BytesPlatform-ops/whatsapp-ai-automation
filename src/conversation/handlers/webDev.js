@@ -24,6 +24,14 @@ async function handleWebDev(user, message) {
     case STATES.WEB_COLLECT_LOGO:
       // Legacy: skip straight to contact if stuck in old states
       return STATES.WEB_COLLECT_CONTACT;
+    case STATES.SALON_BOOKING_TOOL:
+      return handleSalonBookingTool(user, message);
+    case STATES.SALON_INSTAGRAM:
+      return handleSalonInstagram(user, message);
+    case STATES.SALON_HOURS:
+      return handleSalonHours(user, message);
+    case STATES.SALON_SERVICE_DURATIONS:
+      return handleSalonServiceDurations(user, message);
     case STATES.WEB_COLLECT_CONTACT:
       return handleCollectContact(user, message);
     case STATES.WEB_CONFIRM:
@@ -214,6 +222,12 @@ function getColorsForIndustry(industry) {
   return match ? INDUSTRY_COLORS[match] : DEFAULT_COLORS;
 }
 
+// A "salon-like" business gets the dedicated salon template with its booking flow.
+function isSalonIndustry(industry) {
+  if (!industry) return false;
+  return /\b(salon|beauty|barber|spa|nail|hair|lash|brow|makeup)\b/i.test(industry);
+}
+
 async function handleCollectServices(user, message) {
   const servicesText = (message.text || '').trim();
   if (!servicesText || servicesText.length < 2) {
@@ -234,11 +248,12 @@ async function handleCollectServices(user, message) {
     await updateUserMetadata(user.id, {
       websiteData: { ...(user.metadata?.websiteData || {}), services: [], ...colors },
     });
+    await logMessage(user.id, `Services: skipped | Colors auto-assigned for ${industry}`, 'assistant');
+    if (isSalonIndustry(industry)) return startSalonFlow(user);
     await sendTextMessage(
       user.phone_number,
       'No worries, we\'ll skip the services page! Last thing - what contact info do you want on the site? Just send your email, phone, and/or address.'
     );
-    await logMessage(user.id, `Services: skipped | Colors auto-assigned for ${industry}`, 'assistant');
     return STATES.WEB_COLLECT_CONTACT;
   }
 
@@ -248,13 +263,178 @@ async function handleCollectServices(user, message) {
     websiteData: { ...(user.metadata?.websiteData || {}), services, ...colors },
   });
 
+  await logMessage(user.id, `Services: ${services.join(', ')} | Colors auto-assigned for ${industry}`, 'assistant');
+
+  if (isSalonIndustry(industry)) return startSalonFlow(user);
+
   await sendTextMessage(
     user.phone_number,
     'Last thing - what contact info do you want on the site? Just send your email, phone, and/or address.'
   );
-  await logMessage(user.id, `Services: ${services.join(', ')} | Colors auto-assigned for ${industry}`, 'assistant');
 
   // Skip logo — go straight to contact
+  return STATES.WEB_COLLECT_CONTACT;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SALON-SPECIFIC COLLECTION
+// Only reached when industry matches salon/beauty/barber/spa/etc.
+// Flow: services -> booking tool -> instagram -> (if native) hours -> durations -> contact
+// ═══════════════════════════════════════════════════════════════════════════
+
+async function startSalonFlow(user) {
+  // Mark this site as using the salon template so the deployer picks the salon renderer.
+  const siteId = user.metadata?.currentSiteId;
+  if (siteId) {
+    try {
+      await updateSite(siteId, { template_id: 'salon' });
+    } catch (err) {
+      logger.warn(`[SALON] Could not update template_id on site ${siteId}: ${err.message}`);
+    }
+  }
+  await sendTextMessage(
+    user.phone_number,
+    'Do you already use a booking tool (Fresha, Booksy, Vagaro, Calendly, etc.)?\n\n' +
+      '• If yes, just paste the link and we\'ll embed it on your site.\n' +
+      '• If not, type *"no"* and we\'ll build a built-in booking system for you.'
+  );
+  return STATES.SALON_BOOKING_TOOL;
+}
+
+async function handleSalonBookingTool(user, message) {
+  const text = (message.text || '').trim();
+  const wd = { ...(user.metadata?.websiteData || {}) };
+  const noWords = /^(no|none|nope|nah|n\/a|na|skip|don'?t have|dont have|not yet)$/i;
+  const urlMatch = text.match(/https?:\/\/\S+/i);
+
+  if (urlMatch) {
+    wd.bookingMode = 'embed';
+    wd.bookingUrl = urlMatch[0].replace(/[)\]]+$/, '');
+    await updateUserMetadata(user.id, { websiteData: wd });
+    await logMessage(user.id, `Booking mode: embed (${wd.bookingUrl})`, 'assistant');
+    await sendTextMessage(
+      user.phone_number,
+      `Got it — we'll embed *${wd.bookingUrl}* on your booking page.\n\nWhat's your Instagram handle? (e.g. @glowstudio). Say *"skip"* if you don't have one.`
+    );
+    return STATES.SALON_INSTAGRAM;
+  }
+
+  if (noWords.test(text)) {
+    wd.bookingMode = 'native';
+    await updateUserMetadata(user.id, { websiteData: wd });
+    await logMessage(user.id, 'Booking mode: native', 'assistant');
+    await sendTextMessage(
+      user.phone_number,
+      'Perfect — we\'ll build you a booking system. What\'s your Instagram handle? (e.g. @glowstudio). Say *"skip"* if you don\'t have one.'
+    );
+    return STATES.SALON_INSTAGRAM;
+  }
+
+  await sendTextMessage(
+    user.phone_number,
+    'Please either paste your booking tool link (Fresha/Booksy/Vagaro/etc.) or type *"no"* and we\'ll build one for you.'
+  );
+  return STATES.SALON_BOOKING_TOOL;
+}
+
+async function handleSalonInstagram(user, message) {
+  const text = (message.text || '').trim();
+  const wd = { ...(user.metadata?.websiteData || {}) };
+  const skipWords = /^(skip|no|none|n\/a|na|nah|nope|don'?t|dont)$/i;
+
+  if (!skipWords.test(text) && text.length > 0) {
+    // Accept @handle, bare handle, or full URL — normalise to handle.
+    const urlHandle = text.match(/instagram\.com\/([\w.]+)/i);
+    const raw = urlHandle ? urlHandle[1] : text.replace(/^@/, '').split(/\s/)[0];
+    if (raw && /^[\w.]{1,30}$/.test(raw)) {
+      wd.instagramHandle = raw;
+    }
+  }
+  await updateUserMetadata(user.id, { websiteData: wd });
+  await logMessage(user.id, `Instagram: ${wd.instagramHandle || '(skipped)'}`, 'assistant');
+
+  if (wd.bookingMode === 'native') {
+    await sendTextMessage(
+      user.phone_number,
+      'What are your opening hours? A quick line is fine — for example: *"Tue-Sat 9-7, Sun-Mon closed"*.\n\nSay *"default"* for standard salon hours (Tue-Sat 9-7).'
+    );
+    return STATES.SALON_HOURS;
+  }
+
+  // Embed mode — skip hours/durations and go to contact.
+  await sendTextMessage(
+    user.phone_number,
+    'Last thing — what contact info do you want on the site? Just send your email, phone, and/or address.'
+  );
+  return STATES.WEB_COLLECT_CONTACT;
+}
+
+async function handleSalonHours(user, message) {
+  const text = (message.text || '').trim();
+  const wd = { ...(user.metadata?.websiteData || {}) };
+  const { parseWeeklyHours, formatHoursForDisplay } = require('../../website-gen/hoursParser');
+  const { hours, usedDefault } = await parseWeeklyHours(text);
+  wd.weeklyHours = hours;
+  await updateUserMetadata(user.id, { websiteData: wd });
+  await logMessage(user.id, `Hours${usedDefault ? ' (default)' : ''}:\n${formatHoursForDisplay(hours)}`, 'assistant');
+
+  const prefix = usedDefault
+    ? 'Using standard salon hours (Tue-Sat 9-7). You can edit these later.\n\n'
+    : `Got it:\n${formatHoursForDisplay(hours)}\n\n`;
+  const services = (wd.services || []);
+  if (services.length === 0) {
+    // No services to duration-tag — jump to contact.
+    await sendTextMessage(user.phone_number, prefix + 'Last thing — email, phone, and/or address for the site?');
+    return STATES.WEB_COLLECT_CONTACT;
+  }
+  await sendTextMessage(
+    user.phone_number,
+    prefix +
+      `How long does each service take? Example: *"Haircut 30min, Colour 90min, Nails 45min"*.\n\n` +
+      `Your services: ${services.join(', ')}.\n\n` +
+      `Say *"default"* to use 30min for each.`
+  );
+  return STATES.SALON_SERVICE_DURATIONS;
+}
+
+function parseServiceDurations(text, servicesList) {
+  // Match pairs: "name NN min" or "name: NN min". Returns a map by lowercased name.
+  const map = {};
+  const pairRe = /([a-zA-Z][\w\s&/'-]*?)\s*[:\-]?\s*(\d{1,3})\s*(?:mins?|minutes|m)\b/gi;
+  let m;
+  while ((m = pairRe.exec(text))) {
+    const name = m[1].trim().replace(/,+$/, '').toLowerCase();
+    const mins = parseInt(m[2], 10);
+    if (name && mins > 0 && mins <= 600) map[name] = mins;
+  }
+  return servicesList.map((s) => {
+    const key = s.toLowerCase();
+    // Try exact, then partial match.
+    const hit = map[key] || Object.keys(map).find((k) => key.includes(k) || k.includes(key));
+    const mins = typeof hit === 'number' ? hit : (hit ? map[hit] : null);
+    return { name: s, durationMinutes: mins || 30, priceText: '' };
+  });
+}
+
+async function handleSalonServiceDurations(user, message) {
+  const text = (message.text || '').trim();
+  const wd = { ...(user.metadata?.websiteData || {}) };
+  const services = wd.services || [];
+  const useDefault = /^(default|skip|idk|dunno|not sure|30)$/i.test(text);
+  const salonServices = useDefault
+    ? services.map((s) => ({ name: s, durationMinutes: 30, priceText: '' }))
+    : parseServiceDurations(text, services);
+  wd.salonServices = salonServices;
+  await updateUserMetadata(user.id, { websiteData: wd });
+  await logMessage(
+    user.id,
+    `Service durations: ${salonServices.map((s) => `${s.name} ${s.durationMinutes}m`).join(', ')}`,
+    'assistant'
+  );
+  await sendTextMessage(
+    user.phone_number,
+    'Perfect. Last thing — what contact info do you want on the site? Just send your email, phone, and/or address.'
+  );
   return STATES.WEB_COLLECT_CONTACT;
 }
 
@@ -438,8 +618,10 @@ async function generateWebsite(user) {
     });
 
     // 1. Generate content with LLM
-    logger.info(`[WEBGEN] Step 2/5: Generating website content via LLM for "${websiteData.businessName}"`);
-    const siteConfig = await generateWebsiteContent(websiteData);
+    const templateId = isSalonIndustry(websiteData.industry) ? 'salon' : 'business-starter';
+    const siteId = freshUser.metadata?.currentSiteId;
+    logger.info(`[WEBGEN] Step 2/5: Generating website content via LLM for "${websiteData.businessName}" (template=${templateId})`);
+    const siteConfig = await generateWebsiteContent(websiteData, { templateId, siteId });
     logger.info(`[WEBGEN] Content generated:`, {
       headline: siteConfig.headline,
       servicesCount: siteConfig.services?.length,
@@ -452,15 +634,29 @@ async function generateWebsite(user) {
 
     // 3. Update site record
     logger.info(`[WEBGEN] Step 4/5: Updating site record in DB`);
-    const siteId = freshUser.metadata?.currentSiteId;
     if (siteId) {
-      await updateSite(siteId, {
+      const updateFields = {
         site_data: siteConfig,
         preview_url: previewUrl,
         netlify_site_id: netlifySiteId,
         netlify_subdomain: netlifySubdomain,
         status: 'preview',
-      });
+        template_id: templateId,
+      };
+      // Salon: persist booking settings in dedicated columns so the booking API
+      // can look them up by site_id without parsing site_data.
+      if (templateId === 'salon') {
+        updateFields.booking_mode = siteConfig.bookingMode || null;
+        updateFields.booking_url = siteConfig.bookingUrl || null;
+        updateFields.booking_settings = {
+          timezone: siteConfig.timezone || null,
+          instagramHandle: siteConfig.instagramHandle || null,
+          weeklyHours: siteConfig.weeklyHours || null,
+          slotMinutes: 30,
+          services: siteConfig.salonServices || [],
+        };
+      }
+      await updateSite(siteId, updateFields);
       logger.info(`[WEBGEN] Site record ${siteId} updated`);
     } else {
       logger.warn(`[WEBGEN] No currentSiteId found in user metadata - skipping DB update`);

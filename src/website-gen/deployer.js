@@ -2,14 +2,23 @@ const axios = require('axios');
 const crypto = require('crypto');
 const { env } = require('../config/env');
 const { logger } = require('../utils/logger');
+const salonTemplate = require('./templates/salon');
 
 const NETLIFY_API = 'https://api.netlify.com/api/v1';
+
+// Route a siteConfig to the right template's page generator.
+function renderAllPagesForTemplate(siteConfig, watermark) {
+  if (siteConfig.templateId === 'salon') {
+    return salonTemplate.generateAllPages(siteConfig, watermark);
+  }
+  return generateAllPages(siteConfig, watermark);
+}
 
 async function deployToNetlify(siteConfig, existingSiteId = null, { watermark = false } = {}) {
   if (!env.netlify.token) throw new Error('NETLIFY_TOKEN is not configured');
   const headers = { Authorization: `Bearer ${env.netlify.token}`, 'Content-Type': 'application/json' };
   try {
-    const files = generateAllPages(siteConfig, watermark);
+    const files = renderAllPagesForTemplate(siteConfig, watermark);
     let siteId, siteName;
 
     if (existingSiteId) {

@@ -5,6 +5,7 @@ const { env, validateEnv } = require('./config/env');
 const { logger } = require('./utils/logger');
 const webhookRoutes = require('./webhook/routes');
 const calendlyRoutes = require('./webhook/calendly');
+const bookingRoutes = require('./webhook/bookingRoutes');
 const adminRoutes = require('./admin/routes');
 const { startFollowupScheduler } = require('./followup/scheduler');
 const chatbotApiRoutes = require('./chatbot/api');
@@ -14,6 +15,7 @@ const { startInstagramTokenRefreshScheduler } = require('./jobs/instagramTokenRe
 const { startUpsellScheduler } = require('./jobs/upsellScheduler');
 const { startDomainVerifier } = require('./jobs/domainVerifier');
 const { startSiteCleanup } = require('./jobs/siteCleanup');
+const { startBookingReminders } = require('./jobs/bookingReminders');
 const path = require('path');
 
 // Validate environment variables
@@ -48,6 +50,8 @@ app.use(
     },
   })
 );
+// URL-encoded bodies (used by the cancellation form in the salon booking flow).
+app.use(express.urlencoded({ extended: false }));
 
 // Health check
 app.get('/health', (req, res) => {
@@ -57,6 +61,9 @@ app.get('/health', (req, res) => {
 // Webhook routes
 app.use('/', webhookRoutes);
 app.use('/', calendlyRoutes);
+
+// Salon booking API — endpoints are public (called from static salon sites on Netlify).
+app.use('/', bookingRoutes);
 
 // Messenger & Instagram webhook routes
 const messengerRoutes = require('./webhook/messengerRoutes');
@@ -144,6 +151,9 @@ app.listen(env.port, () => {
 
   // Start site cleanup job — watermark after 24h, delete after 60 days (every 6h)
   startSiteCleanup();
+
+  // Start salon booking reminder job — 24h-before customer emails (every 15m)
+  startBookingReminders();
 });
 
 // Catch unhandled promise rejections so they don't silently kill operations

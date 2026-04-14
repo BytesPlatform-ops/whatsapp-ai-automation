@@ -1,0 +1,42 @@
+{
+  "businessName": "Glow Studio",
+  "industry": "Hair Salon",
+  "primaryColor": "#1F2937",
+  "secondaryColor": "#111827",
+  "accentColor": "#EC4899",
+  "headline": "Where Beauty Meets Art",
+  "tagline": "Expert stylists. Thoughtful service. A salon you'll actually enjoy visiting.",
+  "aboutTitle": "About Glow Studio",
+  "aboutText": "Founded on the belief that everyone deserves to feel beautiful, Glow Studio brings together talented artists, premium products, and a welcoming space. From bold balayage to signature facials, we treat every appointment as a chance to make your day better.",
+  "servicesTitle": "Our Services",
+  "contactEmail": "hello@glowstudio.example",
+  "contactPhone": "+353 1 234 5678",
+  "contactAddress": "12 Grafton Lane, Dublin, Ireland",
+  "ctaTitle": "Ready to Book?",
+  "ctaText": "Reserve your spot in seconds — or call us, whichever you prefer.",
+  "ctaButton": "Book Now",
+  "footerTagline": "A modern salon with an old-school attention to detail.",
+  "apiBaseUrl": "https://api.example.com",
+  "siteId": "00000000-0000-0000-0000-000000000000",
+  "bookingMode": "native",
+  "bookingUrl": null,
+  "instagramHandle": "glowstudio",
+  "timezone": "Europe/Dublin",
+  "weeklyHours": {
+    "mon": [],
+    "tue": [{ "open": "09:00", "close": "19:00" }],
+    "wed": [{ "open": "09:00", "close": "19:00" }],
+    "thu": [{ "open": "09:00", "close": "20:00" }],
+    "fri": [{ "open": "09:00", "close": "20:00" }],
+    "sat": [{ "open": "09:00", "close": "18:00" }],
+    "sun": []
+  },
+  "salonServices": [
+    { "name": "Women's Cut & Blow Dry", "durationMinutes": 60, "priceText": "€55" },
+    { "name": "Men's Cut", "durationMinutes": 30, "priceText": "€25" },
+    { "name": "Full Head Colour", "durationMinutes": 90, "priceText": "€85" },
+    { "name": "Balayage / Highlights", "durationMinutes": 120, "priceText": "From €120" },
+    { "name": "Gel Manicure", "durationMinutes": 45, "priceText": "€35" },
+    { "name": "Classic Facial", "durationMinutes": 60, "priceText": "€65" }
+  ]
+}
