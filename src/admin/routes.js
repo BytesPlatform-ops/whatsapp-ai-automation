@@ -127,7 +127,7 @@ router.post('/api/conversations/:userId/reply', async (req, res) => {
     const { supabase } = require('../config/database');
     const { data: user, error: userErr } = await supabase
       .from('users')
-      .select('id, phone_number, channel')
+      .select('id, phone_number, channel, via_phone_number_id')
       .eq('id', req.params.userId)
       .single();
 
@@ -137,17 +137,20 @@ router.post('/api/conversations/:userId/reply', async (req, res) => {
 
     const { logMessage } = require('../db/conversations');
     const { sendTextMessage } = require('../messages/sender');
-    const { runWithChannel } = require('../messages/channelContext');
+    const { runWithContext } = require('../messages/channelContext');
 
-    // Send the message via the correct channel
-    await runWithChannel(user.channel || 'whatsapp', () =>
-      sendTextMessage(user.phone_number, messageText.trim())
+    // Send on the same channel + WhatsApp number the user originally messaged —
+    // via_phone_number_id ensures the admin's reply shows up in the customer's
+    // existing thread instead of a different business number.
+    await runWithContext(
+      { channel: user.channel || 'whatsapp', phoneNumberId: user.via_phone_number_id || null },
+      () => sendTextMessage(user.phone_number, messageText.trim())
     );
 
     // Log it as an assistant message
     await logMessage(user.id, messageText.trim(), 'assistant');
 
-    logger.info(`[ADMIN] Manual reply sent to ${user.phone_number} (${user.channel}): "${messageText.trim().slice(0, 50)}..."`);
+    logger.info(`[ADMIN] Manual reply sent to ${user.phone_number} (${user.channel}, via=${user.via_phone_number_id || 'default'}): "${messageText.trim().slice(0, 50)}..."`);
     res.json({ success: true });
   } catch (err) {
     logger.error('[ADMIN] Reply error:', err.message);

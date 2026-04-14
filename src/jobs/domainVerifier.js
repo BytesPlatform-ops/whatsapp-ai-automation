@@ -12,7 +12,7 @@
 const { supabase } = require('../config/database');
 const { verifyDNS } = require('../website-gen/domainChecker');
 const { sendTextMessage } = require('../messages/sender');
-const { runWithChannel } = require('../messages/channelContext');
+const { runWithContext } = require('../messages/channelContext');
 const { logMessage } = require('../db/conversations');
 const { logger } = require('../utils/logger');
 
@@ -39,16 +39,18 @@ async function runDomainVerificationCycle() {
             .update({ status: 'live' })
             .eq('id', site.id);
 
-          // Get user info to notify them
+          // Get user info to notify them — include via_phone_number_id so the
+          // notification lands on the same WhatsApp line they originally used.
           const { data: user } = await supabase
             .from('users')
-            .select('id, phone_number, channel')
+            .select('id, phone_number, channel, via_phone_number_id')
             .eq('id', site.user_id)
             .single();
 
           if (user) {
-            await runWithChannel(user.channel || 'whatsapp', () =>
-              sendTextMessage(
+            await runWithContext(
+              { channel: user.channel || 'whatsapp', phoneNumberId: user.via_phone_number_id || null },
+              () => sendTextMessage(
                 user.phone_number,
                 `🎉 Great news! Your website is now live at:\n\n` +
                 `🌐 *https://${site.custom_domain}*\n\n` +

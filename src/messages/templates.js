@@ -1,5 +1,6 @@
 const { env } = require('../config/env');
 const { sendTextMessage, sendInteractiveButtons } = require('./sender');
+const { getCurrentPhoneNumberId } = require('./channelContext');
 const { logger } = require('../utils/logger');
 
 /**
@@ -24,8 +25,9 @@ async function sendTemplateMessage(to, templateName, languageCode = 'en', compon
   }
 
   try {
+    const pnid = getCurrentPhoneNumberId() || env.whatsapp.phoneNumberId;
     const response = await axios.post(
-      `https://graph.facebook.com/v21.0/${env.whatsapp.phoneNumberId}/messages`,
+      `https://graph.facebook.com/v21.0/${pnid}/messages`,
       payload,
       {
         headers: {

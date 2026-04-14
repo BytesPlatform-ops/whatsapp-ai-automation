@@ -1,8 +1,19 @@
 const axios = require('axios');
 const { env } = require('../config/env');
 const { logger } = require('../utils/logger');
+const { getCurrentPhoneNumberId } = require('./channelContext');
 
-const API_BASE = `https://graph.facebook.com/v21.0/${env.whatsapp.phoneNumberId}/messages`;
+// Pick the outbound phone_number_id per request:
+//   1. The inbound phone_number_id from the current turn's context (so a user
+//      who messaged number B gets a reply from number B).
+//   2. Fall back to env.whatsapp.phoneNumberId for proactive/background
+//      sends (followups, scheduled messages) where there's no inbound turn.
+function activePhoneNumberId() {
+  return getCurrentPhoneNumberId() || env.whatsapp.phoneNumberId;
+}
+function messagesUrl(phoneNumberId) {
+  return `https://graph.facebook.com/v21.0/${phoneNumberId}/messages`;
+}
 
 const headers = {
   Authorization: `Bearer ${env.whatsapp.accessToken}`,
@@ -10,14 +21,16 @@ const headers = {
 };
 
 async function sendRequest(payload) {
+  const pnid = activePhoneNumberId();
   try {
-    const response = await axios.post(API_BASE, payload, { headers });
-    logger.debug('Message sent successfully', { to: payload.to });
+    const response = await axios.post(messagesUrl(pnid), payload, { headers });
+    logger.debug('Message sent successfully', { to: payload.to, via: pnid });
     return response.data;
   } catch (error) {
     logger.error('WhatsApp API error:', {
       status: error.response?.status,
       data: error.response?.data,
+      via: pnid,
     });
     throw error;
   }
@@ -179,8 +192,8 @@ async function sendDocumentBuffer(to, buffer, caption = '', filename = 'report.p
   form.append('type', mimeType);
   form.append('file', buffer, { filename, contentType: mimeType });
 
-  // 1. Upload media
-  const uploadUrl = `https://graph.facebook.com/v21.0/${env.whatsapp.phoneNumberId}/media`;
+  // 1. Upload media (under whichever phone_number_id is handling this turn).
+  const uploadUrl = `https://graph.facebook.com/v21.0/${activePhoneNumberId()}/media`;
   const uploadRes = await axios.post(uploadUrl, form, {
     headers: {
       Authorization: `Bearer ${env.whatsapp.accessToken}`,

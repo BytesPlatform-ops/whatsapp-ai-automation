@@ -1,7 +1,7 @@
 const { findOrCreateUser, updateUserState, updateUserMetadata } = require('../db/users');
 const { logMessage } = require('../db/conversations');
 const { markAsRead, sendTextMessage, sendInteractiveButtons, sendWithMenuButton, setLastMessageId } = require('../messages/sender');
-const { runWithChannel } = require('../messages/channelContext');
+const { runWithContext } = require('../messages/channelContext');
 const { STATES } = require('./states');
 const { logger } = require('../utils/logger');
 const { generateResponse } = require('../llm/provider');
@@ -231,7 +231,10 @@ async function classifyIntent(state, text) {
  */
 async function routeMessage(message) {
   const channel = message.channel || 'whatsapp';
-  return runWithChannel(channel, () => _routeMessage(message));
+  // Pin the inbound phone_number_id into the async context so every
+  // sendTextMessage / sendInteractiveButtons / etc. inside this turn replies
+  // from the same business number the user messaged.
+  return runWithContext({ channel, phoneNumberId: message.phoneNumberId || null }, () => _routeMessage(message));
 }
 
 async function _routeMessage(message) {
@@ -284,8 +287,10 @@ async function _routeMessage(message) {
     }
   }
 
-  // Find or create user (channel-aware)
-  const user = await findOrCreateUser(from, channel);
+  // Find or create user. Identity is per (phone, channel, inbound business
+  // number) so a customer texting two of our WhatsApp numbers gets two
+  // independent sessions.
+  const user = await findOrCreateUser(from, channel, message.phoneNumberId || null);
 
   // Store ad referral data on first interaction (if present)
   if (message.referral && !user.metadata?.adSource) {

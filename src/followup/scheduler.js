@@ -15,7 +15,7 @@
 
 const { supabase } = require('../config/database');
 const { sendTextMessage } = require('../messages/sender');
-const { runWithChannel } = require('../messages/channelContext');
+const { runWithChannel, runWithContext } = require('../messages/channelContext');
 const { logMessage } = require('../db/conversations');
 const { updateUserMetadata } = require('../db/users');
 const { logger } = require('../utils/logger');
@@ -95,7 +95,7 @@ async function runFollowupCycle() {
     // Get all users currently in the sales chat state
     const { data: users, error: userErr } = await supabase
       .from('users')
-      .select('id, phone_number, metadata, channel')
+      .select('id, phone_number, metadata, channel, via_phone_number_id')
       .eq('state', STATES.SALES_CHAT);
 
     if (userErr) {
@@ -111,7 +111,13 @@ async function runFollowupCycle() {
       if (channel === 'messenger' || channel === 'instagram') continue;
 
       try {
-        await runWithChannel(channel, () => processUserFollowup(user));
+        // Reply on whichever of our WhatsApp numbers the user originally
+        // messaged, not the env default — avoids surfacing a brand-new thread
+        // from an unfamiliar business number.
+        await runWithContext(
+          { channel, phoneNumberId: user.via_phone_number_id || null },
+          () => processUserFollowup(user)
+        );
       } catch (err) {
         logger.error(`Followup: error processing user ${user.phone_number}`, err.response?.data || err.message);
       }
@@ -245,10 +251,11 @@ async function runMeetingReminders() {
 
         // Send reminder if meeting is 25-35 minutes away (catches the 30-min window)
         if (diffMins >= 25 && diffMins <= 35) {
-          // Check if we already sent a reminder for this meeting
+          // Check if we already sent a reminder for this meeting + pick up
+          // the line this user messages on so the reminder goes back there.
           const { data: user } = await supabase
             .from('users')
-            .select('metadata')
+            .select('metadata, via_phone_number_id')
             .eq('id', meeting.user_id)
             .single();
 
@@ -260,10 +267,13 @@ async function runMeetingReminders() {
           const displayDate = meeting.preferred_date;
           const topic = meeting.topic || 'your upcoming call';
 
-          await runWithChannel(meeting.channel || 'whatsapp', () => sendTextMessage(
-            meeting.phone_number,
-            `Hey${meeting.name ? ' ' + meeting.name : ''}! Just a quick reminder - you have a call about *${topic}* in about 30 minutes (${displayTime}, ${displayDate}). Talk soon!`
-          ));
+          await runWithContext(
+            { channel: meeting.channel || 'whatsapp', phoneNumberId: user?.via_phone_number_id || null },
+            () => sendTextMessage(
+              meeting.phone_number,
+              `Hey${meeting.name ? ' ' + meeting.name : ''}! Just a quick reminder - you have a call about *${topic}* in about 30 minutes (${displayTime}, ${displayDate}). Talk soon!`
+            )
+          );
           await logMessage(meeting.user_id, `Meeting reminder sent for ${displayDate} at ${displayTime}`, 'assistant');
 
           // Mark as sent
@@ -390,11 +400,12 @@ async function runPaymentPolling() {
         // receipt to a different phone than the one currently having the conversation.
         const { data: paidUserRecord } = await supabase
           .from('users')
-          .select('phone_number, channel, metadata')
+          .select('phone_number, channel, metadata, via_phone_number_id')
           .eq('id', payment.user_id)
           .single();
         const targetPhone = paidUserRecord?.phone_number || payment.phone_number;
         const targetChannel = paidUserRecord?.channel || payment.channel || 'whatsapp';
+        const targetVia = paidUserRecord?.via_phone_number_id || null;
         if (paidUserRecord?.phone_number && paidUserRecord.phone_number !== payment.phone_number) {
           logger.warn(`[PAYMENT] Phone mismatch for payment ${payment.id}: payment row=${payment.phone_number}, user record=${paidUserRecord.phone_number}. Sending to user record.`);
         }
@@ -419,7 +430,7 @@ async function runPaymentPolling() {
 
           if (selectedDomain && meta.domainPaymentPending) {
             // Domain payment confirmed — start auto-purchase flow
-            await runWithChannel(targetChannel, async () => {
+            await runWithContext({ channel: targetChannel, phoneNumberId: targetVia }, async () => {
               await sendTextMessage(
                 targetPhone,
                 `Payment of *${amountDisplay}* received! 🎉\n\n` +
@@ -439,7 +450,7 @@ async function runPaymentPolling() {
                 const { addCustomDomainToNetlify } = require('../website-gen/deployer');
 
                 // Progress update 1
-                await runWithChannel(targetChannel, () =>
+                await runWithContext({ channel: targetChannel, phoneNumberId: targetVia }, () =>
                   sendTextMessage(targetPhone, `⏳ Registering *${selectedDomain}*...`)
                 );
 
@@ -448,7 +459,7 @@ async function runPaymentPolling() {
                 if (result.success) {
                   // Add to Netlify
                   if (netlifySiteId) {
-                    await runWithChannel(targetChannel, () =>
+                    await runWithContext({ channel: targetChannel, phoneNumberId: targetVia }, () =>
                       sendTextMessage(targetPhone, `⏳ Configuring your website on *${selectedDomain}*...`)
                     );
                     try { await addCustomDomainToNetlify(netlifySiteId, selectedDomain); } catch (e) {
@@ -463,7 +474,7 @@ async function runPaymentPolling() {
                     domainPurchasedAt: new Date().toISOString(),
                   });
 
-                  await runWithChannel(targetChannel, () =>
+                  await runWithContext({ channel: targetChannel, phoneNumberId: targetVia }, () =>
                     sendTextMessage(
                       targetPhone,
                       `✅ *${selectedDomain}* is registered and configured!\n\n` +
@@ -476,7 +487,7 @@ async function runPaymentPolling() {
                 } else {
                   // Auto-purchase failed — fallback to manual
                   if (site) await updateSite(site.id, { custom_domain: selectedDomain, status: 'domain_setup_pending' });
-                  await runWithChannel(targetChannel, () =>
+                  await runWithContext({ channel: targetChannel, phoneNumberId: targetVia }, () =>
                     sendTextMessage(
                       targetPhone,
                       `Domain registration for *${selectedDomain}* needs manual setup (${result.error}). Our team will handle it within 2 business days — we'll keep you posted!`
@@ -487,14 +498,14 @@ async function runPaymentPolling() {
               } catch (err) {
                 logger.error('[PAYMENT] Domain auto-purchase error:', err.message);
                 if (site) await updateSite(site.id, { custom_domain: selectedDomain, status: 'domain_setup_pending' });
-                await runWithChannel(targetChannel, () =>
+                await runWithContext({ channel: targetChannel, phoneNumberId: targetVia }, () =>
                   sendTextMessage(targetPhone, `Domain setup for *${selectedDomain}* is being handled by our team. We'll update you within 2 business days!`)
                 );
               }
             } else {
               // No Namecheap API — manual flow
               if (site) await updateSite(site.id, { custom_domain: selectedDomain, status: 'domain_setup_pending' });
-              await runWithChannel(targetChannel, () =>
+              await runWithContext({ channel: targetChannel, phoneNumberId: targetVia }, () =>
                 sendTextMessage(
                   targetPhone,
                   `Payment received! Our team will set up *${selectedDomain}* for your website within 2 business days. We'll send you the live link once it's ready!`
@@ -503,7 +514,7 @@ async function runPaymentPolling() {
             }
           } else {
             // Regular website payment (no domain selected)
-            await runWithChannel(targetChannel, () => sendTextMessage(
+            await runWithContext({ channel: targetChannel, phoneNumberId: targetVia }, () => sendTextMessage(
               targetPhone,
               `Payment of *${amountDisplay}* received! Thank you for choosing Bytes Platform.\n\n` +
                 `*Package:* ${payment.description || payment.service_type}\n\n` +
@@ -516,7 +527,7 @@ async function runPaymentPolling() {
           }
         } else {
           // Non-website payment — generic confirmation
-          await runWithChannel(targetChannel, () => sendTextMessage(
+          await runWithContext({ channel: targetChannel, phoneNumberId: targetVia }, () => sendTextMessage(
             targetPhone,
             `Payment of *${amountDisplay}* received! Thank you for choosing Bytes Platform.\n\n` +
               `*Package:* ${payment.description || payment.service_type}\n\n` +
