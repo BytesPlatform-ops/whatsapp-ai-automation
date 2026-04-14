@@ -141,6 +141,10 @@ async function getLeads() {
     },
     ad_source: u.metadata?.adSource || '',
     channel: u.channel || 'whatsapp',
+    // Which of OUR WhatsApp numbers the user originally messaged. Surfacing
+    // it here lets the dashboard render a small pill so operators can tell
+    // apart two sessions of the same phone (one per line).
+    via_phone_number_id: u.via_phone_number_id || null,
   }));
 }
 

@@ -28,6 +28,11 @@ function parseWebhookPayload(body) {
 
     const parsed = {
       from: message.from, // sender's phone number
+      // Which of OUR WhatsApp business numbers received this message. Used to
+      // route the outbound reply back on the same number when one WABA hosts
+      // multiple phone numbers (regional marketing lines, etc.).
+      phoneNumberId: value.metadata?.phone_number_id || null,
+      displayPhoneNumber: value.metadata?.display_phone_number || null,
       messageId: message.id,
       timestamp: message.timestamp,
       type: message.type, // text, image, document, interactive, etc.

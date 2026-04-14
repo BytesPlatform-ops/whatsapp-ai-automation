@@ -461,7 +461,7 @@ function leadsTableRows(leads) {
     if (l.services_used.website) svcs.push('<span class="badge bg-emerald-100 text-emerald-700">Web</span>');
     if (l.services_used.seo) svcs.push('<span class="badge bg-amber-100 text-amber-700">SEO</span>');
     return '<tr class="border-b hover:bg-gray-50 transition-colors">' +
-      '<td class="p-3 font-mono text-xs">' + esc(l.phone_number) + '</td>' +
+      '<td class="p-3 font-mono text-xs">' + esc(l.phone_number) + ' ' + viaLinePill(l.via_phone_number_id) + '</td>' +
       '<td class="p-3">' + esc(l.name || '-') + '</td>' +
       '<td class="p-3">' + stateBadge(l.state) + '</td>' +
       '<td class="p-3">' + leadStatusBadge(l) + '</td>' +
@@ -540,6 +540,13 @@ function channelIcon(channel) {
   if (channel === 'instagram') return '<span class="inline-block w-5 h-5 rounded-full bg-pink-100 text-pink-600 text-[10px] font-bold flex items-center justify-center" title="Instagram">IG</span>';
   return '<span class="inline-block w-5 h-5 rounded-full bg-green-100 text-green-600 text-[10px] font-bold flex items-center justify-center" title="WhatsApp">WA</span>';
 }
+// Small pill showing which of OUR WhatsApp numbers the user is messaging.
+// Only shown when via_phone_number_id is set, so legacy rows render nothing.
+function viaLinePill(via) {
+  if (!via) return '';
+  var last4 = String(via).slice(-4);
+  return '<span class="inline-block px-1.5 py-0.5 rounded-sm bg-gray-100 text-gray-600 text-[10px] font-mono" title="Received on our line ending ' + last4 + ' (phone_number_id: ' + via + ')">via …' + last4 + '</span>';
+}
 
 function convListItems(leads) {
   return leads.filter(function(l) {
@@ -551,7 +558,7 @@ function convListItems(leads) {
       '<div class="flex items-center gap-4">' +
         '<div class="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-bold text-sm">' + (l.name ? l.name[0].toUpperCase() : '#') + '</div>' +
         '<div>' +
-          '<p class="font-semibold text-sm flex items-center gap-2">' + esc(l.name || l.phone_number) + ' ' + channelIcon(l.channel || 'whatsapp') + '</p>' +
+          '<p class="font-semibold text-sm flex items-center gap-2">' + esc(l.name || l.phone_number) + ' ' + channelIcon(l.channel || 'whatsapp') + ' ' + viaLinePill(l.via_phone_number_id) + '</p>' +
           '<p class="text-xs text-gray-500">' + esc(l.phone_number) + ' &middot; ' + l.message_count + ' messages</p>' +
         '</div>' +
       '</div>' +

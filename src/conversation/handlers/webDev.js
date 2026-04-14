@@ -228,6 +228,20 @@ function isSalonIndustry(industry) {
   return /\b(salon|beauty|barber|spa|nail|hair|lash|brow|makeup)\b/i.test(industry);
 }
 
+// Turn "Bytes Salon" into a reasonable example domain like "bytessalon.com"
+// for use in the domain-offer message. Falls back to "yourbusiness.com" if the
+// business name yields nothing usable (all symbols, empty, etc.).
+function domainExampleFor(businessName) {
+  const slug = String(businessName || '')
+    .normalize('NFD')            // Separate accents from letters...
+    .replace(/[\u0300-\u036f]/g, '')  // ...then drop the combining marks so "Café" → "Cafe".
+    .toLowerCase()
+    .replace(/&/g, ' and ')
+    .replace(/[^a-z0-9]+/g, '');
+  if (!slug || slug.length < 2) return 'yourbusiness.com';
+  return `${slug}.com`;
+}
+
 async function handleCollectServices(user, message) {
   const servicesText = (message.text || '').trim();
   if (!servicesText || servicesText.length < 2) {
@@ -326,7 +340,7 @@ async function finishSalonFlow(user) {
  * handleCollectContact so users see the same structure.
  */
 async function showConfirmSummary(user) {
-  const freshUser = await require('../../db/users').findOrCreateUser(user.phone_number);
+  const freshUser = await require('../../db/users').findOrCreateUser(user.phone_number, user.channel, user.via_phone_number_id);
   const wd = freshUser.metadata?.websiteData || {};
   const servicesList = (wd.services || []).length > 0 ? wd.services.join(', ') : 'None (skipped)';
   const contactInfo = [wd.contactEmail, wd.contactPhone, wd.contactAddress].filter(Boolean).join(' | ') || 'None';
@@ -698,7 +712,7 @@ async function generateWebsite(user) {
     // Refresh user data to get full metadata
     logger.info(`[WEBGEN] Step 1/5: Fetching user data for ${user.phone_number}`);
     const { findOrCreateUser } = require('../../db/users');
-    const freshUser = await findOrCreateUser(user.phone_number);
+    const freshUser = await findOrCreateUser(user.phone_number, user.channel, user.via_phone_number_id);
     const websiteData = freshUser.metadata?.websiteData || {};
     logger.info(`[WEBGEN] User data loaded:`, {
       businessName: websiteData.businessName,
@@ -842,9 +856,10 @@ async function handleRevisions(user, message) {
     const siteId = user.metadata?.currentSiteId;
     if (siteId) await updateSite(siteId, { status: 'approved' });
 
+    const example = domainExampleFor(user.metadata?.websiteData?.businessName);
     await sendTextMessage(
       user.phone_number,
-      '🎉 *Awesome!* Your website is approved.\n\nWould you like to put it on your own custom domain? (e.g., yourbusiness.com)\n\nJust say *"yes"* and I\'ll help you find one, or *"no"* if you want to skip it for now.'
+      `🎉 *Awesome!* Your website is approved.\n\nWould you like to put it on your own custom domain? (e.g., ${example})\n\nJust say *"yes"* and I'll help you find one, or *"no"* if you want to skip it for now.`
     );
     await logMessage(user.id, 'Website approved, offering custom domain', 'assistant');
     return STATES.DOMAIN_OFFER;
@@ -958,7 +973,7 @@ async function handleRevisions(user, message) {
       const { deployToNetlify } = require('../../website-gen/deployer');
       const { findOrCreateUser } = require('../../db/users');
 
-      const freshUser = await findOrCreateUser(user.phone_number);
+      const freshUser = await findOrCreateUser(user.phone_number, user.channel, user.via_phone_number_id);
       const site = await getLatestSite(user.id);
       const currentConfig = site?.site_data || freshUser.metadata?.websiteData || {};
 
@@ -984,9 +999,10 @@ async function handleRevisions(user, message) {
         const siteId = user.metadata?.currentSiteId;
         if (siteId) await updateSite(siteId, { status: 'approved' });
 
+        const example = domainExampleFor(currentConfig?.businessName || user.metadata?.websiteData?.businessName);
         await sendTextMessage(
           user.phone_number,
-          '🎉 *Awesome!* Your website is approved.\n\nWould you like to put it on your own custom domain? (e.g., yourbusiness.com)\n\nJust say *"yes"* and I\'ll help you find one, or *"no"* if you want to skip it for now.'
+          `🎉 *Awesome!* Your website is approved.\n\nWould you like to put it on your own custom domain? (e.g., ${example})\n\nJust say *"yes"* and I'll help you find one, or *"no"* if you want to skip it for now.`
         );
         await logMessage(user.id, 'Website approved, offering custom domain', 'assistant');
         return STATES.DOMAIN_OFFER;
