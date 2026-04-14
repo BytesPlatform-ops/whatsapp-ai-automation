@@ -1,9 +1,11 @@
 const { generateResponse } = require('../llm/provider');
-const { WEBSITE_CONTENT_PROMPT } = require('../llm/prompts');
+const { WEBSITE_CONTENT_PROMPT, HVAC_CONTENT_PROMPT } = require('../llm/prompts');
 const { logger } = require('../utils/logger');
 const { getHeroImage } = require('./heroImage');
 const { attachServiceImages } = require('./serviceImages');
+const { attachHvacServiceImages } = require('./hvacServiceImages');
 const { inferTimezoneFromAddress } = require('./timezone');
+const { isHvac } = require('./templates');
 
 // Luxury-biased hero queries, grouped by salon sub-type. One is picked at
 // random at generation time so two similar salons get different heroes.
@@ -52,6 +54,7 @@ function pickSalonHeroQuery(industry) {
   else if (/beauty|skin|facial|lash|brow|makeup/.test(s)) bucket = SALON_HERO_QUERIES.beauty;
   return bucket[Math.floor(Math.random() * bucket.length)];
 }
+const { isHvac } = require('./templates');
 
 /**
  * Generate website content using LLM based on collected business info.
@@ -78,10 +81,44 @@ async function generateWebsiteContent(businessData, extras = {}) {
     weeklyHours,
     salonServices,
     timezone,
+    // HVAC-specific — pass-through to the HVAC template.
+    primaryCity,
+    serviceAreas,
+    yearsExperience,
+    licenseNumber,
+    googleRating,
+    reviewCount,
+    googleProfileUrl,
   } = businessData;
 
   const hasServices = Array.isArray(services) && services.length > 0;
-  const prompt = `
+  const hvacMode = isHvac(industry);
+  // For HVAC, ensure we have a services list the LLM can write copy for —
+  // if the user didn't supply any, seed from the HVAC default list so the
+  // LLM generates rich descriptions that match the template's icon mapping.
+  let hvacSeededServices = services;
+  if (hvacMode && !hasServices) {
+    const { DEFAULT_SERVICES } = require('./templates/hvac/common');
+    hvacSeededServices = DEFAULT_SERVICES.map((s) => s.title);
+  }
+  const effectiveServicesList = hvacMode ? hvacSeededServices : services;
+  const effectiveHasServices = Array.isArray(effectiveServicesList) && effectiveServicesList.length > 0;
+
+  const prompt = hvacMode
+    ? `
+Business Name: ${businessName}
+Industry: HVAC
+Primary City: ${primaryCity || 'unspecified'}
+Service Areas: ${Array.isArray(serviceAreas) && serviceAreas.length ? serviceAreas.join(', ') : (primaryCity || 'not provided')}
+Services: ${effectiveHasServices ? effectiveServicesList.join(', ') : 'general HVAC services'}
+Years in Business: ${yearsExperience || 'unspecified'}
+License: ${licenseNumber || 'not provided'}
+${contactEmail ? `Email: ${contactEmail}` : ''}
+${contactPhone ? `Phone: ${contactPhone}` : ''}
+${contactAddress ? `Address: ${contactAddress}` : ''}
+
+Generate HVAC website copy. Return ONLY valid JSON matching the schema in the system prompt.`
+    : `
 Business Name: ${businessName}
 Industry: ${industry}
 Services/Products: ${hasServices ? services.join(', ') : 'None provided — skip services page'}
@@ -91,8 +128,8 @@ ${contactAddress ? `Address: ${contactAddress}` : ''}
 
 Generate compelling website copy for this business. Return ONLY valid JSON.`;
 
-  logger.info(`[WEBGEN] Sending content prompt to LLM for "${businessName}"`);
-  const response = await generateResponse(WEBSITE_CONTENT_PROMPT, [
+  logger.info(`[WEBGEN] Sending ${hvacMode ? 'HVAC' : 'generic'} content prompt to LLM for "${businessName}"`);
+  const response = await generateResponse(hvacMode ? HVAC_CONTENT_PROMPT : WEBSITE_CONTENT_PROMPT, [
     { role: 'user', content: prompt },
   ]);
   logger.info(`[WEBGEN] LLM response received: ${response.length} chars`);
@@ -168,6 +205,7 @@ Generate compelling website copy for this business. Return ONLY valid JSON.`;
   // business context and knows what the company actually DOES), then fall back to
   // services + industry. Industry alone is often misleading — e.g. a cleaning
   // company serving "real estate" is cleaning, not real estate.
+<<<<<<< Updated upstream
   let imageQuery;
   if (extras.templateId === 'salon') {
     // Salon sites get a luxury-biased hero query regardless of what the LLM
@@ -178,8 +216,21 @@ Generate compelling website copy for this business. Return ONLY valid JSON.`;
   } else {
     imageQuery = (generatedContent.heroImageQuery || '').trim();
     if (!imageQuery) {
+      if (hvacMode) {
+      imageQuery = 'hvac technician service';
+    } else {
+      const servicesPart = hasServices ? services.slice(0, 2).join(' ') : '';
+        imageQuery = [servicesPart, industry].filter(Boolean).join(' ').trim() || 'business';
+    }
+=======
+  let imageQuery = (generatedContent.heroImageQuery || '').trim();
+  if (!imageQuery) {
+    if (hvacMode) {
+      imageQuery = 'hvac technician service';
+    } else {
       const servicesPart = hasServices ? services.slice(0, 2).join(' ') : '';
       imageQuery = [servicesPart, industry].filter(Boolean).join(' ').trim() || 'business';
+>>>>>>> Stashed changes
     }
   }
 
@@ -191,6 +242,41 @@ Generate compelling website copy for this business. Return ONLY valid JSON.`;
     }
   } catch (err) {
     logger.warn(`[WEBGEN] Hero image fetch threw: ${err.message}`);
+  }
+
+  // HVAC: fetch per-service Unsplash images so the services page zigzag has
+  // real visuals instead of icon-on-gradient placeholders.
+  if (hvacMode && Array.isArray(generatedContent.services) && generatedContent.services.length > 0) {
+<<<<<<< Updated upstream
+=======
+    try {
+      generatedContent.services = await attachHvacServiceImages(generatedContent.services);
+    } catch (err) {
+      logger.warn(`[WEBGEN] HVAC service image fetch failed: ${err.message}`);
+    }
+  }
+
+  // For salon sites, fetch a per-service Unsplash image so we can render
+  // visual service cards on the home + services pages. This runs in parallel
+  // after the hero image; failures per-service are silent.
+  let enrichedSalonServices = salonServices || null;
+  if (extras.templateId === 'salon' && Array.isArray(salonServices) && salonServices.length > 0) {
+>>>>>>> Stashed changes
+    try {
+      generatedContent.services = await attachHvacServiceImages(generatedContent.services);
+    } catch (err) {
+      logger.warn(`[WEBGEN] HVAC service image fetch failed: ${err.message}`);
+    }
+  }
+
+  // HVAC: fetch per-service Unsplash images so the services page zigzag has
+  // real visuals instead of icon-on-gradient placeholders.
+  if (hvacMode && Array.isArray(generatedContent.services) && generatedContent.services.length > 0) {
+    try {
+      generatedContent.services = await attachHvacServiceImages(generatedContent.services);
+    } catch (err) {
+      logger.warn(`[WEBGEN] HVAC service image fetch failed: ${err.message}`);
+    }
   }
 
   // For salon sites, make sure we always have a populated salonServices list
@@ -261,6 +347,14 @@ Generate compelling website copy for this business. Return ONLY valid JSON.`;
     weeklyHours: weeklyHours || null,
     salonServices: enrichedSalonServices,
     timezone: resolvedTimezone,
+    // HVAC pass-through (harmless for non-HVAC templates).
+    primaryCity: primaryCity || null,
+    serviceAreas: Array.isArray(serviceAreas) ? serviceAreas : (primaryCity ? [primaryCity] : []),
+    yearsExperience: yearsExperience || null,
+    licenseNumber: licenseNumber || null,
+    googleRating: googleRating || null,
+    reviewCount: reviewCount || null,
+    googleProfileUrl: googleProfileUrl || null,
   };
 
   logger.info(`Generated website content for ${businessName}${heroImage ? ' (with Unsplash hero)' : ''}`);

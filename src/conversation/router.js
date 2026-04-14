@@ -54,6 +54,7 @@ const STATE_HANDLERS = {
   [STATES.WEB_COLLECT_NAME]: handleWebDev,
   [STATES.WEB_COLLECT_EMAIL]: handleWebDev,
   [STATES.WEB_COLLECT_INDUSTRY]: handleWebDev,
+  [STATES.WEB_COLLECT_AREAS]: handleWebDev,
   [STATES.WEB_COLLECT_SERVICES]: handleWebDev,
   [STATES.WEB_COLLECT_COLORS]: handleWebDev,
   [STATES.WEB_COLLECT_LOGO]: handleWebDev,
@@ -140,6 +141,7 @@ const STATE_HANDLERS = {
 const COLLECTION_STATES = new Set([
   STATES.WEB_COLLECT_NAME,
   STATES.WEB_COLLECT_INDUSTRY,
+  STATES.WEB_COLLECT_AREAS,
   STATES.WEB_COLLECT_SERVICES,
   STATES.WEB_COLLECT_LOGO,
   STATES.WEB_COLLECT_CONTACT,
@@ -173,6 +175,7 @@ const COLLECTION_STATES = new Set([
 const STATE_QUESTION = {
   [STATES.WEB_COLLECT_NAME]: 'What is your business name?',
   [STATES.WEB_COLLECT_INDUSTRY]: 'What industry are you in?',
+  [STATES.WEB_COLLECT_AREAS]: 'Which city are you based in, and which areas do you serve?',
   [STATES.WEB_COLLECT_SERVICES]: 'What services or products do you offer?',
   [STATES.WEB_COLLECT_LOGO]: "Do you have a logo? (send an image or type 'skip')",
   [STATES.WEB_COLLECT_CONTACT]: 'Please share your contact details (email, phone, address)',

@@ -18,6 +18,8 @@ async function handleWebDev(user, message) {
       return handleCollectEmail(user, message);
     case STATES.WEB_COLLECT_INDUSTRY:
       return handleCollectIndustry(user, message);
+    case STATES.WEB_COLLECT_AREAS:
+      return handleCollectAreas(user, message);
     case STATES.WEB_COLLECT_SERVICES:
       return handleCollectServices(user, message);
     case STATES.WEB_COLLECT_COLORS:
@@ -174,11 +176,100 @@ async function handleCollectIndustry(user, message) {
     websiteData: { ...(user.metadata?.websiteData || {}), industry },
   });
 
+  // HVAC branch — collect primary city + service areas before services.
+  const { isHvac } = require('../../website-gen/templates');
+  if (isHvac(industry)) {
+    await sendTextMessage(
+      user.phone_number,
+      `Got it — ${industry}! 🛠️\n\nWhich city are you based in, and which areas do you serve? Example:\n*Austin — Round Rock, Cedar Park, Pflugerville*`
+    );
+    await logMessage(user.id, `Industry: ${industry} (HVAC — prompting for service areas)`, 'assistant');
+    return STATES.WEB_COLLECT_AREAS;
+  }
+
   await sendTextMessage(
     user.phone_number,
     'What services or products do you offer? Just list them separated by commas.'
   );
   await logMessage(user.id, `Industry: ${industry}`, 'assistant');
+
+  return STATES.WEB_COLLECT_SERVICES;
+}
+
+// ─── HVAC: city + service areas ──────────────────────────────────────────────
+async function handleCollectAreas(user, message) {
+  const raw = (message.text || '').trim();
+  if (!raw) {
+    await sendTextMessage(
+      user.phone_number,
+      'Please tell me your city and service areas. Example: *Austin — Round Rock, Cedar Park*'
+    );
+    return STATES.WEB_COLLECT_AREAS;
+  }
+
+  // Allow skip — treat as "we'll fill in later".
+  if (/^(skip|later|unsure|not sure|n\/?a)$/i.test(raw)) {
+    await updateUserMetadata(user.id, {
+      websiteData: {
+        ...(user.metadata?.websiteData || {}),
+        primaryCity: null,
+        serviceAreas: [],
+      },
+    });
+    await sendTextMessage(
+      user.phone_number,
+      'No problem — you can add service areas later. What services do you offer? (Or say *skip* to use the default HVAC list.)'
+    );
+    return STATES.WEB_COLLECT_SERVICES;
+  }
+
+  // Parse: split on em/en dash, colon, pipe, or "serving".
+  const parts = raw.split(/\s*[—\-–:|]\s+|\s+serving\s+/i);
+  let primaryCity = (parts[0] || '').trim().replace(/[,.]$/, '');
+  let areasStr = parts.slice(1).join(', ').trim();
+  let serviceAreas = areasStr
+    ? areasStr.split(/[,;]|\band\b/i).map((s) => s.trim()).filter(Boolean)
+    : [];
+
+  // If the user gave a single value only, treat it as both primaryCity and the
+  // sole service area.
+  if (!serviceAreas.length && primaryCity) {
+    serviceAreas = [primaryCity];
+  }
+
+  // If parsing clearly failed (primaryCity looks like a sentence), ask LLM to
+  // extract structured fields.
+  if (!primaryCity || primaryCity.length > 40) {
+    try {
+      const extracted = await generateResponse(
+        `Extract the primary city and the list of service areas from this HVAC business owner message. Return ONLY JSON: {"primaryCity":"...","serviceAreas":["..."]}. If unclear, make reasonable guesses.`,
+        [{ role: 'user', content: raw }]
+      );
+      const m = extracted.match(/\{[\s\S]*\}/);
+      if (m) {
+        const parsed = JSON.parse(m[0]);
+        if (parsed.primaryCity) primaryCity = String(parsed.primaryCity).trim();
+        if (Array.isArray(parsed.serviceAreas)) serviceAreas = parsed.serviceAreas.map((s) => String(s).trim()).filter(Boolean);
+        if (!serviceAreas.length && primaryCity) serviceAreas = [primaryCity];
+      }
+    } catch (err) {
+      logger.warn(`[HVAC] LLM area extraction failed: ${err.message}`);
+    }
+  }
+
+  await updateUserMetadata(user.id, {
+    websiteData: {
+      ...(user.metadata?.websiteData || {}),
+      primaryCity: primaryCity || null,
+      serviceAreas,
+    },
+  });
+
+  await sendTextMessage(
+    user.phone_number,
+    `Got it — based in *${primaryCity || 'your area'}* serving *${serviceAreas.slice(0, 4).join(', ')}${serviceAreas.length > 4 ? '…' : ''}*.\n\nWhich HVAC services do you offer? List them separated by commas, or say *skip* to use our default list (AC repair, heating, heat pumps, duct cleaning, thermostats, and more).`
+  );
+  await logMessage(user.id, `HVAC areas: ${primaryCity} / ${serviceAreas.join(', ')}`, 'assistant');
 
   return STATES.WEB_COLLECT_SERVICES;
 }
@@ -211,6 +302,11 @@ const INDUSTRY_COLORS = {
   salon:       { primaryColor: '#1F2937', secondaryColor: '#111827', accentColor: '#EC4899' },
   automotive:  { primaryColor: '#1E293B', secondaryColor: '#0F172A', accentColor: '#DC2626' },
   travel:      { primaryColor: '#0F4C75', secondaryColor: '#0A2E4D', accentColor: '#06B6D4' },
+  // HVAC: trust blue dominant + orange CTA accent. Emergency red is hard-coded
+  // inside the HVAC template itself (reserved for the emergency strip only).
+  hvac:        { primaryColor: '#1E3A5F', secondaryColor: '#0F172A', accentColor: '#F97316' },
+  heating:     { primaryColor: '#1E3A5F', secondaryColor: '#0F172A', accentColor: '#F97316' },
+  cooling:     { primaryColor: '#1E3A5F', secondaryColor: '#0F172A', accentColor: '#F97316' },
 };
 const DEFAULT_COLORS = { primaryColor: '#1E293B', secondaryColor: '#0F172A', accentColor: '#6366F1' };
 
