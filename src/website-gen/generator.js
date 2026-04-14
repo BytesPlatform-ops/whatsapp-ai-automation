@@ -54,7 +54,6 @@ function pickSalonHeroQuery(industry) {
   else if (/beauty|skin|facial|lash|brow|makeup/.test(s)) bucket = SALON_HERO_QUERIES.beauty;
   return bucket[Math.floor(Math.random() * bucket.length)];
 }
-const { isHvac } = require('./templates');
 
 /**
  * Generate website content using LLM based on collected business info.
@@ -205,7 +204,6 @@ Generate compelling website copy for this business. Return ONLY valid JSON.`;
   // business context and knows what the company actually DOES), then fall back to
   // services + industry. Industry alone is often misleading — e.g. a cleaning
   // company serving "real estate" is cleaning, not real estate.
-<<<<<<< Updated upstream
   let imageQuery;
   if (extras.templateId === 'salon') {
     // Salon sites get a luxury-biased hero query regardless of what the LLM
@@ -217,20 +215,11 @@ Generate compelling website copy for this business. Return ONLY valid JSON.`;
     imageQuery = (generatedContent.heroImageQuery || '').trim();
     if (!imageQuery) {
       if (hvacMode) {
-      imageQuery = 'hvac technician service';
-    } else {
-      const servicesPart = hasServices ? services.slice(0, 2).join(' ') : '';
+        imageQuery = 'hvac technician service';
+      } else {
+        const servicesPart = hasServices ? services.slice(0, 2).join(' ') : '';
         imageQuery = [servicesPart, industry].filter(Boolean).join(' ').trim() || 'business';
-    }
-=======
-  let imageQuery = (generatedContent.heroImageQuery || '').trim();
-  if (!imageQuery) {
-    if (hvacMode) {
-      imageQuery = 'hvac technician service';
-    } else {
-      const servicesPart = hasServices ? services.slice(0, 2).join(' ') : '';
-      imageQuery = [servicesPart, industry].filter(Boolean).join(' ').trim() || 'business';
->>>>>>> Stashed changes
+      }
     }
   }
 
@@ -242,31 +231,6 @@ Generate compelling website copy for this business. Return ONLY valid JSON.`;
     }
   } catch (err) {
     logger.warn(`[WEBGEN] Hero image fetch threw: ${err.message}`);
-  }
-
-  // HVAC: fetch per-service Unsplash images so the services page zigzag has
-  // real visuals instead of icon-on-gradient placeholders.
-  if (hvacMode && Array.isArray(generatedContent.services) && generatedContent.services.length > 0) {
-<<<<<<< Updated upstream
-=======
-    try {
-      generatedContent.services = await attachHvacServiceImages(generatedContent.services);
-    } catch (err) {
-      logger.warn(`[WEBGEN] HVAC service image fetch failed: ${err.message}`);
-    }
-  }
-
-  // For salon sites, fetch a per-service Unsplash image so we can render
-  // visual service cards on the home + services pages. This runs in parallel
-  // after the hero image; failures per-service are silent.
-  let enrichedSalonServices = salonServices || null;
-  if (extras.templateId === 'salon' && Array.isArray(salonServices) && salonServices.length > 0) {
->>>>>>> Stashed changes
-    try {
-      generatedContent.services = await attachHvacServiceImages(generatedContent.services);
-    } catch (err) {
-      logger.warn(`[WEBGEN] HVAC service image fetch failed: ${err.message}`);
-    }
   }
 
   // HVAC: fetch per-service Unsplash images so the services page zigzag has
