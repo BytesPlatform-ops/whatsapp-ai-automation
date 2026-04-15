@@ -125,13 +125,13 @@ Return JSON like {"industry":"HVAC","primaryCity":"Austin"} or {} if nothing fou
 // is stored at top-level metadata.email by the legacy handler, so we accept
 // either location as "collected".
 function nextMissingWebDevState(websiteData, fullMetadata = {}) {
-  const { isHvac } = require('../../website-gen/templates');
+  const { needsAreaCollection } = require('../../website-gen/templates');
   if (!websiteData.businessName) return STATES.WEB_COLLECT_NAME;
   const emailCollected =
     fullMetadata.email != null || websiteData.contactEmail != null || websiteData.email != null || fullMetadata.emailSkipped === true;
   if (!emailCollected) return STATES.WEB_COLLECT_EMAIL;
   if (!websiteData.industry) return STATES.WEB_COLLECT_INDUSTRY;
-  if (isHvac(websiteData.industry) && !websiteData.primaryCity && (!websiteData.serviceAreas || !websiteData.serviceAreas.length)) {
+  if (needsAreaCollection(websiteData.industry) && !websiteData.primaryCity && (!websiteData.serviceAreas || !websiteData.serviceAreas.length)) {
     return STATES.WEB_COLLECT_AREAS;
   }
   if (websiteData.services == null) return STATES.WEB_COLLECT_SERVICES;
@@ -484,13 +484,10 @@ async function handleCollectAreas(user, message) {
   };
   await updateUserMetadata(user.id, { websiteData });
   user.metadata = { ...(user.metadata || {}), websiteData };
-  await logMessage(user.id, `HVAC areas: ${primaryCity} / ${serviceAreas.join(', ')}`, 'assistant');
+  await logMessage(user.id, `Areas captured: ${primaryCity} / ${serviceAreas.join(', ')}`, 'assistant');
 
   const ackPrefix = `Got it — based in *${primaryCity || 'your area'}* serving *${serviceAreas.slice(0, 4).join(', ')}${serviceAreas.length > 4 ? '…' : ''}*.`;
   return smartAdvance(user, message, ackPrefix);
-  await logMessage(user.id, `HVAC areas: ${primaryCity} / ${serviceAreas.join(', ')}`, 'assistant');
-
-  return STATES.WEB_COLLECT_SERVICES;
 }
 
 // Auto-assign professional color schemes based on industry
@@ -503,9 +500,8 @@ const INDUSTRY_COLORS = {
   health:      { primaryColor: '#0F4C75', secondaryColor: '#0A2E4D', accentColor: '#38BDF8' },
   finance:     { primaryColor: '#1E3A5F', secondaryColor: '#0F2440', accentColor: '#4A90D9' },
   banking:     { primaryColor: '#1E3A5F', secondaryColor: '#0F2440', accentColor: '#4A90D9' },
-  real_estate: { primaryColor: '#2D3436', secondaryColor: '#1A1D1E', accentColor: '#B8860B' },
-  realestate:  { primaryColor: '#2D3436', secondaryColor: '#1A1D1E', accentColor: '#B8860B' },
-  property:    { primaryColor: '#2D3436', secondaryColor: '#1A1D1E', accentColor: '#B8860B' },
+  // (real_estate / realestate / property entries moved below to the new
+  // navy + champagne gold palette that matches the real-estate template.)
   ecommerce:   { primaryColor: '#18181B', secondaryColor: '#09090B', accentColor: '#A78BFA' },
   retail:      { primaryColor: '#18181B', secondaryColor: '#09090B', accentColor: '#A78BFA' },
   food:        { primaryColor: '#1C1917', secondaryColor: '#0C0A09', accentColor: '#D97706' },
@@ -526,6 +522,13 @@ const INDUSTRY_COLORS = {
   hvac:        { primaryColor: '#1E3A5F', secondaryColor: '#0F172A', accentColor: '#F97316' },
   heating:     { primaryColor: '#1E3A5F', secondaryColor: '#0F172A', accentColor: '#F97316' },
   cooling:     { primaryColor: '#1E3A5F', secondaryColor: '#0F172A', accentColor: '#F97316' },
+  // Real estate: deep navy + champagne gold (luxury / editorial feel).
+  real_estate: { primaryColor: '#1A2B45', secondaryColor: '#0F1B30', accentColor: '#C9A96E' },
+  realestate:  { primaryColor: '#1A2B45', secondaryColor: '#0F1B30', accentColor: '#C9A96E' },
+  realtor:     { primaryColor: '#1A2B45', secondaryColor: '#0F1B30', accentColor: '#C9A96E' },
+  realty:      { primaryColor: '#1A2B45', secondaryColor: '#0F1B30', accentColor: '#C9A96E' },
+  broker:      { primaryColor: '#1A2B45', secondaryColor: '#0F1B30', accentColor: '#C9A96E' },
+  property:    { primaryColor: '#1A2B45', secondaryColor: '#0F1B30', accentColor: '#C9A96E' },
 };
 const DEFAULT_COLORS = { primaryColor: '#1E293B', secondaryColor: '#0F172A', accentColor: '#6366F1' };
 

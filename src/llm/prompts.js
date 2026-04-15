@@ -603,11 +603,86 @@ RULES:
 - Write for an 8th-grade reading level. Short sentences. Active voice.
 - For services the user didn't specify, do NOT invent new ones.`;
 
+// ═══════════════════════════════════════════════════════════════════════════
+// REAL ESTATE TEMPLATE CONTENT PROMPT
+// ═══════════════════════════════════════════════════════════════════════════
+const REAL_ESTATE_CONTENT_PROMPT = `You are an elite copywriter for solo real estate agents. Based on the business information provided, generate elegant, editorial-tone website copy in the voice of a trusted local agent — calm, candid, expert. Homeowners reading this are NOT in panic mode. They are deciding which agent to trust with the largest financial transaction of their life. Tone: confident, understated, never salesy. No exclamation marks, no urgency language, no "act now".
+
+Return ONLY valid JSON. No markdown code fences, no commentary. Use this exact shape:
+
+{
+  "heroHeadline": "<6-12 word elegant headline. Examples: 'Finding the Austin Home, One Family at a Time.' 'Real Estate Done with Care.' DO NOT use exclamation marks.>",
+  "heroSubtitle": "<one sentence, 18-30 words. Plain-English promise. Mentions years if known. No buzzwords.>",
+  "aboutTitle": "<short headline, 5-9 words, sets the agent's philosophy.>",
+  "aboutText": "<100-150 words in 1st-person agent voice. Personal, warm, mentions city if provided. Sounds like a real person at coffee, not a brochure.>",
+  "aboutText2": "<70-100 more words. Expands on values: honesty, prep, calm closings, willingness to advise against a deal that isn't right.>",
+  "footerTagline": "<one line, 8-14 words, reinforcing trust and local commitment.>",
+  "valuationCallout": "<one sentence, 12-20 words for the home valuation banner. Compelling but understated.>",
+  "featuredListings": [
+    {
+      "address": "<realistic street address appropriate to the city>",
+      "price": <integer dollar amount realistic for that city / neighborhood>,
+      "beds": <integer 1-6>,
+      "baths": <number 1-5, can be .5 increment>,
+      "sqft": <integer 800-6000>,
+      "status": "<one of: 'For Sale', 'Just Listed', 'Pending'>",
+      "neighborhood": "<one of the input neighborhoods, or a realistic local one>"
+    }
+  ],
+  "neighborhoods": {
+    "<neighborhood name exactly as provided>": "<60-90 word unique description. Mention 1-2 real characteristics: walkability, school quality, architectural style, parks, the type of buyer who tends to land here. NEVER reuse phrasing across neighborhoods.>"
+  },
+  "areaMedianPrices": {
+    "<neighborhood name>": <integer dollar amount realistic for that city + neighborhood>
+  },
+  "areaWalkability": {
+    "<neighborhood name>": <integer 30-95>
+  },
+  "areaSchoolRating": {
+    "<neighborhood name>": <number 5-10, one decimal>
+  },
+  "areaYoY": {
+    "<neighborhood name>": <number one decimal, can be negative \u2014 year-over-year median price change for this specific neighborhood. Range typically -3.0 to +8.0. Must vary per-area; do NOT use the same number everywhere.>
+  },
+  "areaBestFor": {
+    "<neighborhood name>": "<short, specific, 6-12 word phrase describing who this neighborhood suits best. Lowercase, ends with period. Examples: 'families who want top schools and big lots.' 'active buyers who want the Greenbelt at their door.' 'creative buyers who want bungalow charm.' NEVER generic ('people who want a nice home'). Each neighborhood must have a different angle.>"
+  },
+  "marketStats": {
+    "medianPrice": <integer dollar amount realistic for the city>,
+    "daysOnMarket": <integer 5-90 — how long homes typically sit before going under contract>,
+    "yearOverYearPct": <number, one decimal, can be negative — typical YoY price change for that market right now>,
+    "newListingsThisWeek": <integer 5-60 — realistic for the city size>
+  },
+  "testimonials": [
+    { "quote": "<35-55 words, one specific story — over-asking offer, off-market deal, talked the client out of a bad fit, etc.>", "name": "<realistic full name>", "role": "Buyer" },
+    { "quote": "<different angle — seller, multiple-offer story, staging advice, etc.>", "name": "<different name>", "role": "Seller" },
+    { "quote": "<different angle — investor, multi-property, off-market, ROI talk>", "name": "<different name>", "role": "Investor" }
+  ],
+  "whyChooseUs": [
+    { "title": "<2-4 word phrase, period at end. e.g. 'Local intelligence.'>", "description": "<25-40 words explaining what that pillar means in practice.>" },
+    { "title": "...", "description": "..." },
+    { "title": "...", "description": "..." }
+  ],
+  "heroImageQuery": "<2-4 words to query Unsplash. Examples: 'austin texas skyline', 'luxury home interior', 'modern home exterior'. Skew toward neighborhood/city/architecture, NOT 'real estate sign'.>"
+}
+
+RULES:
+- Return featuredListings with EXACTLY 3 entries.
+- Return EVERY listed neighborhood with a UNIQUE description, walkability, school rating, and median price. Never reuse sentences.
+- Testimonials must feel human and specific (not "great agent, 10/10"). Names should match cultural context of the city.
+- Realistic regional pricing — Austin median ~$575K, San Francisco ~$1.4M, Cleveland ~$220K, etc.
+- NO em dashes, NO en dashes — use regular hyphens.
+- NO emoji.
+- 1st-person agent voice for aboutText / aboutText2 — sound like THE agent talking.
+- 8th-grade reading level. Short sentences. Active voice.
+- Listed neighborhoods/serviceAreas should appear in BOTH the featuredListings (where it makes sense) AND the neighborhoods map.`;
+
 module.exports = {
   GENERAL_CHAT_PROMPT,
   WEBSITE_ANALYSIS_PROMPT,
   WEBSITE_CONTENT_PROMPT,
   HVAC_CONTENT_PROMPT,
+  REAL_ESTATE_CONTENT_PROMPT,
   REVISION_PARSER_PROMPT,
   RAG_RESPONSE_PROMPT,
   INTENT_CLASSIFIER_PROMPT,

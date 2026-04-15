@@ -1,11 +1,13 @@
 const { generateResponse } = require('../llm/provider');
-const { WEBSITE_CONTENT_PROMPT, HVAC_CONTENT_PROMPT } = require('../llm/prompts');
+const { WEBSITE_CONTENT_PROMPT, HVAC_CONTENT_PROMPT, REAL_ESTATE_CONTENT_PROMPT } = require('../llm/prompts');
 const { logger } = require('../utils/logger');
 const { getHeroImage } = require('./heroImage');
 const { attachServiceImages } = require('./serviceImages');
 const { attachHvacServiceImages } = require('./hvacServiceImages');
+const { attachRealEstateListingImages } = require('./realEstateListingImages');
+const { fetchNeighborhoodImages, fetchAgentPlaceholderImage } = require('./neighborhoodImages');
 const { inferTimezoneFromAddress } = require('./timezone');
-const { isHvac } = require('./templates');
+const { isHvac, isRealEstate } = require('./templates');
 
 // Luxury-biased hero queries, grouped by salon sub-type. One is picked at
 // random at generation time so two similar salons get different heroes.
@@ -88,10 +90,18 @@ async function generateWebsiteContent(businessData, extras = {}) {
     googleRating,
     reviewCount,
     googleProfileUrl,
+    // Real-estate-specific — pass-through to the real-estate template.
+    brokerageName,
+    homesSold,
+    volumeClosed,
+    designations,
+    specialty,
+    calendlyUrl,
   } = businessData;
 
   const hasServices = Array.isArray(services) && services.length > 0;
   const hvacMode = isHvac(industry);
+  const realEstateMode = isRealEstate(industry);
   // For HVAC, ensure we have a services list the LLM can write copy for —
   // if the user didn't supply any, seed from the HVAC default list so the
   // LLM generates rich descriptions that match the template's icon mapping.
@@ -103,8 +113,13 @@ async function generateWebsiteContent(businessData, extras = {}) {
   const effectiveServicesList = hvacMode ? hvacSeededServices : services;
   const effectiveHasServices = Array.isArray(effectiveServicesList) && effectiveServicesList.length > 0;
 
-  const prompt = hvacMode
-    ? `
+  let prompt;
+  let systemPrompt;
+  let promptLabel;
+  if (hvacMode) {
+    promptLabel = 'HVAC';
+    systemPrompt = HVAC_CONTENT_PROMPT;
+    prompt = `
 Business Name: ${businessName}
 Industry: HVAC
 Primary City: ${primaryCity || 'unspecified'}
@@ -116,8 +131,31 @@ ${contactEmail ? `Email: ${contactEmail}` : ''}
 ${contactPhone ? `Phone: ${contactPhone}` : ''}
 ${contactAddress ? `Address: ${contactAddress}` : ''}
 
-Generate HVAC website copy. Return ONLY valid JSON matching the schema in the system prompt.`
-    : `
+Generate HVAC website copy. Return ONLY valid JSON matching the schema in the system prompt.`;
+  } else if (realEstateMode) {
+    promptLabel = 'real-estate';
+    systemPrompt = REAL_ESTATE_CONTENT_PROMPT;
+    prompt = `
+Agent Name: ${businessName}
+Brokerage: ${brokerageName || 'not specified'}
+Primary City: ${primaryCity || 'unspecified'}
+Neighborhoods Served: ${Array.isArray(serviceAreas) && serviceAreas.length ? serviceAreas.join(', ') : (primaryCity || 'not provided')}
+Years in Business: ${yearsExperience || 'unspecified'}
+Homes Sold: ${homesSold || 'not specified'}
+Volume Closed: ${volumeClosed || 'not specified'}
+Designations: ${Array.isArray(designations) && designations.length ? designations.join(', ') : 'not specified'}
+Specialty: ${specialty || 'not specified'}
+License: ${licenseNumber || 'not provided'}
+${contactEmail ? `Email: ${contactEmail}` : ''}
+${contactPhone ? `Phone: ${contactPhone}` : ''}
+${contactAddress ? `Address: ${contactAddress}` : ''}
+${hasServices ? `How I help: ${services.join(', ')}` : ''}
+
+Generate real-estate-agent website copy. Return ONLY valid JSON matching the schema in the system prompt.`;
+  } else {
+    promptLabel = 'generic';
+    systemPrompt = WEBSITE_CONTENT_PROMPT;
+    prompt = `
 Business Name: ${businessName}
 Industry: ${industry}
 Services/Products: ${hasServices ? services.join(', ') : 'None provided — skip services page'}
@@ -126,10 +164,11 @@ ${contactPhone ? `Phone: ${contactPhone}` : ''}
 ${contactAddress ? `Address: ${contactAddress}` : ''}
 
 Generate compelling website copy for this business. Return ONLY valid JSON.`;
+  }
 
-  logger.info(`[WEBGEN] Sending ${hvacMode ? 'HVAC' : 'generic'} content prompt to LLM for "${businessName}"`);
+  logger.info(`[WEBGEN] Sending ${promptLabel} content prompt to LLM for "${businessName}"`);
   const response = await generateResponse(
-    hvacMode ? HVAC_CONTENT_PROMPT : WEBSITE_CONTENT_PROMPT,
+    systemPrompt,
     [{ role: 'user', content: prompt }],
     { userId: extras.userId, operation: 'website_content_gen' }
   );
@@ -218,6 +257,8 @@ Generate compelling website copy for this business. Return ONLY valid JSON.`;
     if (!imageQuery) {
       if (hvacMode) {
         imageQuery = 'hvac technician service';
+      } else if (realEstateMode) {
+        imageQuery = primaryCity ? `${primaryCity} skyline` : 'luxury home interior';
       } else {
         // Build a tighter query from the first service + industry. Strip the
         // same noise words heroImage.js would strip so we don't waste tokens
@@ -253,12 +294,15 @@ Generate compelling website copy for this business. Return ONLY valid JSON.`;
     }
   }
 
-  // Generic / business-starter: fetch per-service Unsplash images too. Pass
-  // `mode: 'generic'` + a fallback industry so sharpenGenericQuery anchors
-  // queries on the business context (e.g. "pipe cleaning plumbing") instead
-  // of falling through to the salon-biased default.
+  // Generic / business-starter: fetch per-service Unsplash images. Passes
+  // `mode: 'generic'` + industry so sharpenGenericQuery anchors queries on
+  // the business context (e.g. "pipe cleaning plumbing") instead of the
+  // salon-biased default. Skipped for HVAC (uses attachHvacServiceImages
+  // above), salon (uses attachServiceImages below on salonServices), and
+  // real estate (uses its own listing/neighborhood fetchers below).
   if (
     !hvacMode &&
+    !realEstateMode &&
     extras.templateId !== 'salon' &&
     Array.isArray(generatedContent.services) &&
     generatedContent.services.length > 0
@@ -277,6 +321,36 @@ Generate compelling website copy for this business. Return ONLY valid JSON.`;
       logger.info(`[WEBGEN] Generic: attached Unsplash images to ${withImgs}/${generatedContent.services.length} services (industry="${industry}")`);
     } catch (err) {
       logger.warn(`[WEBGEN] Generic service image fetch failed: ${err.message}`);
+    }
+  }
+
+  // Real estate: fetch per-listing, per-neighborhood, and agent-placeholder
+  // Unsplash images in parallel so the template has real visuals instead of
+  // solid-navy blocks.
+  let neighborhoodImages = {};
+  let agentPlaceholderImage = null;
+  if (realEstateMode) {
+    const [listingRes, neighRes, agentRes] = await Promise.allSettled([
+      Array.isArray(generatedContent.featuredListings) && generatedContent.featuredListings.length > 0
+        ? attachRealEstateListingImages(generatedContent.featuredListings)
+        : Promise.resolve(generatedContent.featuredListings || []),
+      fetchNeighborhoodImages(primaryCity, Array.isArray(serviceAreas) ? serviceAreas.slice(0, 8) : []),
+      fetchAgentPlaceholderImage(),
+    ]);
+    if (listingRes.status === 'fulfilled') {
+      generatedContent.featuredListings = listingRes.value;
+    } else {
+      logger.warn(`[WEBGEN] Real estate listing image fetch failed: ${listingRes.reason?.message}`);
+    }
+    if (neighRes.status === 'fulfilled') {
+      neighborhoodImages = neighRes.value || {};
+    } else {
+      logger.warn(`[WEBGEN] Neighborhood image fetch failed: ${neighRes.reason?.message}`);
+    }
+    if (agentRes.status === 'fulfilled') {
+      agentPlaceholderImage = agentRes.value;
+    } else {
+      logger.warn(`[WEBGEN] Agent placeholder image fetch failed: ${agentRes.reason?.message}`);
     }
   }
 
@@ -356,6 +430,15 @@ Generate compelling website copy for this business. Return ONLY valid JSON.`;
     googleRating: googleRating || null,
     reviewCount: reviewCount || null,
     googleProfileUrl: googleProfileUrl || null,
+    // Real-estate pass-through (harmless for non-real-estate templates).
+    brokerageName: brokerageName || null,
+    homesSold: homesSold || null,
+    volumeClosed: volumeClosed || null,
+    designations: Array.isArray(designations) ? designations : null,
+    specialty: specialty || null,
+    calendlyUrl: calendlyUrl || null,
+    neighborhoodImages,
+    agentPlaceholderImage,
   };
 
   logger.info(`Generated website content for ${businessName}${heroImage ? ' (with Unsplash hero)' : ''}`);

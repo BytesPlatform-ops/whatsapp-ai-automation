@@ -9,3 +9,6 @@ Design-Automation-V2/
 
 # Local smoke-test output from HVAC template
 src/website-gen/templates/hvac/smoke-out/
+
+# Local smoke-test output from real-estate template
+src/website-gen/templates/real-estate/smoke-out/
