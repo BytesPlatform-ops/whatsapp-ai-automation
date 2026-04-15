@@ -853,6 +853,17 @@ function sendAdminReply(e) {
       // table by the time we get here. Bump lastMsgCount so the next 5s
       // poll doesn't see it as "new" and append a duplicate bubble.
       lastMsgCount += 1;
+      // Update the cached leads row so the Manual badge + amber highlight
+      // update live without a reload when the operator closes the modal.
+      if (Array.isArray(leadsData)) {
+        var row = leadsData.find(function(l) { return l.id === currentConvUserId; });
+        if (row) {
+          row.manual_count = (row.manual_count || 0) + 1;
+          row.has_manual = true;
+          row.message_count = (row.message_count || 0) + 1;
+          row.last_message_at = new Date().toISOString();
+        }
+      }
     } else {
       alert('Failed to send: ' + (data.error || 'Unknown error'));
     }
@@ -901,6 +912,19 @@ function toggleTakeover() {
   .then(function(data) {
     if (data.success) {
       updateTakeoverButton(newState);
+      // Keep the cached leads list in sync so the amber highlight and the
+      // Manual / AI Only filter counts reflect the toggle without a reload.
+      // If the user is on the Conversations tab, re-render it now.
+      if (Array.isArray(leadsData)) {
+        var row = leadsData.find(function(l) { return l.id === currentConvUserId; });
+        if (row) {
+          row.human_takeover = newState;
+          row.has_manual = newState || (row.manual_count || 0) > 0;
+        }
+      }
+      if (currentSection === 'conversations') {
+        renderConversations(leadsData);
+      }
     } else {
       alert('Failed: ' + (data.error || 'Unknown error'));
     }

@@ -253,10 +253,10 @@ Generate compelling website copy for this business. Return ONLY valid JSON.`;
     }
   }
 
-  // Generic / business-starter: fetch per-service Unsplash images too. Until
-  // now these sites only got icon placeholders. attachServiceImages expects
-  // objects with a `name` field, so we map title -> name, run the fetcher,
-  // then splice the images back onto the original service entries.
+  // Generic / business-starter: fetch per-service Unsplash images too. Pass
+  // `mode: 'generic'` + a fallback industry so sharpenGenericQuery anchors
+  // queries on the business context (e.g. "pipe cleaning plumbing") instead
+  // of falling through to the salon-biased default.
   if (
     !hvacMode &&
     extras.templateId !== 'salon' &&
@@ -268,13 +268,13 @@ Generate compelling website copy for this business. Return ONLY valid JSON.`;
         name: s.title || s.name || '',
         industry,
       }));
-      const enriched = await attachServiceImages(probes);
+      const enriched = await attachServiceImages(probes, { mode: 'generic', industry });
       generatedContent.services = generatedContent.services.map((s, i) => ({
         ...s,
         image: enriched[i]?.image || null,
       }));
       const withImgs = generatedContent.services.filter((s) => s.image).length;
-      logger.info(`[WEBGEN] Generic: attached Unsplash images to ${withImgs}/${generatedContent.services.length} services`);
+      logger.info(`[WEBGEN] Generic: attached Unsplash images to ${withImgs}/${generatedContent.services.length} services (industry="${industry}")`);
     } catch (err) {
       logger.warn(`[WEBGEN] Generic service image fetch failed: ${err.message}`);
     }

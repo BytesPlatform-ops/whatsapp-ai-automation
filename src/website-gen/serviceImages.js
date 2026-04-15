@@ -189,7 +189,7 @@ async function runPool(items, limit, worker) {
  *      thematically relevant photo even when the exact term is thin on
  *      Unsplash. Covers ambiguous names like "Bleach" or "Cleanup".
  */
-async function attachServiceImages(services) {
+async function attachServiceImages(services, options = {}) {
   const accessKey = env.unsplash?.accessKey;
   if (!accessKey) {
     logger.warn('[SERVICE-IMG] UNSPLASH_ACCESS_KEY not set — service images will be skipped');
@@ -197,27 +197,38 @@ async function attachServiceImages(services) {
   }
   if (!Array.isArray(services) || services.length === 0) return services || [];
 
-  // Decide mode per-call: if any service carries an `industry` marker it's a
-  // generic business site, otherwise treat as salon (original behaviour).
-  const isGeneric = services.some((s) => s && typeof s.industry === 'string' && s.industry.length > 0);
+  // Mode is now explicit. Callers pass `{ mode: 'generic', industry: '...' }`
+  // so we don't have to guess from whether individual service objects happen
+  // to carry an `industry` field. Default mode is 'salon' to preserve legacy
+  // behaviour for the salon template.
+  const mode = options.mode || (services.some((s) => s && typeof s.industry === 'string' && s.industry.length > 0) ? 'generic' : 'salon');
+  const fallbackIndustry = String(options.industry || '').trim();
 
-  const specific = isGeneric
-    ? services.map((s) => sharpenGenericQuery(s.name, s.industry))
+  const specific = mode === 'generic'
+    ? services.map((s) => sharpenGenericQuery(s.name, s.industry || fallbackIndustry))
     : services.map((s) => sharpenQuery(s.name));
-  logger.info(`[SERVICE-IMG] Pass 1 (${isGeneric ? 'generic' : 'salon'}): fetching ${specific.length} specific queries`);
+  logger.info(`[SERVICE-IMG] Pass 1 (${mode}): fetching ${specific.length} queries: ${specific.join(' | ')}`);
   const firstPass = await runPool(specific, CONCURRENCY, (q) => fetchOne(q, accessKey));
   const hits1 = firstPass.filter(Boolean).length;
 
-  // Second pass only for the misses, using a broader category fallback.
+  // Second pass for misses — broader category/industry fallback.
   const missingIdx = firstPass.map((v, i) => (v ? -1 : i)).filter((i) => i >= 0);
   let hits2 = 0;
   if (missingIdx.length > 0) {
-    const fallbackFor = (i) => isGeneric
-      ? (services[i].industry || 'business')
-      : (CATEGORY_FALLBACK[roughCategory(services[i].name)] || 'salon beauty');
-    // De-dupe so multiple missing services in the same category share one fetch.
+    const fallbackFor = (i) => {
+      if (mode === 'generic') {
+        const ind = services[i].industry || fallbackIndustry;
+        if (ind) return ind;
+        // Last-ditch: service name alone with no industry. Strip noise words
+        // so "Cleaning Services" doesn't search for the word "services".
+        return String(services[i].name || 'business')
+          .replace(/\b(services?|solutions?)\b/gi, '')
+          .trim() || 'business';
+      }
+      return CATEGORY_FALLBACK[roughCategory(services[i].name)] || 'salon beauty';
+    };
     const fallbackQueries = Array.from(new Set(missingIdx.map(fallbackFor)));
-    logger.info(`[SERVICE-IMG] Pass 2: ${missingIdx.length} misses → ${fallbackQueries.length} fallback queries`);
+    logger.info(`[SERVICE-IMG] Pass 2: ${missingIdx.length} misses → fallback queries: ${fallbackQueries.join(' | ')}`);
     const fallbackResults = await runPool(fallbackQueries, CONCURRENCY, (q) => fetchOne(q, accessKey));
     const byQuery = Object.fromEntries(fallbackQueries.map((q, i) => [q, fallbackResults[i]]));
     for (const i of missingIdx) {
@@ -229,7 +240,19 @@ async function attachServiceImages(services) {
     }
   }
 
-  logger.info(`[SERVICE-IMG] Total: ${hits1 + hits2}/${services.length} service images (${hits1} specific + ${hits2} fallback)`);
+  // Third-pass safety net for generic mode: if we still have misses, borrow
+  // the first successful image from another service so every card has SOME
+  // visual instead of falling back to the icon tile. Better than a bare card.
+  if (mode === 'generic') {
+    const stillMissing = firstPass.map((v, i) => (v ? -1 : i)).filter((i) => i >= 0);
+    const anyHit = firstPass.find(Boolean);
+    if (anyHit && stillMissing.length > 0) {
+      for (const i of stillMissing) firstPass[i] = anyHit;
+      logger.info(`[SERVICE-IMG] Pass 3: filled ${stillMissing.length} remaining misses with a borrowed image`);
+    }
+  }
+
+  logger.info(`[SERVICE-IMG] Total: ${firstPass.filter(Boolean).length}/${services.length} service images (${hits1} specific + ${hits2} fallback)`);
   return services.map((s, i) => (firstPass[i] ? { ...s, image: firstPass[i] } : s));
 }
 
