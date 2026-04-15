@@ -357,7 +357,7 @@ async function _routeMessage(message) {
 
   // Check for reset command
   if (text && text.toLowerCase().trim() === '/reset') {
-    await updateUserState(user.id, STATES.WELCOME);
+    await updateUserState(user.id, STATES.SALES_CHAT);
     // Clear trigger flags so flows can be re-triggered
     const { updateUserMetadata } = require('../db/users');
     await updateUserMetadata(user.id, {
@@ -394,8 +394,14 @@ async function _routeMessage(message) {
     // Clear conversation history so the sales bot starts fresh
     const { clearHistory } = require('../db/conversations');
     await clearHistory(user.id);
-    user.state = STATES.WELCOME;
+    user.state = STATES.SALES_CHAT;
     logger.info(`User ${from} reset conversation, metadata, and history`);
+
+    // Send a deterministic Pixie greeting so /reset never produces a
+    // greeting-less response. Stopping here also saves an LLM call.
+    await sendTextMessage(user.phone_number, "Hi! I'm Pixie. What can I help you with today?");
+    await logMessage(user.id, "Hi! I'm Pixie. What can I help you with today?", 'assistant');
+    return;
   }
 
   // Check for menu command (text or button) - go back to service selection
