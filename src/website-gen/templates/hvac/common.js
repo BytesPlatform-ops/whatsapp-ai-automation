@@ -534,6 +534,220 @@ a:hover{color:${t.trust}}
 /* Scroll reveal */
 .rv{opacity:0;transform:translateY(20px);transition:opacity .6s ease,transform .6s ease}
 .rv.is-visible{opacity:1;transform:translateY(0)}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   MOBILE RESPONSIVE OVERRIDES
+   Most users find this site through a WhatsApp link, so phones are the
+   primary surface. These overrides tighten padding, stack CTAs full-width,
+   shrink decorative elements, and prevent text overflow.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+@media(max-width:760px){
+  /* Layout */
+  .ctn{padding:0 18px}
+  .sect{padding:56px 0}
+
+  /* Emergency strip — keep one line, smaller pill */
+  .e-strip{font-size:12.5px;padding:7px 0}
+  .e-strip .ctn{gap:10px;flex-wrap:wrap;justify-content:center}
+  .e-strip-l{justify-content:center}
+  .e-strip-cta{padding:3px 10px;font-size:12px}
+
+  /* Nav — compact, drop nav-phone text, keep call icon + Book Now + hamburger */
+  .nav-inner{height:58px;gap:8px}
+  .nav-logo{font-size:16px}
+  .nav-logo .logo-mark{width:30px;height:30px;font-size:14px;margin-right:7px}
+  .nav .btn-sm{padding:9px 14px;font-size:13px}
+  .nav-call-m{width:38px;height:38px}
+  .ham{width:38px;height:38px;padding:9px}
+  .mm{inset:58px 0 0 0}
+  .mm a.mm-link{font-size:16px;padding:13px 14px}
+
+  /* Hero */
+  .hero{padding:40px 0 72px}
+  .hero-grid{gap:36px}
+  .hero .h1{font-size:clamp(28px,8vw,38px);line-height:1.1}
+  .hero .body-lg{font-size:16px;margin-bottom:22px}
+  .hero .chip{font-size:11.5px;padding:5px 10px;margin-bottom:14px}
+  .hero .flex.flex-wrap.gap-12{flex-direction:column;align-items:stretch;gap:10px}
+  .hero .btn{width:100%;padding:14px 20px;font-size:15px}
+  .hero .btn-lg{padding:15px 22px;font-size:15px}
+  .hero .trust-row{padding:12px 14px;gap:8px 14px;border-radius:12px}
+  .hero .trust-row .t-item{font-size:12.5px}
+  .hero-photo-wrap::before{display:none}
+  .hero-photo{aspect-ratio:1/1;border-radius:18px}
+  .hero-badge{padding:10px 14px;max-width:240px;border-radius:12px}
+  .hero-badge .badge-text strong{font-size:16px}
+  .hero-badge .badge-text span{font-size:11px}
+
+  /* Section headings */
+  .h2{font-size:clamp(24px,6.5vw,30px);line-height:1.2}
+  .body-lg{font-size:16px}
+  .center .body{font-size:15px}
+
+  /* Service cards */
+  .svc-card{border-radius:14px}
+  .svc-card .svc-body{padding:18px 18px 20px;gap:8px}
+  .svc-card h3{font-size:17px}
+  .svc-card p{font-size:14px;line-height:1.5}
+  .svc-card .svc-price-abs{font-size:11.5px;padding:4px 9px;top:12px;left:12px}
+
+  /* Why Choose Us */
+  .why-row{gap:14px}
+  .why-item{padding:22px 22px 22px 24px;gap:16px}
+  .why-item .why-num{font-size:36px;min-width:42px}
+  .why-item h4{font-size:16.5px;margin-bottom:4px}
+  .why-item p{font-size:14px;line-height:1.5}
+
+  /* Testimonials */
+  .testi{padding:24px 22px 22px;border-radius:12px}
+  .testi::before{font-size:60px;top:10px;right:18px}
+  .testi-q{font-size:15px;line-height:1.6}
+  .testi-meta{padding-top:14px}
+  .avatar{width:38px;height:38px;font-size:14px}
+  .testi-name{font-size:13.5px}
+  .testi-role{font-size:11.5px}
+  .testi-btn{width:38px;height:38px}
+
+  /* Service areas split (home) */
+  .area-split{gap:24px}
+  .area-stat{font-size:12.5px;padding:7px 13px}
+  .area-map{min-height:240px}
+  .area-map iframe{min-height:240px;height:240px!important}
+  .area-map-overlay{padding:10px 14px;left:12px;bottom:12px;gap:10px;max-width:calc(100% - 24px)}
+  .area-map-overlay .map-ico{width:34px;height:34px}
+  .area-map-overlay strong{font-size:14px}
+  .area-map-overlay span{font-size:11.5px}
+  .area-cards{max-height:none;padding-right:0}
+  .area-card{padding:14px 16px;gap:12px;border-radius:12px}
+  .area-card .ac-ico{width:40px;height:40px}
+  .area-card .ac-name{font-size:15px}
+  .area-card .ac-meta{font-size:11.5px;gap:8px 12px}
+  .area-card .ac-go{display:none}
+
+  /* Areas page (sub-page) */
+  .area-pill{padding:8px 14px;font-size:13px}
+
+  /* Page hero (sub-pages) */
+  .page-hero{padding:40px 0 28px}
+  .page-hero h1.h1{font-size:clamp(26px,7.5vw,34px)}
+  .page-hero .body-lg{font-size:16px}
+  .page-hero .crumb{font-size:12.5px;margin-bottom:10px}
+
+  /* Services page — zigzag rows */
+  .zz-row{gap:28px;margin-bottom:48px}
+  .zz-label{font-size:11px;padding:5px 12px;letter-spacing:.1em}
+  .zz-meta{font-size:13px;gap:8px 14px;margin:14px 0 18px}
+  .zz-price-block{display:flex;width:100%}
+  .zz-price-cell{flex:1;padding:12px 14px}
+  .zz-price-cell .zz-price-label{font-size:10.5px}
+  .zz-price-cell .zz-price-val{font-size:18px}
+  .zz-feats{gap:8px;grid-template-columns:1fr;margin-bottom:22px}
+  .zz-feat{font-size:14px}
+  .zz-visual{aspect-ratio:16/11}
+  .zz-visual-label{font-size:11px;padding:6px 10px;left:10px;bottom:10px}
+
+  /* CTA banner */
+  .cta-banner{padding:52px 0}
+  .cta-banner h2.h2{font-size:clamp(24px,7vw,30px)}
+  .cta-banner .body-lg{font-size:15px;margin-bottom:22px}
+  .cta-banner .flex.flex-wrap.gap-12{flex-direction:column;align-items:stretch;max-width:340px;margin:0 auto}
+  .cta-banner .btn{width:100%}
+
+  /* Footer */
+  .foot{padding:40px 0 24px;font-size:13px}
+  .foot-grid{gap:28px}
+  .foot-bot{flex-direction:column;gap:8px;text-align:center;padding-top:20px;margin-top:28px}
+  .foot-big-phone{font-size:18px}
+
+  /* Floating call FAB */
+  .fab{width:54px;height:54px;bottom:18px;right:18px}
+
+  /* Contact form */
+  .form-grid{gap:14px}
+  .form-input,.form-select,.form-textarea{font-size:16px;padding:12px 14px} /* 16px prevents iOS zoom on focus */
+  .form-label{font-size:12.5px}
+
+  /* About — story grid */
+  .story-grid{gap:36px}
+  .founder-frame::before{top:-8px;left:-8px;right:8px;bottom:14px;border-radius:18px}
+  .founder-frame > .founder-photo{aspect-ratio:4/4;border-radius:18px}
+  .founder-frame .fp-badge{right:10px;bottom:-14px;padding:11px 14px;max-width:220px}
+  .founder-frame .fp-badge strong{font-size:14.5px}
+  .founder-frame .fp-badge span{font-size:11.5px}
+  .signature{margin-top:22px;padding-top:18px}
+  .signature-name{font-size:18px}
+  .signature-role{font-size:12px}
+
+  /* About — credentials */
+  .cred-card{padding:22px 20px 18px;min-height:auto;gap:8px}
+  .cred-label{font-size:10.5px}
+  .cred-title{font-size:17px}
+  .cred-desc{font-size:13.5px;line-height:1.45}
+  .cred-tag{font-size:10.5px;padding:5px 9px}
+
+  /* About — values */
+  .value-card{padding:30px 22px 22px}
+  .value-num{font-size:48px;top:14px;right:18px}
+  .value-card h3{font-size:21px;margin-bottom:10px}
+  .value-card p{font-size:14.5px;line-height:1.55}
+
+  /* About — guarantee */
+  .guarantee-card{padding:32px 26px;border-radius:18px}
+  .guarantee-card::after{font-size:200px;right:-20px;bottom:-40px}
+  .guarantee-grid{gap:24px}
+  .guarantee-grid p{font-size:15px}
+  .guarantee-grid .flex{flex-direction:column;align-items:stretch}
+  .guarantee-grid .btn{width:100%}
+  .guarantee-seal{order:-1;margin-bottom:8px}
+  .guarantee-seal .seal-ring{width:140px;height:140px}
+  .guarantee-seal .seal-ring strong{font-size:36px}
+  .guarantee-seal .seal-ring span{font-size:10px}
+
+  /* About — team banner */
+  .team-banner{border-radius:18px;min-height:280px}
+  .team-banner img{min-height:280px;max-height:380px}
+  .team-banner-overlay{padding:22px 22px 22px;background:linear-gradient(180deg,rgba(15,23,42,.55) 0%,rgba(15,23,42,.85) 60%)}
+  .team-banner-text h3{font-size:19px;line-height:1.2}
+  .team-banner-text p{font-size:13.5px}
+  .team-banner-text .replace-note{font-size:11px;padding:5px 10px}
+
+  /* About — stats dark */
+  .stats-dark{padding:48px 0}
+  .stat-cell{padding:18px 8px}
+  .stat-num{font-size:clamp(40px,10vw,52px)}
+  .stat-label{font-size:12px;letter-spacing:.05em}
+
+  /* Bar accent placement on left-aligned headings */
+  .bar-accent{margin:12px auto 0}
+  .bar-accent-l{margin-left:0}
+
+  /* FAQ */
+  .faq summary{padding:18px 20px;font-size:15.5px}
+  .faq-body{padding:0 20px 20px;font-size:14.5px}
+}
+
+/* Very narrow — compact phones, e.g. iPhone SE / Galaxy S Mini */
+@media(max-width:400px){
+  .ctn{padding:0 14px}
+  .sect{padding:48px 0}
+  .e-strip-full{display:none}
+  .e-strip-short{display:inline}
+  .nav .btn-sm{display:none}
+  .nav-inner{gap:6px}
+  .hero{padding:32px 0 64px}
+  .hero .h1{font-size:clamp(26px,8.5vw,32px)}
+  .hero-badge{padding:10px 12px;max-width:200px}
+  .hero-badge .badge-text strong{font-size:14.5px}
+  .why-item{padding:20px 18px 20px 22px;gap:12px}
+  .why-item .why-num{font-size:32px;min-width:36px}
+  .testi{padding:22px 20px 20px}
+  .area-card .ac-meta span:nth-child(3){display:none}
+  .stat-num{font-size:clamp(36px,11vw,46px)}
+  .guarantee-card{padding:26px 22px}
+  .guarantee-card::after{display:none}
+  .cred-title{font-size:16px}
+}
 `;
 }
 

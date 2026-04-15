@@ -214,6 +214,21 @@ async function classifyIntent(state, text) {
   const currentQuestion = STATE_QUESTION[state];
   if (!currentQuestion) return 'answer';
 
+  // Fast-path — these are unambiguously answers, never menu/exit/question.
+  // The LLM classifier sometimes misfires on single-word replies (e.g. "skip"
+  // gets routed to "menu", which resets the user back to service selection
+  // mid-flow). Treat the obvious short replies as plain answers and skip the
+  // LLM call entirely.
+  const t = String(text || '').trim().toLowerCase();
+  if (!t) return 'answer';
+  if (/^(skip|none|no|nope|nah|n\/?a|na|next|continue|done|same|ok|okay|yes|yeah|yep|ya|sure|y|n)$/.test(t)) return 'answer';
+  // Phone-number-shaped input
+  if (/^[\d\s\-+().]{6,}$/.test(t)) return 'answer';
+  // Email-shaped input
+  if (/@/.test(t) && t.length < 100 && !/[?]/.test(t)) return 'answer';
+  // Very short replies (< 4 chars) almost always answers, never menu requests
+  if (t.length < 4) return 'answer';
+
   try {
     const prompt = INTENT_CLASSIFIER_PROMPT.replace('{{CURRENT_QUESTION}}', currentQuestion);
     const response = await generateResponse(prompt, [{ role: 'user', content: text }]);

@@ -110,12 +110,34 @@ async function handleCollectEmail(user, message) {
 
 async function skipToNextAfterEmail(user, businessName, existingWebsiteData) {
   if (existingWebsiteData.industry) {
-    await sendTextMessage(
-      user.phone_number,
-      'What services or products do you offer? List them separated by commas, or say "skip".'
-    );
-    await logMessage(user.id, `Industry already set: ${existingWebsiteData.industry}, skipping to services`, 'assistant');
-    return STATES.WEB_COLLECT_SERVICES;
+    return continueAfterIndustry(user, existingWebsiteData.industry);
+  }
+
+  // Try to infer industry from the recent conversation. Most users mention
+  // their business type in the sales bot turn before the website flow even
+  // starts (e.g. "I run an HVAC company"). Re-asking is jarring.
+  try {
+    const history = await getConversationHistory(user.id, 10);
+    if (history && history.length > 0) {
+      const transcript = history
+        .map((m) => `${m.role}: ${m.message_text}`)
+        .filter((line) => line.length < 400)
+        .join('\n');
+      const inferred = await generateResponse(
+        `From the conversation below, what industry/niche is the business "${businessName}" in? Reply with ONLY the industry name in 1-3 words (e.g. "HVAC", "Restaurant", "Real estate", "Salon"). If you can't tell with reasonable confidence, reply EXACTLY with the word "unknown".\n\nConversation:\n${transcript}`,
+        [{ role: 'user', content: '' }]
+      );
+      const cleaned = (inferred || '').trim().replace(/^["']|["']$/g, '');
+      if (cleaned && cleaned.length >= 2 && cleaned.length < 40 && !/^unknown$/i.test(cleaned)) {
+        await updateUserMetadata(user.id, {
+          websiteData: { ...(user.metadata?.websiteData || {}), industry: cleaned },
+        });
+        await logMessage(user.id, `Industry auto-inferred from conversation: ${cleaned}`, 'assistant');
+        return continueAfterIndustry(user, cleaned);
+      }
+    }
+  } catch (err) {
+    logger.warn(`[WEBDEV] Industry inference failed for ${user.id}: ${err.message}`);
   }
 
   await sendTextMessage(
@@ -124,6 +146,25 @@ async function skipToNextAfterEmail(user, businessName, existingWebsiteData) {
   );
 
   return STATES.WEB_COLLECT_INDUSTRY;
+}
+
+// Shared transition used after we know the industry — either the user just
+// answered, OR we inferred it from prior conversation. Decides whether to
+// branch into the HVAC areas-collection step or go straight to services.
+async function continueAfterIndustry(user, industry) {
+  const { isHvac } = require('../../website-gen/templates');
+  if (isHvac(industry)) {
+    await sendTextMessage(
+      user.phone_number,
+      `Got it — ${industry}! Which city are you based in, and which areas do you serve? Example:\n*Austin — Round Rock, Cedar Park, Pflugerville*`
+    );
+    return STATES.WEB_COLLECT_AREAS;
+  }
+  await sendTextMessage(
+    user.phone_number,
+    'What services or products do you offer? List them separated by commas, or say "skip".'
+  );
+  return STATES.WEB_COLLECT_SERVICES;
 }
 
 async function handleCollectIndustry(user, message) {
@@ -223,9 +264,12 @@ async function handleCollectAreas(user, message) {
     return STATES.WEB_COLLECT_SERVICES;
   }
 
-  // Parse: split on em/en dash, colon, pipe, or "serving".
-  const parts = raw.split(/\s*[—\-–:|]\s+|\s+serving\s+/i);
-  let primaryCity = (parts[0] || '').trim().replace(/[,.]$/, '');
+  // Parse: split on newline, em/en dash, colon, pipe, or "serving". Newline
+  // first so users typing on two lines (city on line 1, areas on line 2) work.
+  const parts = raw.split(/\r?\n+|\s*[—\-–:|]\s+|\s+serving\s+/i)
+    .map((p) => p.trim())
+    .filter(Boolean);
+  let primaryCity = (parts[0] || '').replace(/[,.]$/, '');
   let areasStr = parts.slice(1).join(', ').trim();
   let serviceAreas = areasStr
     ? areasStr.split(/[,;]|\band\b/i).map((s) => s.trim()).filter(Boolean)
@@ -234,7 +278,20 @@ async function handleCollectAreas(user, message) {
   // If the user gave a single value only, treat it as both primaryCity and the
   // sole service area.
   if (!serviceAreas.length && primaryCity) {
-    serviceAreas = [primaryCity];
+    // But first check: the single value might itself be a comma-separated
+    // list with no city header, e.g. "Karachi, Gulshan, Pechs". In that case
+    // first element = primary city, rest = service areas.
+    if (primaryCity.includes(',')) {
+      const tokens = primaryCity.split(',').map((s) => s.trim()).filter(Boolean);
+      if (tokens.length > 1) {
+        primaryCity = tokens[0];
+        serviceAreas = tokens;
+      } else {
+        serviceAreas = [primaryCity];
+      }
+    } else {
+      serviceAreas = [primaryCity];
+    }
   }
 
   // If parsing clearly failed (primaryCity looks like a sentence), ask LLM to
