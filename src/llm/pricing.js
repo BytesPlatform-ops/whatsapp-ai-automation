@@ -1,33 +1,46 @@
-// Per-million-token USD rates for the models we actually call. When a new
-// model is added, add a row here — any unknown model falls back to a
-// conservative default so the cost shows as "0" rather than a wrong number.
+// Per-million-token USD rates for the models we actually call. Each row has
+// fresh `input`, `cached` (prompt-cache read), and `write` (prompt-cache write,
+// Anthropic only) rates. Output is always fresh.
+//
+// OpenAI: cached reads are 50% of input. No cache-write premium.
+// Anthropic: cached reads are 10% of input. Cache writes are 125% of input.
 const RATES = {
   // Anthropic
-  'claude-sonnet-4-20250514':   { input: 3.00,  output: 15.00 },
-  'claude-3-5-sonnet-20241022': { input: 3.00,  output: 15.00 },
-  'claude-3-5-haiku-20241022':  { input: 0.80,  output: 4.00 },
-  'claude-opus-4-20250514':     { input: 15.00, output: 75.00 },
+  'claude-sonnet-4-20250514':   { input: 3.00,  output: 15.00, cached: 0.30,  write: 3.75 },
+  'claude-3-5-sonnet-20241022': { input: 3.00,  output: 15.00, cached: 0.30,  write: 3.75 },
+  'claude-3-5-haiku-20241022':  { input: 0.80,  output: 4.00,  cached: 0.08,  write: 1.00 },
+  'claude-opus-4-20250514':     { input: 15.00, output: 75.00, cached: 1.50,  write: 18.75 },
 
   // OpenAI chat
-  'gpt-4o-mini':                { input: 0.15,  output: 0.60 },
-  'gpt-4o':                     { input: 2.50,  output: 10.00 },
-  'gpt-4-turbo':                { input: 10.00, output: 30.00 },
+  'gpt-4o-mini':                { input: 0.15,  output: 0.60,  cached: 0.075, write: 0.15 },
+  'gpt-4o':                     { input: 2.50,  output: 10.00, cached: 1.25,  write: 2.50 },
+  'gpt-4-turbo':                { input: 10.00, output: 30.00, cached: 10.00, write: 10.00 },
 
-  // OpenAI embeddings (output cost effectively 0 — we only bill input tokens)
-  'text-embedding-3-small':     { input: 0.02,  output: 0 },
-  'text-embedding-3-large':     { input: 0.13,  output: 0 },
+  // OpenAI embeddings (no output, no caching)
+  'text-embedding-3-small':     { input: 0.02,  output: 0,     cached: 0.02,  write: 0.02 },
+  'text-embedding-3-large':     { input: 0.13,  output: 0,     cached: 0.13,  write: 0.13 },
 };
 
 /**
- * Calculate USD cost for a single LLM call. Returns 0 for unknown models so
- * missing rates never silently inflate the visible cost.
+ * Cost in USD for a single LLM call. Unknown models return 0 so missing
+ * rates never silently inflate the visible cost.
+ *
+ * @param {string} model
+ * @param {number} [inputTokens=0]        Fresh input (billed at full rate)
+ * @param {number} [outputTokens=0]       Completion tokens
+ * @param {number} [cachedInputTokens=0]  Prompt-cache reads
+ * @param {number} [cacheWriteTokens=0]   Prompt-cache writes (Anthropic only)
  */
-function costOf(model, inputTokens = 0, outputTokens = 0) {
+function costOf(model, inputTokens = 0, outputTokens = 0, cachedInputTokens = 0, cacheWriteTokens = 0) {
   const rate = RATES[model];
   if (!rate) return 0;
-  const costIn = (inputTokens / 1_000_000) * rate.input;
-  const costOut = (outputTokens / 1_000_000) * rate.output;
-  return Number((costIn + costOut).toFixed(6));
+  const M = 1_000_000;
+  const cost =
+    (inputTokens / M) * rate.input +
+    (outputTokens / M) * rate.output +
+    (cachedInputTokens / M) * rate.cached +
+    (cacheWriteTokens / M) * rate.write;
+  return Number(cost.toFixed(6));
 }
 
 module.exports = { RATES, costOf };

@@ -13,11 +13,11 @@ function getClient() {
 
 const MODEL = 'claude-sonnet-4-20250514';
 
-/**
- * Call Claude and return both the text and raw usage metadata so the
- * caller (provider.js) can record cost. Signature is kept backwards-
- * compatible via `generateResponse` below, which strips usage.
- */
+// Anthropic prompt caching requires system prompts to be sent as a structured
+// block with `cache_control`. Prompts under ~1024 tokens aren't cacheable —
+// the API still works but `cache_creation_input_tokens` / `cache_read_input_tokens`
+// will stay 0. We always attach the marker; Anthropic ignores it when the
+// prompt is too short to cache.
 async function generateResponseWithUsage(systemPrompt, messages) {
   const anthropic = getClient();
 
@@ -30,16 +30,24 @@ async function generateResponseWithUsage(systemPrompt, messages) {
     const response = await anthropic.messages.create({
       model: MODEL,
       max_tokens: 2048,
-      system: systemPrompt,
+      system: [
+        { type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } },
+      ],
       messages: formattedMessages,
     });
 
+    const u = response.usage || {};
+    // Anthropic splits cached reads, cache writes, and fresh input across three
+    // counters. provider.js sums them for the display total; pricing.js prices
+    // them separately (reads at ~10%, writes at ~125%).
     return {
       text: response.content[0].text,
       model: MODEL,
       provider: 'claude',
-      inputTokens: response.usage?.input_tokens || 0,
-      outputTokens: response.usage?.output_tokens || 0,
+      inputTokens: u.input_tokens || 0,
+      cachedInputTokens: u.cache_read_input_tokens || 0,
+      cacheWriteTokens: u.cache_creation_input_tokens || 0,
+      outputTokens: u.output_tokens || 0,
     };
   } catch (error) {
     logger.error('Claude API error:', error);

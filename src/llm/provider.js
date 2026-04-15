@@ -23,11 +23,19 @@ async function generateResponse(systemPrompt, messages, options = {}) {
   const impl = provider === 'openai' ? openai : claude;
   const start = Date.now();
 
-  const { text, model, provider: providerName, inputTokens, outputTokens } =
-    await impl.generateResponseWithUsage(systemPrompt, messages);
+  const result = await impl.generateResponseWithUsage(systemPrompt, messages);
+  const {
+    text,
+    model,
+    provider: providerName,
+    inputTokens = 0,
+    outputTokens = 0,
+    cachedInputTokens = 0,
+    cacheWriteTokens = 0,
+  } = result;
 
   const durationMs = Date.now() - start;
-  const cost_usd = costOf(model, inputTokens, outputTokens);
+  const cost_usd = costOf(model, inputTokens, outputTokens, cachedInputTokens, cacheWriteTokens);
 
   // Fire-and-forget — recordUsage swallows its own errors.
   recordUsage({
@@ -37,6 +45,8 @@ async function generateResponse(systemPrompt, messages, options = {}) {
     model,
     inputTokens,
     outputTokens,
+    cachedInputTokens,
+    cacheWriteTokens,
     costUsd: cost_usd,
     durationMs,
   });

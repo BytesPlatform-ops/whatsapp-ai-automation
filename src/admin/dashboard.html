@@ -711,6 +711,9 @@ function loadLlmCost(userId) {
         '<td class="py-1 pr-2 text-right font-semibold">' + fmtUSD(b.cost_usd) + '</td>' +
       '</tr>';
     }).join('');
+    var cacheLine = totals.cached_input_tokens > 0
+      ? ' · <span class="text-green-700">' + totals.cached_input_tokens.toLocaleString() + ' cached (' + totals.cache_hit_pct + '% hit)</span>'
+      : '';
     panel.innerHTML =
       '<div class="flex items-baseline justify-between mb-2">' +
         '<p><b>LLM Cost (total):</b></p>' +
@@ -719,6 +722,7 @@ function loadLlmCost(userId) {
       '<p class="text-[11px] text-gray-600 mb-2">' +
         totals.calls + ' calls · ' + totals.input_tokens.toLocaleString() + ' in / ' +
         totals.output_tokens.toLocaleString() + ' out tokens' +
+        cacheLine +
       '</p>' +
       '<table class="w-full text-[11px]">' +
         '<thead><tr class="text-gray-500">' +
