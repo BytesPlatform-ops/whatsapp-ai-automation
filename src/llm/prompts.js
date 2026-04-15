@@ -184,8 +184,40 @@ The site configuration has these fields:
 - primaryColor, secondaryColor, accentColor
 - contactEmail, contactPhone, contactAddress
 
-For example, if the user says "change the color to blue", return:
-{"primaryColor": "#2563EB"}
+## CRITICAL: Handling array fields (services, faq, testimonials, etc.)
+When the user wants to add, remove, or edit items in an array, you MUST return the **ENTIRE updated array**, not a partial patch. Resolve positional references yourself by looking at the Current config in the user message.
+
+**Positional references you MUST resolve:**
+- "remove the last service" → drop the final element of services[]
+- "remove the first one" / "the first service" → drop services[0]
+- "the 2nd one" / "second service" / "the one in the middle" → resolve by index
+- "remove music distribution" → drop the service whose title matches "music distribution" (case-insensitive)
+- "add a service for X" → append a new well-formed service object with all fields (title, shortDescription, fullDescription, features, icon)
+- "reorder" / "move X to the top" → return the full array in the new order
+
+**Never** return just a single service object or a partial array — always the full new array. Same rule applies to faq, testimonials, values, whyChooseUs, processSteps, heroFeatures, stats.
+
+## CRITICAL: Color choices must stay readable
+The hero section renders TEXT ON TOP OF the primaryColor (either as a gradient or a tinted photo overlay). Pick colors that keep the hero readable:
+
+- When the user names a color without qualifiers (e.g. "make it green", "blue theme", "red"), choose a **deep, saturated shade** in the #1e to #4a range, NOT a pastel. White hero text must stay legible.
+  - Green → #059669 or #065F46 (NOT mint/sage)
+  - Blue → #1E40AF or #1D4ED8 (NOT sky blue)
+  - Red → #B91C1C or #991B1B (NOT pink/coral)
+  - Purple → #6D28D9 or #5B21B6 (NOT lavender)
+  - Orange → #C2410C or #9A3412 (NOT peach)
+  - Teal → #0F766E or #115E59
+- When the user explicitly asks for a **light**, **pastel**, or **soft** shade (e.g. "make it mint green", "soft pink", "lighter blue"), go ahead and use that light color, BUT in the same response also update the hero text colour by setting:
+  - "heroTextOverride": "dark"  (the renderer will switch hero headline/tagline/badges to near-black so they remain readable on the light background)
+- When the user asks for a darker shade of an already-applied colour, deepen it and keep heroTextOverride as "auto" (or omit it).
+
+The valid values for heroTextOverride are "auto" (default), "light" (white text), "dark" (near-black text). Only include this field when the user's colour ask warrants forcing a specific text palette.
+
+**Examples:**
+- "change the color to green" → {"primaryColor": "#059669"}
+- "make it mint green" → {"primaryColor": "#A7F3D0", "heroTextOverride": "dark"}
+- "go with a darker blue" (current is #1E40AF) → {"primaryColor": "#1E3A8A"}
+- "I like a softer pastel pink" → {"primaryColor": "#FBCFE8", "heroTextOverride": "dark"}
 
 Return ONLY valid JSON. No explanation outside the JSON.`;
 

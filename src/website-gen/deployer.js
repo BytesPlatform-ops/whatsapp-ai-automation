@@ -95,7 +95,25 @@ const ICON_MAP = {
 function getIcon(n) { return `<svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">${ICON_MAP[n]||ICON_MAP.star}</svg>`; }
 
 // ─── Styles ─────────────────────────────────────────────────────────────────
-function getStyles(pc, ac) {
+function getStyles(pc, ac, ctx = {}) {
+  // `onPc` is the palette computed against the primary colour — used for any
+  // UI element whose background IS `pc` (primary button, back-to-top button)
+  // so the label stays legible when the user picks a light primary.
+  // `heroPageHasLightBg` is only true when this page has a hero (home) AND
+  // the hero background is light — in that case nav links need to be dark
+  // instead of white even before the user scrolls.
+  const onPc = ctx.onPc || { fg: '#fff', fgSoft: 'rgba(255,255,255,0.85)', fgMuted: 'rgba(255,255,255,0.55)', border: 'rgba(255,255,255,0.3)', buttonBg: '#fff', buttonFg: pc };
+  const lightHero = !!ctx.heroPageHasLightBg;
+  // Nav colour at the top of the hero. On pages without a hero the nav
+  // starts in the scrolled (white-bg, dark-text) state, which getNav
+  // already handles via the `nav-dark` class — so we only override when
+  // it IS a light hero page.
+  const navBrandTop = lightHero ? onPc.fg : '#fff';
+  const navLinkTop = lightHero ? onPc.fgSoft : 'rgba(255,255,255,0.85)';
+  const navLinkTopHover = lightHero ? onPc.fg : '#fff';
+  const navMenuLineTop = lightHero ? onPc.fg : '#fff';
+  // Button text colour against `pc`. When pc is light, fg is dark already.
+  const pcBtnFg = onPc.fg;
   return `
 :root{--pc:${pc};--ac:${ac}}*{margin:0;padding:0;box-sizing:border-box}html{scroll-behavior:smooth}body{font-family:'Inter',sans-serif;color:#1a1a2e;overflow-x:hidden}
 @keyframes fadeUp{from{opacity:0;transform:translateY(40px)}to{opacity:1;transform:translateY(0)}}
@@ -122,7 +140,7 @@ body{animation:pageIn 0.5s ease-out}
 .tilt{transition:transform 0.4s ease}.tilt:hover{transform:perspective(800px) rotateY(-4deg) rotateX(4deg) translateY(-6px);box-shadow:0 25px 60px rgba(0,0,0,0.15)}
 .sect{padding:100px 24px;position:relative}@media(min-width:768px){.sect{padding:120px 48px}}
 .ctn{max-width:1200px;margin:0 auto}
-.btn-p{display:inline-flex;align-items:center;gap:8px;padding:16px 32px;font-size:16px;font-weight:600;color:#fff;background:linear-gradient(135deg,${pc},${pc}dd);border:none;border-radius:50px;cursor:pointer;transition:all 0.4s cubic-bezier(0.16,1,0.3,1);text-decoration:none;position:relative;overflow:hidden}
+.btn-p{display:inline-flex;align-items:center;gap:8px;padding:16px 32px;font-size:16px;font-weight:600;color:${pcBtnFg};background:linear-gradient(135deg,${pc},${pc}dd);border:none;border-radius:50px;cursor:pointer;transition:all 0.4s cubic-bezier(0.16,1,0.3,1);text-decoration:none;position:relative;overflow:hidden}
 .btn-p::before{content:'';position:absolute;inset:0;background:linear-gradient(135deg,transparent,rgba(255,255,255,0.15),transparent);transform:translateX(-100%);transition:transform 0.6s}.btn-p:hover::before{transform:translateX(100%)}
 .btn-p:hover{transform:translateY(-3px);box-shadow:0 15px 40px ${pc}44}
 .btn-s{display:inline-flex;align-items:center;gap:8px;padding:16px 32px;font-size:16px;font-weight:600;color:${pc};background:transparent;border:2px solid ${pc};border-radius:50px;cursor:pointer;transition:all 0.4s;text-decoration:none}.btn-s:hover{background:${pc};color:#fff;transform:translateY(-3px)}
@@ -137,19 +155,19 @@ body{animation:pageIn 0.5s ease-out}
 .nav.scrolled .nav-l,.nav.nav-dark .nav-l{color:#333!important}.nav.scrolled .nav-l:hover,.nav.nav-dark .nav-l:hover{color:${pc}!important}
 .nav.scrolled .nav-b,.nav.nav-dark .nav-b{color:${pc}!important}
 .nav-i{max-width:1200px;margin:0 auto;display:flex;align-items:center;justify-content:space-between}
-.nav-b{font-size:22px;font-weight:800;color:#fff;text-decoration:none;letter-spacing:-0.5px;transition:color 0.3s}
+.nav-b{font-size:22px;font-weight:800;color:${navBrandTop};text-decoration:none;letter-spacing:-0.5px;transition:color 0.3s}
 .nav-ls{display:none;gap:32px;align-items:center}@media(min-width:768px){.nav-ls{display:flex}}
-.nav-l{color:rgba(255,255,255,0.85);text-decoration:none;font-size:14px;font-weight:500;transition:all 0.3s;position:relative}
-.nav-l:hover{color:#fff}.nav-l::after{content:'';position:absolute;bottom:-4px;left:0;width:0;height:2px;background:${ac};transition:width 0.3s;border-radius:2px}.nav-l:hover::after{width:100%}
+.nav-l{color:${navLinkTop};text-decoration:none;font-size:14px;font-weight:500;transition:all 0.3s;position:relative}
+.nav-l:hover{color:${navLinkTopHover}}.nav-l::after{content:'';position:absolute;bottom:-4px;left:0;width:0;height:2px;background:${ac};transition:width 0.3s;border-radius:2px}.nav-l:hover::after{width:100%}
 .nav.nav-dark .nav-l:hover{color:${pc}!important}
 .mt{display:flex;flex-direction:column;gap:5px;cursor:pointer;padding:8px}@media(min-width:768px){.mt{display:none}}
-.mt span{display:block;width:24px;height:2px;background:#fff;transition:all 0.3s;border-radius:2px}.nav.scrolled .mt span,.nav.nav-dark .mt span{background:#333}
+.mt span{display:block;width:24px;height:2px;background:${navMenuLineTop};transition:all 0.3s;border-radius:2px}.nav.scrolled .mt span,.nav.nav-dark .mt span{background:#333}
 .mm{display:none;position:fixed;inset:0;background:rgba(10,10,26,0.98);z-index:1100;flex-direction:column;align-items:center;justify-content:center;gap:0}
 .mm.open{display:flex}.mm a{color:#fff;font-size:28px;font-weight:600;text-decoration:none;padding:16px;opacity:0;transform:translateY(20px);transition:all 0.4s}
 .mm.open a{opacity:1;transform:translateY(0)}.mm.open a:nth-child(1){transition-delay:0.1s}.mm.open a:nth-child(2){transition-delay:0.15s}.mm.open a:nth-child(3){transition-delay:0.2s}.mm.open a:nth-child(4){transition-delay:0.25s}.mm.open a:nth-child(5){transition-delay:0.3s}
 .mm a:hover{color:${ac}}.mc{position:absolute;top:24px;right:24px;color:#fff;font-size:36px;cursor:pointer;background:none;border:none;z-index:1101;transition:transform 0.3s}.mc:hover{transform:rotate(90deg)}
 .scroll-bar{position:fixed;top:0;left:0;height:3px;background:linear-gradient(90deg,${pc},${ac});z-index:1001;transition:width 0.1s;width:0}
-.btt{position:fixed;bottom:32px;right:32px;width:48px;height:48px;border-radius:50%;background:${pc};color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;z-index:998;opacity:0;transform:translateY(20px);transition:all 0.4s;border:none;box-shadow:0 8px 24px ${pc}44}
+.btt{position:fixed;bottom:32px;right:32px;width:48px;height:48px;border-radius:50%;background:${pc};color:${pcBtnFg};display:flex;align-items:center;justify-content:center;cursor:pointer;z-index:998;opacity:0;transform:translateY(20px);transition:all 0.4s;border:none;box-shadow:0 8px 24px ${pc}44}
 .btt.show{opacity:1;transform:translateY(0)}.btt:hover{transform:translateY(-4px);box-shadow:0 12px 32px ${pc}66}
 .marquee-strip{overflow:hidden;padding:20px 0;background:#fafafa;border-top:1px solid #f0f0f0;border-bottom:1px solid #f0f0f0}
 .marquee-track{display:flex;animation:marquee 25s linear infinite;width:max-content}
@@ -283,12 +301,19 @@ function getMarquee(c) {
 function wrap(c, cur, body) {
   const pc=c.primaryColor||'#2563EB', ac=c.accentColor||'#60A5FA';
   const title = cur==='/'?'':" - "+cur.replace('/','').charAt(0).toUpperCase()+cur.slice(2);
+  // Compute the colour palette that needs to survive against `pc` — used for:
+  //   1. Nav text at the top of the page (before scroll). Only flips when the
+  //      page HAS a hero (i.e. the home page) since other pages start on the
+  //      tinted hero-free header which is already white-backgrounded.
+  //   2. Primary button and back-to-top button — they sit directly on pc.
+  const onPc = heroTextPalette(pc, c.heroTextOverride);
+  const heroPageHasLightBg = cur === '/' && onPc.fg === '#0f172a';
   return `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>${esc(c.businessName||'Business')}${title}</title><meta name="description" content="${esc(c.tagline||'')}">
 <script src="https://cdn.tailwindcss.com"><\/script>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
-<style>${getStyles(pc,ac)}</style></head><body>${getNav(c,cur)}<main>${body}</main>${getFoot(c)}${getScript()}</body></html>`;
+<style>${getStyles(pc, ac, { onPc, heroPageHasLightBg })}</style></head><body>${getNav(c,cur)}<main>${body}</main>${getFoot(c)}${getScript()}</body></html>`;
 }
 
 // ─── Arrow SVG shortcut ─────────────────────────────────────────────────────
@@ -300,7 +325,17 @@ const CHK = '<svg style="flex-shrink:0;margin-top:2px" width="20" height="20" fi
 // ═══════════════════════════════════════════════════════════════════════════
 function generateHomePage(c) {
   const pc=c.primaryColor||'#2563EB', ac=c.accentColor||'#60A5FA';
-  const badges = (c.heroFeatures||[]).map(f=>`<span class="glass" style="padding:8px 20px;border-radius:50px;font-size:13px;font-weight:500;letter-spacing:0.5px">${esc(f)}</span>`).join('');
+  // Hero badges need to adapt to light/dark hero backgrounds too. Precompute
+  // the hero palette once so both the section wrapper and the badge chips
+  // read from the same luminance decision.
+  const hasHeroImgEarly = !!(c.heroImage && c.heroImage.url);
+  // c.heroTextOverride is set by the LLM revision parser when the user asks
+  // for a light/pastel shade ('dark' text) or explicitly wants white text on
+  // a specific colour ('light'). Otherwise auto-detect from luminance.
+  const heroPal = hasHeroImgEarly
+    ? heroTextPalette('#000000', c.heroTextOverride)
+    : heroTextPalette(pc, c.heroTextOverride);
+  const badges = (c.heroFeatures||[]).map(f=>`<span style="padding:8px 20px;border-radius:50px;font-size:13px;font-weight:500;letter-spacing:0.5px;background:${heroPal.glassBg};color:${heroPal.fg};border:1px solid ${heroPal.border};backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px)">${esc(f)}</span>`).join('');
 
   const services = (c.services||[]).slice(0,6).map((s,i)=>{
     // Prefer a real Unsplash service photo; fall back to the coloured icon tile.
@@ -343,42 +378,44 @@ function generateHomePage(c) {
       <p style="font-size:14px;color:#666;line-height:1.6">${esc(s.description)}</p>
     </div>`).join('');
 
-  const hasHeroImg = !!(c.heroImage && c.heroImage.url);
+  const hasHeroImg = hasHeroImgEarly;
+  // Reuse the palette computed above at the top of generateHomePage.
+  const palette = heroPal;
   const heroBg = hasHeroImg
     ? `background:#0a0a1a url('${c.heroImage.url.replace(/'/g, '%27')}') center/cover no-repeat`
     : `background:linear-gradient(135deg,${pc} 0%,${pc}dd 40%,${ac}88 100%)`;
   const heroOverlay = hasHeroImg
     ? `<div style="position:absolute;inset:0;background:linear-gradient(135deg,${pc}d9 0%,${pc}99 40%,${ac}66 100%),linear-gradient(180deg,rgba(0,0,0,0.45) 0%,rgba(0,0,0,0.25) 40%,rgba(0,0,0,0.55) 100%);background-blend-mode:multiply"></div>`
-    : `<div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,0.12) 0%,transparent 30%,transparent 70%,rgba(0,0,0,0.25) 100%)"></div>`;
+    : `<div style="position:absolute;inset:0;background:linear-gradient(180deg,${palette.fg === '#fff' ? 'rgba(0,0,0,0.12)' : 'rgba(255,255,255,0.15)'} 0%,transparent 30%,transparent 70%,${palette.fg === '#fff' ? 'rgba(0,0,0,0.25)' : 'rgba(255,255,255,0.2)'} 100%)"></div>`;
   // Per-image credits are consolidated into the footer (see collectUnsplashCredits).
   const heroCredit = '';
 
   const body = `
-    <section class="hero-section" style="min-height:100vh;display:flex;align-items:center;justify-content:center;text-align:center;color:#fff;position:relative;overflow:hidden;${heroBg}">
+    <section class="hero-section" style="min-height:100vh;display:flex;align-items:center;justify-content:center;text-align:center;color:${palette.fg};position:relative;overflow:hidden;${heroBg}">
       <div class="noise" style="position:absolute;inset:0;pointer-events:none"></div>
       <div class="dot-grid" style="position:absolute;inset:0;pointer-events:none"></div>
       <div style="position:absolute;inset:0;overflow:hidden">
         <div class="ps blob" style="position:absolute;top:-10%;right:-5%;width:500px;height:500px;background:${ac};opacity:0.08"></div>
-        <div class="ps blob" style="position:absolute;bottom:-15%;left:-10%;width:400px;height:400px;background:#fff;opacity:0.06;animation-direction:reverse"></div>
-        <div class="ps" style="position:absolute;top:20%;left:10%;width:200px;height:200px;border-radius:50%;border:1px solid rgba(255,255,255,0.08);animation:float 7s ease-in-out infinite"></div>
-        <div class="ps" style="position:absolute;bottom:30%;right:15%;width:120px;height:120px;border-radius:50%;border:1px solid rgba(255,255,255,0.06);animation:floatSlow 9s ease-in-out infinite"></div>
-        <div style="position:absolute;top:35%;left:65%;width:6px;height:6px;background:rgba(255,255,255,0.3);border-radius:50%;animation:float 4s ease-in-out infinite"></div>
-        <div style="position:absolute;top:55%;left:25%;width:4px;height:4px;background:rgba(255,255,255,0.2);border-radius:50%;animation:floatSlow 5s ease-in-out infinite"></div>
-        <div style="position:absolute;top:70%;right:35%;width:5px;height:5px;background:rgba(255,255,255,0.15);border-radius:50%;animation:float 6s ease-in-out infinite 1s"></div>
+        <div class="ps blob" style="position:absolute;bottom:-15%;left:-10%;width:400px;height:400px;background:${palette.fg};opacity:0.06;animation-direction:reverse"></div>
+        <div class="ps" style="position:absolute;top:20%;left:10%;width:200px;height:200px;border-radius:50%;border:1px solid ${palette.border};animation:float 7s ease-in-out infinite"></div>
+        <div class="ps" style="position:absolute;bottom:30%;right:15%;width:120px;height:120px;border-radius:50%;border:1px solid ${palette.border};animation:floatSlow 9s ease-in-out infinite"></div>
+        <div style="position:absolute;top:35%;left:65%;width:6px;height:6px;background:${palette.fgMuted};border-radius:50%;animation:float 4s ease-in-out infinite"></div>
+        <div style="position:absolute;top:55%;left:25%;width:4px;height:4px;background:${palette.fgMuted};border-radius:50%;animation:floatSlow 5s ease-in-out infinite"></div>
+        <div style="position:absolute;top:70%;right:35%;width:5px;height:5px;background:${palette.fgMuted};border-radius:50%;animation:float 6s ease-in-out infinite 1s"></div>
       </div>
       ${heroOverlay}
       ${heroCredit}
       <div style="position:relative;z-index:10;padding:0 24px;max-width:900px">
         ${badges?`<div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-bottom:32px;animation:fadeDown 0.8s ease-out forwards">${badges}</div>`:''}
-        <h1 style="font-size:clamp(36px,7vw,76px);font-weight:900;line-height:1.05;letter-spacing:-2px;margin-bottom:24px;animation:fadeUp 0.8s ease-out 0.2s both">${esc(c.headline)}</h1>
-        <p style="font-size:clamp(16px,2.5vw,22px);opacity:0.85;max-width:650px;margin:0 auto 40px;line-height:1.6;animation:fadeUp 0.8s ease-out 0.4s both">${esc(c.tagline)}</p>
+        <h1 style="font-size:clamp(36px,7vw,76px);font-weight:900;line-height:1.05;letter-spacing:-2px;margin-bottom:24px;animation:fadeUp 0.8s ease-out 0.2s both;color:${palette.fg}">${esc(c.headline)}</h1>
+        <p style="font-size:clamp(16px,2.5vw,22px);color:${palette.fgSoft};max-width:650px;margin:0 auto 40px;line-height:1.6;animation:fadeUp 0.8s ease-out 0.4s both">${esc(c.tagline)}</p>
         <div style="display:flex;gap:16px;justify-content:center;flex-wrap:wrap;animation:fadeUp 0.8s ease-out 0.6s both">
-          <a href="/contact" class="btn-w" style="animation:pulseGlow 3s ease-in-out infinite">${esc(c.ctaButton)} ${ARR}</a>
-          ${(c.services||[]).length>0?`<a href="/services" class="btn-s" style="color:#fff;border-color:rgba(255,255,255,0.3)">Our Services</a>`:''}
+          <a href="/contact" class="btn-w" style="animation:pulseGlow 3s ease-in-out infinite;background:${palette.buttonBg};color:${palette.buttonFg}">${esc(c.ctaButton)} ${ARR}</a>
+          ${(c.services||[]).length>0?`<a href="/services" class="btn-s" style="color:${palette.fg};border-color:${palette.border}">Our Services</a>`:''}
         </div>
       </div>
       <div style="position:absolute;bottom:32px;left:50%;transform:translateX(-50%);animation:fadeIn 1s ease-out 1s both">
-        <div style="width:28px;height:44px;border:2px solid rgba(255,255,255,0.3);border-radius:14px;display:flex;justify-content:center;padding-top:8px"><div style="width:3px;height:10px;background:rgba(255,255,255,0.6);border-radius:3px;animation:float 2s ease-in-out infinite"></div></div>
+        <div style="width:28px;height:44px;border:2px solid ${palette.border};border-radius:14px;display:flex;justify-content:center;padding-top:8px"><div style="width:3px;height:10px;background:${palette.fgSoft};border-radius:3px;animation:float 2s ease-in-out infinite"></div></div>
       </div>
     </section>
 
@@ -716,6 +753,38 @@ function generateAllPages(config, watermark = false) {
 }
 function generateStaticHTML(config) { return generateHomePage(config); }
 function esc(s) { if(!s)return''; return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;'); }
+
+// Compute the relative luminance of a hex color (0 = black, 1 = white) using
+// the sRGB formula. Used to decide whether to render hero text in white or
+// near-black — critical when the user picks a light primary color, because
+// white text on mint/pastel backgrounds is unreadable.
+function relativeLuminance(hex) {
+  const h = String(hex || '').replace('#', '');
+  if (h.length !== 6 && h.length !== 3) return 0;
+  const full = h.length === 3 ? h.split('').map((c) => c + c).join('') : h;
+  const r = parseInt(full.slice(0, 2), 16) / 255;
+  const g = parseInt(full.slice(2, 4), 16) / 255;
+  const b = parseInt(full.slice(4, 6), 16) / 255;
+  const lin = (v) => (v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4));
+  return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+}
+
+// Decide hero text palette from the primary color. If the background is too
+// light for white text to read against, flip to a dark palette. Caller may
+// pass an explicit override ('light' | 'dark') when the user's revision
+// request specifies a colour that should force a particular text colour.
+function heroTextPalette(primaryColor, override) {
+  let isLight;
+  if (override === 'dark') isLight = true;
+  else if (override === 'light') isLight = false;
+  else {
+    const lum = relativeLuminance(primaryColor);
+    isLight = lum > 0.55;
+  }
+  return isLight
+    ? { fg: '#0f172a', fgSoft: 'rgba(15,23,42,0.75)', fgMuted: 'rgba(15,23,42,0.55)', border: 'rgba(15,23,42,0.18)', glassBg: 'rgba(255,255,255,0.4)', buttonBg: '#0f172a', buttonFg: '#fff' }
+    : { fg: '#fff', fgSoft: 'rgba(255,255,255,0.85)', fgMuted: 'rgba(255,255,255,0.55)', border: 'rgba(255,255,255,0.3)', glassBg: 'rgba(255,255,255,0.08)', buttonBg: '#fff', buttonFg: primaryColor };
+}
 
 /**
  * Add a custom domain to an existing Netlify site.

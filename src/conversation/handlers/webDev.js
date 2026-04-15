@@ -1326,7 +1326,23 @@ async function handleRevisions(user, message) {
       // Merge updates and redeploy to the SAME site
       const updatedConfig = { ...currentConfig, ...updates };
 
-      await sendTextMessage(user.phone_number, '🔄 Applying your changes and redeploying...');
+      // Pick a natural-sounding "working on it" message that varies each
+      // time so the bot doesn't feel like a stuck script. Same for the
+      // done message, which also references what changed when it's a
+      // single obvious field (color, services, etc.).
+      const workingVariants = [
+        'on it — updating the site now...',
+        'got it, pushing the update...',
+        'sure thing, rebuilding now...',
+        'one sec, applying that...',
+        'alright, redeploying...',
+        'okay, regenerating the site...',
+        'doing it now, gimme a few seconds...',
+      ];
+      await sendTextMessage(
+        user.phone_number,
+        workingVariants[Math.floor(Math.random() * workingVariants.length)]
+      );
 
       const existingSiteId = site?.netlify_site_id || null;
       const { previewUrl, netlifySiteId, netlifySubdomain } = await deployToNetlify(updatedConfig, existingSiteId);
@@ -1335,9 +1351,39 @@ async function handleRevisions(user, message) {
         await updateSite(site.id, { site_data: updatedConfig, preview_url: previewUrl, netlify_site_id: netlifySiteId, netlify_subdomain: netlifySubdomain });
       }
 
+      // Describe what actually changed in human terms so the follow-up
+      // doesn't always read the same.
+      const changedKeys = Object.keys(updates || {});
+      let changeHint = '';
+      if (changedKeys.length === 1) {
+        const k = changedKeys[0];
+        if (k === 'primaryColor' || k === 'secondaryColor' || k === 'accentColor') changeHint = 'new colour is in';
+        else if (k === 'services') changeHint = 'services updated';
+        else if (k === 'headline') changeHint = 'new headline is in';
+        else if (k === 'tagline') changeHint = 'tagline updated';
+        else if (k === 'businessName') changeHint = 'name updated';
+        else if (k === 'testimonials') changeHint = 'testimonials updated';
+        else if (k === 'faq') changeHint = 'FAQs updated';
+        else if (k === 'aboutText' || k === 'aboutTitle') changeHint = 'about section updated';
+        else if (k === 'contactEmail' || k === 'contactPhone' || k === 'contactAddress') changeHint = 'contact info updated';
+      }
+      const doneVariants = changeHint
+        ? [
+            `done, ${changeHint} — have a look:\n${previewUrl}`,
+            `${changeHint} — refresh to see it:\n${previewUrl}`,
+            `${changeHint.charAt(0).toUpperCase() + changeHint.slice(1)}. Fresh version:\n${previewUrl}`,
+            `all set, ${changeHint}:\n${previewUrl}`,
+          ]
+        : [
+            `done — take another look:\n${previewUrl}`,
+            `updated, refresh to see it:\n${previewUrl}`,
+            `all good, fresh version:\n${previewUrl}`,
+            `new version is live:\n${previewUrl}`,
+            `redeploy's done — have a look:\n${previewUrl}`,
+          ];
       await sendTextMessage(
         user.phone_number,
-        `✅ Changes applied! Check out the updated preview:\n${previewUrl}`
+        doneVariants[Math.floor(Math.random() * doneVariants.length)]
       );
 
       await logMessage(user.id, `Revision applied, redeployed: ${previewUrl}`, 'assistant');
