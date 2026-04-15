@@ -61,7 +61,10 @@ async function handleInformativeBot(user, message) {
     }
 
     const systemPrompt = INFORMATIVE_BOT_PROMPT + knowledgeContext;
-    const response = await generateResponse(systemPrompt, messages);
+    const response = await generateResponse(systemPrompt, messages, {
+      userId: user.id,
+      operation: 'info_chat',
+    });
 
     // Check if the bot detected buying intent and wants to hand off
     const salesHandoff = response.includes('[HANDOFF_SALES]');

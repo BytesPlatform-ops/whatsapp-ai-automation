@@ -197,7 +197,8 @@ async function handleCollectIndustry(user, message) {
       const context = history.map(m => `${m.role}: ${m.message_text}`).join('\n');
       const inferred = await generateResponse(
         `Based on the conversation below and the business name "${websiteData.businessName || ''}", determine the most appropriate industry/niche for this business. Return ONLY the industry name (1-3 words, e.g. "Education", "Poetry & Literature", "Food & Beverage"). No explanation.\n\nConversation:\n${context}`,
-        [{ role: 'user', content: industry }]
+        [{ role: 'user', content: industry }],
+        { userId: user.id, operation: 'webdev_industry_infer' }
       );
       if (inferred && inferred.trim().length > 1) {
         industry = inferred.trim().replace(/^["']|["']$/g, '');
@@ -300,7 +301,8 @@ async function handleCollectAreas(user, message) {
     try {
       const extracted = await generateResponse(
         `Extract the primary city and the list of service areas from this HVAC business owner message. Return ONLY JSON: {"primaryCity":"...","serviceAreas":["..."]}. If unclear, make reasonable guesses.`,
-        [{ role: 'user', content: raw }]
+        [{ role: 'user', content: raw }],
+        { userId: user.id, operation: 'webdev_hvac_areas' }
       );
       const m = extracted.match(/\{[\s\S]*\}/);
       if (m) {
@@ -878,7 +880,7 @@ async function generateWebsite(user) {
     const templateId = isSalonIndustry(websiteData.industry) ? 'salon' : 'business-starter';
     const siteId = freshUser.metadata?.currentSiteId;
     logger.info(`[WEBGEN] Step 2/5: Generating website content via LLM for "${websiteData.businessName}" (template=${templateId})`);
-    const siteConfig = await generateWebsiteContent(websiteData, { templateId, siteId });
+    const siteConfig = await generateWebsiteContent(websiteData, { templateId, siteId, userId: user.id });
     logger.info(`[WEBGEN] Content generated:`, {
       headline: siteConfig.headline,
       servicesCount: siteConfig.services?.length,
@@ -1073,7 +1075,8 @@ async function handleRevisions(user, message) {
         const { generateResponse: classifyLLM } = require('../../llm/provider');
         const classifyResponse = await classifyLLM(
           `Classify this website revision request as LIGHT, MEDIUM, or HEAVY.\nLIGHT: color change, text edit, small tweaks\nMEDIUM: new section, layout change, significant content rewrite, font changes\nHEAVY: completely different design, major restructure, complex features, booking systems, e-commerce\nReturn ONLY one word: LIGHT, MEDIUM, or HEAVY.`,
-          [{ role: 'user', content: revisionText }]
+          [{ role: 'user', content: revisionText }],
+          { userId: user.id, operation: 'webdev_revision_complexity' }
         );
         const complexity = (classifyResponse || '').trim().toUpperCase();
         await updateUserMetadata(user.id, { lastRevisionComplexity: complexity });
@@ -1130,9 +1133,11 @@ async function handleRevisions(user, message) {
       const site = await getLatestSite(user.id);
       const currentConfig = site?.site_data || freshUser.metadata?.websiteData || {};
 
-      const response = await generateResponse(REVISION_PARSER_PROMPT, [
-        { role: 'user', content: `Current config: ${JSON.stringify(currentConfig)}\n\nUser request: ${revisionText}` },
-      ]);
+      const response = await generateResponse(
+        REVISION_PARSER_PROMPT,
+        [{ role: 'user', content: `Current config: ${JSON.stringify(currentConfig)}\n\nUser request: ${revisionText}` }],
+        { userId: user.id, operation: 'webdev_revision_parse' }
+      );
 
       let updates;
       try {

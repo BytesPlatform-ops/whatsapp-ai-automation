@@ -117,6 +117,17 @@ router.get('/api/conversations/:userId', async (req, res) => {
   }
 });
 
+router.get('/api/conversations/:userId/llm-usage', async (req, res) => {
+  try {
+    const { getUsageForUser } = require('../db/llmUsage');
+    const data = await getUsageForUser(req.params.userId);
+    res.json(data);
+  } catch (err) {
+    logger.error('[ADMIN] LLM usage error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.post('/api/conversations/:userId/reply', async (req, res) => {
   try {
     const { messageText } = req.body;

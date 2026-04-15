@@ -7,7 +7,7 @@ const { logger } = require('../utils/logger');
  * @param {Object} scrapedData - Output from scraper.js
  * @returns {Promise<string>} Analysis text
  */
-async function analyzeWebsite(scrapedData) {
+async function analyzeWebsite(scrapedData, options = {}) {
   // Prepare a structured summary for the LLM
   const summary = `
 WEBSITE: ${scrapedData.url}
@@ -48,9 +48,11 @@ MOBILE:
 
   logger.info(`[SEO:ANALYZER] Sending ${summary.length} chars of website data to LLM for analysis`);
 
-  const analysis = await generateResponse(WEBSITE_ANALYSIS_PROMPT, [
-    { role: 'user', content: `Please analyze this website:\n\n${summary}` },
-  ]);
+  const analysis = await generateResponse(
+    WEBSITE_ANALYSIS_PROMPT,
+    [{ role: 'user', content: `Please analyze this website:\n\n${summary}` }],
+    { userId: options.userId, operation: 'seo_analysis' }
+  );
 
   logger.info(`[SEO:ANALYZER] LLM analysis received: ${analysis.length} chars`);
   return analysis;

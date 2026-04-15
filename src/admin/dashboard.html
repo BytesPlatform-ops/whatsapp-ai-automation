@@ -658,6 +658,9 @@ function openConversation(userId, phone, name) {
       '<p><b>Joined:</b> ' + fmtDate(user.created_at) + '</p>' +
       (user.metadata && user.metadata.leadBrief ? '<p><b>Lead Brief:</b> ' + esc(user.metadata.leadBrief).slice(0, 300) + '</p>' : '') +
       (user.metadata && user.metadata.adSource ? '<p><b>Ad Source:</b> ' + esc(user.metadata.adSource) + '</p>' : '') +
+    '</div>' +
+    '<div id="conv-llm-cost" class="bg-amber-50 rounded-lg p-3 mb-4 text-xs">' +
+      '<p class="text-gray-500">Calculating LLM cost...</p>' +
     '</div>';
 
     msgs.forEach(function(m) {
@@ -676,8 +679,59 @@ function openConversation(userId, phone, name) {
     // Start polling for new messages every 5s
     if (convPollInterval) clearInterval(convPollInterval);
     convPollInterval = setInterval(function() { pollConversation(); }, 5000);
+
+    // Load LLM cost breakdown in parallel — non-critical, don't block the view.
+    loadLlmCost(userId);
   }).catch(function(err) {
     document.getElementById('conv-modal-body').innerHTML = '<p class="text-red-500">Failed to load: ' + esc(err.message) + '</p>';
+  });
+}
+
+function fmtUSD(n) {
+  var x = Number(n || 0);
+  if (x < 0.01) return '$' + x.toFixed(5);
+  return '$' + x.toFixed(4);
+}
+
+function loadLlmCost(userId) {
+  api('conversations/' + userId + '/llm-usage').then(function(data) {
+    var panel = document.getElementById('conv-llm-cost');
+    if (!panel) return;
+    var totals = data.totals || { cost_usd: 0, input_tokens: 0, output_tokens: 0, calls: 0 };
+    var breakdown = data.breakdown || [];
+    if (!totals.calls) {
+      panel.innerHTML = '<p class="text-gray-500"><b>LLM Cost:</b> no tracked calls yet</p>';
+      return;
+    }
+    var rows = breakdown.map(function(b) {
+      return '<tr class="border-t border-amber-200">' +
+        '<td class="py-1 pr-2 font-mono text-[11px]">' + esc(b.operation) + '</td>' +
+        '<td class="py-1 pr-2 text-right">' + b.calls + '</td>' +
+        '<td class="py-1 pr-2 text-right">' + (b.input_tokens + b.output_tokens).toLocaleString() + '</td>' +
+        '<td class="py-1 pr-2 text-right font-semibold">' + fmtUSD(b.cost_usd) + '</td>' +
+      '</tr>';
+    }).join('');
+    panel.innerHTML =
+      '<div class="flex items-baseline justify-between mb-2">' +
+        '<p><b>LLM Cost (total):</b></p>' +
+        '<p class="text-base font-bold text-amber-700">' + fmtUSD(totals.cost_usd) + '</p>' +
+      '</div>' +
+      '<p class="text-[11px] text-gray-600 mb-2">' +
+        totals.calls + ' calls · ' + totals.input_tokens.toLocaleString() + ' in / ' +
+        totals.output_tokens.toLocaleString() + ' out tokens' +
+      '</p>' +
+      '<table class="w-full text-[11px]">' +
+        '<thead><tr class="text-gray-500">' +
+          '<th class="text-left py-1 pr-2">Operation</th>' +
+          '<th class="text-right py-1 pr-2">Calls</th>' +
+          '<th class="text-right py-1 pr-2">Tokens</th>' +
+          '<th class="text-right py-1 pr-2">Cost</th>' +
+        '</tr></thead>' +
+        '<tbody>' + rows + '</tbody>' +
+      '</table>';
+  }).catch(function(err) {
+    var panel = document.getElementById('conv-llm-cost');
+    if (panel) panel.innerHTML = '<p class="text-gray-500">LLM cost unavailable</p>';
   });
 }
 

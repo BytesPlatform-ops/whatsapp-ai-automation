@@ -91,7 +91,7 @@ async function handleCollectUrl(user, message) {
     logger.info('[SEO] Step 2/6: Analyzing with LLM');
     let analysis;
     try {
-      analysis = await analyzer.analyzeWebsite(scrapedData);
+      analysis = await analyzer.analyzeWebsite(scrapedData, { userId: user.id });
       logger.info(`[SEO] Analysis done: ${analysis.length} chars`);
     } catch (analyzeErr) {
       logger.error(`[SEO] LLM Analysis FAILED: ${analyzeErr.message}`);
@@ -262,7 +262,10 @@ async function handleFollowUp(user, message) {
     systemContext += `\n\nYou recently analyzed the website ${audit.url}. Here's the analysis:\n${audit.analysis_text}\n\nAnswer follow-up questions based on this analysis.`;
   }
 
-  const response = await generateResponse(systemContext, messages);
+  const response = await generateResponse(systemContext, messages, {
+    userId: user.id,
+    operation: 'seo_follow_up',
+  });
 
   await sendTextMessage(user.phone_number, formatWhatsApp(response));
   await logMessage(user.id, response, 'assistant');

@@ -46,7 +46,7 @@ async function saveLeadSummary(user, outcome, outcomeDetails = '') {
     try {
       const response = await generateResponse(SUMMARY_PROMPT, [
         { role: 'user', content: conversationText.slice(-4000) }, // last ~4000 chars
-      ]);
+      ], { userId: user.id, operation: 'lead_summary' });
       const jsonMatch = response.match(/\{[\s\S]*?\}/);
       if (jsonMatch) {
         const parsed = JSON.parse(jsonMatch[0]);

@@ -11,7 +11,9 @@ function getClient() {
   return client;
 }
 
-async function generateResponse(systemPrompt, messages) {
+const MODEL = 'gpt-4o-mini';
+
+async function generateResponseWithUsage(systemPrompt, messages) {
   const openai = getClient();
 
   const formattedMessages = [
@@ -24,16 +26,27 @@ async function generateResponse(systemPrompt, messages) {
 
   try {
     const response = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
+      model: MODEL,
       max_tokens: 2048,
       messages: formattedMessages,
     });
 
-    return response.choices[0].message.content;
+    return {
+      text: response.choices[0].message.content,
+      model: MODEL,
+      provider: 'openai',
+      inputTokens: response.usage?.prompt_tokens || 0,
+      outputTokens: response.usage?.completion_tokens || 0,
+    };
   } catch (error) {
     logger.error('OpenAI API error:', error);
     throw error;
   }
+}
+
+async function generateResponse(systemPrompt, messages) {
+  const { text } = await generateResponseWithUsage(systemPrompt, messages);
+  return text;
 }
 
 async function generateEmbedding(text) {
@@ -52,4 +65,4 @@ async function generateEmbedding(text) {
   }
 }
 
-module.exports = { generateResponse, generateEmbedding };
+module.exports = { generateResponse, generateResponseWithUsage, generateEmbedding };

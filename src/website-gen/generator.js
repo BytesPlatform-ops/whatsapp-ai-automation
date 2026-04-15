@@ -128,9 +128,11 @@ ${contactAddress ? `Address: ${contactAddress}` : ''}
 Generate compelling website copy for this business. Return ONLY valid JSON.`;
 
   logger.info(`[WEBGEN] Sending ${hvacMode ? 'HVAC' : 'generic'} content prompt to LLM for "${businessName}"`);
-  const response = await generateResponse(hvacMode ? HVAC_CONTENT_PROMPT : WEBSITE_CONTENT_PROMPT, [
-    { role: 'user', content: prompt },
-  ]);
+  const response = await generateResponse(
+    hvacMode ? HVAC_CONTENT_PROMPT : WEBSITE_CONTENT_PROMPT,
+    [{ role: 'user', content: prompt }],
+    { userId: extras.userId, operation: 'website_content_gen' }
+  );
   logger.info(`[WEBGEN] LLM response received: ${response.length} chars`);
 
   // Parse the LLM response as JSON

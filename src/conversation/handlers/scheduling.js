@@ -72,7 +72,10 @@ async function handleCollectDate(user, message) {
   // Parse date with LLM
   let parsed;
   try {
-    const response = await generateResponse(DATE_PARSE_PROMPT, [{ role: 'user', content: text }]);
+    const response = await generateResponse(DATE_PARSE_PROMPT, [{ role: 'user', content: text }], {
+      userId: user.id,
+      operation: 'schedule_date_parse',
+    });
     const jsonMatch = response.match(/\{[\s\S]*?\}/);
     parsed = jsonMatch ? JSON.parse(jsonMatch[0]) : { error: 'unclear' };
   } catch {
@@ -160,7 +163,10 @@ async function handleCollectTime(user, message) {
   // Parse time with LLM
   let parsed;
   try {
-    const response = await generateResponse(TIME_PARSE_PROMPT, [{ role: 'user', content: text }]);
+    const response = await generateResponse(TIME_PARSE_PROMPT, [{ role: 'user', content: text }], {
+      userId: user.id,
+      operation: 'schedule_time_parse',
+    });
     const jsonMatch = response.match(/\{[\s\S]*?\}/);
     parsed = jsonMatch ? JSON.parse(jsonMatch[0]) : { error: 'unclear' };
   } catch {

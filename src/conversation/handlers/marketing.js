@@ -44,7 +44,7 @@ async function handleCollectDetails(user, message) {
 
   const response = await generateResponse(systemPrompt, [
     { role: 'user', content: details },
-  ]);
+  ], { userId: user.id, operation: 'marketing_strategy' });
 
   await sendTextMessage(user.phone_number, formatWhatsApp(response));
   await logMessage(user.id, response, 'assistant');
@@ -91,7 +91,8 @@ async function handleFollowUp(user, message) {
 
   const response = await generateResponse(
     GENERAL_CHAT_PROMPT + '\n\nThis user is interested in digital marketing services. Help them with their questions.',
-    messages
+    messages,
+    { userId: user.id, operation: 'marketing_followup' }
   );
 
   await sendTextMessage(user.phone_number, response);

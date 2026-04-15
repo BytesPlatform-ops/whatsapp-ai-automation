@@ -210,7 +210,7 @@ const STATE_QUESTION = {
  * or doing something else (asking a question, wanting the menu, exiting).
  * Returns: "answer" | "question" | "menu" | "exit"
  */
-async function classifyIntent(state, text) {
+async function classifyIntent(state, text, userId) {
   const currentQuestion = STATE_QUESTION[state];
   if (!currentQuestion) return 'answer';
 
@@ -231,7 +231,10 @@ async function classifyIntent(state, text) {
 
   try {
     const prompt = INTENT_CLASSIFIER_PROMPT.replace('{{CURRENT_QUESTION}}', currentQuestion);
-    const response = await generateResponse(prompt, [{ role: 'user', content: text }]);
+    const response = await generateResponse(prompt, [{ role: 'user', content: text }], {
+      userId,
+      operation: 'intent_classifier',
+    });
     const jsonMatch = response.match(/\{[\s\S]*?\}/);
     if (!jsonMatch) return 'answer';
     const parsed = JSON.parse(jsonMatch[0]);
@@ -423,7 +426,7 @@ async function _routeMessage(message) {
     message.type === 'text' &&
     COLLECTION_STATES.has(user.state)
   ) {
-    const intent = await classifyIntent(user.state, text);
+    const intent = await classifyIntent(user.state, text, user.id);
     logger.debug(`Intent classified for ${from} in state ${user.state}: ${intent}`);
 
     if (intent === 'menu' || intent === 'exit') {
@@ -443,7 +446,8 @@ async function _routeMessage(message) {
       const currentQuestion = STATE_QUESTION[user.state];
       const aside = await generateResponse(
         GENERAL_CHAT_PROMPT,
-        [{ role: 'user', content: text }]
+        [{ role: 'user', content: text }],
+        { userId: user.id, operation: 'off_topic_aside' }
       );
       await sendTextMessage(user.phone_number, aside);
       await logMessage(user.id, aside, 'assistant');

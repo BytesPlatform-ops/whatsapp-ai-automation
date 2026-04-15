@@ -74,7 +74,10 @@ async function handleSalesBot(user, message) {
 
   let rawResponse;
   try {
-    rawResponse = await generateResponse(systemPrompt, messages);
+    rawResponse = await generateResponse(systemPrompt, messages, {
+      userId: user.id,
+      operation: 'sales_chat',
+    });
   } catch (error) {
     logger.error('Sales bot LLM error:', error);
     await sendTextMessage(

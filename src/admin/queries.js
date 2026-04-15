@@ -627,7 +627,10 @@ Payment Status: [whether they paid, and how much, or "No payment yet"]
 Conversation Summary: [2-3 sentence summary of how the conversation went, what was discussed, what the client cares about, and what the salesperson should focus on during the call. Be specific and actionable.]`;
 
   try {
-    const response = await generateResponse(prompt, [{ role: 'user', content: chatLog }]);
+    const response = await generateResponse(prompt, [{ role: 'user', content: chatLog }], {
+      userId,
+      operation: 'admin_lead_brief',
+    });
 
     // Save it to user metadata so we don't regenerate every time
     await supabase.from('users').update({
