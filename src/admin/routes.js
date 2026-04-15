@@ -8,8 +8,30 @@ const queries = require('./queries');
 const router = express.Router();
 
 // ─── Auth helpers ──────────────────────────────
+// ADMIN_SECRET is the HMAC key used to derive admin session tokens. If it
+// isn't set in production we fail loudly at startup — a shared hardcoded
+// constant lets anyone with a copy of the source forge admin sessions.
+// In non-production envs we fall back to a dev default so local-only setups
+// don't break, but log a loud warning so it's impossible to miss.
+const ADMIN_SECRET = (() => {
+  const fromEnv = env.admin.secret;
+  if (fromEnv && fromEnv.length >= 16) return fromEnv;
+  if (env.nodeEnv === 'production' || process.env.NODE_ENV === 'production') {
+    throw new Error(
+      '[ADMIN] ADMIN_SECRET is not set (or is <16 chars). Refusing to start in production — ' +
+      'set a random string of 32+ chars in the ADMIN_SECRET env var. ' +
+      'Generate with: node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'hex\'))"'
+    );
+  }
+  logger.warn(
+    '[ADMIN] ADMIN_SECRET not set — using a dev-only fallback. Admin sessions in this process are ' +
+    'NOT secure. Set ADMIN_SECRET (32+ chars) before deploying.'
+  );
+  return 'wa-bot-admin-DEV-ONLY';
+})();
+
 function makeToken(password) {
-  return crypto.createHmac('sha256', 'wa-bot-admin').update(password).digest('hex');
+  return crypto.createHmac('sha256', ADMIN_SECRET).update(password).digest('hex');
 }
 
 function parseCookies(req) {

@@ -16,6 +16,7 @@ const optional = [
   'LLM_PROVIDER',
   'NETLIFY_TOKEN',
   'ADMIN_PASSWORD',
+  'ADMIN_SECRET',
   'PORT',
   'NODE_ENV',
   'LOG_LEVEL',
@@ -72,9 +73,12 @@ const env = {
   netlify: {
     token: process.env.NETLIFY_TOKEN || '',
   },
-  // Admin
+  // Admin — ADMIN_SECRET is the HMAC key used to derive admin session
+  // tokens from ADMIN_PASSWORD. Rotating the secret invalidates all
+  // existing sessions. Must be a random string (≥32 chars recommended).
   admin: {
     password: process.env.ADMIN_PASSWORD || '',
+    secret: process.env.ADMIN_SECRET || '',
   },
   // Sales bot
   calendlyUrl: process.env.CALENDLY_URL || 'https://calendly.com/bytes-platform',
