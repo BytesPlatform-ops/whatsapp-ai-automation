@@ -230,35 +230,62 @@ router.post('/calendly/webhook', async (req, res) => {
     const { updateUserMetadata } = require('../db/users');
     await updateUserMetadata(user.id, { meetingBooked: true, leadClosed: true });
 
-    // Generate chat summary and update the meeting record for the salesperson
+    // Generate chat summary and persist the meeting so the admin Meetings
+    // page actually has a row to show.
+    //
+    // Previously this code only UPDATED an existing meeting row — but sales-
+    // bot Calendly bookings never create one (only the `/schedule` flow
+    // calls createMeeting). Result: bookings through the main flow never
+    // appeared in admin. Fix: update if present, otherwise insert.
     try {
       const summary = await generateChatSummary(user.id);
 
-      if (summary) {
-        // Find the latest meeting for this user and update it
-        const { data: meeting } = await supabase
+      const { data: existing } = await supabase
+        .from('meetings')
+        .select('id')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      // Extract date/time from Calendly's start_time so admins see when the
+      // call is, not just when the booking happened.
+      let preferredDate = null;
+      let preferredTime = null;
+      if (startTime) {
+        const dt = new Date(startTime);
+        preferredDate = dt.toISOString().slice(0, 10); // YYYY-MM-DD
+        preferredTime = dt.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+      }
+
+      const meetingFields = {
+        status: 'confirmed',
+        name: name !== 'there' ? name : null,
+        chat_summary: summary || null,
+        preferred_date: preferredDate,
+        preferred_time: preferredTime,
+        topic: eventDetails.name || payload?.scheduled_event?.name || 'Calendly booking',
+        notes: `Booked via Calendly by ${invitee.email || 'unknown'}`,
+      };
+
+      if (existing) {
+        await supabase.from('meetings').update(meetingFields).eq('id', existing.id);
+        logger.info(`[CALENDLY] Updated existing meeting ${existing.id} for ${user.phone_number}`);
+      } else {
+        const { data: inserted, error: insertErr } = await supabase
           .from('meetings')
+          .insert({
+            user_id: user.id,
+            phone_number: user.phone_number,
+            ...meetingFields,
+          })
           .select('id')
-          .eq('user_id', user.id)
-          .order('created_at', { ascending: false })
-          .limit(1)
           .single();
-
-        if (meeting) {
-          await supabase
-            .from('meetings')
-            .update({
-              status: 'confirmed',
-              chat_summary: summary,
-              name: name !== 'there' ? name : null,
-            })
-            .eq('id', meeting.id);
-
-          logger.info(`Chat summary saved to meeting ${meeting.id} for ${user.phone_number}`);
-        }
+        if (insertErr) throw insertErr;
+        logger.info(`[CALENDLY] Created meeting ${inserted.id} for ${user.phone_number}`);
       }
     } catch (error) {
-      logger.error('Failed to generate/save chat summary:', error);
+      logger.error('Failed to persist meeting from Calendly webhook:', error.message);
       // Non-critical - farewell was already sent
     }
 
