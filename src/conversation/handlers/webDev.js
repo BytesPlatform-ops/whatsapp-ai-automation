@@ -10,6 +10,244 @@ const { logger } = require('../../utils/logger');
 const { generateResponse } = require('../../llm/provider');
 const { STATES } = require('../states');
 
+// ═══════════════════════════════════════════════════════════════════════════
+// SMART MULTI-FIELD EXTRACTOR (Path B — natural-conversation collector)
+//
+// Many users dump multiple fields into a single message. Rather than asking
+// each field one at a time like a form, we run an extractor on every free-
+// text answer and fast-forward past steps whose fields are already filled.
+//
+// Cheap regex pre-pass catches the obvious stuff (email, phone). LLM is
+// only invoked when the message looks like it MIGHT contain richer info
+// (long-ish, has commas, mentions a place, etc.) so most short single-field
+// answers stay free of an extra LLM round-trip.
+// ═══════════════════════════════════════════════════════════════════════════
+
+const EMAIL_RX = /[\w.+-]+@[\w-]+\.[\w.-]+/;
+const PHONE_RX = /(?:\+?\d[\d\s\-().]{6,}\d)/;
+
+// Returns only fields newly extracted (not already populated in `known`).
+async function extractWebsiteFields(text, known, user) {
+  const raw = String(text || '').trim();
+  if (!raw) return {};
+  const out = {};
+
+  // Cheap regex pre-pass — no LLM cost.
+  if (!known.contactEmail) {
+    const m = raw.match(EMAIL_RX);
+    if (m) out.contactEmail = m[0];
+  }
+  if (!known.contactPhone) {
+    const m = raw.match(PHONE_RX);
+    // Avoid matching dates like "16/04/2026" — require at least one separator OR length >=10
+    if (m && (m[0].length >= 10 || /[\s\-+().]/.test(m[0]))) out.contactPhone = m[0].trim();
+  }
+
+  // Decide if it's worth running the LLM extractor. Skip on short replies
+  // that almost certainly only answer the current question.
+  const looksRich =
+    raw.length >= 18 ||
+    /[,;]/.test(raw) ||
+    /\b(in|at|serving|near)\s+[A-Z]/.test(raw) ||
+    /[\n]/.test(raw);
+  if (!looksRich) {
+    return out;
+  }
+
+  // LLM extraction — focused, JSON-only, told to omit unknown fields.
+  const missing = [];
+  if (!known.businessName) missing.push('businessName');
+  if (!known.industry) missing.push('industry');
+  if (!known.primaryCity) missing.push('primaryCity');
+  if (!Array.isArray(known.serviceAreas) || !known.serviceAreas.length) missing.push('serviceAreas');
+  if (!Array.isArray(known.services) || !known.services.length) missing.push('services');
+  if (!known.contactAddress) missing.push('contactAddress');
+
+  if (!missing.length) return out;
+
+  const prompt = `You are a structured-data extractor. Read the user's message and return ONLY valid JSON with any of the listed fields you can confidently extract. Omit fields not clearly stated. Never guess or hallucinate. Never include a field that's already known.
+
+Fields you may extract (only the ones in this list — ignore others):
+${missing.map((f) => `- ${f}`).join('\n')}
+
+Field rules:
+- businessName: the trade name of the business (NOT the user's personal name unless explicitly stated as the business name).
+- industry: 1-3 word niche label, e.g. "HVAC", "Salon", "Restaurant", "Real estate".
+- primaryCity: the city the business is based in.
+- serviceAreas: array of cities/neighborhoods they serve. May overlap with primaryCity.
+- services: array of services or products offered.
+- contactAddress: physical street address.
+
+Already known (do NOT re-extract these): ${JSON.stringify({
+    businessName: known.businessName || undefined,
+    industry: known.industry || undefined,
+    primaryCity: known.primaryCity || undefined,
+    serviceAreas: (known.serviceAreas && known.serviceAreas.length) ? known.serviceAreas : undefined,
+    services: (known.services && known.services.length) ? known.services : undefined,
+    contactEmail: known.contactEmail || undefined,
+    contactPhone: known.contactPhone || undefined,
+    contactAddress: known.contactAddress || undefined,
+  })}
+
+Return JSON like {"industry":"HVAC","primaryCity":"Austin"} or {} if nothing found. No commentary.`;
+
+  try {
+    const response = await generateResponse(prompt, [{ role: 'user', content: raw }], {
+      userId: user?.id,
+      operation: 'webdev_field_extract',
+    });
+    const m = response.match(/\{[\s\S]*\}/);
+    if (m) {
+      const parsed = JSON.parse(m[0]);
+      for (const k of missing) {
+        const v = parsed[k];
+        if (v == null) continue;
+        if (typeof v === 'string') {
+          const trimmed = v.trim();
+          if (trimmed.length >= 2 && trimmed.length < 120) out[k] = trimmed;
+        } else if (Array.isArray(v)) {
+          const cleaned = v
+            .map((x) => (typeof x === 'string' ? x.trim() : ''))
+            .filter((x) => x && x.length < 80);
+          if (cleaned.length) out[k] = cleaned;
+        }
+      }
+    }
+  } catch (err) {
+    logger.warn(`[WEBDEV-EXTRACT] LLM extraction failed: ${err.message}`);
+  }
+
+  return out;
+}
+
+// Walk the website-dev checklist and return the first state whose field
+// is still missing. Used to fast-forward past steps already covered. Email
+// is stored at top-level metadata.email by the legacy handler, so we accept
+// either location as "collected".
+function nextMissingWebDevState(websiteData, fullMetadata = {}) {
+  const { isHvac } = require('../../website-gen/templates');
+  if (!websiteData.businessName) return STATES.WEB_COLLECT_NAME;
+  const emailCollected =
+    fullMetadata.email != null || websiteData.contactEmail != null || websiteData.email != null || fullMetadata.emailSkipped === true;
+  if (!emailCollected) return STATES.WEB_COLLECT_EMAIL;
+  if (!websiteData.industry) return STATES.WEB_COLLECT_INDUSTRY;
+  if (isHvac(websiteData.industry) && !websiteData.primaryCity && (!websiteData.serviceAreas || !websiteData.serviceAreas.length)) {
+    return STATES.WEB_COLLECT_AREAS;
+  }
+  if (websiteData.services == null) return STATES.WEB_COLLECT_SERVICES;
+  // Phone is critical (especially for HVAC). Email alone is not enough — make
+  // sure we collect at least a phone OR address before confirming.
+  if (!websiteData.contactPhone && !websiteData.contactAddress) return STATES.WEB_COLLECT_CONTACT;
+  return STATES.WEB_CONFIRM;
+}
+
+// Compose a friendly "got it" line listing what we just captured, then
+// transition to the next missing state by sending its question. Returns
+// the new state. Caller does NOT need to send any follow-up message.
+async function smartAdvance(user, message, ackPrefix = null) {
+  const text = (message && message.text) || '';
+  const known = user.metadata?.websiteData || {};
+
+  // Try to extract additional fields from the user's message.
+  let extracted = {};
+  try {
+    extracted = await extractWebsiteFields(text, known, user);
+  } catch (err) {
+    logger.warn(`[WEBDEV-EXTRACT] threw: ${err.message}`);
+  }
+
+  // Merge new fields into metadata (only ones not already filled).
+  const merged = { ...known };
+  const captured = [];
+  for (const [k, v] of Object.entries(extracted)) {
+    if (v == null) continue;
+    if (Array.isArray(v) && v.length === 0) continue;
+    if (merged[k] && (Array.isArray(merged[k]) ? merged[k].length > 0 : String(merged[k]).length > 0)) continue;
+    merged[k] = v;
+    captured.push(k);
+  }
+
+  if (captured.length > 0) {
+    const update = { websiteData: merged };
+    // Mirror extracted contactEmail into the legacy top-level metadata.email
+    // field so the rest of the codebase (which checks user.metadata.email)
+    // sees it too.
+    if (captured.includes('contactEmail') && merged.contactEmail) {
+      update.email = merged.contactEmail;
+    }
+    await updateUserMetadata(user.id, update);
+    if (update.email) user.metadata = { ...(user.metadata || {}), email: update.email };
+    user.metadata = { ...(user.metadata || {}), websiteData: merged };
+    await logMessage(user.id, `Auto-extracted: ${captured.join(', ')}`, 'assistant');
+  }
+
+  const nextState = nextMissingWebDevState(merged, user.metadata || {});
+
+  // All required fields filled? Send the confirmation summary.
+  if (nextState === STATES.WEB_CONFIRM) {
+    return await sendConfirmation(user, merged);
+  }
+
+  // Build a natural acknowledgment listing what we just captured.
+  const ackParts = [];
+  if (captured.includes('businessName')) ackParts.push(`*${merged.businessName}*`);
+  if (captured.includes('industry')) ackParts.push(`*${merged.industry}*`);
+  if (captured.includes('primaryCity')) ackParts.push(`based in *${merged.primaryCity}*`);
+  if (captured.includes('serviceAreas')) ackParts.push(`serving *${merged.serviceAreas.slice(0, 3).join(', ')}${merged.serviceAreas.length > 3 ? '…' : ''}*`);
+  if (captured.includes('services')) ackParts.push(`offering *${merged.services.slice(0, 3).join(', ')}${merged.services.length > 3 ? '…' : ''}*`);
+  if (captured.includes('contactEmail')) ackParts.push(`email *${merged.contactEmail}*`);
+  if (captured.includes('contactPhone')) ackParts.push(`phone *${merged.contactPhone}*`);
+  if (captured.includes('contactAddress')) ackParts.push(`address noted`);
+
+  let ack = ackPrefix || '';
+  if (ackParts.length > 0) {
+    ack = ack ? `${ack} Also got: ${ackParts.join(', ')}.` : `Got it — ${ackParts.join(', ')}.`;
+  }
+  ack = ack.trim();
+
+  const nextQuestion = questionForState(nextState, merged);
+  const fullMsg = ack ? `${ack}\n\n${nextQuestion}` : nextQuestion;
+
+  await sendTextMessage(user.phone_number, fullMsg);
+  return nextState;
+}
+
+function questionForState(state, websiteData) {
+  switch (state) {
+    case STATES.WEB_COLLECT_NAME: return "What's your business name?";
+    case STATES.WEB_COLLECT_EMAIL: return "Before we continue, what's your email address? We'll use it to send you updates about your website. (Or say *skip*.)";
+    case STATES.WEB_COLLECT_INDUSTRY: return 'What industry are you in? For example - tech, healthcare, restaurant, real estate, creative, etc.';
+    case STATES.WEB_COLLECT_AREAS: return 'Which city are you based in, and which areas do you serve? Example: *Austin — Round Rock, Cedar Park, Pflugerville*';
+    case STATES.WEB_COLLECT_SERVICES: {
+      const { isHvac } = require('../../website-gen/templates');
+      if (isHvac(websiteData.industry)) {
+        return 'Which HVAC services do you offer? List them separated by commas, or say *skip* to use our default list (AC repair, heating, heat pumps, duct cleaning, thermostats, and more).';
+      }
+      return 'What services or products do you offer? List them separated by commas, or say *skip*.';
+    }
+    case STATES.WEB_COLLECT_CONTACT: return "Last thing — what contact info do you want on the site? Send your email, phone, and/or address.";
+    default: return '';
+  }
+}
+
+// Forward declaration shim — sendConfirmation is defined below in the file.
+async function sendConfirmation(user, websiteData) {
+  // Reuse the confirmation message that handleCollectContact would build.
+  // We do a minimal version here so the flow can jump straight to confirm
+  // when the extractor fills in all required fields.
+  const lines = ['Here\'s a summary of your website details:', ''];
+  if (websiteData.businessName) lines.push(`*Business Name:* ${websiteData.businessName}`);
+  if (websiteData.industry) lines.push(`*Industry:* ${websiteData.industry}`);
+  if (websiteData.primaryCity) lines.push(`*City:* ${websiteData.primaryCity}`);
+  if (Array.isArray(websiteData.serviceAreas) && websiteData.serviceAreas.length) lines.push(`*Service Areas:* ${websiteData.serviceAreas.join(', ')}`);
+  if (Array.isArray(websiteData.services) && websiteData.services.length) lines.push(`*Services:* ${websiteData.services.join(', ')}`);
+  const contact = [websiteData.contactEmail, websiteData.contactPhone, websiteData.contactAddress].filter(Boolean).join(' | ');
+  if (contact) lines.push(`*Contact:* ${contact}`);
+  lines.push('', 'Does everything look good? Say *"yes"* to proceed, or tell me what to change.');
+  await sendTextMessage(user.phone_number, lines.join('\n'));
+  return STATES.WEB_CONFIRM;
+}
+
 async function handleWebDev(user, message) {
   switch (user.state) {
     case STATES.WEB_COLLECT_NAME:
@@ -49,38 +287,38 @@ async function handleWebDev(user, message) {
 }
 
 async function handleCollectName(user, message) {
-  const businessName = (message.text || '').trim();
-  if (!businessName || businessName.length < 2) {
+  const text = (message.text || '').trim();
+  if (!text || text.length < 2) {
     await sendTextMessage(user.phone_number, 'Please enter your business name:');
     return STATES.WEB_COLLECT_NAME;
   }
 
-  // Create site record (if not already created from sales flow) and save business name
+  // Create site record if not yet
   const existingWebsiteData = user.metadata?.websiteData || {};
   if (!user.metadata?.currentSiteId) {
     const site = await createSite(user.id, 'business-starter');
-    await updateUserMetadata(user.id, {
-      currentSiteId: site.id,
-      websiteData: { ...existingWebsiteData, businessName },
-    });
-  } else {
-    await updateUserMetadata(user.id, {
-      websiteData: { ...existingWebsiteData, businessName },
-    });
+    await updateUserMetadata(user.id, { currentSiteId: site.id });
+    user.metadata = { ...(user.metadata || {}), currentSiteId: site.id };
   }
 
-  // If email already collected, skip to industry
-  if (user.metadata?.email) {
-    return skipToNextAfterEmail(user, businessName, existingWebsiteData);
+  // For short, simple replies (no commas, no @ sign, no "in/at city" pattern)
+  // treat the whole text as the business name. Longer / multi-clause messages
+  // get parsed by the extractor (which knows to find businessName + other
+  // fields like industry, city, services, contact).
+  const isSimple =
+    text.length < 50 &&
+    !/[,;\n]/.test(text) &&
+    !/@/.test(text) &&
+    !/\b(in|at|serving|email|phone|located|based)\b/i.test(text);
+
+  if (isSimple) {
+    const websiteData = { ...existingWebsiteData, businessName: text };
+    await updateUserMetadata(user.id, { websiteData });
+    user.metadata = { ...(user.metadata || {}), websiteData };
+    await logMessage(user.id, `Business name: ${text}`, 'assistant');
   }
 
-  await sendTextMessage(
-    user.phone_number,
-    `Got it, *${businessName}*! Before we continue, what's your email address? We'll use it to send you updates about your website.`
-  );
-  await logMessage(user.id, `Business name: ${businessName}`, 'assistant');
-
-  return STATES.WEB_COLLECT_EMAIL;
+  return smartAdvance(user, message);
 }
 
 async function handleCollectEmail(user, message) {
@@ -89,10 +327,12 @@ async function handleCollectEmail(user, message) {
   const skipWords = /^(skip|no|none|nah|later|n\/a|na|don'?t have|dont have)$/i;
 
   if (skipWords.test(text)) {
-    await sendTextMessage(user.phone_number, "No worries! You can share it later.");
+    await updateUserMetadata(user.id, { emailSkipped: true });
+    user.metadata = { ...(user.metadata || {}), emailSkipped: true };
+    await logMessage(user.id, 'Email skipped', 'assistant');
   } else if (emailMatch) {
     await updateUserMetadata(user.id, { email: emailMatch[0] });
-    await sendTextMessage(user.phone_number, `Got it, saved *${emailMatch[0]}*!`);
+    user.metadata = { ...(user.metadata || {}), email: emailMatch[0] };
     await logMessage(user.id, `Email collected: ${emailMatch[0]}`, 'assistant');
   } else {
     // Not a valid email and not a skip — ask again gently
@@ -103,68 +343,8 @@ async function handleCollectEmail(user, message) {
     return STATES.WEB_COLLECT_EMAIL;
   }
 
-  const existingWebsiteData = user.metadata?.websiteData || {};
-  const businessName = existingWebsiteData.businessName || '';
-  return skipToNextAfterEmail(user, businessName, existingWebsiteData);
-}
-
-async function skipToNextAfterEmail(user, businessName, existingWebsiteData) {
-  if (existingWebsiteData.industry) {
-    return continueAfterIndustry(user, existingWebsiteData.industry);
-  }
-
-  // Try to infer industry from the recent conversation. Most users mention
-  // their business type in the sales bot turn before the website flow even
-  // starts (e.g. "I run an HVAC company"). Re-asking is jarring.
-  try {
-    const history = await getConversationHistory(user.id, 10);
-    if (history && history.length > 0) {
-      const transcript = history
-        .map((m) => `${m.role}: ${m.message_text}`)
-        .filter((line) => line.length < 400)
-        .join('\n');
-      const inferred = await generateResponse(
-        `From the conversation below, what industry/niche is the business "${businessName}" in? Reply with ONLY the industry name in 1-3 words (e.g. "HVAC", "Restaurant", "Real estate", "Salon"). If you can't tell with reasonable confidence, reply EXACTLY with the word "unknown".\n\nConversation:\n${transcript}`,
-        [{ role: 'user', content: '' }]
-      );
-      const cleaned = (inferred || '').trim().replace(/^["']|["']$/g, '');
-      if (cleaned && cleaned.length >= 2 && cleaned.length < 40 && !/^unknown$/i.test(cleaned)) {
-        await updateUserMetadata(user.id, {
-          websiteData: { ...(user.metadata?.websiteData || {}), industry: cleaned },
-        });
-        await logMessage(user.id, `Industry auto-inferred from conversation: ${cleaned}`, 'assistant');
-        return continueAfterIndustry(user, cleaned);
-      }
-    }
-  } catch (err) {
-    logger.warn(`[WEBDEV] Industry inference failed for ${user.id}: ${err.message}`);
-  }
-
-  await sendTextMessage(
-    user.phone_number,
-    'What industry are you in? For example - tech, healthcare, restaurant, real estate, creative, etc.'
-  );
-
-  return STATES.WEB_COLLECT_INDUSTRY;
-}
-
-// Shared transition used after we know the industry — either the user just
-// answered, OR we inferred it from prior conversation. Decides whether to
-// branch into the HVAC areas-collection step or go straight to services.
-async function continueAfterIndustry(user, industry) {
-  const { isHvac } = require('../../website-gen/templates');
-  if (isHvac(industry)) {
-    await sendTextMessage(
-      user.phone_number,
-      `Got it — ${industry}! Which city are you based in, and which areas do you serve? Example:\n*Austin — Round Rock, Cedar Park, Pflugerville*`
-    );
-    return STATES.WEB_COLLECT_AREAS;
-  }
-  await sendTextMessage(
-    user.phone_number,
-    'What services or products do you offer? List them separated by commas, or say "skip".'
-  );
-  return STATES.WEB_COLLECT_SERVICES;
+  const ackPrefix = emailMatch ? `Got it, saved *${emailMatch[0]}*!` : 'No worries — we can add it later.';
+  return smartAdvance(user, message, ackPrefix);
 }
 
 async function handleCollectIndustry(user, message) {
@@ -214,28 +394,12 @@ async function handleCollectIndustry(user, message) {
     }
   }
 
-  await updateUserMetadata(user.id, {
-    websiteData: { ...(user.metadata?.websiteData || {}), industry },
-  });
-
-  // HVAC branch — collect primary city + service areas before services.
-  const { isHvac } = require('../../website-gen/templates');
-  if (isHvac(industry)) {
-    await sendTextMessage(
-      user.phone_number,
-      `Got it — ${industry}! 🛠️\n\nWhich city are you based in, and which areas do you serve? Example:\n*Austin — Round Rock, Cedar Park, Pflugerville*`
-    );
-    await logMessage(user.id, `Industry: ${industry} (HVAC — prompting for service areas)`, 'assistant');
-    return STATES.WEB_COLLECT_AREAS;
-  }
-
-  await sendTextMessage(
-    user.phone_number,
-    'What services or products do you offer? Just list them separated by commas.'
-  );
+  const websiteData = { ...(user.metadata?.websiteData || {}), industry };
+  await updateUserMetadata(user.id, { websiteData });
+  user.metadata = { ...(user.metadata || {}), websiteData };
   await logMessage(user.id, `Industry: ${industry}`, 'assistant');
 
-  return STATES.WEB_COLLECT_SERVICES;
+  return smartAdvance(user, message);
 }
 
 // ─── HVAC: city + service areas ──────────────────────────────────────────────
@@ -251,18 +415,15 @@ async function handleCollectAreas(user, message) {
 
   // Allow skip — treat as "we'll fill in later".
   if (/^(skip|later|unsure|not sure|n\/?a)$/i.test(raw)) {
-    await updateUserMetadata(user.id, {
-      websiteData: {
-        ...(user.metadata?.websiteData || {}),
-        primaryCity: null,
-        serviceAreas: [],
-      },
-    });
-    await sendTextMessage(
-      user.phone_number,
-      'No problem — you can add service areas later. What services do you offer? (Or say *skip* to use the default HVAC list.)'
-    );
-    return STATES.WEB_COLLECT_SERVICES;
+    const websiteData = {
+      ...(user.metadata?.websiteData || {}),
+      primaryCity: user.metadata?.websiteData?.primaryCity || null,
+      serviceAreas: [],
+      areasSkipped: true,
+    };
+    await updateUserMetadata(user.id, { websiteData });
+    user.metadata = { ...(user.metadata || {}), websiteData };
+    return smartAdvance(user, message, 'No problem — we can add areas later.');
   }
 
   // Parse: split on newline, em/en dash, colon, pipe, or "serving". Newline
@@ -316,18 +477,17 @@ async function handleCollectAreas(user, message) {
     }
   }
 
-  await updateUserMetadata(user.id, {
-    websiteData: {
-      ...(user.metadata?.websiteData || {}),
-      primaryCity: primaryCity || null,
-      serviceAreas,
-    },
-  });
+  const websiteData = {
+    ...(user.metadata?.websiteData || {}),
+    primaryCity: primaryCity || null,
+    serviceAreas,
+  };
+  await updateUserMetadata(user.id, { websiteData });
+  user.metadata = { ...(user.metadata || {}), websiteData };
+  await logMessage(user.id, `HVAC areas: ${primaryCity} / ${serviceAreas.join(', ')}`, 'assistant');
 
-  await sendTextMessage(
-    user.phone_number,
-    `Got it — based in *${primaryCity || 'your area'}* serving *${serviceAreas.slice(0, 4).join(', ')}${serviceAreas.length > 4 ? '…' : ''}*.\n\nWhich HVAC services do you offer? List them separated by commas, or say *skip* to use our default list (AC repair, heating, heat pumps, duct cleaning, thermostats, and more).`
-  );
+  const ackPrefix = `Got it — based in *${primaryCity || 'your area'}* serving *${serviceAreas.slice(0, 4).join(', ')}${serviceAreas.length > 4 ? '…' : ''}*.`;
+  return smartAdvance(user, message, ackPrefix);
   await logMessage(user.id, `HVAC areas: ${primaryCity} / ${serviceAreas.join(', ')}`, 'assistant');
 
   return STATES.WEB_COLLECT_SERVICES;
@@ -414,35 +574,24 @@ async function handleCollectServices(user, message) {
   const colors = getColorsForIndustry(industry);
 
   if (skipWords.test(servicesText) || skipPhrases.test(servicesText)) {
-    await updateUserMetadata(user.id, {
-      websiteData: { ...(user.metadata?.websiteData || {}), services: [], ...colors },
-    });
+    const websiteData = { ...(user.metadata?.websiteData || {}), services: [], ...colors };
+    await updateUserMetadata(user.id, { websiteData });
+    user.metadata = { ...(user.metadata || {}), websiteData };
     await logMessage(user.id, `Services: skipped | Colors auto-assigned for ${industry}`, 'assistant');
     if (isSalonIndustry(industry)) return startSalonFlow(user);
-    await sendTextMessage(
-      user.phone_number,
-      'No worries, we\'ll skip the services page! Last thing - what contact info do you want on the site? Just send your email, phone, and/or address.'
-    );
-    return STATES.WEB_COLLECT_CONTACT;
+    return smartAdvance(user, message, 'No worries — we\'ll use a sensible default.');
   }
 
   const services = servicesText.split(',').map((s) => s.trim()).filter(Boolean);
 
-  await updateUserMetadata(user.id, {
-    websiteData: { ...(user.metadata?.websiteData || {}), services, ...colors },
-  });
-
+  const websiteData = { ...(user.metadata?.websiteData || {}), services, ...colors };
+  await updateUserMetadata(user.id, { websiteData });
+  user.metadata = { ...(user.metadata || {}), websiteData };
   await logMessage(user.id, `Services: ${services.join(', ')} | Colors auto-assigned for ${industry}`, 'assistant');
 
   if (isSalonIndustry(industry)) return startSalonFlow(user);
 
-  await sendTextMessage(
-    user.phone_number,
-    'Last thing - what contact info do you want on the site? Just send your email, phone, and/or address.'
-  );
-
-  // Skip logo — go straight to contact
-  return STATES.WEB_COLLECT_CONTACT;
+  return smartAdvance(user, message, `Got it — *${services.slice(0, 4).join(', ')}${services.length > 4 ? '…' : ''}*.`);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
