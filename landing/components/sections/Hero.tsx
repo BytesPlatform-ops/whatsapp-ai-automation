@@ -85,7 +85,7 @@ export function Hero() {
       <div className="container-page relative">
         <div className="grid items-center gap-10 pb-16 lg:grid-cols-[1.1fr_0.9fr] lg:gap-10 lg:pb-20">
           {/* Left column */}
-          <div className="max-w-2xl">
+          <div className="max-w-2xl text-center mx-auto lg:text-left lg:mx-0">
             <Eyebrow dark icon={<Bot className="h-3.5 w-3.5" />}>
               Built on WhatsApp · No app. No login.
             </Eyebrow>
@@ -107,9 +107,9 @@ export function Hero() {
               initial={{ opacity: 0, y: 16 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6, delay: 0.1 }}
-              className="mt-6 max-w-xl text-lg leading-relaxed text-white/75"
+              className="mt-6 max-w-xl text-lg leading-relaxed text-white/75 mx-auto lg:mx-0"
             >
-              Text our AI bot. Get a live website, a marketing ad creative, or a free SEO audit —
+              Text our AI bot. Get a live website, a marketing ad creative, or a free SEO audit
               in under 3 minutes. No coding, no designer, no meetings.
             </motion.p>
 
@@ -117,7 +117,7 @@ export function Hero() {
               initial={{ opacity: 0, y: 16 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6, delay: 0.2 }}
-              className="mt-9 flex flex-col items-start gap-3 sm:flex-row sm:items-center"
+              className="mt-9 flex flex-col items-center gap-3 sm:flex-row sm:justify-center lg:justify-start"
             >
               <WhatsAppButton
                 size="xl"
@@ -136,7 +136,7 @@ export function Hero() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ duration: 0.6, delay: 0.35 }}
-              className="mt-6 flex flex-wrap items-center gap-x-5 gap-y-2 text-sm text-white/60"
+              className="mt-6 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-sm text-white/60 lg:justify-start"
             >
               {['Free to start', 'No signup', 'Reply in 10 sec'].map((t) => (
                 <li key={t} className="flex items-center gap-1.5">
