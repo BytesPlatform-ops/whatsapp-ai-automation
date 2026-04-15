@@ -86,7 +86,7 @@ export function HowItWorks() {
           transition={{ duration: 0.6 }}
           className="flex justify-center lg:justify-end"
         >
-          <PhoneMockup contactName="BytesPlatform AI" contactSub="typing…">
+          <PhoneMockup contactName="Pixie AI" contactSub="typing…">
             <div className="flex h-full flex-col justify-end">
               <ChatBubble from="bot" time="10:22">
                 Hey! I can build you a website, design an ad, or run a free SEO audit. What are you looking for?
@@ -107,7 +107,7 @@ export function HowItWorks() {
               <LinkPreview
                 title="Flex Studios · Premier Gym"
                 description="Dark theme · 5 sections · mobile ready"
-                url="flex-studios.bytesplatform.site"
+                url="flex-studios.pixiebot.co"
                 thumbColor="from-ink-900 to-wa-green"
               />
             </div>

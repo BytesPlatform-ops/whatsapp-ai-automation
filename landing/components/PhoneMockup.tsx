@@ -18,7 +18,7 @@ const sizeMap: Record<PhoneSize, string> = {
 
 export function PhoneMockup({
   children,
-  contactName = 'BytesPlatform AI',
+  contactName = 'Pixie AI',
   contactSub = 'online',
   className = '',
   size = 'lg',

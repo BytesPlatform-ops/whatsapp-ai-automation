@@ -16,8 +16,8 @@ const display = Plus_Jakarta_Sans({
 });
 
 export const metadata: Metadata = {
-  metadataBase: new URL('https://bytesplatform.com'),
-  title: 'BytesPlatform — Your website, built by a WhatsApp chat',
+  metadataBase: new URL('https://pixiebot.co'),
+  title: 'Pixie — Your website, built by a WhatsApp chat',
   description:
     'Text our WhatsApp bot. Get a live website, AI-generated ads, or a free SEO audit in under 3 minutes. No coding, no designer, no meetings.',
   keywords: [
@@ -26,14 +26,14 @@ export const metadata: Metadata = {
     'marketing ads',
     'SEO audit',
     'WhatsApp automation',
-    'BytesPlatform',
+    'Pixie',
   ],
   openGraph: {
     title: 'Your website, built by a WhatsApp chat',
     description:
       'Text our AI bot on WhatsApp and get a live website in 3 minutes. No signup, no code.',
     type: 'website',
-    siteName: 'BytesPlatform',
+    siteName: 'Pixie',
   },
   twitter: {
     card: 'summary_large_image',

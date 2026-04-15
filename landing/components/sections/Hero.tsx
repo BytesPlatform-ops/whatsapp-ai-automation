@@ -26,7 +26,7 @@ const scripts: Step[][] = [
       kind: 'link',
       title: 'Sunrise Bakery — Fresh Bakes Daily',
       description: 'Your live preview is ready. Tap to view.',
-      url: 'sunrise-bakery.bytesplatform.site',
+      url: 'sunrise-bakery.pixiebot.co',
       time: '10:26',
     },
   ],
@@ -41,7 +41,7 @@ const scripts: Step[][] = [
       kind: 'link',
       title: 'Layla Cafe · Black Friday Offer',
       description: '3 ad variations ready. Tap to download.',
-      url: 'bytesplatform.site/ad/layla-cafe',
+      url: 'pixiebot.co/ad/layla-cafe',
       time: '15:04',
     },
   ],
@@ -73,7 +73,7 @@ export function Hero() {
   const visible = useScript(scripts[scriptIndex], reveal);
 
   return (
-    <section className="relative overflow-hidden bg-navy-900 pt-20 text-white sm:pt-24">
+    <section className="relative overflow-hidden bg-navy-900 pt-24 text-white sm:pt-28">
       {/* Background treatments */}
       <div aria-hidden className="absolute inset-0 bg-hero-radial" />
       <div aria-hidden className="absolute inset-0 grid-noise opacity-[0.15]" />

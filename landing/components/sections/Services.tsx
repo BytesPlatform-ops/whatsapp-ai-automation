@@ -75,7 +75,7 @@ function MockVisual({ type }: { type: Mock }) {
           <span className="h-2.5 w-2.5 rounded-full bg-amber-400" />
           <span className="h-2.5 w-2.5 rounded-full bg-emerald-400" />
           <span className="ml-3 truncate rounded-md bg-white px-2 py-1 text-[11px] text-ink-400 ring-1 ring-ink-100">
-            sunrise-bakery.bytesplatform.site
+            sunrise-bakery.pixiebot.co
           </span>
         </div>
         <div className="overflow-hidden rounded-xl bg-white ring-1 ring-ink-100">

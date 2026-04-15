@@ -30,12 +30,13 @@ export function Navigation() {
           : 'bg-transparent'
       }`}
     >
-      <div className="container-page flex h-16 items-center justify-between">
-        <a href="#" className="flex items-center gap-2 text-white">
-          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-wa-green text-navy-900 font-black">
-            B
-          </span>
-          <span className="font-display text-lg font-bold tracking-tight">{siteConfig.brand}</span>
+      <div className="container-page flex h-20 items-center justify-between">
+        <a href="#" className="flex items-center text-white" aria-label={siteConfig.brand}>
+          <img
+            src="/pixie-logo-white.png"
+            alt={siteConfig.brand}
+            className="h-16 w-auto object-contain"
+          />
         </a>
 
         <nav className="hidden items-center gap-8 md:flex">
