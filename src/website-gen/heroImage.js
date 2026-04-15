@@ -83,13 +83,20 @@ async function getHeroImage(query) {
     const photographer = photo.user?.name || 'Unsplash';
     const photographerProfile = photo.user?.links?.html || 'https://unsplash.com';
 
-    logger.info(`[HERO-IMG] Fetched Unsplash photo for "${finalQuery}" by ${photographer}`);
+    // Unsplash returns a `color` field on every photo — the dominant colour,
+    // averaged from the image. Surfacing it lets the deployer adapt the hero
+    // text colour (white vs near-black) based on the photo's own brightness,
+    // instead of always assuming a dark image.
+    const dominantColor = photo.color || null;
+
+    logger.info(`[HERO-IMG] Fetched Unsplash photo for "${finalQuery}" by ${photographer}, dominant=${dominantColor || 'n/a'}`);
 
     return {
       url: `${photo.urls.regular}&w=1600&q=80&auto=format&fit=crop`,
       photographer,
       photographerUrl: `${photographerProfile}?${UTM}`,
       unsplashUrl: `https://unsplash.com/?${UTM}`,
+      dominantColor,
     };
   } catch (error) {
     const status = error.response?.status;

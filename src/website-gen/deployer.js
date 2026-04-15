@@ -332,9 +332,29 @@ function generateHomePage(c) {
   // c.heroTextOverride is set by the LLM revision parser when the user asks
   // for a light/pastel shade ('dark' text) or explicitly wants white text on
   // a specific colour ('light'). Otherwise auto-detect from luminance.
-  const heroPal = hasHeroImgEarly
-    ? heroTextPalette('#000000', c.heroTextOverride)
-    : heroTextPalette(pc, c.heroTextOverride);
+  //
+  // For hero-image cases: blend the overlay (primaryColor @ ~70%) with the
+  // image's own dominant colour. The overlay is heavy but not opaque, so a
+  // bright white photo can still leak through enough to wash out white text.
+  // Unsplash gives us `dominantColor`; we take the weighted average of its
+  // luminance and pc's luminance to approximate the effective hero brightness.
+  let effectiveHeroColor = pc;
+  if (hasHeroImgEarly) {
+    const imgColor = c.heroImage.dominantColor;
+    if (imgColor) {
+      const imgLum = relativeLuminance(imgColor);
+      const pcLum = relativeLuminance(pc);
+      // Overlay gradient is ~70% primary colour + 30% image (visual average
+      // across the whole hero). Decide text based on that mix.
+      const effLum = pcLum * 0.7 + imgLum * 0.3;
+      // Map back to a representative hex just for heroTextPalette — the fn
+      // only uses luminance, so pick gray-of-equivalent-luminance.
+      const g = Math.round(Math.sqrt(effLum) * 255).toString(16).padStart(2, '0');
+      effectiveHeroColor = `#${g}${g}${g}`;
+    }
+    // No dominantColor from Unsplash → fall back to old "assume dark" behaviour.
+  }
+  const heroPal = heroTextPalette(effectiveHeroColor, c.heroTextOverride);
   const badges = (c.heroFeatures||[]).map(f=>`<span style="padding:8px 20px;border-radius:50px;font-size:13px;font-weight:500;letter-spacing:0.5px;background:${heroPal.glassBg};color:${heroPal.fg};border:1px solid ${heroPal.border};backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px)">${esc(f)}</span>`).join('');
 
   const services = (c.services||[]).slice(0,6).map((s,i)=>{
@@ -381,11 +401,24 @@ function generateHomePage(c) {
   const hasHeroImg = hasHeroImgEarly;
   // Reuse the palette computed above at the top of generateHomePage.
   const palette = heroPal;
+  // Safety-net text shadow so hero text stays readable even when the photo
+  // behind the overlay has mixed-luminance regions (e.g. bright sky + dark
+  // foreground). Cheap, no extra work at render time, and perceptually
+  // gentle — just enough to lift the glyphs off a noisy background.
+  const heroShadow = palette.fg === '#fff'
+    ? 'text-shadow:0 2px 18px rgba(0,0,0,0.5),0 1px 2px rgba(0,0,0,0.35)'
+    : 'text-shadow:0 1px 14px rgba(255,255,255,0.75),0 0 2px rgba(255,255,255,0.6)';
   const heroBg = hasHeroImg
     ? `background:#0a0a1a url('${c.heroImage.url.replace(/'/g, '%27')}') center/cover no-repeat`
     : `background:linear-gradient(135deg,${pc} 0%,${pc}dd 40%,${ac}88 100%)`;
+  // When there's an image, apply a stronger darkening layer so white text
+  // stays readable even on bright photos (white walls, sky, beach, etc.)
+  // If the palette chose dark text instead (rare but possible with a very
+  // light pc + light photo) we invert and use a lightening layer.
   const heroOverlay = hasHeroImg
-    ? `<div style="position:absolute;inset:0;background:linear-gradient(135deg,${pc}d9 0%,${pc}99 40%,${ac}66 100%),linear-gradient(180deg,rgba(0,0,0,0.45) 0%,rgba(0,0,0,0.25) 40%,rgba(0,0,0,0.55) 100%);background-blend-mode:multiply"></div>`
+    ? (palette.fg === '#fff'
+        ? `<div style="position:absolute;inset:0;background:linear-gradient(135deg,${pc}d9 0%,${pc}99 40%,${ac}66 100%),linear-gradient(180deg,rgba(0,0,0,0.55) 0%,rgba(0,0,0,0.35) 40%,rgba(0,0,0,0.6) 100%);background-blend-mode:multiply"></div>`
+        : `<div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(255,255,255,0.5) 0%,rgba(255,255,255,0.3) 50%,rgba(255,255,255,0.55) 100%)"></div>`)
     : `<div style="position:absolute;inset:0;background:linear-gradient(180deg,${palette.fg === '#fff' ? 'rgba(0,0,0,0.12)' : 'rgba(255,255,255,0.15)'} 0%,transparent 30%,transparent 70%,${palette.fg === '#fff' ? 'rgba(0,0,0,0.25)' : 'rgba(255,255,255,0.2)'} 100%)"></div>`;
   // Per-image credits are consolidated into the footer (see collectUnsplashCredits).
   const heroCredit = '';
@@ -407,8 +440,8 @@ function generateHomePage(c) {
       ${heroCredit}
       <div style="position:relative;z-index:10;padding:0 24px;max-width:900px">
         ${badges?`<div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-bottom:32px;animation:fadeDown 0.8s ease-out forwards">${badges}</div>`:''}
-        <h1 style="font-size:clamp(36px,7vw,76px);font-weight:900;line-height:1.05;letter-spacing:-2px;margin-bottom:24px;animation:fadeUp 0.8s ease-out 0.2s both;color:${palette.fg}">${esc(c.headline)}</h1>
-        <p style="font-size:clamp(16px,2.5vw,22px);color:${palette.fgSoft};max-width:650px;margin:0 auto 40px;line-height:1.6;animation:fadeUp 0.8s ease-out 0.4s both">${esc(c.tagline)}</p>
+        <h1 style="font-size:clamp(36px,7vw,76px);font-weight:900;line-height:1.05;letter-spacing:-2px;margin-bottom:24px;animation:fadeUp 0.8s ease-out 0.2s both;color:${palette.fg};${heroShadow}">${esc(c.headline)}</h1>
+        <p style="font-size:clamp(16px,2.5vw,22px);color:${palette.fgSoft};max-width:650px;margin:0 auto 40px;line-height:1.6;animation:fadeUp 0.8s ease-out 0.4s both;${heroShadow}">${esc(c.tagline)}</p>
         <div style="display:flex;gap:16px;justify-content:center;flex-wrap:wrap;animation:fadeUp 0.8s ease-out 0.6s both">
           <a href="/contact" class="btn-w" style="animation:pulseGlow 3s ease-in-out infinite;background:${palette.buttonBg};color:${palette.buttonFg}">${esc(c.ctaButton)} ${ARR}</a>
           ${(c.services||[]).length>0?`<a href="/services" class="btn-s" style="color:${palette.fg};border-color:${palette.border}">Our Services</a>`:''}
