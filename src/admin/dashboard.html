@@ -787,7 +787,7 @@ function sendAdminReply(e) {
   .then(function(r) { return r.json(); })
   .then(function(data) {
     if (data.success) {
-      // Append the message to the chat immediately
+      // Append the message to the chat immediately (optimistic UI).
       var body = document.getElementById('conv-modal-body');
       var msgDiv = document.createElement('div');
       msgDiv.className = 'max-w-[85%] rounded-2xl px-4 py-2.5 text-sm chat-bot';
@@ -796,6 +796,10 @@ function sendAdminReply(e) {
       body.appendChild(msgDiv);
       body.scrollTop = body.scrollHeight;
       input.value = '';
+      // The backend has already written this message to the conversations
+      // table by the time we get here. Bump lastMsgCount so the next 5s
+      // poll doesn't see it as "new" and append a duplicate bubble.
+      lastMsgCount += 1;
     } else {
       alert('Failed to send: ' + (data.error || 'Unknown error'));
     }
