@@ -100,23 +100,29 @@ async function findUserByInvitee(invitee) {
     }
   }
 
-  // Last resort - find the most recent user in SALES_CHAT who got a Calendly link
-  // (leadClosed = true means we sent them the booking link recently)
-  if (email || name) {
-    const { data: recentLead } = await supabase
-      .from('users')
-      .select('*')
-      .eq('state', 'SALES_CHAT')
-      .contains('metadata', { leadClosed: true })
-      .order('updated_at', { ascending: false })
-      .limit(1)
-      .single();
-    if (recentLead) {
-      logger.info(`Calendly: matched by recent lead (${recentLead.phone_number}) for invitee ${name} <${email}>`);
-      return recentLead;
-    }
+  // Last resort — find the most recent user in SALES_CHAT who got a Calendly
+  // link in the last 24 hours. `leadClosed: true` is set the moment we send
+  // the booking link, so this catches every flow where the invitee used
+  // different contact info on the Calendly form than their WhatsApp profile.
+  // Dropping the `email || name` guard too — Calendly ALWAYS sends at least
+  // one of those, but if payload is weird we still want a best-effort match
+  // rather than a silent drop.
+  const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  const { data: recentLeads } = await supabase
+    .from('users')
+    .select('*')
+    .eq('state', 'SALES_CHAT')
+    .contains('metadata', { leadClosed: true })
+    .gte('updated_at', cutoff)
+    .order('updated_at', { ascending: false })
+    .limit(1);
+  const recentLead = recentLeads && recentLeads[0];
+  if (recentLead) {
+    logger.info(`Calendly: fell back to most-recent lead-closed user (${recentLead.phone_number}) for invitee ${name} <${email}>`);
+    return recentLead;
   }
 
+  logger.warn(`Calendly: no user match at all for invitee name="${name}" email="${email}" phone="${invitee.phone_number || ''}"`);
   return null;
 }
 

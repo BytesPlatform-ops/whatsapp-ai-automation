@@ -1,33 +1,39 @@
 /**
  * One-time script to register a Calendly webhook subscription.
  *
- * Usage:
- *   node src/scripts/setup-calendly-webhook.js <YOUR_CALENDLY_TOKEN> <YOUR_WEBHOOK_URL>
+ * Usage (either):
+ *   node src/scripts/setup-calendly-webhook.js <CALENDLY_PAT> <WEBHOOK_URL>
+ *   # or read from .env: CALENDLY_PAT=... CALENDLY_WEBHOOK_URL=...
+ *   node src/scripts/setup-calendly-webhook.js
  *
  * Example:
- *   node src/scripts/setup-calendly-webhook.js cal_abc123 https://your-ngrok-url.ngrok.io/calendly/webhook
+ *   node src/scripts/setup-calendly-webhook.js eyJraWQ... https://your-domain.com/calendly/webhook
  *
  * Steps:
  *   1. Go to https://calendly.com/integrations/api_webhooks and create a Personal Access Token
- *   2. Run this script with that token and your public server URL
+ *   2. Run this script with that PAT + your public server URL
  *   3. Save the signing key it outputs to your .env as CALENDLY_WEBHOOK_SIGNING_KEY
  */
 
+require('dotenv').config();
 const axios = require('axios');
 
 const CALENDLY_API = 'https://api.calendly.com';
 
 async function setup() {
-  const token = process.argv[2];
-  const webhookUrl = process.argv[3];
+  // Accept CLI args first, fall back to .env (CALENDLY_PAT + CALENDLY_WEBHOOK_URL)
+  // so you can either pass them inline or stash them in .env for convenience.
+  const token = process.argv[2] || process.env.CALENDLY_PAT;
+  const webhookUrl = process.argv[3] || process.env.CALENDLY_WEBHOOK_URL;
 
   if (!token || !webhookUrl) {
-    console.log('Usage: node src/scripts/setup-calendly-webhook.js <CALENDLY_TOKEN> <WEBHOOK_URL>');
+    console.log('Usage: node src/scripts/setup-calendly-webhook.js <CALENDLY_PAT> <WEBHOOK_URL>');
     console.log('');
-    console.log('Example:');
-    console.log('  node src/scripts/setup-calendly-webhook.js cal_abc123 https://your-domain.com/calendly/webhook');
+    console.log('Or set these in .env and run with no args:');
+    console.log('  CALENDLY_PAT=eyJraWQ...');
+    console.log('  CALENDLY_WEBHOOK_URL=https://your-domain.com/calendly/webhook');
     console.log('');
-    console.log('Get your token at: https://calendly.com/integrations/api_webhooks');
+    console.log('Get your PAT at: https://calendly.com/integrations/api_webhooks');
     process.exit(1);
   }
 

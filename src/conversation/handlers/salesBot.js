@@ -329,6 +329,18 @@ async function handleSalesBot(user, message) {
       calendlyUrl
     );
     await logMessage(user.id, 'Sent Calendly booking link', 'assistant');
+
+    // Immediately follow up with an anticipation message so the user isn't
+    // left in silence after tapping the link. The Calendly webhook will still
+    // fire a separate "meeting booked" confirmation once they actually book,
+    // but this bridges the gap — especially useful if the webhook isn't set
+    // up or the invitee email/phone doesn't match their WhatsApp profile.
+    const followUp =
+      "Once you pick a time you'll get a confirmation email from Calendly with all the details. " +
+      "I'll also ping you here the moment it's booked. Looking forward to it! 🤝";
+    await sendTextMessage(user.phone_number, followUp);
+    await logMessage(user.id, followUp, 'assistant');
+
     // Mark lead as closed - stop follow-up sequences
     await updateUserMetadata(user.id, { leadClosed: true });
     saveLeadSummary(user, 'meeting_booked', 'Calendly booking link sent').catch(() => {});
