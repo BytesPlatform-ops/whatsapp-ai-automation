@@ -14,11 +14,16 @@ function getSender() {
   return channel === 'whatsapp' ? whatsappSender : messengerSender;
 }
 
-async function sendTextMessage(to, text) {
-  // Show typing indicator and wait 4-8 seconds to simulate human response time
-  try { await getSender().showTyping(to); } catch {}
-  const delay = 4000 + Math.floor(Math.random() * 4000);
-  await new Promise(r => setTimeout(r, delay));
+async function sendTextMessage(to, text, options = {}) {
+  // The 4-8s "human typing" delay is great for AI replies, but useless for
+  // operator-sent messages from the admin dashboard — the operator clicks
+  // Send and expects it to go out immediately. Pass `{ instant: true }` to
+  // bypass the typing indicator + delay entirely.
+  if (!options.instant) {
+    try { await getSender().showTyping(to); } catch {}
+    const delay = 4000 + Math.floor(Math.random() * 4000);
+    await new Promise(r => setTimeout(r, delay));
+  }
   return getSender().sendTextMessage(to, text);
 }
 

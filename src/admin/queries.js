@@ -119,6 +119,19 @@ async function getLeads() {
     countMap[m.user_id] = (countMap[m.user_id] || 0) + 1;
   });
 
+  // Flag users that have any manual (operator-sent) reply so the admin UI
+  // can highlight them in the conversations list.
+  const { data: manualMessages } = await supabase
+    .from('conversations')
+    .select('user_id')
+    .eq('message_type', 'manual')
+    .in('user_id', userIds.length > 0 ? userIds : ['none']);
+
+  const manualMap = {};
+  (manualMessages || []).forEach((m) => {
+    manualMap[m.user_id] = (manualMap[m.user_id] || 0) + 1;
+  });
+
   return (users || []).map((u) => ({
     id: u.id,
     phone_number: u.phone_number,
@@ -129,6 +142,13 @@ async function getLeads() {
     updated_at: u.updated_at,
     last_message_at: lastMessageMap[u.id] || u.updated_at,
     message_count: countMap[u.id] || 0,
+    manual_count: manualMap[u.id] || 0,
+    // A conversation is considered "manual" if either (a) the operator sent
+    // any reply via the dashboard (yields message_type='manual' rows) OR
+    // (b) the operator currently has human takeover active for this user.
+    // Either signal means the AI isn't fully running this thread.
+    has_manual: (manualMap[u.id] || 0) > 0 || !!u.metadata?.humanTakeover,
+    human_takeover: !!u.metadata?.humanTakeover,
     is_qualified: !!u.metadata?.leadBriefSent,
     is_closed: !!u.metadata?.leadClosed,
     lead_brief: u.metadata?.leadBrief || null,

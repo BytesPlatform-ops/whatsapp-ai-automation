@@ -150,16 +150,20 @@ router.post('/api/conversations/:userId/reply', async (req, res) => {
     const { sendTextMessage } = require('../messages/sender');
     const { runWithContext } = require('../messages/channelContext');
 
-    // Send on the same channel + WhatsApp number the user originally messaged —
-    // via_phone_number_id ensures the admin's reply shows up in the customer's
-    // existing thread instead of a different business number.
-    await runWithContext(
-      { channel: user.channel || 'whatsapp', phoneNumberId: user.via_phone_number_id || null },
-      () => sendTextMessage(user.phone_number, messageText.trim())
-    );
-
-    // Log it as an assistant message
-    await logMessage(user.id, messageText.trim(), 'assistant');
+    // Send on the same channel + WhatsApp number the user originally messaged
+    // (via_phone_number_id keeps the reply in the customer's existing thread).
+    // `instant: true` bypasses the 4-8s human-typing delay used for AI replies
+    // — operator-sent messages should go out the moment Send is clicked.
+    // The DB log runs in parallel with the WhatsApp send to shave another
+    // ~50-150ms off the response time.
+    const trimmed = messageText.trim();
+    await Promise.all([
+      runWithContext(
+        { channel: user.channel || 'whatsapp', phoneNumberId: user.via_phone_number_id || null },
+        () => sendTextMessage(user.phone_number, trimmed, { instant: true })
+      ),
+      logMessage(user.id, trimmed, 'assistant', 'manual'),
+    ]);
 
     logger.info(`[ADMIN] Manual reply sent to ${user.phone_number} (${user.channel}, via=${user.via_phone_number_id || 'default'}): "${messageText.trim().slice(0, 50)}..."`);
     res.json({ success: true });

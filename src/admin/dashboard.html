@@ -534,6 +534,7 @@ function filterLeads() {
 
 // ─── Conversations ─────────────────────────────
 var convChannelFilter = 'all';
+var convTypeFilter = 'all'; // 'all' | 'ai' | 'manual'
 
 function channelIcon(channel) {
   if (channel === 'messenger') return '<span class="inline-block w-5 h-5 rounded-full bg-blue-100 text-blue-600 text-[10px] font-bold flex items-center justify-center" title="Messenger">M</span>';
@@ -551,14 +552,32 @@ function viaLinePill(via) {
 function convListItems(leads) {
   return leads.filter(function(l) {
     if (l.message_count === 0) return false;
-    if (convChannelFilter === 'all') return true;
-    return (l.channel || 'whatsapp') === convChannelFilter;
+    if (convChannelFilter !== 'all' && (l.channel || 'whatsapp') !== convChannelFilter) return false;
+    if (convTypeFilter === 'manual' && !l.has_manual) return false;
+    if (convTypeFilter === 'ai' && l.has_manual) return false;
+    return true;
   }).map(function(l) {
-    return '<div class="bg-white rounded-xl border p-4 flex items-center justify-between hover:border-indigo-300 transition-colors cursor-pointer" onclick="openConversation(\'' + l.id + '\', \'' + esc(l.phone_number) + '\', \'' + esc(l.name || '') + '\')">' +
+    // Strong amber tint + thick left-border accent for conversations with at
+    // least one manual (operator-sent) reply. Also adds a clear "Manual"
+    // badge so the row is unmistakable in a long list.
+    var rowClasses = l.has_manual
+      ? 'bg-amber-100 border-amber-300 border-l-[6px] border-l-amber-500 hover:border-amber-500 ring-1 ring-amber-200'
+      : 'bg-white border hover:border-indigo-300';
+    // Two flavours of "manual": currently in human-takeover mode, and/or
+    // operator has sent at least one reply. Show both badges if both apply.
+    var badges = '';
+    if (l.human_takeover) {
+      badges += '<span class="inline-flex items-center gap-1 ml-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-500 text-white shadow-sm" title="Human takeover is active — AI is paused for this conversation">🙋 TAKEOVER</span>';
+    }
+    if (l.manual_count > 0) {
+      badges += '<span class="inline-flex items-center gap-1 ml-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500 text-white shadow-sm" title="' + l.manual_count + ' manual repl' + (l.manual_count === 1 ? 'y' : 'ies') + ' sent">✋ MANUAL' + (l.manual_count > 1 ? ' ×' + l.manual_count : '') + '</span>';
+    }
+    var manualBadge = badges;
+    return '<div class="rounded-xl ' + rowClasses + ' p-4 flex items-center justify-between transition-colors cursor-pointer" onclick="openConversation(\'' + l.id + '\', \'' + esc(l.phone_number) + '\', \'' + esc(l.name || '') + '\')">' +
       '<div class="flex items-center gap-4">' +
         '<div class="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-bold text-sm">' + (l.name ? l.name[0].toUpperCase() : '#') + '</div>' +
         '<div>' +
-          '<p class="font-semibold text-sm flex items-center gap-2">' + esc(l.name || l.phone_number) + ' ' + channelIcon(l.channel || 'whatsapp') + ' ' + viaLinePill(l.via_phone_number_id) + '</p>' +
+          '<p class="font-semibold text-sm flex items-center gap-2 flex-wrap">' + esc(l.name || l.phone_number) + ' ' + channelIcon(l.channel || 'whatsapp') + ' ' + viaLinePill(l.via_phone_number_id) + manualBadge + '</p>' +
           '<p class="text-xs text-gray-500">' + esc(l.phone_number) + ' &middot; ' + l.message_count + ' messages</p>' +
         '</div>' +
       '</div>' +
@@ -578,20 +597,47 @@ function convChannelCounts(leads) {
   return { all: active.length, whatsapp: wa, messenger: msg, instagram: ig };
 }
 
+// Counts split across "AI only" vs "any manual reply" — respects the active
+// channel filter so the numbers in the type tabs match what's visible.
+function convTypeCounts(leads) {
+  var visible = leads.filter(function(l) {
+    if (l.message_count === 0) return false;
+    if (convChannelFilter !== 'all' && (l.channel || 'whatsapp') !== convChannelFilter) return false;
+    return true;
+  });
+  var manual = visible.filter(function(l) { return l.has_manual; }).length;
+  return { all: visible.length, ai: visible.length - manual, manual: manual };
+}
+
 function renderConversations(leads) {
   var counts = convChannelCounts(leads);
+  var tCounts = convTypeCounts(leads);
   function tabClass(key) {
     return convChannelFilter === key
       ? 'px-4 py-2 text-sm font-medium rounded-lg bg-indigo-600 text-white'
       : 'px-4 py-2 text-sm font-medium rounded-lg bg-white text-gray-600 border hover:bg-gray-50';
   }
+  function typeTabClass(key) {
+    if (convTypeFilter !== key) {
+      return 'px-3 py-1.5 text-xs font-semibold rounded-md bg-white text-gray-600 border hover:bg-gray-50';
+    }
+    if (key === 'manual') return 'px-3 py-1.5 text-xs font-semibold rounded-md bg-amber-500 text-white shadow-sm';
+    if (key === 'ai') return 'px-3 py-1.5 text-xs font-semibold rounded-md bg-indigo-500 text-white shadow-sm';
+    return 'px-3 py-1.5 text-xs font-semibold rounded-md bg-gray-700 text-white shadow-sm';
+  }
   document.getElementById('content').innerHTML = '<div class="fade-in">' +
     '<h2 class="text-2xl font-bold mb-6">Conversations</h2>' +
-    '<div class="flex items-center gap-3 mb-4">' +
+    '<div class="flex items-center gap-3 mb-3 flex-wrap">' +
       '<button onclick="setConvChannel(\'all\')" class="' + tabClass('all') + '">All <span class="ml-1 text-xs opacity-75">(' + counts.all + ')</span></button>' +
       '<button onclick="setConvChannel(\'whatsapp\')" class="' + tabClass('whatsapp') + '">WhatsApp <span class="ml-1 text-xs opacity-75">(' + counts.whatsapp + ')</span></button>' +
       '<button onclick="setConvChannel(\'messenger\')" class="' + tabClass('messenger') + '">Messenger <span class="ml-1 text-xs opacity-75">(' + counts.messenger + ')</span></button>' +
       '<button onclick="setConvChannel(\'instagram\')" class="' + tabClass('instagram') + '">Instagram <span class="ml-1 text-xs opacity-75">(' + counts.instagram + ')</span></button>' +
+    '</div>' +
+    '<div class="flex items-center gap-2 mb-4 flex-wrap">' +
+      '<span class="text-xs text-gray-500 mr-1">Filter by type:</span>' +
+      '<button onclick="setConvType(\'all\')" class="' + typeTabClass('all') + '">All <span class="ml-1 opacity-75">(' + tCounts.all + ')</span></button>' +
+      '<button onclick="setConvType(\'ai\')" class="' + typeTabClass('ai') + '">🤖 AI Only <span class="ml-1 opacity-75">(' + tCounts.ai + ')</span></button>' +
+      '<button onclick="setConvType(\'manual\')" class="' + typeTabClass('manual') + '">✋ Manual <span class="ml-1 opacity-75">(' + tCounts.manual + ')</span></button>' +
     '</div>' +
     '<input id="conv-search" type="text" placeholder="Search by phone or name..." class="px-3 py-2 border rounded-lg text-sm w-80 mb-4" oninput="filterConvList()">' +
     '<div id="conv-list" class="grid gap-3">' + convListItems(leads) + '</div>' +
@@ -603,11 +649,18 @@ function setConvChannel(ch) {
   renderConversations(leadsData);
 }
 
+function setConvType(t) {
+  convTypeFilter = t;
+  renderConversations(leadsData);
+}
+
 function filterConvList() {
   var s = document.getElementById('conv-search').value.toLowerCase();
   var filtered = leadsData.filter(function(l) {
     if (l.message_count === 0) return false;
     if (convChannelFilter !== 'all' && (l.channel || 'whatsapp') !== convChannelFilter) return false;
+    if (convTypeFilter === 'manual' && !l.has_manual) return false;
+    if (convTypeFilter === 'ai' && l.has_manual) return false;
     return l.phone_number.toLowerCase().indexOf(s) !== -1 || (l.name || '').toLowerCase().indexOf(s) !== -1;
   });
   document.getElementById('conv-list').innerHTML = convListItems(filtered);
