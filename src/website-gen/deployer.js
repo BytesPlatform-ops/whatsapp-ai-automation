@@ -274,13 +274,20 @@ function generateHomePage(c) {
   const pc=c.primaryColor||'#2563EB', ac=c.accentColor||'#60A5FA';
   const badges = (c.heroFeatures||[]).map(f=>`<span class="glass" style="padding:8px 20px;border-radius:50px;font-size:13px;font-weight:500;letter-spacing:0.5px">${esc(f)}</span>`).join('');
 
-  const services = (c.services||[]).slice(0,6).map((s,i)=>`
+  const services = (c.services||[]).slice(0,6).map((s,i)=>{
+    // Prefer a real Unsplash service photo; fall back to the coloured icon tile.
+    const hasImg = !!(s.image && s.image.url);
+    const visual = hasImg
+      ? `<div style="width:100%;height:180px;border-radius:14px;background:#f2f2f2 url('${String(s.image.url).replace(/'/g,'%27')}') center/cover no-repeat;margin-bottom:24px"></div>`
+      : `<div style="width:56px;height:56px;border-radius:16px;background:linear-gradient(135deg,${pc}15,${pc}08);display:flex;align-items:center;justify-content:center;color:${pc};margin-bottom:24px;transition:all 0.4s">${getIcon(s.icon||'star')}</div>`;
+    return `
     <div class="glow-card tilt rv d${(i%4)+1}">
-      <div style="width:56px;height:56px;border-radius:16px;background:linear-gradient(135deg,${pc}15,${pc}08);display:flex;align-items:center;justify-content:center;color:${pc};margin-bottom:24px;transition:all 0.4s">${getIcon(s.icon||'star')}</div>
+      ${visual}
       <h3 style="font-size:20px;font-weight:700;margin-bottom:12px;color:#1a1a2e">${esc(s.title)}</h3>
       <p style="font-size:15px;line-height:1.7;color:#666;margin-bottom:20px">${esc(s.shortDescription||s.description)}</p>
       <a href="/services" style="font-size:14px;font-weight:600;color:${pc};text-decoration:none;display:inline-flex;align-items:center;gap:6px">Learn more ${ARR}</a>
-    </div>`).join('');
+    </div>`;
+  }).join('');
 
   const stats = (c.stats||[]).map((s,i)=>`
     <div class="rv d${i+1}" style="text-align:center">
@@ -434,10 +441,15 @@ function generateServicesPage(c) {
             <a href="/contact" class="btn-p">Get Started ${ARR}</a>
           </div>
           <div class="${isEven?'rr':'rl'}" style="order:${isEven?2:1}">
-            <div style="background:${isEven?'#fafafa':'#fff'};border-radius:24px;padding:40px;border:1px solid #f0f0f0">
-              <h4 style="font-size:16px;font-weight:700;color:#1a1a2e;margin-bottom:20px;text-transform:uppercase;letter-spacing:1px">Key Features</h4>
-              ${feats?`<ul style="display:flex;flex-direction:column;gap:16px;list-style:none">${feats}</ul>`:''}
-            </div>
+            ${s.image && s.image.url
+              ? `<div style="border-radius:24px;overflow:hidden;border:1px solid #f0f0f0;aspect-ratio:4/3;background:#f2f2f2 url('${String(s.image.url).replace(/'/g,'%27')}') center/cover no-repeat;position:relative">
+                  ${feats?`<div style="position:absolute;inset:auto 0 0 0;background:linear-gradient(180deg,transparent,rgba(0,0,0,0.75));padding:24px 28px;color:#fff"><ul style="display:flex;flex-direction:column;gap:10px;list-style:none;font-size:14px">${(s.features||[]).slice(0,3).map(f=>`<li style="display:flex;align-items:flex-start;gap:10px">${CHK} ${esc(f)}</li>`).join('')}</ul></div>`:''}
+                </div>`
+              : `<div style="background:${isEven?'#fafafa':'#fff'};border-radius:24px;padding:40px;border:1px solid #f0f0f0">
+                  <h4 style="font-size:16px;font-weight:700;color:#1a1a2e;margin-bottom:20px;text-transform:uppercase;letter-spacing:1px">Key Features</h4>
+                  ${feats?`<ul style="display:flex;flex-direction:column;gap:16px;list-style:none">${feats}</ul>`:''}
+                </div>`
+            }
           </div>
         </div>
       </div>

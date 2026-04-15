@@ -219,10 +219,18 @@ Generate compelling website copy for this business. Return ONLY valid JSON.`;
       if (hvacMode) {
         imageQuery = 'hvac technician service';
       } else {
-        const servicesPart = hasServices ? services.slice(0, 2).join(' ') : '';
-        imageQuery = [servicesPart, industry].filter(Boolean).join(' ').trim() || 'business';
+        // Build a tighter query from the first service + industry. Strip the
+        // same noise words heroImage.js would strip so we don't waste tokens
+        // on "services/solutions/business" filler that Unsplash misranks.
+        const noise = /\b(services?|solutions?|company|business|professional|corporate|industry|consulting|consultation|agency)\b/gi;
+        const servicePart = hasServices
+          ? String(services[0] || '').replace(noise, '').trim()
+          : '';
+        const industryPart = String(industry || '').replace(noise, '').trim();
+        imageQuery = [servicePart, industryPart].filter(Boolean).join(' ').trim() || 'modern workplace';
       }
     }
+    logger.info(`[WEBGEN] Hero image query: "${imageQuery}" (template=${extras.templateId || 'business-starter'})`);
   }
 
   let heroImage = null;
@@ -242,6 +250,33 @@ Generate compelling website copy for this business. Return ONLY valid JSON.`;
       generatedContent.services = await attachHvacServiceImages(generatedContent.services);
     } catch (err) {
       logger.warn(`[WEBGEN] HVAC service image fetch failed: ${err.message}`);
+    }
+  }
+
+  // Generic / business-starter: fetch per-service Unsplash images too. Until
+  // now these sites only got icon placeholders. attachServiceImages expects
+  // objects with a `name` field, so we map title -> name, run the fetcher,
+  // then splice the images back onto the original service entries.
+  if (
+    !hvacMode &&
+    extras.templateId !== 'salon' &&
+    Array.isArray(generatedContent.services) &&
+    generatedContent.services.length > 0
+  ) {
+    try {
+      const probes = generatedContent.services.map((s) => ({
+        name: s.title || s.name || '',
+        industry,
+      }));
+      const enriched = await attachServiceImages(probes);
+      generatedContent.services = generatedContent.services.map((s, i) => ({
+        ...s,
+        image: enriched[i]?.image || null,
+      }));
+      const withImgs = generatedContent.services.filter((s) => s.image).length;
+      logger.info(`[WEBGEN] Generic: attached Unsplash images to ${withImgs}/${generatedContent.services.length} services`);
+    } catch (err) {
+      logger.warn(`[WEBGEN] Generic service image fetch failed: ${err.message}`);
     }
   }
 

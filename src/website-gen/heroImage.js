@@ -21,7 +21,10 @@ const UTM = 'utm_source=bytes_platform&utm_medium=referral';
 async function getHeroImage(query) {
   const accessKey = env.unsplash?.accessKey;
   if (!accessKey) {
-    logger.debug('[HERO-IMG] No UNSPLASH_ACCESS_KEY set - skipping Unsplash fetch');
+    // Bumped from debug → warn so missing keys are visible in production
+    // logs (the hero then falls back to a gradient, which is what the user
+    // was seeing on generic sites).
+    logger.warn('[HERO-IMG] No UNSPLASH_ACCESS_KEY set - hero will fall back to gradient');
     return null;
   }
 

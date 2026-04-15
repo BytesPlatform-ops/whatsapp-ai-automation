@@ -154,10 +154,15 @@ async function getLeads() {
 async function getConversation(userId) {
   const [userResult, messagesResult] = await Promise.all([
     supabase.from('users').select('*').eq('id', userId).single(),
+    // Sort by the monotonic `seq` column so messages inserted in the same
+    // millisecond keep their true insertion order. `created_at` is a
+    // secondary tiebreaker for older rows whose seq may have been assigned
+    // out of order by the migration backfill.
     supabase
       .from('conversations')
       .select('*')
       .eq('user_id', userId)
+      .order('seq', { ascending: true })
       .order('created_at', { ascending: true }),
   ]);
 

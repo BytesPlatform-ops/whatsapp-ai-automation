@@ -80,6 +80,26 @@ function sharpenQuery(name) {
   return `${raw} salon beauty`.replace(/\s{2,}/g, ' ').trim();
 }
 
+// Generic (non-salon) query sharpener. Uses the industry as an anchor so
+// "Pipe repair" for a plumber becomes "pipe repair plumbing" instead of the
+// salon-biased "pipe repair salon beauty". Strips common noise words so the
+// result stays tight (Unsplash keyword search is sensitive to filler).
+function sharpenGenericQuery(name, industry) {
+  const cleanedName = String(name || '')
+    .replace(/\b(services?|solutions?|company|business|professional|corporate|industry|consulting|consultation)\b/gi, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+  const cleanedIndustry = String(industry || '')
+    .replace(/\b(services?|solutions?|company|business|professional|corporate|industry)\b/gi, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+  // If the industry is already inside the service name, don't double it up.
+  if (cleanedIndustry && cleanedName && !cleanedName.toLowerCase().includes(cleanedIndustry.toLowerCase())) {
+    return `${cleanedName} ${cleanedIndustry}`.trim();
+  }
+  return cleanedName || cleanedIndustry || 'business';
+}
+
 // Rough category for a salon service — used to pick a broader fallback query.
 function roughCategory(name) {
   const n = String(name || '').toLowerCase();
@@ -171,10 +191,20 @@ async function runPool(items, limit, worker) {
  */
 async function attachServiceImages(services) {
   const accessKey = env.unsplash?.accessKey;
-  if (!accessKey || !Array.isArray(services) || services.length === 0) return services || [];
+  if (!accessKey) {
+    logger.warn('[SERVICE-IMG] UNSPLASH_ACCESS_KEY not set — service images will be skipped');
+    return services || [];
+  }
+  if (!Array.isArray(services) || services.length === 0) return services || [];
 
-  const specific = services.map((s) => sharpenQuery(s.name));
-  logger.info(`[SERVICE-IMG] Pass 1: fetching ${specific.length} specific queries`);
+  // Decide mode per-call: if any service carries an `industry` marker it's a
+  // generic business site, otherwise treat as salon (original behaviour).
+  const isGeneric = services.some((s) => s && typeof s.industry === 'string' && s.industry.length > 0);
+
+  const specific = isGeneric
+    ? services.map((s) => sharpenGenericQuery(s.name, s.industry))
+    : services.map((s) => sharpenQuery(s.name));
+  logger.info(`[SERVICE-IMG] Pass 1 (${isGeneric ? 'generic' : 'salon'}): fetching ${specific.length} specific queries`);
   const firstPass = await runPool(specific, CONCURRENCY, (q) => fetchOne(q, accessKey));
   const hits1 = firstPass.filter(Boolean).length;
 
@@ -182,15 +212,16 @@ async function attachServiceImages(services) {
   const missingIdx = firstPass.map((v, i) => (v ? -1 : i)).filter((i) => i >= 0);
   let hits2 = 0;
   if (missingIdx.length > 0) {
-    // De-dupe category queries so multiple missing Hair services share one fetch.
-    const fallbackQueries = Array.from(
-      new Set(missingIdx.map((i) => CATEGORY_FALLBACK[roughCategory(services[i].name)] || 'salon beauty'))
-    );
+    const fallbackFor = (i) => isGeneric
+      ? (services[i].industry || 'business')
+      : (CATEGORY_FALLBACK[roughCategory(services[i].name)] || 'salon beauty');
+    // De-dupe so multiple missing services in the same category share one fetch.
+    const fallbackQueries = Array.from(new Set(missingIdx.map(fallbackFor)));
     logger.info(`[SERVICE-IMG] Pass 2: ${missingIdx.length} misses → ${fallbackQueries.length} fallback queries`);
     const fallbackResults = await runPool(fallbackQueries, CONCURRENCY, (q) => fetchOne(q, accessKey));
     const byQuery = Object.fromEntries(fallbackQueries.map((q, i) => [q, fallbackResults[i]]));
     for (const i of missingIdx) {
-      const q = CATEGORY_FALLBACK[roughCategory(services[i].name)] || 'salon beauty';
+      const q = fallbackFor(i);
       if (byQuery[q]) {
         firstPass[i] = byQuery[q];
         hits2++;

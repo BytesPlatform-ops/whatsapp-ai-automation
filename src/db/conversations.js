@@ -21,10 +21,13 @@ async function logMessage(userId, messageText, role, messageType = 'text', waMes
 
 async function getConversationHistory(userId, limit = 20) {
   return await withRetry(async () => {
+    // Order by seq (monotonic bigserial) so simultaneous same-millisecond
+    // inserts keep their true order. See migration 015.
     const { data, error } = await supabase
       .from('conversations')
       .select('message_text, role, created_at')
       .eq('user_id', userId)
+      .order('seq', { ascending: false })
       .order('created_at', { ascending: false })
       .limit(limit);
     throwIfNetworkError(error);
