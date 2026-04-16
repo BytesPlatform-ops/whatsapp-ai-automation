@@ -37,6 +37,15 @@ async function createPaymentLink({ userId, phoneNumber, amount, serviceType, pac
       },
     });
 
+    // Build the post-payment redirect. Stripe auto-substitutes
+    // {CHECKOUT_SESSION_ID} at redirect time, which the thank-you page uses
+    // as a support reference. svc/tier drive the personalized hero copy.
+    const redirectParams = new URLSearchParams();
+    redirectParams.set('session', '{CHECKOUT_SESSION_ID}');
+    if (serviceType) redirectParams.set('svc', String(serviceType).toLowerCase());
+    if (packageTier) redirectParams.set('tier', String(packageTier).toLowerCase());
+    const thankYouUrl = `https://pixiebot.co/thank-you?${decodeURIComponent(redirectParams.toString())}`;
+
     // Create a payment link
     const paymentLink = await s.paymentLinks.create({
       line_items: [{ price: price.id, quantity: 1 }],
@@ -48,7 +57,7 @@ async function createPaymentLink({ userId, phoneNumber, amount, serviceType, pac
       },
       after_completion: {
         type: 'redirect',
-        redirect: { url: 'https://bytesplatform.com/thank-you' },
+        redirect: { url: thankYouUrl },
       },
     });
 

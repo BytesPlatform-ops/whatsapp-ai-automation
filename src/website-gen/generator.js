@@ -97,6 +97,10 @@ async function generateWebsiteContent(businessData, extras = {}) {
     designations,
     specialty,
     calendlyUrl,
+    // User-provided listings (from the WhatsApp collection flow). When
+    // present, these override the LLM-generated featuredListings so the
+    // site shows real properties instead of hallucinated ones.
+    listings: userListings,
   } = businessData;
 
   const hasServices = Array.isArray(services) && services.length > 0;
@@ -330,6 +334,24 @@ Generate compelling website copy for this business. Return ONLY valid JSON.`;
   let neighborhoodImages = {};
   let agentPlaceholderImage = null;
   if (realEstateMode) {
+    // Prefer user-provided listings (from the WhatsApp collection flow) over
+    // LLM-hallucinated ones. If the user gave a photoUrl, attach it as
+    // `image` so attachRealEstateListingImages skips Unsplash for that row.
+    if (Array.isArray(userListings) && userListings.length > 0) {
+      generatedContent.featuredListings = userListings.map((l) => ({
+        address: l.address || 'Address on request',
+        price: Number(l.price) || 0,
+        beds: Number(l.beds) || 3,
+        baths: Number(l.baths) || 2,
+        sqft: Number(l.sqft) || 1800,
+        status: l.status || 'For Sale',
+        neighborhood: l.neighborhood || (Array.isArray(serviceAreas) && serviceAreas[0]) || '',
+        image: l.photoUrl
+          ? { url: l.photoUrl, photographer: '', photographerUrl: '', unsplashUrl: '' }
+          : undefined,
+      }));
+      logger.info(`[WEBGEN] Using ${userListings.length} user-provided listings (${userListings.filter((l) => l.photoUrl).length} with photos)`);
+    }
     const [listingRes, neighRes, agentRes] = await Promise.allSettled([
       Array.isArray(generatedContent.featuredListings) && generatedContent.featuredListings.length > 0
         ? attachRealEstateListingImages(generatedContent.featuredListings)

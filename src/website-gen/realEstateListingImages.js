@@ -88,12 +88,24 @@ async function runPool(items, limit, worker) {
 async function attachRealEstateListingImages(listings) {
   const accessKey = env.unsplash?.accessKey;
   if (!accessKey || !Array.isArray(listings) || !listings.length) return listings || [];
-  const queries = listings.map((l, i) => pickQuery(l, i));
-  logger.info(`[RE-IMG] Fetching ${queries.length} listing images`);
+  // Skip fetch for listings that already have a user-provided image.
+  const missingIdx = listings
+    .map((l, i) => (l && (l.image || l.photoUrl) ? -1 : i))
+    .filter((i) => i >= 0);
+  if (!missingIdx.length) {
+    logger.info(`[RE-IMG] All ${listings.length} listings have user photos — no Unsplash fetch`);
+    return listings;
+  }
+  const queries = missingIdx.map((i) => pickQuery(listings[i], i));
+  logger.info(`[RE-IMG] Fetching ${queries.length} listing images (${listings.length - queries.length} already have photos)`);
   const images = await runPool(queries, CONCURRENCY, (q) => fetchOne(q, accessKey));
   const hits = images.filter(Boolean).length;
   logger.info(`[RE-IMG] Got ${hits}/${queries.length} listing images`);
-  return listings.map((l, i) => (images[i] ? { ...l, image: images[i] } : l));
+  return listings.map((l, i) => {
+    const slot = missingIdx.indexOf(i);
+    if (slot >= 0 && images[slot]) return { ...l, image: images[slot] };
+    return l;
+  });
 }
 
 module.exports = { attachRealEstateListingImages, pickQuery };
