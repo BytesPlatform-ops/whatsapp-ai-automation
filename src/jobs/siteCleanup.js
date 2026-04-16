@@ -52,7 +52,13 @@ async function runSiteCleanup() {
           await supabase.from('generated_sites').update({ status: 'archived' }).eq('id', site.id);
           logger.info(`[CLEANUP] Deleted and archived site ${site.netlify_site_id} (${ageDays.toFixed(0)} days old)`);
         } catch (err) {
-          logger.error(`[CLEANUP] Failed to delete site ${site.netlify_site_id}:`, err.message);
+          // 404 = already gone on Netlify's side, archive anyway.
+          if (err.response?.status === 404) {
+            await supabase.from('generated_sites').update({ status: 'archived' }).eq('id', site.id);
+            logger.warn(`[CLEANUP] Site ${site.netlify_site_id} already gone from Netlify (404) — archived row ${site.id}`);
+          } else {
+            logger.error(`[CLEANUP] Failed to delete site ${site.netlify_site_id}:`, err.message);
+          }
         }
         continue;
       }
@@ -65,7 +71,16 @@ async function runSiteCleanup() {
           await supabase.from('generated_sites').update({ status: 'watermarked' }).eq('id', site.id);
           logger.info(`[CLEANUP] Watermarked site ${site.netlify_site_id} (${ageHours.toFixed(0)}h old)`);
         } catch (err) {
-          logger.error(`[CLEANUP] Failed to watermark site ${site.netlify_site_id}:`, err.message);
+          // If Netlify says the site doesn't exist anymore (manual delete, bad
+          // seed data like "fake-site-id", or never deployed in the first
+          // place) mark the row archived so we stop hitting the 404 loop on
+          // every 15-minute cleanup pass.
+          if (err.response?.status === 404) {
+            await supabase.from('generated_sites').update({ status: 'archived' }).eq('id', site.id);
+            logger.warn(`[CLEANUP] Site ${site.netlify_site_id} is gone from Netlify (404) — archived row ${site.id}`);
+          } else {
+            logger.error(`[CLEANUP] Failed to watermark site ${site.netlify_site_id}:`, err.message);
+          }
         }
       }
     }
