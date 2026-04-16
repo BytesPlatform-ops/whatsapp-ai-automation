@@ -1169,6 +1169,35 @@ async function handleConfirm(user, message) {
   return STATES.WEB_CONFIRM;
 }
 
+// Returns the user-facing page list for the template we just generated, so
+// the "your site is ready" message matches reality instead of guessing
+// "3-page site". Thank-you / thank-you-cma pages are excluded — they're
+// utility pages not in the nav.
+function describePages(industry, websiteData, templateId) {
+  const { isHvac, isRealEstate } = require('../../website-gen/templates');
+  const hasServices = Array.isArray(websiteData?.services) && websiteData.services.length > 0;
+  if (isHvac(industry)) return ['Home', 'Services', 'Areas', 'About', 'Contact'];
+  if (isRealEstate(industry)) return ['Home', 'Listings', 'Neighborhoods', 'About', 'Contact'];
+  if (templateId === 'salon') {
+    const pages = ['Home', 'Booking'];
+    if (hasServices) pages.push('Services');
+    pages.push('About', 'Contact');
+    return pages;
+  }
+  // Generic business-starter
+  const pages = ['Home'];
+  if (hasServices) pages.push('Services');
+  pages.push('About', 'Contact');
+  return pages;
+}
+
+function joinWithAnd(items) {
+  if (!items || items.length === 0) return '';
+  if (items.length === 1) return items[0];
+  if (items.length === 2) return `${items[0]} and ${items[1]}`;
+  return `${items.slice(0, -1).join(', ')}, and ${items[items.length - 1]}`;
+}
+
 async function generateWebsite(user) {
   // Set state to GENERATING immediately to prevent duplicate builds
   const { updateUserState } = require('../../db/users');
@@ -1237,9 +1266,11 @@ async function generateWebsite(user) {
 
     // 4. Send preview link
     logger.info(`[WEBGEN] Step 5/5: Sending preview URL to user`);
+    const pages = describePages(websiteData.industry, websiteData, templateId);
+    const pageSummary = `${pages.length}-page site with ${joinWithAnd(pages)} pages`;
     await sendTextMessage(
       user.phone_number,
-      `Your website is ready! Here's the preview:\n\n${previewUrl}\n\nHave a look - it's a ${(siteConfig.services||[]).length>0?'4-page site with Home, Services, About, and Contact pages':'3-page site with Home, About, and Contact pages'}.`
+      `Your website is ready! Here's the preview:\n\n${previewUrl}\n\nHave a look - it's a ${pageSummary}.`
     );
 
     await logMessage(user.id, `Website deployed: ${previewUrl}`, 'assistant');
