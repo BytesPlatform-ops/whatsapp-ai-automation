@@ -705,6 +705,141 @@ async function getDomainRequests() {
   });
 }
 
+/**
+ * Attribute leads + revenue to the ad creatives that brought them in.
+ *
+ * Groups users who have metadata.adSource set by (adSource, sourceId,
+ * headline) — where sourceId is Meta's per-creative identifier — and joins
+ * against the payments table to compute closes and revenue per bucket.
+ *
+ * opts.days: optional look-back window (default: all-time). Only leads whose
+ * first message was inside the window count toward that row.
+ *
+ * Returns: {
+ *   byCreative: [
+ *     { adSource, sourceId, headline, platform, leads, closes, closeRatePct,
+ *       revenueCents, avgRevenueCents, firstSeenAt, lastSeenAt },
+ *     ...
+ *   ],
+ *   byChannel: { [channel]: { leads, closes, revenueCents } },
+ *   bySource: { [adSource]: { leads, closes, revenueCents } },
+ *   totals: { leads, closes, closeRatePct, revenueCents, creatives }
+ * }
+ */
+async function getAdAttribution(opts = {}) {
+  const { days } = opts;
+  const sinceIso = Number.isFinite(days) && days > 0
+    ? new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString()
+    : null;
+
+  // Pull every user that arrived via an ad. sinceIso (when set) restricts to
+  // leads whose account was created inside the window — close enough to "ad
+  // clicks in the last N days" since the user row is created on first DM.
+  let usersQuery = supabase
+    .from('users')
+    .select('id, channel, created_at, metadata')
+    .not('metadata->>adSource', 'is', null);
+  if (sinceIso) usersQuery = usersQuery.gte('created_at', sinceIso);
+
+  const { data: users, error: userErr } = await usersQuery;
+  if (userErr) throw userErr;
+
+  const adUsers = (users || []).filter((u) => (u.metadata?.adSource || '').length > 0);
+  if (adUsers.length === 0) {
+    return {
+      byCreative: [],
+      byChannel: {},
+      bySource: {},
+      totals: { leads: 0, closes: 0, closeRatePct: '0', revenueCents: 0, creatives: 0 },
+      windowDays: days || null,
+    };
+  }
+
+  // Pull paid payments for just the ad-attributed users. A single user can
+  // have multiple payments (split, upsell, etc.) — sum them all.
+  const userIds = adUsers.map((u) => u.id);
+  const { data: payments } = await supabase
+    .from('payments')
+    .select('user_id, amount, status, paid_at')
+    .in('user_id', userIds)
+    .eq('status', 'paid');
+
+  const revenueByUser = {};
+  (payments || []).forEach((p) => {
+    revenueByUser[p.user_id] = (revenueByUser[p.user_id] || 0) + (p.amount || 0);
+  });
+
+  // Bucket by (adSource + sourceId + headline). sourceId differentiates two
+  // creatives that share the same headline; headline is kept so the table is
+  // human-readable even when Meta doesn't surface the sourceId.
+  const creativeMap = {};
+  const channelMap = {};
+  const sourceMap = {};
+  let totalRevenue = 0;
+  let totalCloses = 0;
+
+  adUsers.forEach((u) => {
+    const meta = u.metadata || {};
+    const adSource = meta.adSource || 'unknown';
+    const ref = meta.adReferral || {};
+    const sourceId = ref.sourceId || '';
+    const headline = (ref.headline || '').slice(0, 120);
+    const platform = ref.platform || u.channel || 'unknown';
+    const key = `${adSource}|${sourceId}|${headline}`;
+
+    if (!creativeMap[key]) {
+      creativeMap[key] = {
+        adSource,
+        sourceId,
+        headline,
+        platform,
+        adBody: (ref.body || '').slice(0, 180),
+        leads: 0,
+        closes: 0,
+        revenueCents: 0,
+        firstSeenAt: u.created_at,
+        lastSeenAt: u.created_at,
+      };
+    }
+    const bucket = creativeMap[key];
+    bucket.leads += 1;
+    if (u.created_at < bucket.firstSeenAt) bucket.firstSeenAt = u.created_at;
+    if (u.created_at > bucket.lastSeenAt) bucket.lastSeenAt = u.created_at;
+
+    const rev = revenueByUser[u.id] || 0;
+    if (rev > 0) {
+      bucket.closes += 1;
+      bucket.revenueCents += rev;
+      totalCloses += 1;
+      totalRevenue += rev;
+    }
+
+    if (!channelMap[platform]) channelMap[platform] = { leads: 0, closes: 0, revenueCents: 0 };
+    channelMap[platform].leads += 1;
+    if (rev > 0) { channelMap[platform].closes += 1; channelMap[platform].revenueCents += rev; }
+
+    if (!sourceMap[adSource]) sourceMap[adSource] = { leads: 0, closes: 0, revenueCents: 0 };
+    sourceMap[adSource].leads += 1;
+    if (rev > 0) { sourceMap[adSource].closes += 1; sourceMap[adSource].revenueCents += rev; }
+  });
+
+  const byCreative = Object.values(creativeMap).map((c) => ({
+    ...c,
+    closeRatePct: c.leads > 0 ? ((c.closes / c.leads) * 100).toFixed(1) : '0',
+    avgRevenueCents: c.closes > 0 ? Math.round(c.revenueCents / c.closes) : 0,
+  })).sort((a, b) => b.revenueCents - a.revenueCents || b.closes - a.closes || b.leads - a.leads);
+
+  const totals = {
+    leads: adUsers.length,
+    closes: totalCloses,
+    closeRatePct: adUsers.length > 0 ? ((totalCloses / adUsers.length) * 100).toFixed(1) : '0',
+    revenueCents: totalRevenue,
+    creatives: byCreative.length,
+  };
+
+  return { byCreative, byChannel: channelMap, bySource: sourceMap, totals, windowDays: days || null };
+}
+
 async function getLeadSummaries() {
   const { data, error } = await supabase
     .from('lead_summaries')
@@ -731,4 +866,5 @@ module.exports = {
   generateLeadSummary,
   getLeadSummaries,
   getDomainRequests,
+  getAdAttribution,
 };

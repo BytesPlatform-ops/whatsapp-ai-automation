@@ -128,27 +128,29 @@ async function findUserByInvitee(invitee) {
 
 const MEETING_SUMMARY_PROMPT = `You are a sales assistant preparing a briefing for the project specialist who will take the meeting. Read the full WhatsApp conversation below and produce a structured summary.
 
-Return this EXACT format (fill in each field, use "N/A" if unknown):
+Return this EXACT format — plain text only, no markdown, no asterisks, no bolding, one field per line. Use "N/A" if unknown.
 
-**Lead Name:** [name]
-**Business Name:** [name]
-**Industry:** [industry]
-**Service Needed:** [website / ecommerce / SEO / SMM / other]
-**Current Website:** [URL or N/A]
-**Pain Point / Goal:** [what they want to achieve or fix]
-**Budget:** [stated budget or range]
-**Timeline:** [when they need it]
-**Package Discussed:** [which tier/price was discussed]
-**Payment Plan:** [yes/no, details if yes]
-**Personality Mode:** [Cool / Professional / Unsure / Negotiator]
-**Language:** [language used in the chat]
-**Objections Raised:** [list any objections or "none"]
+Lead Name: [name]
+Business Name: [name]
+Industry: [industry]
+Service Needed: [website / ecommerce / SEO / SMM / other]
+Current Website: [URL or N/A]
+Pain Point / Goal: [what they want to achieve or fix]
+Budget: [stated budget or range]
+Timeline: [when they need it]
+Package Discussed: [which tier/price was discussed]
+Payment Plan: [yes/no, details if yes]
+Personality Mode: [Cool / Professional / Unsure / Negotiator]
+Language: [language used in the chat]
+Objections Raised: [list any objections or "none"]
 
-**Conversation Summary:**
+Conversation Summary:
 [2-4 sentence summary of how the conversation went - what was discussed, what the client responded well to, any concerns, and where things left off. Include anything the salesperson should know going into the call.]
 
-**Recommended Approach for Call:**
-[1-2 sentences on how to approach this client based on their personality and conversation history]`;
+Recommended Approach for Call:
+[1-2 sentences on how to approach this client based on their personality and conversation history]
+
+Do not wrap any field name or value in asterisks, underscores, or any other markdown. The output will be rendered as plain text.`;
 
 /**
  * Generate a chat summary for the salesperson from the full conversation history.
@@ -258,6 +260,16 @@ router.post('/calendly/webhook', async (req, res) => {
         preferredTime = dt.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
       }
 
+      // Calendly surfaces the join URL under scheduled_event.location.join_url
+      // for virtual conferences (Google Meet, Zoom, MS Teams). For physical or
+      // phone meetings the field will be null/absent — we store that as null
+      // and the dashboard hides the "send link" button accordingly.
+      const loc = eventDetails.location || payload?.scheduled_event?.location || {};
+      const joinUrl = loc.join_url || loc.location || null;
+      const inviteeEmail = invitee.email || null;
+      const rescheduleUrl = invitee.reschedule_url || payload?.reschedule_url || null;
+      const cancelUrl = invitee.cancel_url || payload?.cancel_url || null;
+
       const meetingFields = {
         status: 'confirmed',
         name: name !== 'there' ? name : null,
@@ -266,6 +278,10 @@ router.post('/calendly/webhook', async (req, res) => {
         preferred_time: preferredTime,
         topic: eventDetails.name || payload?.scheduled_event?.name || 'Calendly booking',
         notes: `Booked via Calendly by ${invitee.email || 'unknown'}`,
+        join_url: joinUrl,
+        invitee_email: inviteeEmail,
+        reschedule_url: rescheduleUrl,
+        cancel_url: cancelUrl,
       };
 
       if (existing) {

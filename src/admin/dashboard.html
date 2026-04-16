@@ -71,6 +71,10 @@
           <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"/></svg>
           Payments
         </a>
+        <a href="#" class="sidebar-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm" data-section="adattribution">
+          <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 19V6l12-3v13M9 19c0 1.657-1.343 3-3 3s-3-1.343-3-3 1.343-3 3-3 3 1.343 3 3zm12-3c0 1.657-1.343 3-3 3s-3-1.343-3-3 1.343-3 3-3 3 1.343 3 3zM9 10l12-3"/></svg>
+          Ad Attribution
+        </a>
         <div class="pt-3 mt-3 border-t border-gray-800">
           <p class="px-3 text-xs text-gray-600 uppercase tracking-wider mb-2">Services</p>
         </div>
@@ -137,6 +141,7 @@
 // State
 var currentSection = (window.location.hash || '#overview').slice(1) || 'overview';
 var leadsData = [];
+var adAttrWindow = 30; // days; 0 = all-time
 
 // API helpers
 function api(endpoint) {
@@ -250,6 +255,9 @@ function loadSection(section) {
     case 'meetings': promise = api('meetings').then(renderMeetings); break;
     case 'revenue': promise = Promise.all([api('revenue'), api('payments')]).then(function(r) { renderRevenue(r[0], r[1]); }); break;
     case 'payments': promise = api('payments').then(renderPayments); break;
+    case 'adattribution':
+      promise = api('ad-attribution?days=' + (adAttrWindow || 0)).then(function(d) { renderAdAttribution(d); });
+      break;
     case 'leadsummaries': promise = api('lead-summaries').then(renderLeadSummaries); break;
     case 'domains': promise = api('domains').then(renderDomains); break;
   }
@@ -1212,7 +1220,8 @@ function renderSites(sites) {
     var statusColor = s.status === 'approved' ? 'bg-green-100 text-green-700' : s.status === 'preview' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600';
     return '<tr class="border-b hover:bg-gray-50">' +
       '<td class="p-3 text-sm">' + esc(s.business_name || '-') + '</td>' +
-      '<td class="p-3 text-sm font-mono text-xs">' + esc(s.user_phone) + '</td>' +
+      '<td class="p-3 text-sm font-medium">' + esc(s.user_name || '-') + '</td>' +
+      '<td class="p-3 text-xs text-gray-500 font-mono">' + esc(s.user_phone) + '</td>' +
       '<td class="p-3"><span class="badge ' + statusColor + '">' + s.status + '</span></td>' +
       '<td class="p-3">' + (s.preview_url ? '<a href="' + esc(s.preview_url) + '" target="_blank" class="text-indigo-600 hover:underline text-xs">Open</a>' : '-') + '</td>' +
       '<td class="p-3 text-xs text-gray-500">' + fmtDate(s.created_at) + '</td>' +
@@ -1222,8 +1231,8 @@ function renderSites(sites) {
   document.getElementById('content').innerHTML = '<div class="fade-in">' +
     '<h2 class="text-2xl font-bold mb-6">Generated Websites (' + sites.length + ')</h2>' +
     '<div class="bg-white rounded-xl border overflow-hidden"><table class="w-full text-sm">' +
-      '<thead class="bg-gray-50 border-b"><tr><th class="text-left p-3 font-semibold">Business</th><th class="text-left p-3 font-semibold">User</th><th class="text-left p-3 font-semibold">Status</th><th class="text-left p-3 font-semibold">Preview</th><th class="text-left p-3 font-semibold">Created</th></tr></thead>' +
-      '<tbody>' + (rows || '<tr><td colspan="5" class="p-8 text-center text-gray-400">No sites yet</td></tr>') + '</tbody>' +
+      '<thead class="bg-gray-50 border-b"><tr><th class="text-left p-3 font-semibold">Business</th><th class="text-left p-3 font-semibold">Name</th><th class="text-left p-3 font-semibold">Phone</th><th class="text-left p-3 font-semibold">Status</th><th class="text-left p-3 font-semibold">Preview</th><th class="text-left p-3 font-semibold">Created</th></tr></thead>' +
+      '<tbody>' + (rows || '<tr><td colspan="6" class="p-8 text-center text-gray-400">No sites yet</td></tr>') + '</tbody>' +
     '</table></div>' +
   '</div>';
 }
@@ -1454,7 +1463,9 @@ function openMeeting(meetingId) {
     document.body.appendChild(modal);
   }
   var card = document.getElementById('meeting-modal-card');
-  var summary = m.chat_summary ? esc(m.chat_summary).replace(/\n/g, '<br>') : '<span class="text-gray-400">No chat summary available</span>';
+  // parseBrief() handles both the new plain-text format AND legacy summaries
+  // that still have **markdown** wrappers (it strips them before parsing).
+  var summary = m.chat_summary ? parseBrief(m.chat_summary) : '<span class="text-gray-400">No chat summary available</span>';
   card.innerHTML =
     '<div class="sticky top-0 bg-white border-b p-5 flex items-start justify-between gap-4">' +
       '<div>' +
@@ -1477,12 +1488,46 @@ function openMeeting(meetingId) {
       (m.notes ? '<div><p class="text-xs text-gray-500 uppercase tracking-wide mb-1">Notes</p><p class="text-sm text-gray-700">' + esc(m.notes) + '</p></div>' : '') +
       '<div>' +
         '<p class="text-xs text-gray-500 uppercase tracking-wide mb-2">Chat summary for the salesperson</p>' +
-        '<div class="text-sm text-gray-800 whitespace-pre-wrap bg-gray-50 rounded-lg p-4 border">' + summary + '</div>' +
+        '<div class="text-sm text-gray-800 bg-gray-50 rounded-lg p-4 border">' + summary + '</div>' +
       '</div>' +
+      (m.join_url && m.invitee_email
+        ? '<button onclick="openAndEmailMeetingLink(\'' + esc(m.id) + '\')" class="w-full mt-2 px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 flex items-center justify-center gap-2">' +
+          '<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>' +
+          'Open meeting & email link to ' + esc(m.invitee_email) +
+        '</button>'
+        : m.join_url
+          ? '<button onclick="window.open(\'' + esc(m.join_url) + '\', \'_blank\')" class="w-full mt-2 px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700">Open meeting →</button>' +
+            '<p class="text-xs text-gray-400 mt-2 text-center">No email on file — can only open the link.</p>'
+          : '<p class="text-xs text-gray-400 mt-2 text-center italic">No join link captured (in-person or phone meeting).</p>') +
       (m.user_id ? '<button onclick="closeMeetingModal(); openConversation(\'' + m.user_id + '\', \'' + esc(m.phone_number) + '\', \'' + esc(m.name || '') + '\')" class="w-full mt-2 px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700">Open full conversation →</button>' : '') +
     '</div>';
   modal.classList.remove('hidden');
   modal.classList.add('flex');
+}
+
+// Dashboard button handler: open the Calendly/Meet join URL in a new tab
+// AND email the same link to the lead (re-send for reminder value). One
+// click, two outcomes — the admin is never left wondering whether the email
+// went out. Uses alerts for feedback to match the rest of the dashboard.
+function openAndEmailMeetingLink(meetingId) {
+  var meeting = (meetingsData || []).find(function(m) { return m.id === meetingId; });
+  if (!meeting) { alert('Meeting not found — try refreshing.'); return; }
+  // Open the meeting immediately so browsers don't block the popup (user
+  // initiated click). The email fires in parallel.
+  if (meeting.join_url) window.open(meeting.join_url, '_blank', 'noopener');
+  fetch('/admin/api/meetings/' + encodeURIComponent(meetingId) + '/send-link', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+  })
+    .then(function(res) { return res.json().then(function(body) { return { ok: res.ok, body: body }; }); })
+    .then(function(r) {
+      if (r.ok) {
+        alert('Meeting link emailed to ' + (r.body.sentTo || meeting.invitee_email) + '.');
+      } else {
+        alert('Email failed: ' + ((r.body && r.body.error) || 'Unknown error'));
+      }
+    })
+    .catch(function(err) { alert('Email request failed: ' + err.message); });
 }
 
 function closeMeetingModal() {
@@ -1687,6 +1732,111 @@ function renderPayments(payments) {
       '<tbody>' + (rows || '<tr><td colspan="9" class="p-8 text-center text-gray-400">No payments yet</td></tr>') + '</tbody>' +
     '</table></div></div>' +
   '</div>';
+}
+
+// ─── Ad Attribution ───────────────────────────
+// Change the lookback window and reload. adAttrWindow is global (top of file).
+// 0 means all-time; numeric values are days.
+function setAdAttrWindow(days) {
+  adAttrWindow = days;
+  loadSection('adattribution');
+}
+
+function renderAdAttribution(data) {
+  var totals = data.totals || {};
+  var byCreative = data.byCreative || [];
+  var byChannel = data.byChannel || {};
+  var bySource = data.bySource || {};
+
+  function windowTab(days, label) {
+    var active = adAttrWindow === days;
+    return '<button onclick="setAdAttrWindow(' + days + ')" class="px-3 py-1.5 text-xs font-medium rounded-lg transition ' +
+      (active ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200') + '">' + label + '</button>';
+  }
+
+  var topBar =
+    '<div class="flex items-center justify-between mb-6">' +
+      '<div>' +
+        '<h2 class="text-2xl font-bold">Ad Attribution</h2>' +
+        '<p class="text-sm text-gray-500 mt-1">Which ad creatives bring leads that actually close. Lower cost-per-close = cheaper customer acquisition.</p>' +
+      '</div>' +
+      '<div class="flex gap-2">' + windowTab(7, '7 days') + windowTab(30, '30 days') + windowTab(90, '90 days') + windowTab(0, 'All time') +
+      '<button onclick="loadSection(\'adattribution\')" class="text-sm text-indigo-600 hover:text-indigo-800 ml-3">Refresh</button></div>' +
+    '</div>';
+
+  var summaryCards =
+    '<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">' +
+      '<div class="bg-white rounded-xl border p-5"><p class="text-xs text-gray-500 mb-1">Ad Leads</p><p class="text-2xl font-bold">' + (totals.leads || 0) + '</p><p class="text-xs text-gray-400 mt-2">Across ' + (totals.creatives || 0) + ' creatives</p></div>' +
+      '<div class="bg-white rounded-xl border p-5"><p class="text-xs text-gray-500 mb-1">Closes</p><p class="text-2xl font-bold text-green-600">' + (totals.closes || 0) + '</p><p class="text-xs text-gray-400 mt-2">Close rate: ' + (totals.closeRatePct || '0') + '%</p></div>' +
+      '<div class="bg-white rounded-xl border p-5"><p class="text-xs text-gray-500 mb-1">Revenue</p><p class="text-2xl font-bold text-green-600">' + fmtMoney(totals.revenueCents || 0) + '</p><p class="text-xs text-gray-400 mt-2">Attributed to ad leads</p></div>' +
+      '<div class="bg-white rounded-xl border p-5"><p class="text-xs text-gray-500 mb-1">Avg Revenue / Close</p><p class="text-2xl font-bold">' + fmtMoney((totals.closes > 0 ? (totals.revenueCents / totals.closes) : 0)) + '</p><p class="text-xs text-gray-400 mt-2">Per closed ad lead</p></div>' +
+    '</div>';
+
+  // Roll-up cards: by source (web/seo/smm/...) and by channel (WA/Messenger/IG)
+  function rollupCard(title, map) {
+    var keys = Object.keys(map).sort(function(a, b) { return map[b].revenueCents - map[a].revenueCents; });
+    if (keys.length === 0) {
+      return '<div class="bg-white rounded-xl border p-5"><h3 class="font-semibold mb-3">' + esc(title) + '</h3><p class="text-sm text-gray-400">No data</p></div>';
+    }
+    var rows = keys.map(function(k) {
+      var v = map[k];
+      var rate = v.leads > 0 ? ((v.closes / v.leads) * 100).toFixed(1) : '0';
+      return '<div class="flex items-center justify-between py-2 border-b last:border-0">' +
+        '<div class="flex-1"><span class="badge bg-indigo-100 text-indigo-700 mr-2">' + esc(k) + '</span><span class="text-xs text-gray-500">' + v.leads + ' leads · ' + v.closes + ' closes · ' + rate + '%</span></div>' +
+        '<span class="font-semibold text-sm">' + fmtMoney(v.revenueCents) + '</span>' +
+      '</div>';
+    }).join('');
+    return '<div class="bg-white rounded-xl border p-5"><h3 class="font-semibold mb-3">' + esc(title) + '</h3>' + rows + '</div>';
+  }
+
+  var rollups =
+    '<div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">' +
+      rollupCard('By Ad Source', bySource) +
+      rollupCard('By Channel', byChannel) +
+    '</div>';
+
+  // Main creative-level table sorted by revenue DESC.
+  var rows = byCreative.map(function(c) {
+    var rate = parseFloat(c.closeRatePct || '0');
+    var rateColor = rate >= 10 ? 'text-green-600' : rate >= 3 ? 'text-yellow-600' : 'text-gray-500';
+    var headlineText = c.headline ? esc(c.headline) : '<span class="text-gray-400 italic">(no headline captured)</span>';
+    var sourceIdText = c.sourceId ? '<div class="text-[10px] text-gray-400 font-mono mt-1 truncate max-w-[220px]" title="' + esc(c.sourceId) + '">' + esc(c.sourceId) + '</div>' : '';
+    return '<tr class="border-b hover:bg-gray-50">' +
+      '<td class="p-3 text-xs"><span class="badge bg-indigo-100 text-indigo-700">' + esc(c.adSource) + '</span></td>' +
+      '<td class="p-3 text-xs"><span class="badge bg-gray-100 text-gray-700">' + esc(c.platform) + '</span></td>' +
+      '<td class="p-3 text-sm max-w-md"><div class="font-medium truncate" title="' + esc(c.headline || '') + '">' + headlineText + '</div>' + sourceIdText + '</td>' +
+      '<td class="p-3 text-sm font-semibold text-center">' + c.leads + '</td>' +
+      '<td class="p-3 text-sm font-semibold text-center text-green-600">' + c.closes + '</td>' +
+      '<td class="p-3 text-sm font-semibold text-center ' + rateColor + '">' + c.closeRatePct + '%</td>' +
+      '<td class="p-3 text-sm font-bold text-right text-green-700">' + fmtMoney(c.revenueCents) + '</td>' +
+      '<td class="p-3 text-xs text-gray-500 text-right">' + fmtMoney(c.avgRevenueCents) + '</td>' +
+      '<td class="p-3 text-xs text-gray-400">' + fmtDate(c.lastSeenAt) + '</td>' +
+    '</tr>';
+  }).join('');
+
+  var table =
+    '<div class="bg-white rounded-xl border overflow-hidden">' +
+      '<div class="px-5 py-3 border-b bg-gray-50 flex items-center justify-between">' +
+        '<h3 class="font-semibold">Creative Performance</h3>' +
+        '<p class="text-xs text-gray-500">Sorted by revenue. Kill the bottom; scale the top.</p>' +
+      '</div>' +
+      '<div class="overflow-x-auto"><table class="w-full text-sm">' +
+        '<thead class="bg-gray-50 border-b"><tr>' +
+          '<th class="text-left p-3 font-semibold text-xs uppercase tracking-wide text-gray-600">Source</th>' +
+          '<th class="text-left p-3 font-semibold text-xs uppercase tracking-wide text-gray-600">Channel</th>' +
+          '<th class="text-left p-3 font-semibold text-xs uppercase tracking-wide text-gray-600">Headline</th>' +
+          '<th class="text-center p-3 font-semibold text-xs uppercase tracking-wide text-gray-600">Leads</th>' +
+          '<th class="text-center p-3 font-semibold text-xs uppercase tracking-wide text-gray-600">Closes</th>' +
+          '<th class="text-center p-3 font-semibold text-xs uppercase tracking-wide text-gray-600">Close %</th>' +
+          '<th class="text-right p-3 font-semibold text-xs uppercase tracking-wide text-gray-600">Revenue</th>' +
+          '<th class="text-right p-3 font-semibold text-xs uppercase tracking-wide text-gray-600">Avg $/Close</th>' +
+          '<th class="text-left p-3 font-semibold text-xs uppercase tracking-wide text-gray-600">Last Seen</th>' +
+        '</tr></thead>' +
+        '<tbody>' + (rows || '<tr><td colspan="9" class="p-8 text-center text-gray-400">No ad-attributed leads in this window. Check back after your next Meta Ads campaign runs.</td></tr>') + '</tbody>' +
+      '</table></div>' +
+    '</div>';
+
+  document.getElementById('content').innerHTML = '<div class="fade-in">' + topBar + summaryCards + rollups + table + '</div>';
 }
 
 // ─── Sales Prep ───────────────────────────────

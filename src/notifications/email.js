@@ -140,9 +140,62 @@ async function sendUpsellEmail({ toEmail, userName, type }) {
   });
 }
 
+/**
+ * Send (or re-send) the meeting join link to a booked lead.
+ * Triggered from the admin dashboard. Includes the join URL as a clickable
+ * button + plain-text fallback, with reschedule/cancel links when present.
+ */
+async function sendMeetingLinkToLead({ toEmail, leadName, joinUrl, topic, dateStr, timeStr, rescheduleUrl, cancelUrl }) {
+  if (!toEmail) {
+    logger.warn('[EMAIL] sendMeetingLinkToLead: no recipient email');
+    return false;
+  }
+  if (!joinUrl) {
+    logger.warn('[EMAIL] sendMeetingLinkToLead: no join URL');
+    return false;
+  }
+
+  const safeName = leadName || 'there';
+  const whenLine = (dateStr || timeStr)
+    ? `<p style="font-size:15px;color:#374151;margin:0 0 20px">${[dateStr, timeStr].filter(Boolean).join(' &middot; ')}</p>`
+    : '';
+  const topicLine = topic ? `<p style="font-size:14px;color:#6b7280;margin:0 0 28px">${topic}</p>` : '';
+  const rescheduleLine = (rescheduleUrl || cancelUrl)
+    ? `<p style="font-size:13px;color:#6b7280;margin:28px 0 0">Need to change it? ${rescheduleUrl ? `<a href="${rescheduleUrl}" style="color:#4f46e5">Reschedule</a>` : ''}${rescheduleUrl && cancelUrl ? ' or ' : ''}${cancelUrl ? `<a href="${cancelUrl}" style="color:#4f46e5">Cancel</a>` : ''}.</p>`
+    : '';
+
+  const html = `
+    <div style="font-family:-apple-system,BlinkMacSystemFont,sans-serif;max-width:560px;margin:0 auto;padding:32px 24px;color:#111827">
+      <h2 style="font-size:20px;font-weight:700;margin:0 0 12px">Your meeting link, ${safeName}</h2>
+      ${whenLine}
+      ${topicLine}
+      <a href="${joinUrl}" style="display:inline-block;padding:12px 24px;background:#4f46e5;color:#fff;text-decoration:none;font-weight:600;border-radius:8px;font-size:15px">Join the meeting</a>
+      <p style="font-size:13px;color:#6b7280;margin:20px 0 0;word-break:break-all">Or paste this into your browser: <a href="${joinUrl}" style="color:#4f46e5">${joinUrl}</a></p>
+      ${rescheduleLine}
+      <hr style="border:none;border-top:1px solid #e5e7eb;margin:32px 0">
+      <p style="font-size:12px;color:#9ca3af;margin:0">Bytes Platform &middot; See you on the call.</p>
+    </div>
+  `;
+
+  const text = `Your meeting link, ${safeName}\n\n` +
+    (dateStr || timeStr ? `${[dateStr, timeStr].filter(Boolean).join(' · ')}\n` : '') +
+    (topic ? `${topic}\n\n` : '\n') +
+    `Join: ${joinUrl}\n` +
+    (rescheduleUrl ? `Reschedule: ${rescheduleUrl}\n` : '') +
+    (cancelUrl ? `Cancel: ${cancelUrl}\n` : '');
+
+  return sendEmail({
+    to: toEmail,
+    subject: `Your meeting link${topic ? ` — ${topic}` : ''}`,
+    html,
+    text,
+  });
+}
+
 module.exports = {
   sendEmail,
   sendPaymentNotification,
   sendDomainRequestNotification,
   sendUpsellEmail,
+  sendMeetingLinkToLead,
 };

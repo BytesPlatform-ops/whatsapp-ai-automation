@@ -258,6 +258,50 @@ router.get('/api/meetings', async (req, res) => {
   }
 });
 
+// Send (or re-send) the Google Meet / Zoom join link to the lead's email.
+// Reads the meeting row directly so the admin only has to click one button —
+// no payload required beyond the meeting id.
+router.post('/api/meetings/:id/send-link', async (req, res) => {
+  try {
+    const { supabase } = require('../config/database');
+    const { sendMeetingLinkToLead } = require('../notifications/email');
+
+    const { data: meeting, error } = await supabase
+      .from('meetings')
+      .select('id, name, phone_number, preferred_date, preferred_time, topic, join_url, invitee_email, reschedule_url, cancel_url')
+      .eq('id', req.params.id)
+      .maybeSingle();
+    if (error) throw error;
+    if (!meeting) return res.status(404).json({ error: 'Meeting not found' });
+
+    if (!meeting.join_url) {
+      return res.status(400).json({ error: 'This meeting has no join link on file (likely an in-person or phone meeting).' });
+    }
+    if (!meeting.invitee_email) {
+      return res.status(400).json({ error: 'No email on file for this lead — Calendly did not capture one.' });
+    }
+
+    const sent = await sendMeetingLinkToLead({
+      toEmail: meeting.invitee_email,
+      leadName: meeting.name,
+      joinUrl: meeting.join_url,
+      topic: meeting.topic,
+      dateStr: meeting.preferred_date,
+      timeStr: meeting.preferred_time,
+      rescheduleUrl: meeting.reschedule_url,
+      cancelUrl: meeting.cancel_url,
+    });
+
+    if (!sent) {
+      return res.status(502).json({ error: 'Email provider failed — check SendGrid config and logs.' });
+    }
+    res.json({ ok: true, sentTo: meeting.invitee_email });
+  } catch (err) {
+    logger.error('[ADMIN] Send meeting link error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.get('/api/message-volume', async (req, res) => {
   try {
     const data = await queries.getMessageVolume();
@@ -285,6 +329,18 @@ router.get('/api/revenue', async (req, res) => {
     res.json(data);
   } catch (err) {
     logger.error('[ADMIN] Revenue error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/api/ad-attribution', async (req, res) => {
+  try {
+    const daysRaw = parseInt(req.query.days, 10);
+    const days = Number.isFinite(daysRaw) && daysRaw > 0 ? Math.min(daysRaw, 365) : null;
+    const data = await queries.getAdAttribution({ days });
+    res.json(data);
+  } catch (err) {
+    logger.error('[ADMIN] Ad attribution error:', err.message);
     res.status(500).json({ error: err.message });
   }
 });
