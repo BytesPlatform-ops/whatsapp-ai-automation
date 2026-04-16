@@ -160,11 +160,23 @@ const REVISION_PARSER_PROMPT = `You are a website configuration assistant. The u
 
 First, classify the message intent:
 1. APPROVAL  - The user is happy/satisfied and wants to keep the site as-is (e.g. "looks good", "it's fine", "perfect", "I love it", "that works", "great", "yes", "ok", "no changes needed", "ship it")
-2. REVISION  - The user wants specific changes to the website
-3. UNCLEAR  - You can't determine what the user wants
+2. IMAGE_SWAP - The user wants to replace the hero/banner/background image with a different photo. Triggers include: "hero image", "banner", "background image", "main image", "header image", "the photo at the top", "that picture", "change the image", "different image". Only classify as IMAGE_SWAP when the request is about the HERO/top image specifically — requests to change a service image or logo are REVISION, not IMAGE_SWAP.
+3. REVISION  - The user wants specific changes to the website (text, colors, sections, layout — anything except swapping the hero photo).
+4. UNCLEAR  - You can't determine what the user wants
 
 For APPROVAL, return: {"_approved": true}
 For UNCLEAR, return: {"_unclear": true, "_message": "Could you clarify what you'd like to change? Or if you're happy with the site, just say 'approve'."}
+
+For IMAGE_SWAP, return: {"_imageQuery": "<short visual description, 2-6 words>"}
+Extract the visual subject the user wants the new image to show and put it in _imageQuery. Keep it concrete and photographable (nouns + adjectives, no noise words like "nice", "professional", "modern" unless genuinely descriptive). If the user just says "change the image" / "different hero" with NO description of what it should show, return {"_imageQuery": ""} and the system will ask them what they want.
+
+IMAGE_SWAP examples:
+- "change the hero image to coffee beans" → {"_imageQuery": "coffee beans"}
+- "I don't like the banner, use something with a city skyline at night" → {"_imageQuery": "city skyline at night"}
+- "the photo at the top should show happy dentists" → {"_imageQuery": "happy dentists"}
+- "use a different hero image" → {"_imageQuery": ""}
+- "swap the background photo for a beach sunset" → {"_imageQuery": "beach sunset"}
+- "change the image to a close-up of pizza" → {"_imageQuery": "close-up pizza"}
 
 For REVISION, return ONLY a JSON object with the fields that need to change.
 The site configuration has these fields:

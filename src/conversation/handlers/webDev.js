@@ -1516,6 +1516,44 @@ async function handleRevisions(user, message) {
         return STATES.WEB_REVISIONS;
       }
 
+      // Hero-image swap: intercept before the normal merge flow so we can
+      // fetch a fresh Unsplash photo for the user's query and then fall
+      // through to the standard deploy path with the new heroImage.
+      if (updates._imageQuery !== undefined) {
+        const query = String(updates._imageQuery || '').trim();
+        if (!query) {
+          await sendTextMessage(
+            user.phone_number,
+            "Sure — what should the new hero image show? A short description works best (e.g. *coffee shop interior*, *city skyline at night*, *happy dentist*)."
+          );
+          // Don't consume a revision for just asking the clarifying question
+          await updateUserMetadata(user.id, { revisionCount: Math.max(0, revisionCount - 1) });
+          return STATES.WEB_REVISIONS;
+        }
+
+        await sendTextMessage(user.phone_number, `Looking for a hero image of *${query}*...`);
+
+        const { getHeroImage } = require('../../website-gen/heroImage');
+        let newHero = null;
+        try {
+          newHero = await getHeroImage(query);
+        } catch (imgErr) {
+          logger.warn(`[WEB_REVISIONS] Hero image fetch threw for "${query}": ${imgErr.message}`);
+        }
+
+        if (!newHero || !newHero.url) {
+          await sendTextMessage(
+            user.phone_number,
+            `Couldn't find a good image for *${query}*. Try a different description — something specific like a scene, object, or setting.`
+          );
+          // Don't consume a revision on a failed lookup
+          await updateUserMetadata(user.id, { revisionCount: Math.max(0, revisionCount - 1) });
+          return STATES.WEB_REVISIONS;
+        }
+
+        updates = { heroImage: newHero };
+      }
+
       // Merge updates and redeploy to the SAME site
       const updatedConfig = { ...currentConfig, ...updates };
 
@@ -1559,6 +1597,7 @@ async function handleRevisions(user, message) {
         else if (k === 'faq') changeHint = 'FAQs updated';
         else if (k === 'aboutText' || k === 'aboutTitle') changeHint = 'about section updated';
         else if (k === 'contactEmail' || k === 'contactPhone' || k === 'contactAddress') changeHint = 'contact info updated';
+        else if (k === 'heroImage') changeHint = 'new hero image is in';
       }
       const doneVariants = changeHint
         ? [
