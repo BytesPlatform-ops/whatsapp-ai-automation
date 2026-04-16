@@ -3,6 +3,7 @@ const {
   wrapRealEstatePage, getRealEstateAgentSchema, netlifyFormAttrs, netlifyHiddenFields,
   TOKENS, DEFAULT_DESIGNATIONS, DEFAULT_LISTINGS,
 } = require('./common');
+const { computeHeroPaletteFromConfig } = require('../../heroPalette');
 
 function statusClass(status) {
   const s = String(status || '').toLowerCase();
@@ -299,6 +300,7 @@ function generateHomePage(c) {
     title: `${c.businessName}${city ? ` — Real Estate in ${city}` : ''}${c.brokerageName ? ` | ${c.brokerageName}` : ''}`,
     description: `${c.businessName}: ${city ? `your trusted real estate expert in ${city}. ` : ''}${homesSold} homes sold, ${years}+ years local. ${phone ? `Call ${phone}.` : ''}`,
     schemas: [getRealEstateAgentSchema(c)],
+    heroPal: computeHeroPaletteFromConfig(c),
   });
 }
 

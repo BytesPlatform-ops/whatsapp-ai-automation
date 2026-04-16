@@ -1,4 +1,5 @@
 const { env } = require('../../config/env');
+const { computeHeroPaletteFromConfig } = require('../heroPalette');
 
 // Public URL the static salon site uses to reach the booking API.
 const PUBLIC_API_BASE = process.env.PUBLIC_API_BASE_URL || env.chatbot.baseUrl;
@@ -52,7 +53,19 @@ function pages(c) {
 const pad2 = (n) => String(n).padStart(2, '0');
 
 // ─── global style ──────────────────────────────────────────────────────────
-function getStyles(pc, ac) {
+function getStyles(pc, ac, heroPal) {
+  // Default to white-on-dark if no palette is supplied (pre-existing behaviour
+  // for non-home pages where the .hero element never renders). On the home
+  // page the palette is derived from the Unsplash hero image + primaryColor.
+  const hp = heroPal || { isDark: false, fg: '#fff', fgSoft: 'rgba(255,255,255,0.85)', fgMuted: 'rgba(255,255,255,0.55)', border: 'rgba(255,255,255,0.3)' };
+  // Dark text case (bright hero image): overlay biases toward cream so the
+  // title area stays readable even over bright photo patches.
+  // White text case (dark hero image): overlay biases dark, with the top stop
+  // bumped from 0.25 → 0.40 so a mid-bright title band still has a floor of
+  // contrast instead of washing out on a mixed-brightness photo.
+  const heroOverlay = hp.isDark
+    ? 'linear-gradient(180deg,rgba(246,239,229,0.55) 0%,rgba(246,239,229,0.75) 60%,rgba(246,239,229,0.92) 100%)'
+    : 'linear-gradient(180deg,rgba(14,13,12,0.40) 0%,rgba(14,13,12,0.65) 65%,rgba(14,13,12,0.9) 100%)';
   return `
 *{box-sizing:border-box;margin:0;padding:0}
 :root{--pc:${pc};--ac:${ac};--ink:#0E0D0C;--cream:#F6EFE5;--bone:#FBF6EC;--paper:#FFFBF3;--mute:#8A7F74;--line:#E8DFD2}
@@ -69,17 +82,17 @@ img{max-width:100%;display:block}
 @media(max-width:720px){.sect{padding:80px 0}.ctn,.ctn-sm{padding:0 22px}}
 
 .eyebrow{font-family:'Inter',sans-serif;font-size:11px;font-weight:500;letter-spacing:0.42em;text-transform:uppercase;color:var(--mute)}
-.eyebrow--light{color:rgba(255,255,255,0.72)}
+.eyebrow--light{color:${hp.fgSoft}}
 .divider{width:44px;height:1px;background:var(--pc);display:inline-block;margin:0 14px;vertical-align:middle}
-.divider--light{background:rgba(255,255,255,0.5)}
+.divider--light{background:${hp.border}}
 
 .btn{display:inline-flex;align-items:center;gap:10px;padding:15px 30px;border-radius:0;text-decoration:none;font-size:12px;font-weight:500;letter-spacing:0.24em;text-transform:uppercase;transition:all 0.3s cubic-bezier(.2,.7,.2,1);border:1px solid transparent;cursor:pointer;font-family:'Inter',sans-serif}
 .btn-p{background:var(--pc);color:#fff;border-color:var(--pc)}
 .btn-p:hover{background:transparent;color:var(--pc)}
 .btn-w{background:#fff;color:var(--ink);border-color:#fff}
 .btn-w:hover{background:transparent;color:#fff}
-.btn-g{background:transparent;color:#fff;border-color:rgba(255,255,255,0.5)}
-.btn-g:hover{background:#fff;color:var(--ink);border-color:#fff}
+.btn-g{background:transparent;color:${hp.fg};border-color:${hp.border}}
+.btn-g:hover{background:${hp.fg};color:${hp.isDark ? 'var(--bone)' : 'var(--ink)'};border-color:${hp.fg}}
 .btn-ink{background:transparent;color:var(--ink);border-color:var(--ink)}
 .btn-ink:hover{background:var(--ink);color:#fff}
 
@@ -107,22 +120,23 @@ img{max-width:100%;display:block}
 @media(max-width:820px){.nav-ls{display:none}.mm-btn{display:inline-flex}.nav{padding:20px 22px}}
 
 /* Hero */
-.hero{position:relative;min-height:100vh;display:flex;align-items:flex-end;color:#fff;overflow:hidden;padding:160px 40px 100px}
+.hero{position:relative;min-height:100vh;display:flex;align-items:flex-end;color:${hp.fg};overflow:hidden;padding:160px 40px 100px}
+.hero h1,.hero h2,.hero h3,.hero h4{color:${hp.fg}}
 .hero-bg{position:absolute;inset:0;z-index:-2}
 .hero-bg img{width:100%;height:100%;object-fit:cover}
-.hero-overlay{position:absolute;inset:0;z-index:-1;background:linear-gradient(180deg,rgba(14,13,12,0.25) 0%,rgba(14,13,12,0.55) 70%,rgba(14,13,12,0.85) 100%)}
+.hero-overlay{position:absolute;inset:0;z-index:-1;background:${heroOverlay}}
 .hero-inner{max-width:1280px;margin:0 auto;width:100%;position:relative}
 .hero-kicker{display:flex;align-items:center;gap:10px;margin-bottom:26px}
 .hero-h1{font-family:'Cormorant Garamond',serif;font-size:clamp(52px,9vw,128px);font-weight:500;line-height:0.96;letter-spacing:-0.03em;margin-bottom:36px;max-width:13ch}
 .hero-h1 em{font-style:italic;font-weight:400;color:var(--ac);filter:saturate(0.7) brightness(1.15)}
 .hero-tag{font-size:18px;font-weight:300;line-height:1.65;opacity:0.88;max-width:520px;margin-bottom:40px}
 .hero-ctas{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:48px}
-.hero-meta{display:flex;flex-wrap:wrap;gap:28px;padding-top:28px;border-top:1px solid rgba(255,255,255,0.18);max-width:720px}
+.hero-meta{display:flex;flex-wrap:wrap;gap:28px;padding-top:28px;border-top:1px solid ${hp.border};max-width:720px}
 .hero-meta-item{display:flex;flex-direction:column;gap:4px}
 .hero-meta-item .k{font-size:10px;letter-spacing:0.32em;text-transform:uppercase;opacity:0.55;font-weight:500}
 .hero-meta-item .v{font-size:15px;font-weight:400;line-height:1.4;max-width:230px}
-.hero-scroll{position:absolute;right:40px;bottom:40px;display:flex;flex-direction:column;align-items:center;gap:12px;color:rgba(255,255,255,0.55);font-size:10px;letter-spacing:0.3em;text-transform:uppercase}
-.hero-scroll::after{content:'';width:1px;height:44px;background:rgba(255,255,255,0.35);animation:scrollLine 2.4s ease-in-out infinite}
+.hero-scroll{position:absolute;right:40px;bottom:40px;display:flex;flex-direction:column;align-items:center;gap:12px;color:${hp.fgMuted};font-size:10px;letter-spacing:0.3em;text-transform:uppercase}
+.hero-scroll::after{content:'';width:1px;height:44px;background:${hp.border};animation:scrollLine 2.4s ease-in-out infinite}
 @keyframes scrollLine{0%,100%{transform:scaleY(0.3);transform-origin:top}50%{transform:scaleY(1)}}
 @media(max-width:720px){.hero{padding:130px 22px 60px}.hero-scroll{display:none}.hero-meta{gap:18px}}
 
@@ -399,7 +413,7 @@ function renderServiceCard(s, index) {
 }
 
 // ─── PAGE SHELL ────────────────────────────────────────────────────────────
-function wrap(c, cur, body, { navDark = false } = {}) {
+function wrap(c, cur, body, { navDark = false, heroPal = null } = {}) {
   const pc = c.primaryColor || '#1F2937';
   const ac = c.accentColor || '#EC4899';
   const title = cur === '/' ? esc(c.businessName) : `${esc(c.businessName)} — ${cur.replace('/', '').replace(/^\w/, (x) => x.toUpperCase())}`;
@@ -410,13 +424,18 @@ function wrap(c, cur, body, { navDark = false } = {}) {
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
-<style>${getStyles(pc, ac)}</style>
+<style>${getStyles(pc, ac, heroPal)}</style>
 </head><body>${getNav(c, cur, { dark: navDark })}<main>${body}</main>${getFooter(c)}${getScript()}</body></html>`;
 }
 
 // ─── HOME ──────────────────────────────────────────────────────────────────
 function generateHomePage(c) {
   const hasHero = !!(c.heroImage && c.heroImage.url);
+  // Decide hero text palette from the Unsplash image's dominant colour
+  // blended with primaryColor. On a bright image we render dark text + a
+  // cream-tinted overlay; on a dark/medium image we keep white text with a
+  // stronger dark overlay. Nav-over-hero mirrors the same decision.
+  const heroPal = computeHeroPaletteFromConfig(c);
   const heroImg = hasHero
     ? `<div class="hero-bg"><img src="${attr(c.heroImage.url)}" alt=""></div>`
     : `<div class="hero-bg" style="background:linear-gradient(135deg,var(--pc),var(--ac))"></div>`;
@@ -510,7 +529,10 @@ ${c.instagramHandle ? `
   <a href="/booking" class="btn btn-w rv d3">Reserve a Visit <svg class="arr" viewBox="0 0 14 10" fill="currentColor"><path d="M8.5 0l4.8 5L8.5 10l-.7-.7L11.4 5.7H0v-1.4h11.4L7.8.7z"/></svg></a>
 </section>`;
 
-  return wrap(c, '/', body, { navDark: true });
+  // navDark=true paints the nav white for dark-hero pages. When the palette
+  // flips to dark-text (bright image), the nav needs to stay on its default
+  // ink palette so the links remain readable over the cream-tinted overlay.
+  return wrap(c, '/', body, { navDark: !heroPal.isDark, heroPal });
 }
 
 // ─── SERVICES ───────────────────────────────────────────────────────────────
@@ -800,7 +822,7 @@ function generateAllPages(config, watermark = false) {
     pages['/services/index.html'] = generateServicesPage(config);
   }
   if (watermark) {
-    const WM = `<div style="position:fixed;bottom:0;left:0;right:0;background:rgba(14,13,12,0.94);color:#fff;text-align:center;padding:14px 20px;z-index:99999;font-family:'Inter',sans-serif;font-size:12px;letter-spacing:0.3em;text-transform:uppercase">Preview — <a href="https://bytesplatform.com" style="color:#fff;text-decoration:underline;font-weight:500">Built by Bytes Platform</a></div>`;
+    const WM = `<div style="position:fixed;bottom:0;left:0;right:0;background:rgba(14,13,12,0.94);color:#fff;text-align:center;padding:14px 20px;z-index:99999;font-family:'Inter',sans-serif;font-size:12px;letter-spacing:0.3em;text-transform:uppercase">Preview — <a href="https://bytesplatform.com" style="color:#fff;text-decoration:underline;font-weight:500">Built by Pixie</a></div>`;
     for (const [p, html] of Object.entries(pages)) {
       pages[p] = html.replace('</body>', WM + '</body>');
     }

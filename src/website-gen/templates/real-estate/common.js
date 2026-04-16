@@ -155,8 +155,18 @@ const DEFAULT_LISTINGS = [
 
 // ─── Styles ─────────────────────────────────────────────────────────────────
 
-function getRealEstateStyles() {
+function getRealEstateStyles(heroPal) {
   const t = TOKENS;
+  // When the hero palette resolves to dark text (bright Unsplash image), flip
+  // the title/subhead colours and lighten the left-weighted overlay so the
+  // photo shows through. Otherwise keep the existing white-on-navy look.
+  const hp = heroPal || { isDark: false, fg: '#fff', fgSoft: 'rgba(255,255,255,.86)' };
+  const heroTextColor = hp.fg;
+  const heroSubColor = hp.fgSoft;
+  const heroOverlayBg = hp.isDark
+    ? 'linear-gradient(90deg,rgba(250,247,242,.7) 0%,rgba(250,247,242,.5) 45%,rgba(250,247,242,.25) 75%,rgba(250,247,242,.5) 100%)'
+    : 'linear-gradient(90deg,rgba(10,20,40,.86) 0%,rgba(15,27,48,.7) 45%,rgba(15,27,48,.4) 75%,rgba(15,27,48,.55) 100%)';
+  const heroShadow = hp.isDark ? '0 2px 14px rgba(255,255,255,.35)' : '0 2px 14px rgba(0,0,0,.2)';
   return `
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
 html{scroll-behavior:smooth;-webkit-text-size-adjust:100%}
@@ -237,17 +247,18 @@ a:hover{color:${t.gold}}
 
 /* Hero — full-bleed editorial. 100vh fills the initial viewport entirely so
    the next section (stats strip) doesn't peek cream above the fold. */
-.hero{position:relative;min-height:100vh;display:flex;align-items:center;color:#fff;overflow:hidden;padding:120px 0 80px}
+.hero{position:relative;min-height:100vh;display:flex;align-items:center;color:${heroTextColor};overflow:hidden;padding:120px 0 80px}
 .hero-bg{position:absolute;inset:0;z-index:0;background:linear-gradient(135deg,${t.navy},${t.charcoal})}
 .hero-bg img{width:100%;height:100%;object-fit:cover}
 /* Left-weighted gradient keeps copy readable on any photo. Stronger on the
-   left 55% where the text lives, softer on the right so the image breathes. */
-.hero-overlay{position:absolute;inset:0;z-index:1;background:linear-gradient(90deg,rgba(10,20,40,.86) 0%,rgba(15,27,48,.7) 45%,rgba(15,27,48,.4) 75%,rgba(15,27,48,.55) 100%)}
+   left 55% where the text lives, softer on the right so the image breathes.
+   Flips to a cream-tinted wash when the hero palette resolves to dark text. */
+.hero-overlay{position:absolute;inset:0;z-index:1;background:${heroOverlayBg}}
 .hero-overlay::after{content:'';position:absolute;inset:0;background:linear-gradient(180deg,rgba(15,27,48,.25) 0%,transparent 30%,transparent 70%,rgba(15,27,48,.55) 100%);pointer-events:none}
 .hero > .ctn{position:relative;z-index:2}
 .hero-content{max-width:720px}
-.hero h1{color:#fff;margin-top:18px;text-shadow:0 2px 14px rgba(0,0,0,.2)}
-.hero-sub{font-family:'Inter',sans-serif;font-size:clamp(16px,1.6vw,18px);color:rgba(255,255,255,.86);margin-top:24px;max-width:560px;line-height:1.7}
+.hero h1{color:${heroTextColor};margin-top:18px;text-shadow:${heroShadow}}
+.hero-sub{font-family:'Inter',sans-serif;font-size:clamp(16px,1.6vw,18px);color:${heroSubColor};margin-top:24px;max-width:560px;line-height:1.7}
 .hero-cta-row{display:flex;flex-wrap:wrap;gap:14px;margin-top:36px}
 .hero-credit{position:absolute;bottom:14px;right:24px;z-index:2;font-size:10.5px;color:rgba(255,255,255,.55);letter-spacing:.04em}
 .hero-credit a{color:rgba(255,255,255,.7);text-decoration:underline}
@@ -980,7 +991,7 @@ function wrapRealEstatePage(c, cur, body, opts = {}) {
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,500;1,600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<style>${getRealEstateStyles()}</style>
+<style>${getRealEstateStyles(opts.heroPal)}</style>
 ${schemas}
 </head>
 <body>
