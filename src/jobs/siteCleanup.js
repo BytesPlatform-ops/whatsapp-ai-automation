@@ -1,10 +1,11 @@
 /**
  * Site Cleanup Job
  *
- * - After 24h unpaid: redeploy with "Preview Only" watermark
+ * - After 1h unpaid: redeploy with "Preview Only" watermark
  * - After 60 days unpaid: delete the Netlify site and archive in DB
  *
- * Runs every 6 hours.
+ * Runs every 15 minutes so the 1h watermark threshold is actually honoured —
+ * a slower cadence would let previews sit un-watermarked hours past the cutoff.
  */
 
 const axios = require('axios');
@@ -13,7 +14,7 @@ const { env } = require('../config/env');
 const { logger } = require('../utils/logger');
 
 const NETLIFY_API = 'https://api.netlify.com/api/v1';
-const WATERMARK_AFTER_HOURS = 24;
+const WATERMARK_AFTER_HOURS = 1;
 const DELETE_AFTER_DAYS = 60;
 
 async function runSiteCleanup() {
@@ -56,7 +57,7 @@ async function runSiteCleanup() {
         continue;
       }
 
-      // 24+ hours: redeploy with watermark
+      // 1+ hour: redeploy with watermark
       if (ageHours >= WATERMARK_AFTER_HOURS && site.status !== 'watermarked' && site.netlify_site_id && site.site_data) {
         try {
           const { deployToNetlify } = require('../website-gen/deployer');
@@ -74,7 +75,7 @@ async function runSiteCleanup() {
 }
 
 function startSiteCleanup() {
-  const INTERVAL = 6 * 60 * 60 * 1000; // 6 hours
+  const INTERVAL = 15 * 60 * 1000; // 15 minutes
 
   // Run once on startup after a delay
   setTimeout(() => {
@@ -85,7 +86,7 @@ function startSiteCleanup() {
     runSiteCleanup().catch(err => logger.error('[CLEANUP] Scheduled run error:', err.message));
   }, INTERVAL);
 
-  logger.info('[CLEANUP] Site cleanup job started (interval: 6h)');
+  logger.info('[CLEANUP] Site cleanup job started (interval: 15m, watermark after 1h)');
 }
 
 module.exports = { startSiteCleanup };

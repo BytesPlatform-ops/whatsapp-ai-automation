@@ -149,7 +149,7 @@ app.listen(env.port, () => {
   // Start domain DNS verification job (every 5 min)
   startDomainVerifier();
 
-  // Start site cleanup job — watermark after 24h, delete after 60 days (every 6h)
+  // Start site cleanup job — watermark after 1h, delete after 60 days (every 15m)
   startSiteCleanup();
 
   // Start salon booking reminder job — 24h-before customer emails (every 15m)
