@@ -16,6 +16,8 @@ const STATES = {
   WEB_COLLECT_INDUSTRY: 'WEB_COLLECT_INDUSTRY',
   // HVAC-specific: collect primary city + service areas in one step
   WEB_COLLECT_AREAS: 'WEB_COLLECT_AREAS',
+  // Real-estate-specific: brokerage, years, designations in one step
+  WEB_COLLECT_AGENT_PROFILE: 'WEB_COLLECT_AGENT_PROFILE',
   WEB_COLLECT_SERVICES: 'WEB_COLLECT_SERVICES',
   WEB_COLLECT_COLORS: 'WEB_COLLECT_COLORS',
   WEB_COLLECT_LOGO: 'WEB_COLLECT_LOGO',

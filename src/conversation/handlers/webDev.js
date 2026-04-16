@@ -125,7 +125,7 @@ Return JSON like {"industry":"HVAC","primaryCity":"Austin"} or {} if nothing fou
 // is stored at top-level metadata.email by the legacy handler, so we accept
 // either location as "collected".
 function nextMissingWebDevState(websiteData, fullMetadata = {}) {
-  const { needsAreaCollection } = require('../../website-gen/templates');
+  const { needsAreaCollection, isRealEstate } = require('../../website-gen/templates');
   if (!websiteData.businessName) return STATES.WEB_COLLECT_NAME;
   const emailCollected =
     fullMetadata.email != null || websiteData.contactEmail != null || websiteData.email != null || fullMetadata.emailSkipped === true;
@@ -134,7 +134,14 @@ function nextMissingWebDevState(websiteData, fullMetadata = {}) {
   if (needsAreaCollection(websiteData.industry) && !websiteData.primaryCity && (!websiteData.serviceAreas || !websiteData.serviceAreas.length)) {
     return STATES.WEB_COLLECT_AREAS;
   }
-  if (websiteData.services == null) return STATES.WEB_COLLECT_SERVICES;
+  // Real-estate flow diverges here: collect agent profile (brokerage / years /
+  // designations) in place of the services list. The real-estate template has
+  // no services section — whyChooseUs + featuredListings carry that load.
+  if (isRealEstate(websiteData.industry)) {
+    if (!websiteData.agentProfileCollected) return STATES.WEB_COLLECT_AGENT_PROFILE;
+  } else if (websiteData.services == null) {
+    return STATES.WEB_COLLECT_SERVICES;
+  }
   // Phone is critical (especially for HVAC). Email alone is not enough — make
   // sure we collect at least a phone OR address before confirming.
   if (!websiteData.contactPhone && !websiteData.contactAddress) return STATES.WEB_COLLECT_CONTACT;
@@ -225,6 +232,14 @@ function questionForState(state, websiteData) {
       }
       return 'What services or products do you offer? List them separated by commas, or say *skip*.';
     }
+    case STATES.WEB_COLLECT_AGENT_PROFILE:
+      return (
+        'Quick agent profile so the site feels authentic:\n' +
+        '• Your brokerage (or say *solo* if independent)\n' +
+        '• Years in real estate\n' +
+        '• Designations (CRS, ABR, SRS, GRI, etc. — or *none*)\n\n' +
+        'Answer all three in one message, or say *skip* to use sensible defaults.'
+      );
     case STATES.WEB_COLLECT_CONTACT: return "Last thing — what contact info do you want on the site? Send your email, phone, and/or address.";
     default: return '';
   }
@@ -232,15 +247,20 @@ function questionForState(state, websiteData) {
 
 // Forward declaration shim — sendConfirmation is defined below in the file.
 async function sendConfirmation(user, websiteData) {
-  // Reuse the confirmation message that handleCollectContact would build.
-  // We do a minimal version here so the flow can jump straight to confirm
-  // when the extractor fills in all required fields.
+  const { isRealEstate } = require('../../website-gen/templates');
+  const realEstate = isRealEstate(websiteData.industry);
   const lines = ['Here\'s a summary of your website details:', ''];
-  if (websiteData.businessName) lines.push(`*Business Name:* ${websiteData.businessName}`);
+  if (websiteData.businessName) lines.push(`*${realEstate ? 'Agent' : 'Business'} Name:* ${websiteData.businessName}`);
   if (websiteData.industry) lines.push(`*Industry:* ${websiteData.industry}`);
   if (websiteData.primaryCity) lines.push(`*City:* ${websiteData.primaryCity}`);
-  if (Array.isArray(websiteData.serviceAreas) && websiteData.serviceAreas.length) lines.push(`*Service Areas:* ${websiteData.serviceAreas.join(', ')}`);
-  if (Array.isArray(websiteData.services) && websiteData.services.length) lines.push(`*Services:* ${websiteData.services.join(', ')}`);
+  if (Array.isArray(websiteData.serviceAreas) && websiteData.serviceAreas.length) lines.push(`*${realEstate ? 'Neighborhoods' : 'Service Areas'}:* ${websiteData.serviceAreas.join(', ')}`);
+  if (realEstate) {
+    lines.push(`*Brokerage:* ${websiteData.brokerageName || 'Solo / independent'}`);
+    if (websiteData.yearsExperience != null) lines.push(`*Years:* ${websiteData.yearsExperience}`);
+    if (Array.isArray(websiteData.designations) && websiteData.designations.length) lines.push(`*Designations:* ${websiteData.designations.join(', ')}`);
+  } else if (Array.isArray(websiteData.services) && websiteData.services.length) {
+    lines.push(`*Services:* ${websiteData.services.join(', ')}`);
+  }
   const contact = [websiteData.contactEmail, websiteData.contactPhone, websiteData.contactAddress].filter(Boolean).join(' | ');
   if (contact) lines.push(`*Contact:* ${contact}`);
   lines.push('', 'Does everything look good? Say *"yes"* to proceed, or tell me what to change.');
@@ -260,6 +280,8 @@ async function handleWebDev(user, message) {
       return handleCollectAreas(user, message);
     case STATES.WEB_COLLECT_SERVICES:
       return handleCollectServices(user, message);
+    case STATES.WEB_COLLECT_AGENT_PROFILE:
+      return handleCollectAgentProfile(user, message);
     case STATES.WEB_COLLECT_COLORS:
     case STATES.WEB_COLLECT_LOGO:
       // Legacy: skip straight to contact if stuck in old states
@@ -598,6 +620,133 @@ async function handleCollectServices(user, message) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// REAL-ESTATE AGENT PROFILE COLLECTION
+// Asks brokerage + years + designations in one message, extracts via LLM.
+// Sets agentProfileCollected=true so nextMissingWebDevState advances even if
+// some fields are empty (user said "skip" or only partially answered).
+// ═══════════════════════════════════════════════════════════════════════════
+async function handleCollectAgentProfile(user, message) {
+  const raw = (message.text || '').trim();
+  const wd = { ...(user.metadata?.websiteData || {}) };
+  const industry = wd.industry || '';
+  const colors = getColorsForIndustry(industry);
+  const skipWords = /^(skip|none|no|n\/?a|nah|nope|don'?t (know|have)|dont (know|have)|not sure|idk)$/i;
+
+  if (!raw || skipWords.test(raw)) {
+    const merged = {
+      ...wd,
+      ...colors,
+      agentProfileCollected: true,
+      // Mark services as skipped so the generator doesn't loop asking for them.
+      services: Array.isArray(wd.services) ? wd.services : [],
+    };
+    await updateUserMetadata(user.id, { websiteData: merged });
+    user.metadata = { ...(user.metadata || {}), websiteData: merged };
+    await logMessage(user.id, 'Agent profile: skipped (using defaults)', 'assistant');
+    return smartAdvance(user, message, 'No problem — we\'ll use sensible defaults.');
+  }
+
+  // Regex pre-pass for years (common patterns: "10 years", "10+ years", "a decade").
+  let yearsExperience = null;
+  const yrsMatch = raw.match(/(\d{1,2})\s*\+?\s*(?:years?|yrs?|y\b)/i);
+  if (yrsMatch) {
+    const n = parseInt(yrsMatch[1], 10);
+    if (n > 0 && n < 80) yearsExperience = n;
+  } else if (/\bdecade\b/i.test(raw)) {
+    yearsExperience = 10;
+  }
+
+  // Regex pre-pass for well-known designation tokens.
+  const DESIGNATION_RX = /\b(CRS|ABR|SRS|GRI|SRES|RENE|e-?Pro|CIPS|SFR|MRP|ABRM|CCIM|AHWD|CPM|CRB)\b/gi;
+  let designations = [];
+  const designMatches = raw.match(DESIGNATION_RX);
+  if (designMatches) {
+    designations = Array.from(new Set(designMatches.map((d) => d.toUpperCase().replace('-', ''))));
+  } else if (/\b(no|none)\s+(?:designations?|creds?|certifications?)?\b/i.test(raw) || /^none\b/i.test(raw)) {
+    designations = [];
+  }
+
+  // Brokerage: solo vs named. Look for "solo", "independent", "by myself", or a
+  // quoted/clear name. Fallback: LLM extraction.
+  let brokerageName = null;
+  if (/\b(solo|independent|by myself|on my own|no brokerage|freelance|self[- ]employed)\b/i.test(raw)) {
+    brokerageName = null; // explicit solo — keep null
+  }
+
+  // LLM extraction for anything missing (especially brokerageName which is hard
+  // to pattern-match reliably).
+  const needsLlm = brokerageName === null && !/\b(solo|independent)\b/i.test(raw);
+  if (needsLlm || yearsExperience == null || (!designations.length && !/\bnone\b/i.test(raw))) {
+    try {
+      const extractPrompt = `You are a structured-data extractor for a real-estate agent onboarding flow. Read the agent's message and return ONLY JSON with these fields:
+
+{
+  "brokerageName": "<the brokerage/firm name they work at, or null if they said solo/independent, or null if not mentioned>",
+  "yearsExperience": <integer if clearly stated, otherwise null>,
+  "designations": ["CRS", "ABR", ...] (common ones: CRS, ABR, SRS, GRI, SRES, RENE, ePro, CIPS, SFR, MRP, ABRM, CCIM). Return [] if they said none. Omit the field if not mentioned at all.
+}
+
+Rules:
+- brokerageName: real firm names only. "solo", "independent", "by myself" → null.
+- Never invent data. Omit unknown fields.
+- Keep brokerageName under 60 chars.`;
+      const response = await generateResponse(
+        extractPrompt,
+        [{ role: 'user', content: raw }],
+        { userId: user.id, operation: 'webdev_agent_profile' }
+      );
+      const m = response.match(/\{[\s\S]*\}/);
+      if (m) {
+        const parsed = JSON.parse(m[0]);
+        if (parsed.brokerageName && typeof parsed.brokerageName === 'string') {
+          const bn = parsed.brokerageName.trim();
+          if (bn && bn.length < 60 && !/^(solo|independent|null|none)$/i.test(bn)) {
+            brokerageName = bn;
+          }
+        }
+        if (yearsExperience == null && Number.isInteger(parsed.yearsExperience) && parsed.yearsExperience > 0 && parsed.yearsExperience < 80) {
+          yearsExperience = parsed.yearsExperience;
+        }
+        if (!designations.length && Array.isArray(parsed.designations)) {
+          designations = parsed.designations
+            .map((d) => String(d || '').trim().toUpperCase().replace(/[^A-Z]/g, ''))
+            .filter((d) => d.length >= 2 && d.length <= 8);
+        }
+      }
+    } catch (err) {
+      logger.warn(`[WEBDEV-AGENT] LLM extraction failed: ${err.message}`);
+    }
+  }
+
+  const merged = {
+    ...wd,
+    ...colors,
+    agentProfileCollected: true,
+    services: Array.isArray(wd.services) ? wd.services : [],
+  };
+  if (brokerageName) merged.brokerageName = brokerageName;
+  if (yearsExperience != null) merged.yearsExperience = yearsExperience;
+  if (designations.length) merged.designations = designations;
+
+  await updateUserMetadata(user.id, { websiteData: merged });
+  user.metadata = { ...(user.metadata || {}), websiteData: merged };
+  await logMessage(
+    user.id,
+    `Agent profile: brokerage=${brokerageName || 'solo'}, years=${yearsExperience || 'n/a'}, designations=${designations.join(', ') || 'none'}`,
+    'assistant'
+  );
+
+  const ackBits = [];
+  if (brokerageName) ackBits.push(`at *${brokerageName}*`);
+  else if (/\b(solo|independent)\b/i.test(raw)) ackBits.push('*solo agent*');
+  if (yearsExperience != null) ackBits.push(`*${yearsExperience} years* in real estate`);
+  if (designations.length) ackBits.push(`designations: *${designations.join(', ')}*`);
+  const ackPrefix = ackBits.length ? `Got it — ${ackBits.join(', ')}.` : 'Thanks for the details.';
+
+  return smartAdvance(user, message, ackPrefix);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // SALON-SPECIFIC COLLECTION
 // Only reached when industry matches salon/beauty/barber/spa/etc.
 // Flow: services -> booking tool -> instagram -> (if native) hours -> durations -> contact
@@ -886,20 +1035,33 @@ async function handleCollectContact(user, message) {
     websiteData: { ...(user.metadata?.websiteData || {}), ...contactData },
   });
 
-  // Show confirmation summary before generating
+  // Show confirmation summary before generating — real-estate agents see
+  // brokerage / years / designations in place of the services line.
+  const { isRealEstate } = require('../../website-gen/templates');
   const wd = { ...(user.metadata?.websiteData || {}), ...contactData };
-  const servicesList = (wd.services || []).length > 0 ? wd.services.join(', ') : 'None (skipped)';
+  const realEstate = isRealEstate(wd.industry);
   const contactInfo = [wd.contactEmail, wd.contactPhone, wd.contactAddress].filter(Boolean).join(' | ') || 'None';
 
-  const summary =
-    `Here's a summary of your website details:\n\n` +
-    `*Business Name:* ${wd.businessName || '-'}\n` +
-    `*Industry:* ${wd.industry || '-'}\n` +
-    `*Services:* ${servicesList}\n` +
-    `*Contact:* ${contactInfo}\n\n` +
-    `Does everything look good? You can say *"yes"* to proceed, or tell me what you'd like to change.`;
+  const lines = [
+    `Here's a summary of your website details:`,
+    ``,
+    `*${realEstate ? 'Agent' : 'Business'} Name:* ${wd.businessName || '-'}`,
+    `*Industry:* ${wd.industry || '-'}`,
+  ];
+  if (realEstate) {
+    if (wd.primaryCity) lines.push(`*City:* ${wd.primaryCity}`);
+    if (Array.isArray(wd.serviceAreas) && wd.serviceAreas.length) lines.push(`*Neighborhoods:* ${wd.serviceAreas.join(', ')}`);
+    lines.push(`*Brokerage:* ${wd.brokerageName || 'Solo / independent'}`);
+    if (wd.yearsExperience != null) lines.push(`*Years:* ${wd.yearsExperience}`);
+    if (Array.isArray(wd.designations) && wd.designations.length) lines.push(`*Designations:* ${wd.designations.join(', ')}`);
+  } else {
+    const servicesList = (wd.services || []).length > 0 ? wd.services.join(', ') : 'None (skipped)';
+    lines.push(`*Services:* ${servicesList}`);
+  }
+  lines.push(`*Contact:* ${contactInfo}`);
+  lines.push(``, `Does everything look good? You can say *"yes"* to proceed, or tell me what you'd like to change.`);
 
-  await sendTextMessage(user.phone_number, summary);
+  await sendTextMessage(user.phone_number, lines.join('\n'));
   await logMessage(user.id, 'Contact info collected, showing confirmation', 'assistant');
 
   return STATES.WEB_CONFIRM;
