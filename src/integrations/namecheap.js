@@ -74,6 +74,55 @@ async function ncRequest(command, params = {}) {
   return apiResponse.CommandResponse;
 }
 
+// TLD registration-price cache (keyed by TLD without leading dot, e.g. "com")
+const PRICING_TTL_MS = 24 * 60 * 60 * 1000;
+let pricingCache = { fetchedAt: 0, prices: {} };
+
+/**
+ * Fetch 1-year registration prices for domain TLDs from Namecheap.
+ * Cached in-memory for 24h. Returns a map like { com: 10.98, co: 25.98, ... }.
+ */
+async function getTldPricing() {
+  const now = Date.now();
+  if (now - pricingCache.fetchedAt < PRICING_TTL_MS && Object.keys(pricingCache.prices).length) {
+    return pricingCache.prices;
+  }
+
+  try {
+    const result = await ncRequest('namecheap.users.getPricing', {
+      ProductType: 'DOMAIN',
+      ProductCategory: 'REGISTER',
+      ActionName: 'REGISTER',
+    });
+
+    const prices = {};
+    const productType = result.UserGetPricingResult?.ProductType;
+    const categories = productType?.ProductCategory;
+    const categoryList = Array.isArray(categories) ? categories : [categories];
+
+    for (const cat of categoryList) {
+      if (!cat || cat.$?.Name?.toLowerCase() !== 'register') continue;
+      const products = Array.isArray(cat.Product) ? cat.Product : [cat.Product];
+      for (const product of products) {
+        if (!product) continue;
+        const tld = product.$?.Name?.toLowerCase();
+        const priceEntries = Array.isArray(product.Price) ? product.Price : [product.Price];
+        const oneYear = priceEntries.find(p => p?.$?.Duration === '1');
+        if (tld && oneYear?.$?.Price) {
+          prices[tld] = parseFloat(oneYear.$.Price);
+        }
+      }
+    }
+
+    pricingCache = { fetchedAt: now, prices };
+    logger.info(`[NAMECHEAP] TLD pricing cached: ${Object.keys(prices).length} TLDs`);
+    return prices;
+  } catch (err) {
+    logger.error('[NAMECHEAP] getTldPricing failed:', err.message);
+    return pricingCache.prices || {};
+  }
+}
+
 /**
  * Check availability of multiple domains.
  * @param {string[]} domains - Array of full domain names (e.g., ['mybiz.com', 'mybiz.co'])
@@ -83,19 +132,29 @@ async function checkDomains(domains) {
   if (!domains || domains.length === 0) return [];
 
   try {
-    const result = await ncRequest('namecheap.domains.check', {
-      DomainList: domains.join(','),
-    });
+    const [result, tldPrices] = await Promise.all([
+      ncRequest('namecheap.domains.check', { DomainList: domains.join(',') }),
+      getTldPricing(),
+    ]);
 
     const checks = result.DomainCheckResult;
     const items = Array.isArray(checks) ? checks : [checks];
 
-    return items.map(item => ({
-      domain: item.$.Domain,
-      available: item.$.Available === 'true',
-      premium: item.$.IsPremiumDomain === 'true',
-      price: item.$.PremiumRegistrationPrice || '',
-    }));
+    return items.map(item => {
+      const domain = item.$.Domain;
+      const premium = item.$.IsPremiumDomain === 'true';
+      const premiumPrice = item.$.PremiumRegistrationPrice;
+      const tld = domain.split('.').pop().toLowerCase();
+
+      let price = '';
+      if (premium && premiumPrice && parseFloat(premiumPrice) > 0) {
+        price = parseFloat(premiumPrice).toFixed(2);
+      } else if (tldPrices[tld]) {
+        price = tldPrices[tld].toFixed(2);
+      }
+
+      return { domain, available: item.$.Available === 'true', premium, price };
+    });
   } catch (err) {
     logger.error('[NAMECHEAP] Domain check failed:', err.message);
     throw err;
@@ -253,6 +312,7 @@ async function purchaseAndConfigureDomain(domain, netlifySubdomain) {
 module.exports = {
   checkDomains,
   checkDomainAvailability,
+  getTldPricing,
   registerDomain,
   setDNSForNetlify,
   purchaseAndConfigureDomain,

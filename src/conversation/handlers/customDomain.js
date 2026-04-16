@@ -7,8 +7,7 @@ const { logger } = require('../../utils/logger');
 const { env } = require('../../config/env');
 const { STATES } = require('../states');
 
-const DOMAIN_COST = 10; // ~$10 for domain registration
-const SITE_COST = 100;  // Total site cost
+const SITE_COST = 100;  // Flat website price, domain billed separately on top
 const UPFRONT_PERCENT = 0.5; // 50% upfront
 
 async function handleCustomDomain(user, message) {
@@ -135,10 +134,13 @@ async function runDomainSearch(user, baseName) {
 
   let msg = '*Domain Availability:*\n\n';
   results.forEach((r, i) => {
+    const priceLabel = r.price ? ` — $${r.price}/yr` : '';
     if (r.premium) {
-      msg += `${i + 1}. ⚠️ ${r.domain} — Premium (not available)\n`;
+      msg += `${i + 1}. ⚠️ ${r.domain} — Premium${priceLabel} (not available)\n`;
+    } else if (r.available) {
+      msg += `${i + 1}. ✅ ${r.domain} — *Available*${priceLabel}\n`;
     } else {
-      msg += r.available ? `${i + 1}. ✅ ${r.domain} — *Available*\n` : `${i + 1}. ❌ ${r.domain} — Taken\n`;
+      msg += `${i + 1}. ❌ ${r.domain} — Taken\n`;
     }
   });
 
@@ -170,15 +172,28 @@ async function processDomainSelection(user, domain) {
     await updateSite(site.id, { custom_domain: domain, status: 'awaiting_payment' });
   }
 
-  // Default: $100 full payment (website + domain included)
-  const fullAmount = SITE_COST;
+  // Look up this domain's actual registration cost from the search results.
+  const domainOptions = user.metadata?.domainOptions || [];
+  const match = domainOptions.find(d => d.domain.toLowerCase() === domain.toLowerCase());
+  const rawDomainCost = match?.price ? parseFloat(match.price) : 0;
+  const domainCharge = Math.ceil(rawDomainCost);
+  const fullAmount = SITE_COST + domainCharge;
+  const tld = domain.split('.').pop();
+
+  const totalLine = domainCharge > 0
+    ? `The total is *$${fullAmount}* — $${SITE_COST} for the website plus $${domainCharge} for the *.${tld}* domain registration.`
+    : `The total is *$${fullAmount}* for the website (domain registration billed separately once confirmed).`;
+
+  // Split option: customer pays $50 + full domain cost upfront, $50 after delivery.
+  const splitUpfront = 50 + domainCharge;
+  const splitLater = 50;
 
   await sendTextMessage(
     user.phone_number,
     `Great choice — *${domain}*!\n\n` +
-    `The total is *$${fullAmount}* — that covers the website and domain, everything included.\n\n` +
+    `${totalLine}\n\n` +
     `Once you pay, I'll register your domain, set everything up, and your site will be live at *${domain}* — usually within the hour.\n\n` +
-    `_If you'd prefer to split the payment, just let me know and I can do $60 now and $50 after delivery._`
+    `_If you'd prefer to split the payment, I can do $${splitUpfront} now and $${splitLater} after delivery._`
   );
 
   // Create and send payment link for full amount
