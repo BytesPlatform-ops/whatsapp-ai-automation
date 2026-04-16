@@ -28,6 +28,15 @@ const FOLLOWUP_LADDER = [
   { step: 'followup_23h', afterHours: 23 },
 ];
 
+// SEO-audit leads get their own ladder. The existing website ladder pitches a
+// $100 payment / domain — wrong message for someone who only ran an audit.
+// One gentle nudge at ~24h quoting their biggest-opportunity item, then we
+// stop. Kept short on purpose: SEO buyers tend to be comparison-shoppers and
+// a heavy follow-up cascade reads as desperate.
+const SEO_FOLLOWUP_LADDER = [
+  { step: 'seo_followup_24h', afterHours: 24 },
+];
+
 // Messages per step × personality mode
 const FOLLOWUP_MESSAGES = {
   followup_2h: {
@@ -59,20 +68,56 @@ const FOLLOWUP_MESSAGES = {
  * COLD leads get follow-ups later (first check at 4h instead of 2h).
  * Returns the step object or null.
  */
-function getNextFollowup(lastMessageAt, completedSteps, leadTemp = 'WARM') {
+function getNextFollowup(lastMessageAt, completedSteps, leadTemp = 'WARM', ladder = FOLLOWUP_LADDER) {
   const now = Date.now();
   const elapsedHours = (now - new Date(lastMessageAt).getTime()) / (1000 * 60 * 60);
 
   // Adjust timing based on lead temperature
   const timeMultiplier = leadTemp === 'HOT' ? 0.5 : leadTemp === 'COLD' ? 2 : 1;
 
-  for (const rung of FOLLOWUP_LADDER) {
+  for (const rung of ladder) {
     const adjustedHours = rung.afterHours * timeMultiplier;
     if (elapsedHours >= adjustedHours && !completedSteps.includes(rung.step)) {
       return rung;
     }
   }
   return null;
+}
+
+/**
+ * Render the SEO-silence follow-up for a given personality, quoting the
+ * audit's top-fix item if we have one on file. When the top fix is missing
+ * (older audits, extraction failure) we fall back to a generic pitch.
+ */
+function renderSeoFollowupMessage(personalityMode, topFix, url) {
+  const mode = (personalityMode || '').toUpperCase();
+  const hasFix = Boolean(topFix && topFix.trim());
+  const fix = hasFix ? topFix.trim() : '';
+  const site = url ? ` for ${url}` : '';
+
+  if (mode === 'COOL') {
+    return hasFix
+      ? `yo — you saw that audit${site} right? biggest thing was *${fix}*. i can knock out the top 5 fixes from the report for $200 if you wanna ship them fast 🔧`
+      : `yo — you saw that audit${site} right? i can handle the top 5 fixes from the report for $200 if you wanna ship them fast 🔧`;
+  }
+  if (mode === 'PROFESSIONAL') {
+    return hasFix
+      ? `Quick follow-up on your SEO audit${site}. The biggest opportunity I flagged was *${fix}*. I can handle the top 5 fixes from the report for $200 — want me to put the details together?`
+      : `Quick follow-up on your SEO audit${site}. I can handle the top 5 fixes from the report for $200 — want me to put the details together?`;
+  }
+  if (mode === 'UNSURE') {
+    return hasFix
+      ? `hey! following up on your audit${site} — the main thing that stood out was *${fix}*. happy to handle the top 5 fixes for $200 if you'd like. no pressure at all 😊`
+      : `hey! following up on your audit${site} — happy to handle the top 5 fixes from the report for $200 if you'd like. no pressure at all 😊`;
+  }
+  if (mode === 'NEGOTIATOR') {
+    return hasFix
+      ? `audit follow-up${site}. biggest fix: *${fix}*. $200 for the top 5 from the report. yes or no?`
+      : `audit follow-up${site}. $200 for the top 5 fixes from the report. yes or no?`;
+  }
+  return hasFix
+    ? `Following up on your SEO audit${site} — *${fix}* was the biggest opportunity I flagged. Want me to handle the top 5 fixes from the report for $200?`
+    : `Following up on your SEO audit${site} — want me to handle the top 5 fixes from the report for $200?`;
 }
 
 /**
@@ -129,7 +174,6 @@ async function runFollowupCycle() {
 
 async function processUserFollowup(user) {
   const metadata = user.metadata || {};
-  const completedSteps = metadata.followupSteps || [];
 
   // Skip closed leads, converted customers, or opted-out users
   if (metadata.leadClosed) return;
@@ -137,9 +181,6 @@ async function processUserFollowup(user) {
   if (metadata.paymentConfirmed) return;
   if (metadata.followupOptOut) return;
   if (metadata.humanTakeover) return;
-
-  // If all steps are done, skip
-  if (completedSteps.length >= FOLLOWUP_LADDER.length) return;
 
   // HOT leads that went silent get faster follow-up (check at 1h instead of 2h)
   const leadTemp = metadata.leadTemperature || 'WARM';
@@ -155,6 +196,40 @@ async function processUserFollowup(user) {
     .single();
 
   if (msgErr || !lastMsg) return;
+
+  // SEO-audit branch: a user who ran an audit but didn't cross over into the
+  // website/domain purchase flow gets the SEO ladder, not the website one.
+  // We use `selectedDomain` as the signal that they've moved to the website
+  // track — once they pick a domain the normal website ladder takes over.
+  const isSeoLead = metadata.seoAuditTriggered && !metadata.selectedDomain;
+  if (isSeoLead) {
+    const seoCompleted = metadata.seoFollowupSteps || [];
+    if (seoCompleted.length >= SEO_FOLLOWUP_LADDER.length) return;
+
+    const nextSeoStep = getNextFollowup(lastMsg.created_at, seoCompleted, leadTemp, SEO_FOLLOWUP_LADDER);
+    if (!nextSeoStep) return;
+
+    const personality = metadata.leadBrief
+      ? extractPersonalityFromBrief(metadata.leadBrief)
+      : (metadata.personalityMode || 'DEFAULT');
+
+    const message = renderSeoFollowupMessage(personality, metadata.seoTopFix, metadata.lastSeoUrl);
+
+    logger.info(`Followup: sending ${nextSeoStep.step} to ${user.phone_number} (mode: ${personality}, temp: ${leadTemp}, topFix: "${metadata.seoTopFix || ''}")`);
+
+    await sendTextMessage(user.phone_number, message);
+    await logMessage(user.id, message, 'assistant');
+
+    await updateUserMetadata(user.id, {
+      seoFollowupSteps: [...seoCompleted, nextSeoStep.step],
+    });
+    return;
+  }
+
+  const completedSteps = metadata.followupSteps || [];
+
+  // If all steps are done, skip
+  if (completedSteps.length >= FOLLOWUP_LADDER.length) return;
 
   const nextStep = getNextFollowup(lastMsg.created_at, completedSteps, leadTemp);
   if (!nextStep) return;

@@ -146,10 +146,31 @@ async function handleCollectUrl(user, message) {
 
     // 6. Store analysis and immediately pitch via sales bot
     logger.info('[SEO] Step 6/6: Triggering sales pitch based on findings');
+
+    // Extract the single biggest fix in 2-6 words so the 24h silence follow-up
+    // can quote it back to the user ("your biggest opportunity was X") without
+    // having to re-parse the full analysis at scheduler time. Best-effort —
+    // if extraction fails, the follow-up falls back to a generic pitch.
+    let seoTopFix = '';
+    try {
+      const { generateResponse: extractTopFix } = require('../../llm/provider');
+      const rawFix = await extractTopFix(
+        'You read SEO audit reports. Extract the single most impactful improvement opportunity from the report and name it in 2-6 words. No sentence, no punctuation, no quotes — just the issue name. Examples: "missing title tags", "slow page load", "thin homepage content", "no meta descriptions", "broken internal links".',
+        [{ role: 'user', content: analysis.slice(0, 6000) }],
+        { userId: user.id, operation: 'seo_top_fix_extract' }
+      );
+      seoTopFix = String(rawFix || '').trim().replace(/^["']|["']$/g, '').slice(0, 60);
+      logger.info(`[SEO] Top fix extracted: "${seoTopFix}"`);
+    } catch (extractErr) {
+      logger.warn(`[SEO] Top-fix extraction failed: ${extractErr.message}`);
+    }
+
     await updateUserMetadata(user.id, {
       lastSeoAnalysis: analysis,
       lastSeoUrl: url,
       seoAuditTriggered: true, // Prevent re-triggering
+      seoTopFix,
+      seoAuditCompletedAt: new Date().toISOString(),
     });
 
     // Feed a synthetic message to the sales bot so it pitches immediately
