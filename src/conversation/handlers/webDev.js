@@ -1276,12 +1276,35 @@ async function generateWebsite(user) {
     await logMessage(user.id, `Website deployed: ${previewUrl}`, 'assistant');
     logger.info(`[WEBGEN] ✅ Complete! Preview sent to ${user.phone_number}: ${previewUrl}`);
 
-    // Always go to revisions state — user can approve, request changes, or reject
+    // Shareable-preview nudge: send a pre-formatted message the user can
+    // long-press → forward to a partner/friend without rewriting anything.
+    // Every forward is a free impression, and a second opinion often closes
+    // the deal faster than solo deliberation. Fire-and-forget — if it fails
+    // we don't want to derail the approval flow.
+    try {
+      const businessLabel = websiteData?.businessName ? ` for ${websiteData.businessName}` : '';
+      await sendTextMessage(
+        user.phone_number,
+        `💬 *Want a second opinion?* Long-press the message below and forward it to a partner or friend:`
+      );
+      await sendTextMessage(
+        user.phone_number,
+        `Hey — just got this website preview built${businessLabel}. What do you think?\n\n${previewUrl}`
+      );
+      await logMessage(user.id, 'Shareable-preview nudge sent', 'assistant');
+    } catch (shareErr) {
+      logger.warn(`[WEBGEN] Shareable-preview nudge failed: ${shareErr.message}`);
+    }
+
+    // Always go to revisions state — user can approve, request changes, or reject.
+    // Tell them upfront how many free rounds of changes they get — surfacing
+    // the cap here avoids the trust-breaking moment of discovering it only
+    // after they've already hit the wall on revision #3.
     await sendTextMessage(
       user.phone_number,
-      "There you go! Have a look and let me know what you think — want any changes, or are you happy with it?"
+      "There you go! Have a look and let me know what you think — want any changes, or are you happy with it?\n\n_You get *2 free rounds of revisions*; anything beyond that we'd handle as custom work from $200._"
     );
-    await logMessage(user.id, 'Website preview sent, asking for feedback', 'assistant');
+    await logMessage(user.id, 'Website preview sent, asking for feedback (with revision cap note)', 'assistant');
 
     return STATES.WEB_REVISIONS;
   } catch (error) {
