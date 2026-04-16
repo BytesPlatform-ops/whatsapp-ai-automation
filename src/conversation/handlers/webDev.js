@@ -139,6 +139,13 @@ function nextMissingWebDevState(websiteData, fullMetadata = {}) {
   // no services section — whyChooseUs + featuredListings carry that load.
   if (isRealEstate(websiteData.industry)) {
     if (!websiteData.agentProfileCollected) return STATES.WEB_COLLECT_AGENT_PROFILE;
+    if (!websiteData.listingsFlowDone) {
+      // Phase-gated: ASK → DETAILS → PHOTOS. If agent said skip at the ask
+      // step we set listingsFlowDone immediately without entering the loop.
+      if (!websiteData.listingsAskAnswered) return STATES.WEB_COLLECT_LISTINGS_ASK;
+      if (!websiteData.listingsDetailsDone) return STATES.WEB_COLLECT_LISTINGS_DETAILS;
+      return STATES.WEB_COLLECT_LISTINGS_PHOTOS;
+    }
   } else if (websiteData.services == null) {
     return STATES.WEB_COLLECT_SERVICES;
   }
@@ -240,6 +247,35 @@ function questionForState(state, websiteData) {
         '• Designations (CRS, ABR, SRS, GRI, etc. — or *none*)\n\n' +
         'Answer all three in one message, or say *skip* to use sensible defaults.'
       );
+    case STATES.WEB_COLLECT_LISTINGS_ASK:
+      return (
+        'Koi current listings showcase karne hain? I can feature up to 3 on the homepage.\n\n' +
+        '• Say *yes* to send them (natural language is fine — e.g. *"45 Elm St, $525k, 4 bed 3 bath, 2200 sqft"*)\n' +
+        '• Say *skip* and I\'ll use professional placeholder listings'
+      );
+    case STATES.WEB_COLLECT_LISTINGS_DETAILS: {
+      const got = (websiteData.listings || []).length;
+      if (got === 0) {
+        return (
+          'Great — send me your first listing. Natural language is fine:\n\n' +
+          '*"45 Elm St, $525k, 4 bed 3 bath, 2200 sqft, for sale"*\n\n' +
+          'Send one per message. Say *done* any time you\'re finished (up to 3).'
+        );
+      }
+      return `Got listing ${got}. Send the next one, or say *done* to move on.`;
+    }
+    case STATES.WEB_COLLECT_LISTINGS_PHOTOS: {
+      const list = websiteData.listings || [];
+      const pending = websiteData.pendingPhotoAssign;
+      if (pending != null) {
+        const options = list.map((l, i) => `*${i + 1}* — ${l.address}`).join('\n');
+        return `For this photo, which listing?\n${options}\n*skip* — don\'t use this photo`;
+      }
+      return (
+        'Photos lena hai to ek ek karke forward karein — main har photo pe poochunga kaunsa listing hai. ' +
+        'Ya *skip* bolein, professional stock photos lag jayengi.'
+      );
+    }
     case STATES.WEB_COLLECT_CONTACT: return "Last thing — what contact info do you want on the site? Send your email, phone, and/or address.";
     default: return '';
   }
@@ -258,6 +294,12 @@ async function sendConfirmation(user, websiteData) {
     lines.push(`*Brokerage:* ${websiteData.brokerageName || 'Solo / independent'}`);
     if (websiteData.yearsExperience != null) lines.push(`*Years:* ${websiteData.yearsExperience}`);
     if (Array.isArray(websiteData.designations) && websiteData.designations.length) lines.push(`*Designations:* ${websiteData.designations.join(', ')}`);
+    if (Array.isArray(websiteData.listings) && websiteData.listings.length) {
+      const withPhotos = websiteData.listings.filter((l) => l.photoUrl).length;
+      lines.push(`*Listings:* ${websiteData.listings.length}${withPhotos ? ` (${withPhotos} with photos)` : ''}`);
+    } else {
+      lines.push(`*Listings:* professional placeholders`);
+    }
   } else if (Array.isArray(websiteData.services) && websiteData.services.length) {
     lines.push(`*Services:* ${websiteData.services.join(', ')}`);
   }
@@ -282,6 +324,12 @@ async function handleWebDev(user, message) {
       return handleCollectServices(user, message);
     case STATES.WEB_COLLECT_AGENT_PROFILE:
       return handleCollectAgentProfile(user, message);
+    case STATES.WEB_COLLECT_LISTINGS_ASK:
+      return handleCollectListingsAsk(user, message);
+    case STATES.WEB_COLLECT_LISTINGS_DETAILS:
+      return handleCollectListingsDetails(user, message);
+    case STATES.WEB_COLLECT_LISTINGS_PHOTOS:
+      return handleCollectListingsPhotos(user, message);
     case STATES.WEB_COLLECT_COLORS:
     case STATES.WEB_COLLECT_LOGO:
       // Legacy: skip straight to contact if stuck in old states
@@ -747,6 +795,319 @@ Rules:
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// REAL-ESTATE LISTINGS COLLECTION (optional, 3-phase: ASK → DETAILS → PHOTOS)
+// If agent skips at any point we mark listingsFlowDone=true and the
+// generator falls back to LLM-hallucinated defaults + Unsplash.
+// ═══════════════════════════════════════════════════════════════════════════
+
+const MAX_LISTINGS = 3;
+
+/**
+ * Parse a free-text listing description into structured fields. Regex pulls
+ * the obvious numerics fast (price / beds / baths / sqft) and LLM fills in
+ * address + status + anything missing. Returns {} if nothing usable.
+ */
+async function parseListingText(raw, user) {
+  const text = String(raw || '').trim();
+  if (!text) return {};
+  const out = {};
+
+  // Price: $525k, $1.2M, $450000, "525 thousand"
+  const priceMatch = text.match(/\$?\s*([\d,]+(?:\.\d+)?)\s*([kKmM])?/);
+  if (priceMatch) {
+    let n = parseFloat(priceMatch[1].replace(/,/g, ''));
+    const suffix = (priceMatch[2] || '').toLowerCase();
+    if (suffix === 'k') n *= 1000;
+    else if (suffix === 'm') n *= 1000000;
+    else if (n < 1000 && !suffix) n = null; // probably beds/sqft, not price
+    if (n && n >= 50000 && n <= 50000000) out.price = Math.round(n);
+  }
+  // Beds/baths: "4 bed 3 bath", "4bd/3ba", "4/3"
+  const bbMatch = text.match(/(\d+)\s*\/\s*(\d+(?:\.\d+)?)/);
+  if (bbMatch) {
+    out.beds = parseInt(bbMatch[1], 10);
+    out.baths = parseFloat(bbMatch[2]);
+  } else {
+    const bedMatch = text.match(/(\d+)\s*(?:bed|bd|br)\b/i);
+    if (bedMatch) out.beds = parseInt(bedMatch[1], 10);
+    const bathMatch = text.match(/(\d+(?:\.\d+)?)\s*(?:bath|ba|bth)\b/i);
+    if (bathMatch) out.baths = parseFloat(bathMatch[1]);
+  }
+  // Sqft: "1800 sqft", "1,800 sf", "2200 square feet"
+  const sqftMatch = text.match(/([\d,]+)\s*(?:sqft|sf|sq\s*ft|square\s*feet)\b/i);
+  if (sqftMatch) {
+    const n = parseInt(sqftMatch[1].replace(/,/g, ''), 10);
+    if (n >= 200 && n <= 20000) out.sqft = n;
+  }
+  // Status
+  if (/\bpending\b/i.test(text)) out.status = 'Pending';
+  else if (/\b(just\s*listed|new\s*listing)\b/i.test(text)) out.status = 'Just Listed';
+  else if (/\bsold\b/i.test(text)) out.status = 'Sold';
+  else if (/\bfor\s*sale\b/i.test(text)) out.status = 'For Sale';
+
+  // LLM pass for address (and anything missing). Always run — regex can't
+  // reliably find street addresses.
+  try {
+    const missingList = [];
+    if (!out.address) missingList.push('address');
+    if (!out.price) missingList.push('price');
+    if (out.beds == null) missingList.push('beds');
+    if (out.baths == null) missingList.push('baths');
+    if (out.sqft == null) missingList.push('sqft');
+    if (!out.status) missingList.push('status');
+    if (!missingList.length) return out;
+
+    const prompt = `Extract real-estate listing fields from the message. Return ONLY JSON with the requested fields. Omit fields you can't confidently extract. Never guess.
+
+Requested: ${missingList.join(', ')}
+
+Rules:
+- address: street address only (e.g. "45 Elm Street"). No city/state unless clearly part of address.
+- price: integer USD. "$525k" → 525000. "1.2M" → 1200000. Omit if unclear.
+- beds, baths: numbers. baths can be .5.
+- sqft: integer square feet.
+- status: one of "For Sale", "Just Listed", "Pending", "Sold". Default "For Sale" only if message implies active listing.
+
+Return like {"address":"45 Elm St","price":525000,"beds":4,"baths":3} or {} if nothing usable.`;
+    const resp = await generateResponse(prompt, [{ role: 'user', content: text }], {
+      userId: user?.id,
+      operation: 'webdev_listing_parse',
+    });
+    const m = resp.match(/\{[\s\S]*\}/);
+    if (m) {
+      const parsed = JSON.parse(m[0]);
+      for (const k of missingList) {
+        const v = parsed[k];
+        if (v == null) continue;
+        if (k === 'address' && typeof v === 'string' && v.trim().length >= 4 && v.trim().length < 100) out.address = v.trim();
+        else if (k === 'price' && Number.isFinite(v) && v >= 50000 && v <= 50000000) out.price = Math.round(v);
+        else if (k === 'beds' && Number.isInteger(v) && v >= 0 && v < 20) out.beds = v;
+        else if (k === 'baths' && Number.isFinite(v) && v >= 0 && v < 20) out.baths = v;
+        else if (k === 'sqft' && Number.isInteger(v) && v >= 200 && v <= 20000) out.sqft = v;
+        else if (k === 'status' && typeof v === 'string' && /^(For Sale|Just Listed|Pending|Sold)$/i.test(v.trim())) {
+          out.status = v.trim().replace(/\b\w/g, (c) => c.toUpperCase()).replace(/For sale/i, 'For Sale').replace(/Just listed/i, 'Just Listed');
+        }
+      }
+    }
+  } catch (err) {
+    logger.warn(`[WEBDEV-LISTING] LLM parse failed: ${err.message}`);
+  }
+
+  return out;
+}
+
+async function handleCollectListingsAsk(user, message) {
+  const raw = (message.text || '').trim();
+  const wd = { ...(user.metadata?.websiteData || {}) };
+  const yesWords = /^(yes|yep|yeah|y|sure|ok|okay|add|add them|i have|haan|han)$/i;
+  const skipWords = /^(skip|no|none|n|nah|nope|not (yet|now)|later|don'?t (have|want)|nahi|nahin)$/i;
+
+  if (skipWords.test(raw)) {
+    const merged = { ...wd, listingsAskAnswered: true, listingsDetailsDone: true, listingsFlowDone: true, listings: [] };
+    await updateUserMetadata(user.id, { websiteData: merged });
+    user.metadata = { ...(user.metadata || {}), websiteData: merged };
+    await logMessage(user.id, 'Listings: skipped (using LLM defaults)', 'assistant');
+    return smartAdvance(user, message, 'No problem — I\'ll use professional placeholder listings.');
+  }
+
+  if (yesWords.test(raw) || /\b(listing|property|home|house|condo)\b/i.test(raw)) {
+    // If the message also looks like a listing itself, fall straight into
+    // details parsing so we don't waste a round-trip.
+    const looksLikeListing = /\$|\d+\s*(bed|bd|ba|sqft|sf)\b/i.test(raw);
+    const merged = { ...wd, listingsAskAnswered: true, listings: wd.listings || [] };
+    await updateUserMetadata(user.id, { websiteData: merged });
+    user.metadata = { ...(user.metadata || {}), websiteData: merged };
+    if (looksLikeListing) {
+      return handleCollectListingsDetails(user, message);
+    }
+    await sendTextMessage(user.phone_number, questionForState(STATES.WEB_COLLECT_LISTINGS_DETAILS, merged));
+    return STATES.WEB_COLLECT_LISTINGS_DETAILS;
+  }
+
+  // Unclear answer — re-ask
+  await sendTextMessage(
+    user.phone_number,
+    'Just to confirm — *yes* to send your listings, or *skip* to use professional placeholder listings?'
+  );
+  return STATES.WEB_COLLECT_LISTINGS_ASK;
+}
+
+async function handleCollectListingsDetails(user, message) {
+  const raw = (message.text || '').trim();
+  const wd = { ...(user.metadata?.websiteData || {}) };
+  const listings = Array.isArray(wd.listings) ? [...wd.listings] : [];
+  const doneWords = /^(done|finished|that'?s (it|all)|stop|enough|no more|bas|khatam)$/i;
+  const skipWords = /^(skip|cancel)$/i;
+
+  if (skipWords.test(raw)) {
+    // Skip mid-flow — keep what we have (if any), fall back for the rest.
+    const merged = { ...wd, listings, listingsDetailsDone: true, listingsFlowDone: true };
+    await updateUserMetadata(user.id, { websiteData: merged });
+    user.metadata = { ...(user.metadata || {}), websiteData: merged };
+    return smartAdvance(user, message, listings.length ? `Got ${listings.length} listing(s), using defaults for the rest.` : 'No problem — using professional placeholder listings.');
+  }
+
+  if (doneWords.test(raw)) {
+    if (listings.length === 0) {
+      // User said "done" with zero listings — treat as skip
+      const merged = { ...wd, listingsDetailsDone: true, listingsFlowDone: true, listings: [] };
+      await updateUserMetadata(user.id, { websiteData: merged });
+      user.metadata = { ...(user.metadata || {}), websiteData: merged };
+      return smartAdvance(user, message, 'No problem — using professional placeholder listings.');
+    }
+    // Move to photos phase
+    const merged = { ...wd, listings, listingsDetailsDone: true };
+    await updateUserMetadata(user.id, { websiteData: merged });
+    user.metadata = { ...(user.metadata || {}), websiteData: merged };
+    await sendTextMessage(user.phone_number, questionForState(STATES.WEB_COLLECT_LISTINGS_PHOTOS, merged));
+    return STATES.WEB_COLLECT_LISTINGS_PHOTOS;
+  }
+
+  // Parse the listing
+  const parsed = await parseListingText(raw, user);
+  if (!parsed.address && !parsed.price) {
+    await sendTextMessage(
+      user.phone_number,
+      'I couldn\'t pick up an address or price. Try again like *"45 Elm St, $525k, 4 bed 3 bath, 2200 sqft"* — or say *done* to stop.'
+    );
+    return STATES.WEB_COLLECT_LISTINGS_DETAILS;
+  }
+
+  // Sensible defaults for missing fields
+  const listing = {
+    address: parsed.address || 'Address on request',
+    price: parsed.price || 0,
+    beds: parsed.beds != null ? parsed.beds : 3,
+    baths: parsed.baths != null ? parsed.baths : 2,
+    sqft: parsed.sqft != null ? parsed.sqft : 1800,
+    status: parsed.status || 'For Sale',
+    photoUrl: null,
+    neighborhood: '',
+  };
+  listings.push(listing);
+
+  const reachedMax = listings.length >= MAX_LISTINGS;
+  const merged = { ...wd, listings };
+  if (reachedMax) merged.listingsDetailsDone = true;
+  await updateUserMetadata(user.id, { websiteData: merged });
+  user.metadata = { ...(user.metadata || {}), websiteData: merged };
+  await logMessage(user.id, `Listing ${listings.length} captured: ${listing.address} / $${listing.price}`, 'assistant');
+
+  const priceStr = listing.price ? `$${listing.price.toLocaleString()}` : 'price on request';
+  const ack = `Got it — *${listing.address}*, ${priceStr}, ${listing.beds}bd/${listing.baths}ba${listing.sqft ? `, ${listing.sqft.toLocaleString()}sf` : ''}.`;
+
+  if (reachedMax) {
+    await sendTextMessage(
+      user.phone_number,
+      `${ack}\n\nMax 3 reached — moving to photos.\n\n${questionForState(STATES.WEB_COLLECT_LISTINGS_PHOTOS, merged)}`
+    );
+    return STATES.WEB_COLLECT_LISTINGS_PHOTOS;
+  }
+
+  await sendTextMessage(user.phone_number, `${ack}\n\nSend the next listing, or say *done* to move on.`);
+  return STATES.WEB_COLLECT_LISTINGS_DETAILS;
+}
+
+async function handleCollectListingsPhotos(user, message) {
+  const raw = (message.text || '').trim();
+  const wd = { ...(user.metadata?.websiteData || {}) };
+  const listings = Array.isArray(wd.listings) ? [...wd.listings] : [];
+  const skipWords = /^(skip|done|no more|bas|khatam|stock|use stock|placeholder)$/i;
+  const pendingIdx = wd.pendingPhotoAssign; // null when waiting for next image
+
+  // If we're waiting for an assignment number ("1", "2", "3", or skip)
+  if (pendingIdx != null) {
+    if (/^skip$/i.test(raw) || /^discard$/i.test(raw)) {
+      const merged = { ...wd, pendingPhotoAssign: null };
+      await updateUserMetadata(user.id, { websiteData: merged });
+      user.metadata = { ...(user.metadata || {}), websiteData: merged };
+      await sendTextMessage(user.phone_number, 'Skipped. Send another photo or say *done* to finish.');
+      return STATES.WEB_COLLECT_LISTINGS_PHOTOS;
+    }
+    const numMatch = raw.match(/^([1-9])$/);
+    if (!numMatch) {
+      await sendTextMessage(user.phone_number, `Please reply with just a number: ${listings.map((_, i) => i + 1).join(', ')}, or *skip*.`);
+      return STATES.WEB_COLLECT_LISTINGS_PHOTOS;
+    }
+    const n = parseInt(numMatch[1], 10);
+    if (n < 1 || n > listings.length) {
+      await sendTextMessage(user.phone_number, `Pick a valid number: ${listings.map((_, i) => i + 1).join(', ')}, or *skip*.`);
+      return STATES.WEB_COLLECT_LISTINGS_PHOTOS;
+    }
+    // Upload the stored buffer to Supabase now that we know where it belongs.
+    try {
+      const { uploadListingPhoto } = require('../../website-gen/listingPhotoUploader');
+      const { downloadMedia } = require('../../messages/sender');
+      const mediaId = wd.pendingPhotoMediaId;
+      if (!mediaId) throw new Error('no pending media id');
+      const { buffer, mimeType } = await downloadMedia(mediaId);
+      const url = await uploadListingPhoto(buffer, mimeType || 'image/jpeg');
+      listings[n - 1].photoUrl = url;
+      const merged = { ...wd, listings, pendingPhotoAssign: null, pendingPhotoMediaId: null };
+      await updateUserMetadata(user.id, { websiteData: merged });
+      user.metadata = { ...(user.metadata || {}), websiteData: merged };
+      await logMessage(user.id, `Listing ${n} photo uploaded: ${url}`, 'assistant');
+      await sendTextMessage(user.phone_number, `Attached to *${listings[n - 1].address}*. Send another photo or say *done* to finish.`);
+      return STATES.WEB_COLLECT_LISTINGS_PHOTOS;
+    } catch (err) {
+      logger.error('[WEBDEV-LISTING] photo upload failed:', err);
+      const merged = { ...wd, pendingPhotoAssign: null, pendingPhotoMediaId: null };
+      await updateUserMetadata(user.id, { websiteData: merged });
+      user.metadata = { ...(user.metadata || {}), websiteData: merged };
+      await sendTextMessage(user.phone_number, 'Upload failed — stock photo will be used for that one. Try another, or say *done*.');
+      return STATES.WEB_COLLECT_LISTINGS_PHOTOS;
+    }
+  }
+
+  // Not waiting for assignment: either image arrived, or user said done/skip/text
+  if (message.mediaId && message.type === 'image') {
+    // If only one listing, auto-assign and skip the question.
+    if (listings.length === 1) {
+      try {
+        const { uploadListingPhoto } = require('../../website-gen/listingPhotoUploader');
+        const { downloadMedia } = require('../../messages/sender');
+        const { buffer, mimeType } = await downloadMedia(message.mediaId);
+        const url = await uploadListingPhoto(buffer, mimeType || 'image/jpeg');
+        listings[0].photoUrl = url;
+        const merged = { ...wd, listings };
+        await updateUserMetadata(user.id, { websiteData: merged });
+        user.metadata = { ...(user.metadata || {}), websiteData: merged };
+        await sendTextMessage(user.phone_number, `Attached to *${listings[0].address}*. Send another photo or say *done* to finish.`);
+        return STATES.WEB_COLLECT_LISTINGS_PHOTOS;
+      } catch (err) {
+        logger.error('[WEBDEV-LISTING] photo upload failed:', err);
+        await sendTextMessage(user.phone_number, 'Upload failed — stock photo will be used. Say *done* to continue.');
+        return STATES.WEB_COLLECT_LISTINGS_PHOTOS;
+      }
+    }
+    // Multiple listings — ask which one
+    const merged = { ...wd, pendingPhotoAssign: 0, pendingPhotoMediaId: message.mediaId };
+    await updateUserMetadata(user.id, { websiteData: merged });
+    user.metadata = { ...(user.metadata || {}), websiteData: merged };
+    await sendTextMessage(user.phone_number, questionForState(STATES.WEB_COLLECT_LISTINGS_PHOTOS, merged));
+    return STATES.WEB_COLLECT_LISTINGS_PHOTOS;
+  }
+
+  if (skipWords.test(raw)) {
+    const merged = { ...wd, listingsFlowDone: true, pendingPhotoAssign: null, pendingPhotoMediaId: null };
+    await updateUserMetadata(user.id, { websiteData: merged });
+    user.metadata = { ...(user.metadata || {}), websiteData: merged };
+    const withPhotos = listings.filter((l) => l.photoUrl).length;
+    const ack = withPhotos > 0
+      ? `Got ${withPhotos} photo${withPhotos === 1 ? '' : 's'} — stock photos for the rest.`
+      : 'Using professional stock photos for all listings.';
+    return smartAdvance(user, message, ack);
+  }
+
+  // Any other text — gentle nudge
+  await sendTextMessage(
+    user.phone_number,
+    'Send a listing photo (image), or say *done* / *skip* to use stock photos.'
+  );
+  return STATES.WEB_COLLECT_LISTINGS_PHOTOS;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // SALON-SPECIFIC COLLECTION
 // Only reached when industry matches salon/beauty/barber/spa/etc.
 // Flow: services -> booking tool -> instagram -> (if native) hours -> durations -> contact
@@ -1054,6 +1415,12 @@ async function handleCollectContact(user, message) {
     lines.push(`*Brokerage:* ${wd.brokerageName || 'Solo / independent'}`);
     if (wd.yearsExperience != null) lines.push(`*Years:* ${wd.yearsExperience}`);
     if (Array.isArray(wd.designations) && wd.designations.length) lines.push(`*Designations:* ${wd.designations.join(', ')}`);
+    if (Array.isArray(wd.listings) && wd.listings.length) {
+      const withPhotos = wd.listings.filter((l) => l.photoUrl).length;
+      lines.push(`*Listings:* ${wd.listings.length}${withPhotos ? ` (${withPhotos} with photos)` : ''}`);
+    } else {
+      lines.push(`*Listings:* professional placeholders`);
+    }
   } else {
     const servicesList = (wd.services || []).length > 0 ? wd.services.join(', ') : 'None (skipped)';
     lines.push(`*Services:* ${servicesList}`);
