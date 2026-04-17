@@ -4,6 +4,7 @@ const { generateResponse } = require('../../llm/provider');
 const { GENERAL_CHAT_PROMPT } = require('../../llm/prompts');
 const { formatWhatsApp } = require('../../utils/formatWhatsApp');
 const { STATES } = require('../states');
+const { buildSummaryContext } = require('../summaryManager');
 
 async function handleAppDev(user, message) {
   switch (user.state) {
@@ -89,7 +90,7 @@ async function handleFollowUp(user, message) {
   }));
 
   const response = await generateResponse(
-    GENERAL_CHAT_PROMPT + '\n\nThis user is interested in app development. Help them with their questions.',
+    GENERAL_CHAT_PROMPT + '\n\nThis user is interested in app development. Help them with their questions.' + buildSummaryContext(user),
     messages,
     { userId: user.id, operation: 'appdev_followup' }
   );

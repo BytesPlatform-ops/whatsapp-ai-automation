@@ -12,6 +12,7 @@ const { validateUrl } = require('../../utils/validators');
 const { formatWhatsApp } = require('../../utils/formatWhatsApp');
 const { logger } = require('../../utils/logger');
 const { STATES } = require('../states');
+const { buildSummaryContext } = require('../summaryManager');
 
 // Lazy-load heavy modules
 let scraper, analyzer, report;
@@ -282,6 +283,7 @@ async function handleFollowUp(user, message) {
   if (audit?.analysis_text) {
     systemContext += `\n\nYou recently analyzed the website ${audit.url}. Here's the analysis:\n${audit.analysis_text}\n\nAnswer follow-up questions based on this analysis.`;
   }
+  systemContext += buildSummaryContext(user);
 
   const response = await generateResponse(systemContext, messages, {
     userId: user.id,

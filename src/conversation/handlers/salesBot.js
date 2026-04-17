@@ -8,6 +8,7 @@ const { logger } = require('../../utils/logger');
 const { STATES } = require('../states');
 const { env } = require('../../config/env');
 const { saveLeadSummary } = require('../../db/leadSummaries');
+const { buildSummaryContext } = require('../summaryManager');
 
 /**
  * Extract and strip the [LEAD_BRIEF]...[/LEAD_BRIEF] block from the LLM response.
@@ -65,6 +66,7 @@ async function handleSalesBot(user, message) {
   const adSource = user.metadata?.adSource || 'generic';
 
   let systemPrompt = buildSalesPrompt(env.calendlyUrl, env.portfolio, adSource);
+  systemPrompt += buildSummaryContext(user);
 
   // If we just ran an SEO audit, inject the findings so the bot can pitch based on real data
   const seoAnalysis = user.metadata?.lastSeoAnalysis;

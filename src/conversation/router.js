@@ -7,6 +7,7 @@ const { logger } = require('../utils/logger');
 const { generateResponse } = require('../llm/provider');
 const { INTENT_CLASSIFIER_PROMPT, GENERAL_CHAT_PROMPT } = require('../llm/prompts');
 const { transcribeAudio } = require('../llm/transcribe');
+const { maybeUpdateSummary } = require('./summaryManager');
 
 /**
  * Identify which product an ad is promoting based on the ad body text.
@@ -496,6 +497,10 @@ async function _routeMessage(message) {
     await updateUserState(user.id, newState);
     logger.debug(`State transition for ${from}: ${user.state} → ${newState}`);
   }
+
+  // Refresh the rolling conversation summary if we've crossed the interval.
+  // Fire-and-forget — must not block the turn; the summary manager swallows errors.
+  maybeUpdateSummary(user).catch(() => {});
 }
 
 module.exports = { routeMessage };
