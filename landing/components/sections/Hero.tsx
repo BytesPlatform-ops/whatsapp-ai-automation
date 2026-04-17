@@ -125,10 +125,11 @@ export function Hero() {
                 prefill="Hi! I saw your landing page and want to try the bot."
               />
               <a
-                href="#how"
-                className="inline-flex h-14 items-center justify-center rounded-full border border-white/15 px-6 text-base font-semibold text-white/90 transition hover:bg-white/5"
+                href="/examples"
+                className="group inline-flex h-14 items-center justify-center gap-2 rounded-full border-2 border-wa-green/40 bg-wa-green/5 px-7 text-base font-semibold text-white transition-all hover:border-wa-green hover:bg-wa-green/10 hover:shadow-[0_0_24px_-4px_rgba(37,211,102,0.45)]"
               >
                 See it in action
+                <svg className="h-4 w-4 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M7 17L17 7M7 7h10v10"/></svg>
               </a>
             </motion.div>
 

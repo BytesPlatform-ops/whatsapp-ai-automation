@@ -10,8 +10,30 @@ import {
 } from 'lucide-react';
 import { Section, SectionHeading } from '@/components/Section';
 import { WhatsAppButton } from '@/components/WhatsAppButton';
+import { DEMO_SITES } from '@/lib/demoSites';
 
 type Mock = 'website' | 'ad' | 'seo' | 'chatbot';
+
+// Screenshot a real demo site via Microlink — the Websites service card
+// used to show a mocked "Sunrise Bakery" visual, but a live capture of
+// one of our actual generated sites is more convincing.
+function microlinkScreenshot(url: string) {
+  const params = new URLSearchParams({
+    url,
+    screenshot: 'true',
+    embed: 'screenshot.url',
+    waitUntil: 'networkidle0',
+    viewport: JSON.stringify({ width: 1280, height: 800, deviceScaleFactor: 1 }),
+    meta: 'false',
+  });
+  return `https://api.microlink.io?${params.toString()}`;
+}
+
+// Pick the HVAC demo as the website showcase — most visually striking
+// hero of the four (technician photo, bold headline, emergency strip).
+// Falls back to the first demo site if somehow missing.
+const WEBSITE_SHOWCASE =
+  DEMO_SITES.find((s) => s.id === 'hvac') || DEMO_SITES[0];
 
 const services: {
   icon: typeof Globe;
@@ -22,6 +44,9 @@ const services: {
   cta: string;
   prefill: string;
   mock: Mock;
+  // Examples anchor: deep-links to /examples. `null` means no live example
+  // for this service yet (hides the "See an example" link gracefully).
+  examplesLink: string | null;
 }[] = [
   {
     icon: Globe,
@@ -32,6 +57,7 @@ const services: {
     cta: 'Build my site',
     prefill: 'I want to build a website',
     mock: 'website',
+    examplesLink: '/examples',
   },
   {
     icon: Megaphone,
@@ -42,6 +68,7 @@ const services: {
     cta: 'Design my ad',
     prefill: 'I want to design a marketing ad',
     mock: 'ad',
+    examplesLink: null,
   },
   {
     icon: Search,
@@ -52,6 +79,7 @@ const services: {
     cta: 'Audit my site',
     prefill: 'Please audit my website',
     mock: 'seo',
+    examplesLink: null,
   },
   {
     icon: Bot,
@@ -62,42 +90,55 @@ const services: {
     cta: 'Get my chatbot',
     prefill: 'I want the AI chatbot for my site',
     mock: 'chatbot',
+    examplesLink: null,
   },
 ];
 
 function MockVisual({ type }: { type: Mock }) {
   if (type === 'website') {
     return (
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-ink-100 to-white p-4 ring-1 ring-ink-100">
+      <a
+        href="/examples"
+        className="group relative block overflow-hidden rounded-2xl bg-gradient-to-br from-ink-100 to-white p-3 ring-1 ring-ink-100 transition-all hover:ring-wa-green/40 hover:shadow-card"
+      >
         {/* Browser chrome */}
-        <div className="mb-3 flex items-center gap-1.5">
+        <div className="mb-2.5 flex items-center gap-1.5">
           <span className="h-2.5 w-2.5 rounded-full bg-red-400" />
           <span className="h-2.5 w-2.5 rounded-full bg-amber-400" />
           <span className="h-2.5 w-2.5 rounded-full bg-emerald-400" />
           <span className="ml-3 truncate rounded-md bg-white px-2 py-1 text-[11px] text-ink-400 ring-1 ring-ink-100">
-            sunrise-bakery.pixiebot.co
+            {WEBSITE_SHOWCASE.url.replace(/^https?:\/\//, '')}
           </span>
         </div>
-        <div className="overflow-hidden rounded-xl bg-white ring-1 ring-ink-100">
-          <div className="relative h-40 bg-gradient-to-br from-amber-50 via-white to-wa-bubble">
-            <div className="absolute inset-0 flex items-center justify-center">
-              <div className="text-center">
-                <div className="mx-auto mb-2 h-8 w-8 rounded-full bg-wa-green" />
-                <p className="font-display text-lg font-bold text-ink-900">Sunrise Bakery</p>
-                <p className="text-[11px] text-ink-500">Fresh sourdough. Baked daily.</p>
-                <span className="mt-2 inline-block rounded-full bg-ink-900 px-3 py-1 text-[11px] font-semibold text-white">
-                  Order on WhatsApp
-                </span>
-              </div>
-            </div>
-          </div>
-          <div className="grid grid-cols-3 gap-1 p-1">
-            <div className="h-10 rounded bg-ink-100" />
-            <div className="h-10 rounded bg-ink-100" />
-            <div className="h-10 rounded bg-ink-100" />
+        {/* Real deployed site screenshot */}
+        <div className="relative aspect-[16/10] overflow-hidden rounded-xl bg-navy-900 ring-1 ring-ink-100">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={microlinkScreenshot(WEBSITE_SHOWCASE.url)}
+            alt={`${WEBSITE_SHOWCASE.businessName} website preview`}
+            className="h-full w-full object-cover object-top transition-transform duration-500 group-hover:scale-105"
+            loading="lazy"
+          />
+          {/* Live badge */}
+          <div className="absolute left-3 top-3 flex items-center gap-1.5 rounded-full bg-white/95 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-ink-900 shadow-soft backdrop-blur">
+            <span className="relative flex h-2 w-2">
+              <span className="absolute inset-0 animate-ping rounded-full bg-wa-green/70" />
+              <span className="relative h-2 w-2 rounded-full bg-wa-green" />
+            </span>
+            Live · Built by Pixie
           </div>
         </div>
-      </div>
+        <div className="mt-2.5 flex items-center justify-between px-1">
+          <p className="text-xs text-ink-500">
+            <span className="font-semibold text-ink-900">{WEBSITE_SHOWCASE.businessName}</span>
+            {' · '}
+            <span className="text-ink-400">{WEBSITE_SHOWCASE.city}</span>
+          </p>
+          <span className="text-xs font-semibold text-wa-teal transition-colors group-hover:text-wa-green">
+            Visit site →
+          </span>
+        </div>
+      </a>
     );
   }
   if (type === 'ad') {
@@ -240,13 +281,21 @@ export function Services() {
                     </li>
                   ))}
                 </ul>
-                <div className="mt-7 flex flex-wrap items-center gap-3">
+                <div className="mt-7 flex flex-wrap items-center gap-x-5 gap-y-3">
                   <WhatsAppButton size="lg" label={svc.cta} prefill={svc.prefill} />
+                  {svc.examplesLink && (
+                    <a
+                      href={svc.examplesLink}
+                      className="inline-flex items-center gap-1 text-sm font-semibold text-wa-teal transition hover:text-wa-green"
+                    >
+                      See a live example <ArrowUpRight className="h-4 w-4" />
+                    </a>
+                  )}
                   <a
                     href="#faq"
-                    className="inline-flex items-center gap-1 text-sm font-semibold text-wa-teal hover:text-wa-green"
+                    className="inline-flex items-center gap-1 text-sm font-semibold text-ink-500 transition hover:text-ink-900"
                   >
-                    How does this work? <ArrowUpRight className="h-4 w-4" />
+                    How does this work?
                   </a>
                 </div>
               </div>

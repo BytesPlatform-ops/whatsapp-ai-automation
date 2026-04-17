@@ -56,11 +56,19 @@ export function FinalCTA() {
             transition={{ duration: 0.6, delay: 0.15 }}
             className="mt-10 flex flex-col items-center gap-5"
           >
-            <WhatsAppButton
-              size="xl"
-              label="Start on WhatsApp"
-              prefill="Hi! I saw your landing page CTA and want to get started."
-            />
+            <div className="flex flex-col items-center gap-3 sm:flex-row sm:gap-4">
+              <WhatsAppButton
+                size="xl"
+                label="Start on WhatsApp"
+                prefill="Hi! I saw your landing page CTA and want to get started."
+              />
+              <a
+                href="/examples"
+                className="inline-flex h-14 items-center justify-center gap-2 rounded-full border border-white/15 px-6 text-base font-semibold text-white/85 transition hover:border-wa-green/40 hover:bg-white/5 hover:text-white"
+              >
+                Or browse examples first
+              </a>
+            </div>
             <ul className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-sm text-white/60">
               {['Free to start', 'No signup', 'Works on any phone'].map((t) => (
                 <li key={t} className="flex items-center gap-1.5">

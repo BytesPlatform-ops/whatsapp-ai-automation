@@ -2,6 +2,7 @@ import { Navigation } from '@/components/sections/Navigation';
 import { Hero } from '@/components/sections/Hero';
 import { TrustStrip } from '@/components/sections/TrustStrip';
 import { HowItWorks } from '@/components/sections/HowItWorks';
+import { ExamplesPreview } from '@/components/sections/ExamplesPreview';
 import { Services } from '@/components/sections/Services';
 import { WhyUs } from '@/components/sections/WhyUs';
 import { Testimonials } from '@/components/sections/Testimonials';
@@ -18,6 +19,7 @@ export default function Page() {
         <Hero />
         <TrustStrip />
         <HowItWorks />
+        <ExamplesPreview />
         <Services />
         <WhyUs />
         <Testimonials />
