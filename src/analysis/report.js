@@ -3,23 +3,21 @@ const { formatWhatsApp } = require('../utils/formatWhatsApp');
 const { logger } = require('../utils/logger');
 
 // ─── Design tokens ─────────────────────────────────────────────────────────
-// Kept in one place so the PDF's look can be tweaked without hunting through
-// the render code. Hex values are inlined in rgb() calls where pdfkit needs
-// them; these constants exist for readability and so the palette stays
-// internally consistent (e.g. score-card bar colour matches the verdict text).
-const BRAND = '#4F46E5';        // indigo-600 — primary
-const BRAND_SOFT = '#818CF8';   // indigo-400 — accent / underlines
-const INK = '#0F172A';          // slate-900 — body text
-const MUTED = '#475569';        // slate-600 — secondary text
-const SUBTLE = '#94A3B8';       // slate-400 — footers / dates
-const BORDER = '#E2E8F0';       // slate-200 — rules / card borders
-const SURFACE = '#F8FAFC';      // slate-50 — card backgrounds
+// Professional navy palette. All colour decisions live here so the look can
+// be adjusted without hunting through render code.
+const BRAND = '#0F2A52';        // deep navy — primary (headers, underlines)
+const BRAND_SOFT = '#1E3A8A';   // blue-800 — accent stripe on cover band
+const INK = '#111827';          // near-black — body text
+const MUTED = '#4B5563';        // gray-600 — secondary copy
+const SUBTLE = '#9CA3AF';       // gray-400 — footer, dates
+const BORDER = '#E5E7EB';       // gray-200 — hairlines / card borders
+const SURFACE = '#F9FAFB';      // gray-50 — score-card background
 
 const SCORE_PALETTE = [
-  { min: 80, color: '#059669', label: 'Strong' },           // emerald-600
-  { min: 60, color: '#CA8A04', label: 'Room to Improve' },  // yellow-600
-  { min: 40, color: '#EA580C', label: 'Needs Work' },       // orange-600
-  { min: 0,  color: '#DC2626', label: 'Critical' },         // red-600
+  { min: 80, color: '#047857', label: 'Strong' },           // emerald-700
+  { min: 60, color: '#B45309', label: 'Room to Improve' },  // amber-700
+  { min: 40, color: '#C2410C', label: 'Needs Work' },       // orange-700
+  { min: 0,  color: '#B91C1C', label: 'Critical' },         // red-700
 ];
 
 /**
@@ -104,25 +102,18 @@ function generatePdf(url, analysis) {
       doc.rect(0, 0, pageWidth, headerH).fill(BRAND);
       doc.restore();
 
-      // Subtle diagonal accent stripe — a second slightly-darker band behind
-      // the main one gives the header depth without needing gradients.
+      // Thin hairline at the bottom of the band for a more editorial feel
+      // than the chunky accent stripe the first cut used.
       doc.save();
-      doc.rect(0, headerH - 6, pageWidth, 6).fill(BRAND_SOFT);
+      doc.rect(0, headerH - 2, pageWidth, 2).fill(BRAND_SOFT);
       doc.restore();
-
-      // Brand mark top-right.
-      doc
-        .fillColor('#FFFFFF', 0.85)
-        .fontSize(10)
-        .font('Helvetica-Bold')
-        .text('P I X I E', pageWidth - 120, 28, { width: 70, align: 'right' });
 
       // Title.
       doc
         .fillColor('#FFFFFF')
-        .fontSize(28)
+        .fontSize(26)
         .font('Helvetica-Bold')
-        .text('SEO AUDIT REPORT', leftMargin, 40, { width: contentWidth });
+        .text('SEO AUDIT REPORT', leftMargin, 42, { width: contentWidth, characterSpacing: 0.5 });
 
       // "Prepared for" label.
       doc
@@ -174,18 +165,18 @@ function generatePdf(url, analysis) {
         doc.rect(leftMargin, cardY, 6, cardH).fill(v.color);
         doc.restore();
 
-        // Big score number.
+        // Score number — sized down so it reads as a statistic, not a badge.
         doc
           .fillColor(v.color)
-          .fontSize(48)
+          .fontSize(40)
           .font('Helvetica-Bold')
-          .text(String(score), leftMargin + 26, cardY + 16, { lineBreak: false });
+          .text(String(score), leftMargin + 26, cardY + 22, { lineBreak: false });
 
         // "/100" subdued, inline with the big number.
         const numWidth = doc.widthOfString(String(score));
         doc
           .fillColor(MUTED)
-          .fontSize(18)
+          .fontSize(16)
           .font('Helvetica')
           .text('/ 100', leftMargin + 26 + numWidth + 6, cardY + 44, { lineBreak: false });
 
@@ -211,18 +202,57 @@ function generatePdf(url, analysis) {
       }
 
       // ─── Body ──────────────────────────────────────────────────────────
-      // Strip inline markdown before rendering. Line-level structure (lists,
-      // headings prefixed with `##`, etc.) is still detected from the raw
-      // text below.
+      // Line-level structure (lists, `##` headings) is detected from the raw
+      // text; inline **bold** runs are preserved and rendered in bold.
       const body = String(analysis || '').split('\n');
 
-      const stripInline = (s) => s
-        .replace(/\*\*(.+?)\*\*/g, '$1')
-        .replace(/\*(.+?)\*/g, '$1')
+      // Strip _inline_ markdown (italic, code, underscore-bold) — anything
+      // that isn't `**bold**`, which we render with emphasis.
+      const stripNonBold = (s) => s
+        .replace(/\*(?!\*)(.+?)\*(?!\*)/g, '$1')   // *italic* → italic
         .replace(/__(.+?)__/g, '$1')
         .replace(/`(.+?)`/g, '$1');
 
-      // Helper: draw a small indigo accent underline below big headers.
+      // Split a line into alternating normal / bold segments based on
+      // `**...**` markers. Always returns at least one segment.
+      const segmentBold = (raw) => {
+        const text = stripNonBold(raw);
+        const out = [];
+        const re = /\*\*([\s\S]+?)\*\*/g;
+        let last = 0;
+        let m;
+        while ((m = re.exec(text)) !== null) {
+          if (m.index > last) out.push({ text: text.slice(last, m.index), bold: false });
+          out.push({ text: m[1], bold: true });
+          last = m.index + m[0].length;
+        }
+        if (last < text.length) out.push({ text: text.slice(last), bold: false });
+        if (out.length === 0) out.push({ text, bold: false });
+        return out;
+      };
+
+      // Render a line with mixed bold/regular runs using `continued: true`
+      // chains. First call optionally absolute-positions (x, y, width) —
+      // subsequent calls flow naturally on the same paragraph.
+      const renderInline = (raw, opts = {}) => {
+        const { x, y, width, boldColor = INK, baseColor = INK, fontSize = 11 } = opts;
+        const segs = segmentBold(raw);
+        segs.forEach((seg, i) => {
+          const isLast = i === segs.length - 1;
+          const font = seg.bold ? 'Helvetica-Bold' : 'Helvetica';
+          const color = seg.bold ? boldColor : baseColor;
+          doc.font(font).fillColor(color).fontSize(fontSize);
+          if (i === 0 && x != null && y != null) {
+            doc.text(seg.text, x, y, { continued: !isLast, width });
+          } else if (i === 0 && width != null) {
+            doc.text(seg.text, { continued: !isLast, width });
+          } else {
+            doc.text(seg.text, { continued: !isLast });
+          }
+        });
+      };
+
+      // Helper: draw a short navy accent underline below big section headers.
       const drawAccentUnderline = () => {
         const y = doc.y + 2;
         doc.save();
@@ -248,7 +278,7 @@ function generatePdf(url, analysis) {
         // Markdown headings (#, ##, ###, etc.).
         if (/^#{1,6}\s+/.test(trimmed)) {
           const level = trimmed.match(/^#+/)[0].length;
-          const headerText = stripInline(trimmed.replace(/^#+\s*/, ''));
+          const headerText = stripNonBold(trimmed.replace(/^#+\s*/, '')).replace(/\*\*/g, '');
 
           // Keep headings from landing at the very bottom of a page.
           if (doc.y > pageHeight - 120) doc.addPage();
@@ -276,7 +306,7 @@ function generatePdf(url, analysis) {
 
         // A full-line bold "Key: value" style heading (e.g. "**Summary:**").
         if (/^\*\*[^*]+\*\*:?\s*$/.test(trimmed)) {
-          const headerText = stripInline(trimmed).replace(/:$/, '');
+          const headerText = stripNonBold(trimmed).replace(/\*\*/g, '').replace(/:$/, '');
           if (doc.y > pageHeight - 110) doc.addPage();
           doc
             .moveDown(0.55)
@@ -289,36 +319,38 @@ function generatePdf(url, analysis) {
           continue;
         }
 
-        // Inline-bold at start of line (e.g. "**Score:** 82/100").
-        if (/^\*\*.+?\*\*/.test(trimmed)) {
-          const clean = stripInline(trimmed);
-          doc.font('Helvetica-Bold').fillColor(INK).text(clean);
-          doc.font('Helvetica').fillColor(INK);
-          continue;
-        }
-
-        // Bullet points.
+        // Bullet points — bullet glyph + mixed-weight body text so labels
+        // like "**Load Time:**" at the start render bold while the rest
+        // stays regular.
         if (/^[-*•]\s+/.test(trimmed)) {
-          const bulletText = stripInline(trimmed.replace(/^[-*•]\s+/, ''));
+          const bulletBody = trimmed.replace(/^[-*•]\s+/, '');
           const startY = doc.y;
-          // Coloured bullet glyph.
           doc
             .fillColor(BRAND)
             .fontSize(11)
             .font('Helvetica-Bold')
             .text('•', leftMargin + 4, startY, { lineBreak: false, width: 12 });
-          // Body text indented past the bullet.
-          doc
-            .fillColor(INK)
-            .font('Helvetica')
-            .text(bulletText, leftMargin + 20, startY, { width: contentWidth - 20 });
+          renderInline(bulletBody, {
+            x: leftMargin + 20,
+            y: startY,
+            width: contentWidth - 20,
+            baseColor: INK,
+            boldColor: INK,
+          });
           continue;
         }
 
-        // Numbered list.
+        // Numbered list — same inline-bold treatment.
         if (/^\d+[.)]\s+/.test(trimmed)) {
-          const clean = stripInline(trimmed);
-          doc.fillColor(INK).font('Helvetica').text(clean, { indent: 8 });
+          const indent = 8;
+          const startY = doc.y;
+          renderInline(trimmed, {
+            x: leftMargin + indent,
+            y: startY,
+            width: contentWidth - indent,
+            baseColor: INK,
+            boldColor: INK,
+          });
           continue;
         }
 
@@ -333,20 +365,35 @@ function generatePdf(url, analysis) {
           continue;
         }
 
-        // Regular body paragraph.
-        doc.fillColor(INK).font('Helvetica').fontSize(11).text(stripInline(trimmed));
+        // Regular body paragraph — still renders inline **bold** runs.
+        renderInline(trimmed, {
+          width: contentWidth,
+          baseColor: INK,
+          boldColor: INK,
+        });
       }
 
       // ─── Page-number + credit footer on every page ─────────────────────
       // Done last, after all pages exist, so the count is accurate and the
       // footer doesn't interfere with body layout.
+      //
+      // IMPORTANT: pdfkit auto-paginates whenever text is written below the
+      // page's bottom margin — even when we supply an explicit absolute y.
+      // Our footer sits at (pageHeight - 36), which is below the default
+      // bottom margin of 50. Without compensating, every .text() call below
+      // would spawn a blank page to "continue" the text on. The fix is to
+      // temporarily set the bottom margin to 0 for the footer loop, then
+      // restore it. (Learned the hard way — the previous version of this
+      // function was emitting three pages for a single-page report.)
       const pages = doc.bufferedPageRange();
       for (let i = 0; i < pages.count; i++) {
         doc.switchToPage(i);
 
+        const savedBottomMargin = doc.page.margins.bottom;
+        doc.page.margins.bottom = 0;
+
         const footerY = pageHeight - 36;
 
-        // Thin divider above the footer text.
         doc.save();
         doc.strokeColor(BORDER).lineWidth(0.5)
           .moveTo(leftMargin, footerY - 8)
@@ -365,6 +412,8 @@ function generatePdf(url, analysis) {
           .fontSize(9)
           .font('Helvetica')
           .text(`Page ${i + 1} of ${pages.count}`, pageWidth - rightMargin - 100, footerY, { width: 100, align: 'right', lineBreak: false });
+
+        doc.page.margins.bottom = savedBottomMargin;
       }
 
       doc.end();
