@@ -101,6 +101,9 @@ async function generateWebsiteContent(businessData, extras = {}) {
     // present, these override the LLM-generated featuredListings so the
     // site shows real properties instead of hallucinated ones.
     listings: userListings,
+    // Caller-supplied hero image override. Skips the Unsplash API call
+    // entirely — useful for demo fixtures and rate-limit recovery.
+    heroImage: heroImageOverride,
   } = businessData;
 
   const hasServices = Array.isArray(services) && services.length > 0;
@@ -279,13 +282,18 @@ Generate compelling website copy for this business. Return ONLY valid JSON.`;
   }
 
   let heroImage = null;
-  try {
-    heroImage = await getHeroImage(imageQuery);
-    if (!heroImage) {
-      logger.warn(`[WEBGEN] No hero image returned for "${imageQuery}" — check UNSPLASH_ACCESS_KEY or rate limits`);
+  if (heroImageOverride && heroImageOverride.url) {
+    heroImage = heroImageOverride;
+    logger.info(`[WEBGEN] Using caller-supplied hero image (skipping Unsplash)`);
+  } else {
+    try {
+      heroImage = await getHeroImage(imageQuery);
+      if (!heroImage) {
+        logger.warn(`[WEBGEN] No hero image returned for "${imageQuery}" — check UNSPLASH_ACCESS_KEY or rate limits`);
+      }
+    } catch (err) {
+      logger.warn(`[WEBGEN] Hero image fetch threw: ${err.message}`);
     }
-  } catch (err) {
-    logger.warn(`[WEBGEN] Hero image fetch threw: ${err.message}`);
   }
 
   // HVAC: fetch per-service Unsplash images so the services page zigzag has

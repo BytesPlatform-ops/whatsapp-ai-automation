@@ -5,10 +5,11 @@ import { WhatsAppButton } from '@/components/WhatsAppButton';
 import { siteConfig } from '@/lib/config';
 
 const links = [
-  { href: '#how', label: 'How it works' },
-  { href: '#services', label: 'Services' },
-  { href: '#results', label: 'Results' },
-  { href: '#faq', label: 'FAQ' },
+  { href: '/#how', label: 'How it works' },
+  { href: '/#services', label: 'Services' },
+  { href: '/examples', label: 'Examples' },
+  { href: '/#results', label: 'Results' },
+  { href: '/#faq', label: 'FAQ' },
 ];
 
 export function Navigation() {
