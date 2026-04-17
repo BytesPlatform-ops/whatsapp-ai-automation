@@ -38,7 +38,7 @@ export const DEMO_SITES: DemoSite[] = [
     "businessName": "Luna Beauty Studio",
     "industry": "Hair Salon",
     "city": "Miami Beach, FL",
-    "url": "https://preview-1776447111358.netlify.app"
+    "url": "https://preview-1776447956800.netlify.app"
   },
   {
     "id": "generic",
