@@ -6,6 +6,7 @@ const { checkDomainAvailability } = require('../../website-gen/domainChecker');
 const { logger } = require('../../utils/logger');
 const { env } = require('../../config/env');
 const { STATES } = require('../states');
+const { isAffirmative, isNegative, isSkip } = require('../../utils/intentHelpers');
 
 const DOMAIN_COST = 10; // ~$10 for domain registration
 const SITE_COST = 100;  // Total site cost
@@ -33,11 +34,16 @@ async function handleCustomDomain(user, message) {
 // ─── DOMAIN_OFFER ──────────────────────────────────────────────────
 async function handleDomainOffer(user, message) {
   const text = (message.text || '').trim().toLowerCase();
+  const analysis = message.analysis || {};
 
-  const isYes = /^(yes|yeah|yep|sure|ok|okay|y|domain|set up|set it up)$/i.test(text);
-  const isNo = /^(no|nah|nope|later|not now|n|skip|maybe later)$/i.test(text);
+  // Affirmatives, plus domain-specific phrasing ("domain", "set it up").
+  const wantsDomain =
+    isAffirmative(message) ||
+    /^(domain|set up|set it up)$/i.test(text);
+  // Negatives and skip both mean "skip the domain".
+  const skipsDomain = isNegative(message) || isSkip(message);
 
-  if (isNo) {
+  if (skipsDomain) {
     // No domain — offer the site for $100 flat
     await sendTextMessage(
       user.phone_number,
@@ -48,7 +54,22 @@ async function handleDomainOffer(user, message) {
     return STATES.SALES_CHAT;
   }
 
-  if (isYes) {
+  // Clarification — user asked a question instead of answering ("wut is a domain?").
+  // Explain briefly, then re-offer without starting a search.
+  const looksLikeQuestion =
+    analysis.intent === 'question' ||
+    /^(wh(at|ut)|how|why|which|\?)/i.test(text) ||
+    text.includes('?');
+  if (looksLikeQuestion && !wantsDomain) {
+    await sendTextMessage(
+      user.phone_number,
+      "A custom domain is your site's own web address — like *yourbusiness.com* instead of the long preview link. It costs about $10/year extra and makes the site look a lot more professional. Want me to check what's available, or skip it?"
+    );
+    await logMessage(user.id, 'Explained domain concept at DOMAIN_OFFER', 'assistant');
+    return STATES.DOMAIN_OFFER;
+  }
+
+  if (wantsDomain) {
     const businessName = user.metadata?.websiteData?.businessName || '';
     const sanitized = businessName.toLowerCase().replace(/[^a-z0-9]/g, '');
 
@@ -60,14 +81,22 @@ async function handleDomainOffer(user, message) {
     return runDomainSearch(user, sanitized);
   }
 
+  // Otherwise, try to interpret the message as a domain name — but only if
+  // it actually looks like one. Multi-word phrases and confused text fall
+  // back to a re-offer instead of being auto-searched.
   const cleaned = text.replace(/[^a-z0-9-]/g, '');
-  if (cleaned.length >= 2) {
+  const looksLikeDomainName =
+    cleaned.length >= 2 &&
+    cleaned.length <= 30 &&
+    !/\s/.test(text.trim()); // no spaces = plausible single-word domain
+
+  if (looksLikeDomainName) {
     return runDomainSearch(user, cleaned);
   }
 
   await sendTextMessage(
     user.phone_number,
-    'Would you like to set up a custom domain? Just say *"yes"* and I\'ll help you find one, or *"no"* if you want to skip it.'
+    "Would you like to set up a custom domain? I can help you find one, or we can skip it."
   );
   return STATES.DOMAIN_OFFER;
 }
@@ -75,6 +104,24 @@ async function handleDomainOffer(user, message) {
 // ─── DOMAIN_SEARCH ─────────────────────────────────────────────────
 async function handleDomainSearch(user, message) {
   const text = (message.text || '').trim();
+  const analysis = message.analysis || {};
+
+  // Escape hatch — skip / negative / gratitude / farewell all mean
+  // "I'm done with the domain thing". Without this, "nah skip for now"
+  // and "thx" both get auto-sanitised to a domain name and searched.
+  if (
+    isSkip(message) ||
+    isNegative(message) ||
+    analysis.intent === 'gratitude' ||
+    analysis.intent === 'farewell'
+  ) {
+    await sendTextMessage(
+      user.phone_number,
+      "No worries — we can set up a custom domain later any time. Anything else I can help with?"
+    );
+    await logMessage(user.id, 'User exited DOMAIN_SEARCH via skip/negative/gratitude', 'assistant');
+    return STATES.SALES_CHAT;
+  }
 
   const domainOptions = user.metadata?.domainOptions || [];
   const availableOptions = domainOptions.filter(d => d.available && !d.premium);

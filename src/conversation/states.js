@@ -11,6 +11,10 @@ const STATES = {
   SEO_FOLLOW_UP: 'SEO_FOLLOW_UP',
 
   // Web Development flow
+  // WEB_COLLECTING is the single, LLM-driven collection state. It replaces
+  // the old field-by-field collection chain (still below, kept wired for
+  // backward compat with users mid-flow before this change shipped).
+  WEB_COLLECTING: 'WEB_COLLECTING',
   WEB_COLLECT_NAME: 'WEB_COLLECT_NAME',
   WEB_COLLECT_EMAIL: 'WEB_COLLECT_EMAIL',
   WEB_COLLECT_INDUSTRY: 'WEB_COLLECT_INDUSTRY',

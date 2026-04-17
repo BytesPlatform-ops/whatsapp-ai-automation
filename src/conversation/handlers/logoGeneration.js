@@ -29,6 +29,9 @@ const { logger } = require('../../utils/logger');
 const { generateLogoIdeas, expandLogoToPrompt } = require('../../logoGeneration/ideation');
 const { generateLogoImage } = require('../../logoGeneration/imageGen');
 const { uploadLogoImage } = require('../../logoGeneration/imageUploader');
+const { isSkip } = require('../../utils/intentHelpers');
+const { defaultsFor, describeDefault } = require('../../config/smartDefaults');
+const { fillFromMetadata } = require('../entityAccumulator');
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -86,21 +89,54 @@ async function handleLogoGeneration(user, message) {
 // ── Step handlers ─────────────────────────────────────────────────────────────
 
 async function handleStart(user, message) {
+  // Seed logoData from accumulator — if the user already told us their
+  // business name / industry / colors in an earlier flow (e.g. webdev),
+  // we prefill here and jump past those steps.
+  const { data: seeded, filled } = fillFromMetadata('logo', user);
   await saveLogoData(user, {
-    businessName: null, industry: null, description: null, style: null,
-    brandColors: null, symbolIdea: null, background: null,
+    description: null, style: null, symbolIdea: null, background: null,
     ideas: null, selectedIdeaIndex: null,
+    ...seeded, // may include businessName / industry / brandColors
   });
 
   await sendWithMenuButton(
     user.phone_number,
     '✨ *Logo Maker*\n\n' +
-      'I\'ll design 5 unique logo concepts for your brand — like having a top branding agency on call!\n\n' +
-      'Let\'s start with the basics.\n\n' +
-      'What is your *business name*?\n\n' +
+      'I\'ll design 5 unique logo concepts for your brand — like having a top branding agency on call!'
+  );
+  await logMessage(user.id, `Started logo generation flow (prefilled: ${filled.join(', ') || 'none'})`, 'assistant');
+
+  // If business name is already known, skip LOGO_COLLECT_BUSINESS.
+  if (seeded.businessName) {
+    if (seeded.industry) {
+      // Both known — ask for description directly.
+      await sendWithMenuButton(
+        user.phone_number,
+        `I've got *${seeded.businessName}* (${seeded.industry}) from earlier. In *one sentence*, what does your business do?\n\n` +
+          'Examples:\n' +
+          '• "We sell premium organic acacia honey from Pakistani farms"\n' +
+          '• "We run a women\'s fitness studio in Karachi"'
+      );
+      return STATES.LOGO_COLLECT_DESCRIPTION;
+    }
+    // Only name known.
+    await sendWithMenuButton(
+      user.phone_number,
+      `Great — using *${seeded.businessName}* as the brand name 👍\n\nWhat *industry* are you in?\n\n` +
+        'Examples:\n' +
+        '• Food & Beverage\n• Fashion & Apparel\n• Beauty & Skincare\n' +
+        '• Tech / Software\n• Real Estate\n• Fitness & Gym\n• Education\n\n' +
+        'Type your industry:'
+    );
+    return STATES.LOGO_COLLECT_INDUSTRY;
+  }
+
+  // Nothing known — ask name.
+  await sendWithMenuButton(
+    user.phone_number,
+    "Let's start with the basics. What is your *business name*?\n\n" +
       '_(This will be the actual text on your logo, so spell it exactly as you want it to appear)_'
   );
-  await logMessage(user.id, 'Started logo generation flow', 'assistant');
   return STATES.LOGO_COLLECT_BUSINESS;
 }
 
@@ -277,10 +313,10 @@ async function handleCollectStyle(user, message) {
 
   await sendWithMenuButton(
     user.phone_number,
-    '🎨 *Brand Colors*\n\n' +
-      'Do you have specific brand colors?\n\n' +
+    "🎨 *Brand Colors*\n\n" +
+      "Do you have specific brand colors in mind?\n\n" +
       'Examples: _Blue & Gold_, _#1a3a2a & #d4a843_, _Black White Red_\n\n' +
-      'Type your colors — or type *skip* and we\'ll design the perfect palette for your industry:'
+      "If not, no problem — I'll pick a palette that fits your industry."
   );
   await logMessage(user.id, `Style: ${style}`, 'assistant');
   return STATES.LOGO_COLLECT_COLORS;
@@ -288,19 +324,28 @@ async function handleCollectStyle(user, message) {
 
 async function handleCollectColors(user, message) {
   const text = (message.text || '').trim();
-  const brandColors = text.toLowerCase() === 'skip' ? null : text || null;
+  let brandColors = isSkip(message) ? null : text || null;
+
+  // Delegation → apply a smart default based on industry, state it, save.
+  if (brandColors === null && isSkip(message)) {
+    const logo = getLogoData(user);
+    const d = defaultsFor(logo.industry);
+    brandColors = d.colors;
+    await sendTextMessage(user.phone_number, describeDefault('colors', d, { industry: logo.industry }));
+    await logMessage(user.id, `[SMART-DEFAULT] colors → ${d.colors} (industry=${logo.industry || 'unknown'})`, 'assistant');
+  }
 
   await saveLogoData(user, { brandColors });
 
   await sendWithMenuButton(
     user.phone_number,
-    '💡 *Symbol Idea* (optional)\n\n' +
-      'Do you have a specific symbol or icon idea for your logo?\n\n' +
+    "💡 *Symbol Idea* (optional)\n\n" +
+      "Got a specific symbol or icon in mind?\n\n" +
       'Examples:\n' +
       '• "A bee for my honey brand"\n' +
       '• "A leaf or tree for my organic store"\n' +
       '• "A lightning bolt for my tech brand"\n\n' +
-      'Type your idea — or type *skip* and we\'ll design symbols from scratch:'
+      "No worries if not — I'll design symbols from scratch."
   );
   await logMessage(user.id, `Brand colors: ${brandColors || 'skipped'}`, 'assistant');
   return STATES.LOGO_COLLECT_SYMBOL;
@@ -308,7 +353,15 @@ async function handleCollectColors(user, message) {
 
 async function handleCollectSymbol(user, message) {
   const text = (message.text || '').trim();
-  const symbolIdea = text.toLowerCase() === 'skip' ? null : text || null;
+  let symbolIdea = isSkip(message) ? null : text || null;
+
+  if (symbolIdea === null && isSkip(message)) {
+    const logo = getLogoData(user);
+    const d = defaultsFor(logo.industry);
+    symbolIdea = d.symbol;
+    await sendTextMessage(user.phone_number, describeDefault('symbol', d, { industry: logo.industry }));
+    await logMessage(user.id, `[SMART-DEFAULT] symbol → ${d.symbol} (industry=${logo.industry || 'unknown'})`, 'assistant');
+  }
 
   await saveLogoData(user, { symbolIdea });
 

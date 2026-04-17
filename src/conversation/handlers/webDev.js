@@ -9,6 +9,9 @@ const { createSite, updateSite, getLatestSite } = require('../../db/sites');
 const { logger } = require('../../utils/logger');
 const { generateResponse } = require('../../llm/provider');
 const { STATES } = require('../states');
+const { isAffirmative, isSkip, isNegative, isChangeRequest } = require('../../utils/intentHelpers');
+const { buildDirective: languageDirective } = require('../../llm/languageDirective');
+const { withProgress } = require('../progressIndicator');
 
 // ═══════════════════════════════════════════════════════════════════════════
 // SMART MULTI-FIELD EXTRACTOR (Path B — natural-conversation collector)
@@ -206,7 +209,9 @@ async function smartAdvance(user, message, ackPrefix = null) {
   ack = ack.trim();
 
   const nextQuestion = questionForState(nextState, merged);
-  const fullMsg = ack ? `${ack}\n\n${nextQuestion}` : nextQuestion;
+  const base = ack ? `${ack}\n\n${nextQuestion}` : nextQuestion;
+  // Append a progress marker so the user knows how much is left.
+  const fullMsg = withProgress(base, 'webdev', merged);
 
   await sendTextMessage(user.phone_number, fullMsg);
   return nextState;
@@ -215,15 +220,15 @@ async function smartAdvance(user, message, ackPrefix = null) {
 function questionForState(state, websiteData) {
   switch (state) {
     case STATES.WEB_COLLECT_NAME: return "What's your business name?";
-    case STATES.WEB_COLLECT_EMAIL: return "Before we continue, what's your email address? We'll use it to send you updates about your website. (Or say *skip*.)";
+    case STATES.WEB_COLLECT_EMAIL: return "Before we continue, what's a good email to reach you at? We'll send you updates about your site there. No worries if you'd rather skip it.";
     case STATES.WEB_COLLECT_INDUSTRY: return 'What industry are you in? For example - tech, healthcare, restaurant, real estate, creative, etc.';
     case STATES.WEB_COLLECT_AREAS: return 'Which city are you based in, and which areas do you serve? Example: *Austin — Round Rock, Cedar Park, Pflugerville*';
     case STATES.WEB_COLLECT_SERVICES: {
       const { isHvac } = require('../../website-gen/templates');
       if (isHvac(websiteData.industry)) {
-        return 'Which HVAC services do you offer? List them separated by commas, or say *skip* to use our default list (AC repair, heating, heat pumps, duct cleaning, thermostats, and more).';
+        return "Which HVAC services do you offer? Just list them out. If you'd rather I use a default list (AC repair, heating, heat pumps, duct cleaning, thermostats, and more), that's fine too.";
       }
-      return 'What services or products do you offer? List them separated by commas, or say *skip*.';
+      return 'What services or products do you offer? Just list them out.';
     }
     case STATES.WEB_COLLECT_CONTACT: return "Last thing — what contact info do you want on the site? Send your email, phone, and/or address.";
     default: return '';
@@ -243,13 +248,15 @@ async function sendConfirmation(user, websiteData) {
   if (Array.isArray(websiteData.services) && websiteData.services.length) lines.push(`*Services:* ${websiteData.services.join(', ')}`);
   const contact = [websiteData.contactEmail, websiteData.contactPhone, websiteData.contactAddress].filter(Boolean).join(' | ');
   if (contact) lines.push(`*Contact:* ${contact}`);
-  lines.push('', 'Does everything look good? Say *"yes"* to proceed, or tell me what to change.');
+  lines.push('', "Does everything look good? Let me know if you want to change anything, or we can start building!");
   await sendTextMessage(user.phone_number, lines.join('\n'));
   return STATES.WEB_CONFIRM;
 }
 
 async function handleWebDev(user, message) {
   switch (user.state) {
+    case STATES.WEB_COLLECTING:
+      return handleWebCollecting(user, message);
     case STATES.WEB_COLLECT_NAME:
       return handleCollectName(user, message);
     case STATES.WEB_COLLECT_EMAIL:
@@ -287,6 +294,37 @@ async function handleWebDev(user, message) {
 }
 
 async function handleCollectName(user, message) {
+  // ── Auto-prefill from earlier conversation ──────────────────────────────
+  // If the messageAnalyzer captured a business name during sales chat
+  // ("we're Fresh Cuts, a barbershop"), use it instead of asking again.
+  const prefilledName = user.metadata?.extractedBusinessName;
+  const existingWebsiteData = user.metadata?.websiteData || {};
+  if (prefilledName && !existingWebsiteData.businessName) {
+    if (!user.metadata?.currentSiteId) {
+      const site = await createSite(user.id, 'business-starter');
+      await updateUserMetadata(user.id, { currentSiteId: site.id });
+      user.metadata = { ...(user.metadata || {}), currentSiteId: site.id };
+    }
+    const websiteData = { ...existingWebsiteData, businessName: prefilledName };
+    await updateUserMetadata(user.id, { websiteData });
+    user.metadata = { ...(user.metadata || {}), websiteData };
+    logger.info(`[ENTITY-PREFILL] Auto-filled businessName for ${user.phone_number}: "${prefilledName}"`);
+    await sendTextMessage(
+      user.phone_number,
+      `I'll use *${prefilledName}* as your business name!`
+    );
+    await logMessage(user.id, `Auto-filled business name: ${prefilledName}`, 'assistant');
+    const nextState = nextMissingWebDevState(websiteData, user.metadata || {});
+    if (nextState !== STATES.WEB_COLLECT_NAME) {
+      const q = questionForState(nextState, websiteData);
+      if (q) {
+        await sendTextMessage(user.phone_number, q);
+        await logMessage(user.id, q, 'assistant');
+      }
+      return nextState;
+    }
+  }
+
   const text = (message.text || '').trim();
   if (!text || text.length < 2) {
     await sendTextMessage(user.phone_number, 'Please enter your business name:');
@@ -294,7 +332,6 @@ async function handleCollectName(user, message) {
   }
 
   // Create site record if not yet
-  const existingWebsiteData = user.metadata?.websiteData || {};
   if (!user.metadata?.currentSiteId) {
     const site = await createSite(user.id, 'business-starter');
     await updateUserMetadata(user.id, { currentSiteId: site.id });
@@ -324,9 +361,8 @@ async function handleCollectName(user, message) {
 async function handleCollectEmail(user, message) {
   const text = (message.text || '').trim();
   const emailMatch = text.match(/[\w.-]+@[\w.-]+\.\w+/);
-  const skipWords = /^(skip|no|none|nah|later|n\/a|na|don'?t have|dont have)$/i;
 
-  if (skipWords.test(text)) {
+  if (isSkip(message) || isNegative(message)) {
     await updateUserMetadata(user.id, { emailSkipped: true });
     user.metadata = { ...(user.metadata || {}), emailSkipped: true };
     await logMessage(user.id, 'Email skipped', 'assistant');
@@ -338,7 +374,7 @@ async function handleCollectEmail(user, message) {
     // Not a valid email and not a skip — ask again gently
     await sendTextMessage(
       user.phone_number,
-      "That doesn't look like an email address. Could you double-check? Or say *\"skip\"* to continue without it."
+      "Hmm, that doesn't look like an email. Could you double-check? Totally fine to skip it if you'd rather not share one."
     );
     return STATES.WEB_COLLECT_EMAIL;
   }
@@ -348,6 +384,32 @@ async function handleCollectEmail(user, message) {
 }
 
 async function handleCollectIndustry(user, message) {
+  // ── Auto-prefill from earlier conversation ──────────────────────────────
+  // If the messageAnalyzer captured the industry during sales chat
+  // ("I'm a plumber"), use it instead of asking again.
+  const prefilledIndustry = user.metadata?.extractedIndustry;
+  const existingWd = user.metadata?.websiteData || {};
+  if (prefilledIndustry && !existingWd.industry) {
+    const websiteData = { ...existingWd, industry: prefilledIndustry };
+    await updateUserMetadata(user.id, { websiteData });
+    user.metadata = { ...(user.metadata || {}), websiteData };
+    logger.info(`[ENTITY-PREFILL] Auto-filled industry for ${user.phone_number}: "${prefilledIndustry}"`);
+    await sendTextMessage(
+      user.phone_number,
+      `I remember you mentioned *${prefilledIndustry}* — I'll design around that! 🎯`
+    );
+    await logMessage(user.id, `Auto-filled industry: ${prefilledIndustry}`, 'assistant');
+    const nextState = nextMissingWebDevState(websiteData, user.metadata || {});
+    if (nextState !== STATES.WEB_COLLECT_INDUSTRY) {
+      const q = questionForState(nextState, websiteData);
+      if (q) {
+        await sendTextMessage(user.phone_number, q);
+        await logMessage(user.id, q, 'assistant');
+      }
+      return nextState;
+    }
+  }
+
   let industry = message.listId
     ? message.text // Use the title from the list selection
     : (message.text || '').trim();
@@ -414,7 +476,7 @@ async function handleCollectAreas(user, message) {
   }
 
   // Allow skip — treat as "we'll fill in later".
-  if (/^(skip|later|unsure|not sure|n\/?a)$/i.test(raw)) {
+  if (isSkip(message)) {
     const websiteData = {
       ...(user.metadata?.websiteData || {}),
       primaryCity: user.metadata?.websiteData?.primaryCity || null,
@@ -558,22 +620,64 @@ function domainExampleFor(businessName) {
 }
 
 async function handleCollectServices(user, message) {
+  // ── Auto-prefill from earlier conversation ──────────────────────────────
+  // If the messageAnalyzer already captured services from earlier text,
+  // use them instead of re-asking. Note: extractedServices is a comma-or-
+  // semicolon-separated string (per messageAnalyzer schema).
+  const prefilledServices = user.metadata?.extractedServices;
+  const existingWdSvc = user.metadata?.websiteData || {};
+  if (
+    prefilledServices &&
+    (!Array.isArray(existingWdSvc.services) || existingWdSvc.services.length === 0)
+  ) {
+    const services = String(prefilledServices)
+      .split(/[,;]+/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+    if (services.length > 0) {
+      const industry = existingWdSvc.industry || '';
+      const colors = getColorsForIndustry(industry);
+      const websiteData = { ...existingWdSvc, services, ...colors };
+      await updateUserMetadata(user.id, { websiteData });
+      user.metadata = { ...(user.metadata || {}), websiteData };
+      logger.info(`[ENTITY-PREFILL] Auto-filled services for ${user.phone_number}: "${services.join(', ')}"`);
+      await sendTextMessage(
+        user.phone_number,
+        `I've got your services as *${services.slice(0, 4).join(', ')}${services.length > 4 ? '…' : ''}* — I'll use those!`
+      );
+      await logMessage(user.id, `Auto-filled services: ${services.join(', ')}`, 'assistant');
+
+      // Salons need their own sub-flow even when services are pre-filled.
+      if (isSalonIndustry(industry)) return startSalonFlow(user);
+
+      const nextState = nextMissingWebDevState(websiteData, user.metadata || {});
+      if (nextState !== STATES.WEB_COLLECT_SERVICES) {
+        const q = questionForState(nextState, websiteData);
+        if (q) {
+          await sendTextMessage(user.phone_number, q);
+          await logMessage(user.id, q, 'assistant');
+        }
+        return nextState;
+      }
+    }
+  }
+
   const servicesText = (message.text || '').trim();
   if (!servicesText || servicesText.length < 2) {
     await sendTextMessage(
       user.phone_number,
-      'Please list your services/products separated by commas, or say "skip" if you don\'t have specific services:'
+      "Just list your services or products out. If you don't have specific services to list, let me know and I'll set up the page without one."
     );
     return STATES.WEB_COLLECT_SERVICES;
   }
 
-  const skipWords = /^(idk|i don'?t know|skip|none|no|n\/a|na|nah|nothing|not sure|no idea|no services|no products|don'?t have any|dont have any)$/i;
-  // Also catch longer phrases like "I don't offer any services"
-  const skipPhrases = /\b(no services|no products|don'?t (offer|have|provide)|dont (offer|have|provide)|nothing to (list|offer)|not applicable)\b/i;
+  // Extra phrases beyond the core skip helper — longer statements like
+  // "I don't offer any services" that should still count as "no services".
+  const skipPhrases = /\b(no services|no products|don'?t (offer|have|provide)|dont (offer|have|provide))\b/i;
   const industry = user.metadata?.websiteData?.industry || '';
   const colors = getColorsForIndustry(industry);
 
-  if (skipWords.test(servicesText) || skipPhrases.test(servicesText)) {
+  if (isSkip(message) || skipPhrases.test(servicesText)) {
     const websiteData = { ...(user.metadata?.websiteData || {}), services: [], ...colors };
     await updateUserMetadata(user.id, { websiteData });
     user.metadata = { ...(user.metadata || {}), websiteData };
@@ -613,8 +717,8 @@ async function startSalonFlow(user) {
   await sendTextMessage(
     user.phone_number,
     'Do you already use a booking tool (Fresha, Booksy, Vagaro, Calendly, etc.)?\n\n' +
-      '• If yes, just paste the link and we\'ll embed it on your site.\n' +
-      '• If not, type *"no"* and we\'ll build a built-in booking system for you.'
+      '• If yes, just paste the link and I\'ll embed it on your site.\n' +
+      '• If not, no worries — just let me know and I\'ll build a booking system right into your site.'
   );
   return STATES.SALON_BOOKING_TOOL;
 }
@@ -663,7 +767,7 @@ async function showConfirmSummary(user) {
     bookingLine +
     igLine +
     `\n*Contact:* ${contactInfo}\n\n` +
-    `Say *"yes"* to build the site, or tell me what else to change.`;
+    `Want me to build it, or should I tweak anything?`;
 
   await sendTextMessage(user.phone_number, summary);
   return STATES.WEB_CONFIRM;
@@ -672,7 +776,6 @@ async function showConfirmSummary(user) {
 async function handleSalonBookingTool(user, message) {
   const text = (message.text || '').trim();
   const wd = { ...(user.metadata?.websiteData || {}) };
-  const noWords = /^(no|none|nope|nah|n\/a|na|skip|don'?t have|dont have|not yet)$/i;
   const urlMatch = text.match(/https?:\/\/\S+/i);
 
   if (urlMatch) {
@@ -682,25 +785,25 @@ async function handleSalonBookingTool(user, message) {
     await logMessage(user.id, `Booking mode: embed (${wd.bookingUrl})`, 'assistant');
     await sendTextMessage(
       user.phone_number,
-      `Got it — we'll embed *${wd.bookingUrl}* on your booking page.\n\nWhat's your Instagram handle? (e.g. @glowstudio). Say *"skip"* if you don't have one.`
+      `Got it — I'll embed *${wd.bookingUrl}* on your booking page.\n\nWhat's your Instagram handle? (e.g. @glowstudio). No worries if you don't have one.`
     );
     return STATES.SALON_INSTAGRAM;
   }
 
-  if (noWords.test(text)) {
+  if (isNegative(message) || isSkip(message) || /\bnot yet\b/i.test(text)) {
     wd.bookingMode = 'native';
     await updateUserMetadata(user.id, { websiteData: wd });
     await logMessage(user.id, 'Booking mode: native', 'assistant');
     await sendTextMessage(
       user.phone_number,
-      'Perfect — we\'ll build you a booking system. What\'s your Instagram handle? (e.g. @glowstudio). Say *"skip"* if you don\'t have one.'
+      "Perfect — I'll build you a booking system. What's your Instagram handle? (e.g. @glowstudio). No worries if you don't have one."
     );
     return STATES.SALON_INSTAGRAM;
   }
 
   await sendTextMessage(
     user.phone_number,
-    'Please either paste your booking tool link (Fresha/Booksy/Vagaro/etc.) or type *"no"* and we\'ll build one for you.'
+    "Paste your booking tool link (Fresha/Booksy/Vagaro/etc.) if you have one — or just let me know you don't and I'll build one into the site."
   );
   return STATES.SALON_BOOKING_TOOL;
 }
@@ -708,9 +811,8 @@ async function handleSalonBookingTool(user, message) {
 async function handleSalonInstagram(user, message) {
   const text = (message.text || '').trim();
   const wd = { ...(user.metadata?.websiteData || {}) };
-  const skipWords = /^(skip|no|none|n\/a|na|nah|nope|don'?t|dont)$/i;
 
-  if (!skipWords.test(text) && text.length > 0) {
+  if (!isSkip(message) && !isNegative(message) && text.length > 0) {
     // Accept @handle, bare handle, or full URL — normalise to handle.
     const urlHandle = text.match(/instagram\.com\/([\w.]+)/i);
     const raw = urlHandle ? urlHandle[1] : text.replace(/^@/, '').split(/\s/)[0];
@@ -724,7 +826,7 @@ async function handleSalonInstagram(user, message) {
   if (wd.bookingMode === 'native') {
     await sendTextMessage(
       user.phone_number,
-      'What are your opening hours? A quick line is fine — for example: *"Tue-Sat 9-7, Sun-Mon closed"*.\n\nSay *"default"* for standard salon hours (Tue-Sat 9-7).'
+      "What are your opening hours? A quick line is fine — for example: *\"Tue-Sat 9-7, Sun-Mon closed\"*. If you want me to just use standard salon hours (Tue-Sat 9-7), type *default*."
     );
     return STATES.SALON_HOURS;
   }
@@ -757,7 +859,7 @@ async function handleSalonHours(user, message) {
       `How long does each service take, and what's the price?\n\n` +
       `Example: *"Haircut 30min €25, Colour 90min €85, Nails 45min €35"*.\n\n` +
       `Your services: ${services.join(', ')}.\n\n` +
-      `Say *"default"* to use 30min with no price.`
+      `If you want me to use 30min with no price, just type *default*.`
   );
   return STATES.SALON_SERVICE_DURATIONS;
 }
@@ -869,14 +971,102 @@ function parseContactFields(text) {
 }
 
 async function handleCollectContact(user, message) {
+  const meta = user.metadata || {};
+  const existingContactWd = meta.websiteData || {};
   const contactText = (message.text || '').trim();
-  const skipWords = /^(nothing|none|no|skip|n\/a|na|nah|nope|don'?t|dont|no thanks)$/i;
+
+  // ── Auto-prefill from earlier conversation ──────────────────────────────
+  // First time we hit this state with previously-extracted contact info
+  // and nothing already saved, pre-populate and ask for additions/confirm.
+  // The `contactPrefillShown` flag prevents re-showing the prefill on
+  // subsequent turns within this state.
+  const prefillEmail = meta.extractedEmail || meta.email;
+  const prefillPhone = meta.extractedPhone;
+  const prefillLocation = meta.extractedLocation;
+  const haveAnyPrefill = prefillEmail || prefillPhone || prefillLocation;
+  const contactEmpty =
+    !existingContactWd.contactEmail &&
+    !existingContactWd.contactPhone &&
+    !existingContactWd.contactAddress;
+
+  if (haveAnyPrefill && contactEmpty && !meta.contactPrefillShown) {
+    const prefillData = {
+      contactEmail: prefillEmail || '',
+      contactPhone: prefillPhone || '',
+      contactAddress: prefillLocation || '',
+    };
+    const websiteData = { ...existingContactWd, ...prefillData };
+    await updateUserMetadata(user.id, { websiteData, contactPrefillShown: true });
+    user.metadata = { ...meta, websiteData, contactPrefillShown: true };
+
+    const filled = [];
+    if (prefillData.contactEmail) filled.push(`email *${prefillData.contactEmail}*`);
+    if (prefillData.contactPhone) filled.push(`phone *${prefillData.contactPhone}*`);
+    if (prefillData.contactAddress) filled.push(`location *${prefillData.contactAddress}*`);
+
+    logger.info(
+      `[ENTITY-PREFILL] Auto-filled contact for ${user.phone_number}: ${filled.join(', ')}`
+    );
+    await sendTextMessage(
+      user.phone_number,
+      `I already have ${filled.join(', ')} from earlier. Anything else to add (a different phone, address, etc.) or is that good to go?`
+    );
+    await logMessage(user.id, `Showed contact prefill: ${filled.join(', ')}`, 'assistant');
+    return STATES.WEB_COLLECT_CONTACT;
+  }
+
+  // Edit-intent escape hatch: if the user says something like "actually the
+  // name is X" or "change the industry" while we're sitting at the contact
+  // step, do NOT parse it as contact info (it used to land as the address).
+  // Jump to WEB_CONFIRM and let that handler's LLM edit-parser process it.
+  const hasEmailInText = /[\w.-]+@[\w.-]+\.\w+/.test(contactText);
+  const hasPhoneInText = /[\+]?[\d][\d\s\-()]{6,}/.test(contactText);
+  if (
+    contactText &&
+    !hasEmailInText &&
+    !hasPhoneInText &&
+    isChangeRequest(message)
+  ) {
+    logger.info(`[CONTACT-EDIT] ${user.phone_number}: routing edit "${contactText.slice(0, 80)}" to WEB_CONFIRM`);
+    // Hand the original message text forward so WEB_CONFIRM's parser sees
+    // the edit verbatim.
+    return handleConfirm(user, message);
+  }
+
+  // Confirmation of prefilled contact → jump to confirmation summary.
+  if (meta.contactPrefillShown && (isAffirmative(message) || /^(good|all good|that'?s?\s+it|no more|use that|use it|done)$/i.test(contactText))) {
+    const wd = existingContactWd;
+    const servicesList = (wd.services || []).length > 0 ? wd.services.join(', ') : 'None (skipped)';
+    const contactInfo =
+      [wd.contactEmail, wd.contactPhone, wd.contactAddress].filter(Boolean).join(' | ') ||
+      'None';
+    const summary =
+      `Here's a summary of your website details:\n\n` +
+      `*Business Name:* ${wd.businessName || '-'}\n` +
+      `*Industry:* ${wd.industry || '-'}\n` +
+      `*Services:* ${servicesList}\n` +
+      `*Contact:* ${contactInfo}\n\n` +
+      `Does everything look good? Let me know if you want to change anything, or we can start building!`;
+    await sendTextMessage(user.phone_number, summary);
+    await logMessage(user.id, 'Contact confirmed from prefill, showing summary', 'assistant');
+    return STATES.WEB_CONFIRM;
+  }
 
   let contactData;
-  if (!contactText || contactText.length < 3 || skipWords.test(contactText)) {
+  if (!contactText || contactText.length < 3 || isSkip(message) || isNegative(message)) {
     contactData = { contactEmail: '', contactPhone: '', contactAddress: '' };
   } else {
     contactData = parseContactFields(contactText);
+  }
+
+  // If we already prefilled, MERGE with any new info (don't blank out the
+  // prefilled fields just because user didn't repeat them).
+  if (meta.contactPrefillShown) {
+    contactData = {
+      contactEmail: contactData.contactEmail || existingContactWd.contactEmail || '',
+      contactPhone: contactData.contactPhone || existingContactWd.contactPhone || '',
+      contactAddress: contactData.contactAddress || existingContactWd.contactAddress || '',
+    };
   }
 
   await updateUserMetadata(user.id, {
@@ -894,7 +1084,7 @@ async function handleCollectContact(user, message) {
     `*Industry:* ${wd.industry || '-'}\n` +
     `*Services:* ${servicesList}\n` +
     `*Contact:* ${contactInfo}\n\n` +
-    `Does everything look good? You can say *"yes"* to proceed, or tell me what you'd like to change.`;
+    `Does everything look good? Let me know if you want to change anything, or we can start building!`;
 
   await sendTextMessage(user.phone_number, summary);
   await logMessage(user.id, 'Contact info collected, showing confirmation', 'assistant');
@@ -904,10 +1094,85 @@ async function handleCollectContact(user, message) {
 
 async function handleConfirm(user, message) {
   const originalText = (message.text || '').trim();
-  const text = originalText.toLowerCase();
-  const confirmWords = /^(yes|yeah|yep|yup|y|ok|okay|sure|go|looks good|lgtm|correct|perfect|proceed|generate|build|do it|let'?s go|go ahead)$/i;
+  if (!originalText) {
+    await sendTextMessage(user.phone_number, "Ready to build, or want me to tweak something first?");
+    return STATES.WEB_CONFIRM;
+  }
 
-  if (confirmWords.test(text)) {
+  // Fast path — obvious confirmations skip the LLM round-trip entirely.
+  if (isAffirmative(message)) {
+    await sendTextMessage(
+      user.phone_number,
+      'Alright, give me about 30-60 seconds to build your site...'
+    );
+    await logMessage(user.id, 'Confirmed (fast path), generating website', 'assistant');
+    return generateWebsite(user);
+  }
+
+  const wd = { ...(user.metadata?.websiteData || {}) };
+  const contactInfo =
+    [wd.contactEmail, wd.contactPhone, wd.contactAddress].filter(Boolean).join(' | ') || 'None';
+
+  // LLM-driven intent parser (gpt-4o). Replaces the old regex cascade that
+  // mis-stored "add my number to contact" → phone:"contact". This returns a
+  // structured decision: confirm | edit | unclear, plus the exact edits the
+  // user asked for and a `useWhatsappNumber` flag for the common case where
+  // they want us to use their WhatsApp number without repeating the digits.
+  const systemPrompt = `You are parsing the user's reply in a WEB_CONFIRM step. They are reviewing their website details and must either confirm the build or tell us what to change.
+
+CURRENT DETAILS:
+- Business Name: ${wd.businessName || '-'}
+- Industry: ${wd.industry || '-'}
+- Services: ${(wd.services || []).join(', ') || '-'}
+- Contact: ${contactInfo}
+
+Return ONLY a single JSON object (no markdown, no commentary) in this exact shape:
+{
+  "action": "confirm" | "edit" | "unclear",
+  "edits": {
+    "businessName": string,
+    "industry": string,
+    "services": string[],
+    "email": string,
+    "phone": string,
+    "address": string
+  },
+  "useWhatsappNumber": boolean
+}
+
+RULES:
+- If the user affirms ("yes", "yeah", "yep", "looks good", "perfect", "go ahead", "proceed", "build it", "let's go", "lgtm") → action:"confirm", edits:{}, useWhatsappNumber:false.
+- If they want to change something → action:"edit". Include ONLY the fields they changed inside "edits" — omit anything they didn't mention. Never include unchanged fields.
+- If they say "add my number", "use my number", "my phone number", "my contact", "use my whatsapp", "add my whatsapp" WITHOUT explicit phone digits → useWhatsappNumber:true and action:"edit" (system will substitute their real WhatsApp number).
+- If they give explicit phone digits along with that phrase, put the digits in edits.phone and set useWhatsappNumber:false.
+- For "services", normalise to an array of Title Case strings, split commas / "and".
+- NEVER write affirmation words (yes/ok/sure) or meta-descriptions ("contact", "number", "info") into any edits field.
+- NEVER store button titles ("✅ Continue", "⏭ Skip") as field values.
+- If the user's intent is ambiguous → action:"unclear", edits:{}, useWhatsappNumber:false.`;
+
+  let parsed = null;
+  try {
+    const raw = await generateResponse(
+      systemPrompt,
+      [{ role: 'user', content: originalText }],
+      {
+        userId: user.id,
+        operation: 'web_confirm_parse',
+        // Intent classification for edit vs confirm needs reliable
+        // reasoning over tricky phrasings ("add my number to contact") —
+        // 4o-mini misreads these. Pin to gpt-4o.
+        model: 'gpt-4o',
+      }
+    );
+    parsed = safeParseJson(raw);
+  } catch (err) {
+    logger.warn(`[WEB-CONFIRM] Parser LLM failed: ${err.message}`);
+  }
+
+  const action = (parsed && parsed.action) || 'unclear';
+
+  // ── Confirm → generate ───────────────────────────────────────────────────
+  if (action === 'confirm') {
     await sendTextMessage(
       user.phone_number,
       'Alright, give me about 30-60 seconds to build your site...'
@@ -916,90 +1181,101 @@ async function handleConfirm(user, message) {
     return generateWebsite(user);
   }
 
-  // User wants to change something — use originalText to preserve capitalization
-  const wd = user.metadata?.websiteData || {};
+  // ── Edit → apply and re-show summary ─────────────────────────────────────
+  if (action === 'edit') {
+    const edits = (parsed.edits && typeof parsed.edits === 'object') ? parsed.edits : {};
+    const changes = [];
+    let industryChangedToSalon = false;
 
-  // Check for specific field changes (match on originalText to preserve case)
-  const nameChange = originalText.match(/(?:business\s*)?name\s*(?:to|:|should be|is)\s*(.+)/i);
-  const industryChange = originalText.match(/industry\s*(?:to|:|should be|is)\s*(.+)/i);
-  const servicesChange = originalText.match(/services?\s*(?:to|:|should be|are|change)\s*(.+)/i);
-  const emailChange = originalText.match(/e-?mail\s*(?:to|:|should be|is)\s*(.+)/i);
-  const phoneChange = originalText.match(/(?:phone|tel|mobile|number)\s*(?:to|:|should be|is)\s*(.+)/i);
-  const addressChange = originalText.match(/(?:address|location|addr)\s*(?:to|:|should be|is)\s*(.+)/i);
-  const contactChange = originalText.match(/contact\s*(?:to|:|should be|is)\s*(.+)/i);
+    if (typeof edits.businessName === 'string' && edits.businessName.trim()) {
+      wd.businessName = edits.businessName.trim();
+      changes.push(`business name to *${wd.businessName}*`);
+    }
+    if (typeof edits.industry === 'string' && edits.industry.trim()) {
+      const newIndustry = edits.industry.trim();
+      wd.industry = newIndustry;
+      changes.push(`industry to *${newIndustry}*`);
+      if (
+        isSalonIndustry(newIndustry) &&
+        !wd.bookingMode &&
+        (!Array.isArray(wd.salonServices) || wd.salonServices.length === 0)
+      ) {
+        industryChangedToSalon = true;
+      }
+    }
+    if (Array.isArray(edits.services) && edits.services.length) {
+      wd.services = edits.services
+        .map((s) => String(s).trim())
+        .filter(Boolean);
+      if (wd.services.length) changes.push(`services to *${wd.services.join(', ')}*`);
+    }
+    if (typeof edits.email === 'string' && edits.email.trim()) {
+      const m = edits.email.trim().match(/[\w.-]+@[\w.-]+\.\w+/);
+      if (m) {
+        wd.contactEmail = m[0];
+        changes.push(`email to *${wd.contactEmail}*`);
+      }
+    }
+    // Phone — WhatsApp sentinel takes priority. Accepts useWhatsappNumber:true
+    // OR an explicit phone:"USE_WHATSAPP_NUMBER" sentinel (both paths handled
+    // so the LLM can't slip either way).
+    const wantsWhatsApp =
+      parsed.useWhatsappNumber === true ||
+      (typeof edits.phone === 'string' && edits.phone.trim().toUpperCase() === 'USE_WHATSAPP_NUMBER');
+    if (wantsWhatsApp) {
+      wd.contactPhone = formatWhatsAppNumber(user.phone_number);
+      changes.push(`your WhatsApp number (*${wd.contactPhone}*)`);
+    } else if (typeof edits.phone === 'string' && edits.phone.trim()) {
+      // Explicit digits. Guard against junk like "contact" / "number".
+      const digits = edits.phone.trim();
+      if (/\d{4,}/.test(digits)) {
+        wd.contactPhone = digits;
+        changes.push(`phone to *${wd.contactPhone}*`);
+      }
+    }
+    if (typeof edits.address === 'string' && edits.address.trim()) {
+      wd.contactAddress = edits.address.trim();
+      changes.push(`address to *${wd.contactAddress}*`);
+    }
 
-  if (nameChange) {
-    wd.businessName = nameChange[1].trim();
+    if (changes.length === 0) {
+      // Edit intent but nothing extracted — nudge for specifics.
+      await sendTextMessage(
+        user.phone_number,
+        'I caught that you want to change something but couldn\'t pin it down. Could you be specific? e.g. *"change the name to Fresh Cuts"* or *"add my WhatsApp number"*.'
+      );
+      return STATES.WEB_CONFIRM;
+    }
+
     await updateUserMetadata(user.id, { websiteData: wd });
-    await sendTextMessage(user.phone_number, `Updated business name to *${wd.businessName}*. Anything else to change, or say *"yes"* to proceed.`);
-    return STATES.WEB_CONFIRM;
-  }
-  if (industryChange) {
-    const newIndustry = industryChange[1].trim();
-    wd.industry = newIndustry;
-    await updateUserMetadata(user.id, { websiteData: wd });
-    // If the user just switched into a salon industry and we haven't yet
-    // collected the salon-specific details (booking tool, hours, prices),
-    // pivot into the salon sub-flow and return to CONFIRM when it's done.
-    const needsSalonFlow =
-      isSalonIndustry(newIndustry) &&
-      !wd.bookingMode &&
-      (!Array.isArray(wd.salonServices) || wd.salonServices.length === 0);
-    if (needsSalonFlow) {
+    user.metadata = { ...(user.metadata || {}), websiteData: wd };
+
+    if (industryChangedToSalon) {
       await updateUserMetadata(user.id, { salonFlowOrigin: 'CONFIRM' });
-      await sendTextMessage(user.phone_number, `Updated industry to *${newIndustry}* — a few quick salon-specific questions, then we'll build it.`);
+      await sendTextMessage(
+        user.phone_number,
+        `Updated ${changes.join(', ')} — a few quick salon-specific questions, then we'll build it.`
+      );
       return startSalonFlow(user);
     }
-    await sendTextMessage(user.phone_number, `Updated industry to *${wd.industry}*. Anything else, or say *"yes"* to proceed.`);
-    return STATES.WEB_CONFIRM;
-  }
-  if (servicesChange) {
-    wd.services = servicesChange[1].split(',').map(s => s.trim()).filter(Boolean);
-    await updateUserMetadata(user.id, { websiteData: wd });
-    await sendTextMessage(user.phone_number, `Updated services to *${wd.services.join(', ')}*. Anything else, or say *"yes"* to proceed.`);
-    return STATES.WEB_CONFIRM;
-  }
-  if (emailChange) {
-    const val = emailChange[1].trim();
-    const m = val.match(/[\w.-]+@[\w.-]+\.\w+/);
-    wd.contactEmail = m ? m[0] : val;
-    await updateUserMetadata(user.id, { websiteData: wd });
-    await sendTextMessage(user.phone_number, `Updated email to *${wd.contactEmail}*. Anything else, or say *"yes"* to proceed.`);
-    return STATES.WEB_CONFIRM;
-  }
-  if (phoneChange) {
-    wd.contactPhone = phoneChange[1].trim();
-    await updateUserMetadata(user.id, { websiteData: wd });
-    await sendTextMessage(user.phone_number, `Updated phone to *${wd.contactPhone}*. Anything else, or say *"yes"* to proceed.`);
-    return STATES.WEB_CONFIRM;
-  }
-  if (addressChange) {
-    wd.contactAddress = addressChange[1].trim();
-    await updateUserMetadata(user.id, { websiteData: wd });
-    await sendTextMessage(user.phone_number, `Updated address to *${wd.contactAddress}*. Anything else, or say *"yes"* to proceed.`);
-    return STATES.WEB_CONFIRM;
-  }
-  if (contactChange) {
-    const parsed = parseContactFields(contactChange[1].trim());
-    if (parsed.contactEmail) wd.contactEmail = parsed.contactEmail;
-    if (parsed.contactPhone) wd.contactPhone = parsed.contactPhone;
-    if (parsed.contactAddress) wd.contactAddress = parsed.contactAddress;
-    await updateUserMetadata(user.id, { websiteData: wd });
-    await sendTextMessage(user.phone_number, `Updated contact info. Anything else, or say *"yes"* to proceed.`);
+
+    await sendTextMessage(
+      user.phone_number,
+      `Updated ${changes.join(', ')}. Anything else to change, or are we good to build?`
+    );
     return STATES.WEB_CONFIRM;
   }
 
-  // Couldn't parse the change — ask them to be more specific
+  // ── Unclear → help them out ─────────────────────────────────────────────
   await sendTextMessage(
     user.phone_number,
-    'What would you like to change? You can say things like:\n\n' +
-      '• "Name to MyBusiness"\n' +
-      '• "Industry to Tech"\n' +
-      '• "Services to Web Design, SEO, Branding"\n' +
-      '• "Email to hello@example.com"\n' +
-      '• "Phone to +1 555 123 4567"\n' +
-      '• "Address to 123 Main St, City"\n\n' +
-      'Or say *"yes"* to proceed with the current details.'
+    "What would you like to change? You can say things like:\n\n" +
+      '• "change the name to Fresh Cuts"\n' +
+      '• "industry should be Plumbing"\n' +
+      '• "services are pipe repair, drain cleaning"\n' +
+      '• "add my WhatsApp number"\n' +
+      '• "email to hello@example.com"\n\n' +
+      'Or just let me know you\'re happy with the current details and I\'ll build it.'
   );
   return STATES.WEB_CONFIRM;
 }
@@ -1163,7 +1439,7 @@ async function handleRevisions(user, message) {
     const example = domainExampleFor(user.metadata?.websiteData?.businessName);
     await sendTextMessage(
       user.phone_number,
-      `🎉 *Awesome!* Your website is approved.\n\nWould you like to put it on your own custom domain? (e.g., ${example})\n\nJust say *"yes"* and I'll help you find one, or *"no"* if you want to skip it for now.`
+      `🎉 *Awesome!* Your website is approved.\n\nWould you like to put it on your own custom domain? (e.g., ${example})\n\nIf you want one I'll help you find it, or we can skip that for now.`
     );
     await logMessage(user.id, 'Website approved, offering custom domain', 'assistant');
     return STATES.DOMAIN_OFFER;
@@ -1309,7 +1585,7 @@ async function handleRevisions(user, message) {
         const example = domainExampleFor(currentConfig?.businessName || user.metadata?.websiteData?.businessName);
         await sendTextMessage(
           user.phone_number,
-          `🎉 *Awesome!* Your website is approved.\n\nWould you like to put it on your own custom domain? (e.g., ${example})\n\nJust say *"yes"* and I'll help you find one, or *"no"* if you want to skip it for now.`
+          `🎉 *Awesome!* Your website is approved.\n\nWould you like to put it on your own custom domain? (e.g., ${example})\n\nIf you want one I'll help you find it, or we can skip that for now.`
         );
         await logMessage(user.id, 'Website approved, offering custom domain', 'assistant');
         return STATES.DOMAIN_OFFER;
@@ -1352,4 +1628,432 @@ async function handleRevisions(user, message) {
   return STATES.WEB_REVISIONS;
 }
 
-module.exports = { handleWebDev, handleGenerationFailed };
+// ═══════════════════════════════════════════════════════════════════════════
+// NEW: Unified LLM-driven collector (WEB_COLLECTING)
+//
+// One state replaces the NAME/EMAIL/INDUSTRY/SERVICES/COLORS/LOGO/CONTACT
+// chain. Each turn runs two LLM calls:
+//   1. Structured extractor (JSON-only) to pull field values from the user's
+//      message — explicitly ignores confirmations ("yes/sure/ok") and skip
+//      words, so button text like "Continue" never leaks into data.
+//   2. Conversational ask that acknowledges known fields and asks naturally
+//      for 1-2 missing ones.
+//
+// Output is the SAME `websiteData` shape the existing generator.js consumes.
+// Industry-specific sub-flows (salon booking/instagram/hours/durations,
+// HVAC areas) are reached by routing to the legacy states once required
+// fields are collected.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Merge values captured by the messageAnalyzer (`user.metadata.extracted*`)
+ * into `websiteData` on first entry into WEB_COLLECTING. Never overwrites
+ * values already in websiteData.
+ */
+async function hydrateFromExtractedMetadata(user) {
+  const meta = user.metadata || {};
+  const wd = { ...(meta.websiteData || {}) };
+  let dirty = false;
+  let metaUpdates = {};
+
+  if (meta.extractedBusinessName && !wd.businessName) {
+    wd.businessName = meta.extractedBusinessName;
+    dirty = true;
+  }
+  if (meta.extractedIndustry && !wd.industry) {
+    wd.industry = meta.extractedIndustry;
+    dirty = true;
+  }
+  if (meta.extractedServices && (!Array.isArray(wd.services) || wd.services.length === 0)) {
+    const list = String(meta.extractedServices)
+      .split(/[,;]+/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+    if (list.length) {
+      wd.services = list;
+      dirty = true;
+    }
+  }
+  if (meta.extractedColors && !wd.colors) {
+    wd.colors = meta.extractedColors;
+    dirty = true;
+  }
+  if (meta.extractedEmail && !wd.contactEmail) {
+    wd.contactEmail = meta.extractedEmail;
+    dirty = true;
+    if (!meta.email) metaUpdates.email = meta.extractedEmail;
+  }
+  if (meta.extractedPhone && !wd.contactPhone) {
+    wd.contactPhone = meta.extractedPhone;
+    dirty = true;
+  }
+  if (meta.extractedLocation && !wd.contactAddress) {
+    wd.contactAddress = meta.extractedLocation;
+    dirty = true;
+  }
+
+  // Auto-assign color tokens once industry is known (matches legacy path).
+  if (wd.industry && !wd.primaryColor) {
+    Object.assign(wd, getColorsForIndustry(wd.industry));
+    dirty = true;
+  }
+
+  if (dirty) {
+    metaUpdates.websiteData = wd;
+    await updateUserMetadata(user.id, metaUpdates);
+    user.metadata = { ...(user.metadata || {}), ...metaUpdates };
+    logger.info(`[WEB-COLLECTING] Hydrated from extracted* for ${user.phone_number}: ${JSON.stringify({ businessName: wd.businessName, industry: wd.industry, hasServices: !!(wd.services && wd.services.length) })}`);
+  }
+}
+
+/**
+ * Safe JSON parser that strips ```json fences and pulls the first {...} block.
+ */
+function safeParseJson(raw) {
+  if (!raw) return null;
+  let s = String(raw).trim();
+  const fenced = s.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+  if (fenced) s = fenced[1].trim();
+  if (!s.startsWith('{')) {
+    const m = s.match(/\{[\s\S]*\}/);
+    if (m) s = m[0];
+  }
+  try { return JSON.parse(s); } catch { return null; }
+}
+
+/**
+ * Run a tight JSON extractor on the user's latest message. Returns an
+ * object with any of the WEB_COLLECTING fields the user explicitly stated.
+ * Confirmations, skip words, and button text return {}.
+ */
+async function extractWebCollectingFields(text, user) {
+  const t = String(text || '').trim();
+  if (!t) return {};
+  // Hard client-side guards so affirmations / skip words / button titles
+  // NEVER get routed into entity fields, even if the LLM slips.
+  const asMsg = { text: t };
+  const BUTTON_TITLES = /^(✅ continue|⏭ skip optional steps|👤 talk to a human)$/i;
+  if (isAffirmative(asMsg) || isSkip(asMsg) || isNegative(asMsg) || BUTTON_TITLES.test(t)) {
+    return {};
+  }
+
+  const known = user.metadata?.websiteData || {};
+  const systemPrompt = `You are a structured-data extractor for a website-setup conversation.
+Return ONLY a JSON object — no commentary, no markdown fences — with any of the following fields that the user EXPLICITLY stated in their message:
+
+{
+  "businessName": string,  // the trade/brand name. "Ansh plumber" IS the full business name, keep it intact.
+  "industry": string,       // 1-3 words lowercase: "plumber", "bakery", "hvac", "salon", "dentist", "real estate"
+  "services": string[],     // Title Case, split comma / "and" lists
+  "email": string,
+  "phone": string,
+  "address": string,
+  "colors": string          // "blue and white", "navy + gold"
+}
+
+HARD RULES:
+1. Omit any field the user did NOT clearly state. Do NOT guess, infer, or hallucinate.
+2. Affirmations ("yes", "sure", "ok", "go ahead", "proceed", "continue", "sounds good") are NEVER field values — return {} if the whole message is just that.
+3. Skip words ("skip", "no", "none", "n/a", "later", "dont have") are NEVER field values — omit the field.
+4. WhatsApp button titles ("✅ Continue", "⏭ Skip optional steps", "👤 Talk to a human") are NEVER field values — return {}.
+5. If the user says "add my number", "use my number", "my phone number", "my contact", "use my whatsapp", "add my whatsapp" WITHOUT providing explicit phone digits, set phone to the literal string "USE_WHATSAPP_NUMBER" — the system will substitute the user's real WhatsApp number. NEVER set phone to the word "contact", "number", or any other meta-description.
+6. Already-known fields (below) must NOT be re-extracted — treat them as locked in:
+   ${JSON.stringify({
+      businessName: known.businessName || null,
+      industry: known.industry || null,
+      services: (known.services && known.services.length) ? known.services : null,
+      email: known.contactEmail || user.metadata?.email || null,
+      phone: known.contactPhone || null,
+      address: known.contactAddress || null,
+      colors: known.colors || null,
+   })}
+7. When in a WEB_COLLECTING turn and the user sends a single short phrase, that phrase is most likely answering the latest missing field — keep it intact, do not split across entities.
+Return {} if nothing new was explicitly stated.`;
+
+  try {
+    const raw = await generateResponse(systemPrompt, [{ role: 'user', content: t }], {
+      userId: user.id,
+      operation: 'web_collecting_extract',
+      // Structured JSON extraction — accuracy matters far more than cost,
+      // and 4o-mini was mis-mapping short answers ("Ansh plumber" →
+      // businessName:"Ansh" + industry:"plumber"). Pin to gpt-4o.
+      model: 'gpt-4o',
+    });
+    const parsed = safeParseJson(raw) || {};
+    // Sanity filter — drop empty strings, arrays of empties, and any value
+    // that looks like an affirmation/skip that slipped past the LLM.
+    const out = {};
+    const looksLikeIntent = (s) => {
+      const m = { text: s };
+      return isAffirmative(m) || isSkip(m) || isNegative(m);
+    };
+    for (const [k, v] of Object.entries(parsed)) {
+      if (v == null) continue;
+      if (typeof v === 'string') {
+        const trimmed = v.trim();
+        if (!trimmed || looksLikeIntent(trimmed)) continue;
+        out[k] = trimmed;
+      } else if (Array.isArray(v)) {
+        const cleaned = v
+          .map((x) => (typeof x === 'string' ? x.trim() : ''))
+          .filter((x) => x && !looksLikeIntent(x));
+        if (cleaned.length) out[k] = cleaned;
+      }
+    }
+    return out;
+  } catch (err) {
+    logger.warn(`[WEB-COLLECTING] Extractor failed: ${err.message}`);
+    return {};
+  }
+}
+
+/**
+ * Natural, conversational ask that acknowledges what's known and asks for
+ * 1-2 missing things. NOT a form. Never re-asks for info we already have.
+ * Returns the response text.
+ */
+async function askForMissingFields(user, userMessage) {
+  const wd = user.metadata?.websiteData || {};
+  const known = {
+    businessName: wd.businessName || null,
+    industry: wd.industry || null,
+    services: (wd.services && wd.services.length) ? wd.services.join(', ') : null,
+    email: user.metadata?.email || wd.contactEmail || null,
+    phone: wd.contactPhone || null,
+    address: wd.contactAddress || null,
+    colors: wd.colors || null,
+  };
+  const missingRequired = [];
+  if (!known.businessName) missingRequired.push('business name');
+  if (!known.industry) missingRequired.push('line of work');
+  if (!known.services) missingRequired.push('services offered');
+  const missingOptional = [];
+  if (!known.email) missingOptional.push('email');
+  if (!known.phone) missingOptional.push('phone');
+  if (!known.address) missingOptional.push('address');
+  if (!known.colors) missingOptional.push('brand colors');
+
+  const systemPrompt = `You are Pixie, a friendly digital-agency assistant on WhatsApp, gathering details to build a website. You are a real person, NEVER reveal you are AI or a bot.
+
+STYLE: Natural texting. 1-3 sentences max. No emojis unless the user used them first. No em/en dashes — use regular hyphens.
+
+MULTILINGUAL: Mirror the user's language. If they write Spanish, reply entirely in Spanish. If Urdu / Roman Urdu, reply in that.
+
+WHAT YOU ALREADY KNOW:
+${JSON.stringify(known, null, 2)}
+
+STILL NEED (required): ${missingRequired.join(', ') || '— all filled —'}
+NICE TO HAVE (optional): ${missingOptional.join(', ') || '— all filled —'}
+
+RULES:
+1. First, warmly acknowledge any NEW info the user just gave (if any).
+2. If the user already told you something earlier, DO NOT re-ask. Use it: "since you're a plumber, …".
+3. Ask for 1-2 missing REQUIRED fields next, in one natural sentence. Never list field names like a form ("What is your industry?" — BANNED). Instead ask casually: "what's the business called, and what kind of work is it?".
+4. If all required are filled but optional aren't, either weave in one optional OR offer to skip it: "any brand colors you love, or should I pick something that fits plumbing?".
+5. If the user seems to have given no new info this turn, gently re-ask the single most important missing thing without sounding robotic.
+6. Never mention internal field names (businessName, industry, etc.). Talk like a human.
+7. Never say "What industry are you in?" and never list options like "tech, healthcare, restaurant…".`;
+
+  const fullSystemPrompt = systemPrompt + languageDirective(user);
+
+  try {
+    const raw = await generateResponse(
+      fullSystemPrompt,
+      [{ role: 'user', content: userMessage || '(just entered the website-collection step — no message yet)' }],
+      { userId: user.id, operation: 'web_collecting_ask' }
+    );
+    return String(raw || '').trim() || "What's the business called, and what do you do?";
+  } catch (err) {
+    logger.warn(`[WEB-COLLECTING] Ask LLM failed: ${err.message}`);
+    const first = missingRequired[0] || missingOptional[0];
+    return first
+      ? `Could you share your ${first}?`
+      : "Looks like I have what I need — one sec.";
+  }
+}
+
+/**
+ * Normalise a phone/WhatsApp number for display. Input is whatever's on
+ * `user.phone_number` (e.g. "923323448468" or already "+923323448468").
+ * Output always has a leading "+".
+ */
+function formatWhatsAppNumber(raw) {
+  const digits = String(raw || '').replace(/[^\d+]/g, '');
+  if (!digits) return '';
+  return digits.startsWith('+') ? digits : `+${digits}`;
+}
+
+/**
+ * Apply an `extracted` fields object to websiteData, only filling blanks.
+ * Handles the USE_WHATSAPP_NUMBER sentinel for phone — when seen, the user's
+ * actual WhatsApp number (user.phone_number) is substituted.
+ * Returns the merged websiteData.
+ */
+function mergeExtractedIntoWebsiteData(user, extracted) {
+  const wd = { ...(user.metadata?.websiteData || {}) };
+  if (!extracted || typeof extracted !== 'object') return wd;
+
+  if (extracted.businessName && !wd.businessName) wd.businessName = extracted.businessName;
+  if (extracted.industry && !wd.industry) wd.industry = extracted.industry;
+  if (Array.isArray(extracted.services) && extracted.services.length && (!wd.services || !wd.services.length)) {
+    wd.services = extracted.services;
+  }
+  if (extracted.colors && !wd.colors) wd.colors = extracted.colors;
+  if (extracted.email && !wd.contactEmail) wd.contactEmail = extracted.email;
+  if (extracted.phone && !wd.contactPhone) {
+    wd.contactPhone = extracted.phone === 'USE_WHATSAPP_NUMBER'
+      ? formatWhatsAppNumber(user.phone_number)
+      : extracted.phone;
+  }
+  if (extracted.address && !wd.contactAddress) wd.contactAddress = extracted.address;
+
+  // Auto-assign color tokens when industry lands and none were set yet.
+  if (wd.industry && !wd.primaryColor) {
+    Object.assign(wd, getColorsForIndustry(wd.industry));
+  }
+  return wd;
+}
+
+/**
+ * Decide whether we're done collecting and where to send the user next.
+ * Returns the next state (WEB_COLLECTING to stay, WEB_CONFIRM / salon / HVAC
+ * to advance). Does NOT send any message — caller handles messaging.
+ */
+function decideNextStateAfterCollection(user) {
+  const wd = user.metadata?.websiteData || {};
+  const hasName = !!wd.businessName;
+  const hasIndustry = !!wd.industry;
+  const hasServices = Array.isArray(wd.services) && wd.services.length > 0;
+  if (!(hasName && hasIndustry && hasServices)) return STATES.WEB_COLLECTING;
+
+  // Salon sub-flow — needs booking tool choice before confirmation.
+  if (isSalonIndustry(wd.industry) && !wd.bookingMode) return STATES.SALON_BOOKING_TOOL;
+
+  // HVAC sub-flow — needs city + service areas before confirmation.
+  const { isHvac } = require('../../website-gen/templates');
+  if (isHvac(wd.industry) && !wd.primaryCity && (!wd.serviceAreas || !wd.serviceAreas.length)) {
+    return STATES.WEB_COLLECT_AREAS;
+  }
+
+  return STATES.WEB_CONFIRM;
+}
+
+/**
+ * Send the appropriate follow-up message when transitioning out of
+ * WEB_COLLECTING into a sub-flow or the confirmation summary.
+ */
+async function sendTransitionMessage(user, nextState) {
+  if (nextState === STATES.SALON_BOOKING_TOOL) {
+    await sendTextMessage(
+      user.phone_number,
+      "Quick one — do you already use a booking tool (Fresha, Booksy, Vagaro, Calendly)? Paste the link if you do, or let me know you don't and I'll build one in."
+    );
+    await logMessage(user.id, 'Routing to salon booking tool step', 'assistant');
+    return;
+  }
+  if (nextState === STATES.WEB_COLLECT_AREAS) {
+    await sendTextMessage(
+      user.phone_number,
+      'Which city are you based in, and which areas do you serve? Example: *Austin — Round Rock, Cedar Park, Pflugerville*'
+    );
+    await logMessage(user.id, 'Routing to HVAC areas step', 'assistant');
+    return;
+  }
+  if (nextState === STATES.WEB_CONFIRM) {
+    await showConfirmSummary(user);
+    return;
+  }
+}
+
+/**
+ * The main WEB_COLLECTING handler. Runs per inbound user turn.
+ */
+async function handleWebCollecting(user, message) {
+  const text = (message.text || '').trim();
+
+  // 1. Hydrate from messageAnalyzer's extracted* cache on every turn
+  //    (idempotent — only fills blanks).
+  await hydrateFromExtractedMetadata(user);
+
+  // 2. Extract any new fields from the user's message this turn.
+  let extracted = {};
+  if (text) {
+    extracted = await extractWebCollectingFields(text, user);
+    if (Object.keys(extracted).length > 0) {
+      const merged = mergeExtractedIntoWebsiteData(user, extracted);
+      await updateUserMetadata(user.id, { websiteData: merged });
+      user.metadata = { ...(user.metadata || {}), websiteData: merged };
+      logger.info(`[WEB-COLLECTING] Extracted for ${user.phone_number}: ${JSON.stringify(extracted)}`);
+
+      // Also mirror email into top-level metadata.email (legacy path).
+      if (extracted.email && !user.metadata?.email) {
+        await updateUserMetadata(user.id, { email: extracted.email });
+        user.metadata = { ...(user.metadata || {}), email: extracted.email };
+      }
+    }
+  }
+
+  // 3. Ensure site record exists once we have a business name.
+  if (user.metadata?.websiteData?.businessName && !user.metadata?.currentSiteId) {
+    try {
+      const site = await createSite(user.id, 'business-starter');
+      await updateUserMetadata(user.id, { currentSiteId: site.id });
+      user.metadata = { ...(user.metadata || {}), currentSiteId: site.id };
+    } catch (err) {
+      logger.warn(`[WEB-COLLECTING] createSite failed: ${err.message}`);
+    }
+  }
+
+  // 4. Decide next state based on completeness.
+  const nextState = decideNextStateAfterCollection(user);
+  if (nextState !== STATES.WEB_COLLECTING) {
+    await sendTransitionMessage(user, nextState);
+    return nextState;
+  }
+
+  // 5. Still missing something — ask conversationally for 1-2 fields.
+  const reply = await askForMissingFields(user, text);
+  await sendTextMessage(user.phone_number, reply);
+  await logMessage(user.id, reply, 'assistant');
+  return STATES.WEB_COLLECTING;
+}
+
+/**
+ * Public entry used by other flows (sales bot, service selection) to route
+ * a user INTO WEB_COLLECTING. Hydrates extracted* first so the very first
+ * message already reflects what the user told the sales bot earlier.
+ *
+ * Returns the state to set (always WEB_COLLECTING or a direct onward state
+ * if everything required is already known).
+ */
+async function enterWebCollecting(user) {
+  await hydrateFromExtractedMetadata(user);
+
+  // Create a site record early if we already have a business name from
+  // prior chat extraction.
+  if (user.metadata?.websiteData?.businessName && !user.metadata?.currentSiteId) {
+    try {
+      const site = await createSite(user.id, 'business-starter');
+      await updateUserMetadata(user.id, { currentSiteId: site.id });
+      user.metadata = { ...(user.metadata || {}), currentSiteId: site.id };
+    } catch (err) {
+      logger.warn(`[WEB-COLLECTING] createSite failed on entry: ${err.message}`);
+    }
+  }
+
+  const nextState = decideNextStateAfterCollection(user);
+  if (nextState !== STATES.WEB_COLLECTING) {
+    // Fast-path: everything required was already captured earlier —
+    // jump straight to confirmation or the needed sub-flow.
+    await sendTransitionMessage(user, nextState);
+    return nextState;
+  }
+
+  // Otherwise kick off the conversational flow with the dynamic ask.
+  const reply = await askForMissingFields(user, '');
+  await sendTextMessage(user.phone_number, reply);
+  await logMessage(user.id, reply, 'assistant');
+  return STATES.WEB_COLLECTING;
+}
+
+module.exports = { handleWebDev, handleGenerationFailed, enterWebCollecting };

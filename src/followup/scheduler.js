@@ -518,8 +518,7 @@ async function runPaymentPolling() {
               targetPhone,
               `Payment of *${amountDisplay}* received! Thank you for choosing Bytes Platform.\n\n` +
                 `*Package:* ${payment.description || payment.service_type}\n\n` +
-                `Your website is all set! Would you like to put it on your own custom domain?\n\n` +
-                `Just say *"yes"* and I'll help you find one, or *"no"* if you're good for now.`
+                `Your website is all set! Would you like to put it on your own custom domain? I can help you find one, or we can skip that for now.`
             ));
             await logMessage(payment.user_id, `Payment confirmed: ${amountDisplay}`, 'assistant');
             const { updateUserState } = require('../db/users');

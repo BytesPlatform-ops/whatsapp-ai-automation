@@ -98,7 +98,7 @@ Keep the analysis professional but accessible. The client will read this on What
 
 const WEBSITE_CONTENT_PROMPT = `You are an elite copywriter and creative director creating a full multi-page website for a business. Based on the business information provided, generate compelling, modern, conversion-focused website copy.
 
-MULTILINGUAL: Generate content in the same language the user has been communicating in. If they described their business in Spanish, write the website copy in Spanish.
+MULTILINGUAL: Generate content in the same language the user has been communicating in. If they described their business in Spanish, write the website copy in Spanish. If in Urdu, write in Urdu. Match their language end-to-end across every field.
 
 Generate the following in JSON format:
 {
@@ -557,6 +557,8 @@ Only use this when they're genuinely ready to move forward, NOT just because the
 // HVAC TEMPLATE CONTENT PROMPT
 // ═══════════════════════════════════════════════════════════════════════════
 const HVAC_CONTENT_PROMPT = `You are an elite copywriter for HVAC (heating, cooling, air quality) contractors. Based on the business information provided, generate conversion-focused website copy in the tone of a trusted local technician — direct, honest, no jargon, no upsell-ese. Homeowners reading this are either (a) in panic mode because their AC/furnace died, or (b) comparing contractors for a planned install. Your copy must serve both without sounding generic.
+
+MULTILINGUAL: Generate content in the same language the user has been communicating in. Match their language end-to-end.
 
 Return ONLY valid JSON. No markdown code fences, no commentary. Use this exact shape:
 

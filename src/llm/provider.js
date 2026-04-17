@@ -10,12 +10,18 @@ const { recordUsage } = require('../db/llmUsage');
  *
  * @param {string} systemPrompt
  * @param {Array<{role: string, content: string}>} messages
- * @param {{ userId?: string, operation?: string }} [options]
+ * @param {{ userId?: string, operation?: string, model?: string }} [options]
  *   When userId is supplied, token usage + cost is persisted to the
  *   `llm_usage` table so the admin dashboard can show a per-conversation
  *   pricing breakdown. `operation` should be a short tag describing what
  *   this call was for ('webdev_extract', 'website_content', 'sales_chat',
  *   etc.) — anything unset lands in the "unknown" bucket.
+ *
+ *   `model` is an optional per-call override. Use it sparingly for calls
+ *   that need stronger reasoning (e.g. messageAnalyzer, structured-JSON
+ *   extractors). Cost telemetry is split per-model by `recordUsage` below,
+ *   so bumping a single call to gpt-4o surfaces cleanly in the admin
+ *   dashboard without affecting the rest of the call surface.
  * @returns {Promise<string>} The generated response text.
  */
 async function generateResponse(systemPrompt, messages, options = {}) {
@@ -23,7 +29,9 @@ async function generateResponse(systemPrompt, messages, options = {}) {
   const impl = provider === 'openai' ? openai : claude;
   const start = Date.now();
 
-  const result = await impl.generateResponseWithUsage(systemPrompt, messages);
+  const result = await impl.generateResponseWithUsage(systemPrompt, messages, {
+    model: options.model,
+  });
   const {
     text,
     model,

@@ -2,6 +2,7 @@ const { sendTextMessage, sendCTAButton } = require('../../messages/sender');
 const { logMessage, getConversationHistory } = require('../../db/conversations');
 const { generateResponse } = require('../../llm/provider');
 const { buildSalesPrompt } = require('../../llm/prompts');
+const { buildDirective: languageDirective } = require('../../llm/languageDirective');
 const { formatWhatsApp } = require('../../utils/formatWhatsApp');
 const { updateUserMetadata } = require('../../db/users');
 const { logger } = require('../../utils/logger');
@@ -71,6 +72,9 @@ async function handleSalesBot(user, message) {
   if (seoAnalysis) {
     systemPrompt += `\n\n---\n\n## SEO AUDIT CONTEXT\n\nYou just ran a live SEO audit on the client's website (${user.metadata.lastSeoUrl || 'their site'}). The full report has been sent as a PDF. Here are the findings:\n\n${seoAnalysis.slice(0, 2000)}\n\n**Use these specific findings to pitch the right SEO package.** Reference their actual issues - don't be generic. Show them exactly what's broken and how the package you're recommending fixes it. This is your strongest closer - you have real data, use it.`;
   }
+
+  // Persisted language preference overrides everything else in the prompt.
+  systemPrompt += languageDirective(user);
 
   let rawResponse;
   try {
@@ -423,22 +427,17 @@ async function handleSalesBot(user, message) {
     return STATES.CB_COLLECT_NAME;
   }
 
-  // Trigger website demo flow
+  // Trigger website demo flow — hand off to the unified LLM-driven collector.
+  // `enterWebCollecting` hydrates `websiteData` from `extracted*` so any
+  // business name / industry / services the user mentioned during sales
+  // chat carry over, and sends the first dynamic ack-and-ask message
+  // (e.g. "Since you're a plumber, what's the business called?") so we
+  // never re-ask for things the sales bot already learned.
   if (websiteDemoTrigger && !user.metadata?.websiteDemoTriggered) {
     logger.info(`[SALES] Triggering website demo for ${user.phone_number}`);
     await updateUserMetadata(user.id, { websiteDemoTriggered: true, returnToSales: true });
-
-    const { createSite } = require('../../db/sites');
-    const site = await createSite(user.id, 'business-starter');
-    await updateUserMetadata(user.id, { currentSiteId: site.id });
-
-    // Always ask — don't try to auto-extract. Prevents wrong names.
-    await sendTextMessage(
-      user.phone_number,
-      "Let's build it! What's your business name?"
-    );
-    await logMessage(user.id, 'Starting website demo flow', 'assistant');
-    return STATES.WEB_COLLECT_NAME;
+    const { enterWebCollecting } = require('./webDev');
+    return enterWebCollecting(user);
   }
 
   // Trigger ad generator flow

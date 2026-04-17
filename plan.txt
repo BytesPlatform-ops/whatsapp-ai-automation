@@ -1,0 +1,557 @@
+FIXES:
+
+partial
+"Actually wait, how much does the website cost?"
+
+User is mid-collection (e.g. giving business name) but asks a pricing question. Must answer the question AND return them to the exact step they were on.
+
+Current: Intent classifier catches question vs answer, but re-ask is generic — doesn't acknowledge what they asked.
+
+gap
+"Hold on let me ask my partner" [silence for 2 hours] "ok back, where were we?"
+
+Detect returning user after inactivity. Summarize where they left off: 'Welcome back! We were building your website — I had your business name and industry. Next I need your services list.'
+
+Current: Bot just fires the next state question with no context recap.
+
+gap
+"Can I see an example website first before I give you my info?"
+
+Pause collection, show portfolio/example, then resume. Don't lose collected data.
+
+Current: Would likely classify as 'question' and answer generically, but has no mechanism to show examples mid-flow.
+
+partial
+"Actually I don't want a website anymore, I want a logo"
+
+Detect service switch intent. Confirm: 'No problem! Want to switch to our Logo Maker instead?' Preserve any reusable data (business name, colors).
+
+Current: User must say /menu explicitly. Free-text 'I want a logo instead' may not route correctly.
+
+gap
+"My phone is about to die, can you save my progress?"
+
+Reassure that everything is saved (it is — metadata persists). Tell them they can come back anytime and pick up where they left off.
+
+Current: No explicit handling. Bot would try to classify this as answer/question/menu.
+
+partial
+"What's your company name? Who am I talking to?"
+
+Answer identity questions naturally without breaking flow. 'I'm Pixie from BytesPlatform! Now, back to your website — what services do you offer?'
+
+Current: Intent classifier may handle as 'question' but the re-ask transition feels robotic.
+
+gap
+"send me your website/portfolio/social links"
+
+Provide agency links naturally, then resume. This is a trust-building moment — don't rush past it.
+
+Current: Would go to RAG knowledge base but may not find specific links.
+
+gap
+"Thanks so much! You're amazing 😍"
+
+Warm acknowledgment: 'That means a lot! Happy to help 😊' — don't ignore it and fire the next question.
+
+Current: Treated as 'answer' input, so the state handler tries to parse it as data.
+
+gap
+"This is frustrating, it's taking forever"
+
+Detect frustration. Apologize, explain where they are in the process, offer to skip optional steps or talk to a human.
+
+Current: No sentiment detection. Would be classified as free-text answer.
+
+gap
+"haha" / "lol" / "ok cool" / "nice"
+
+Acknowledge casually and continue: 'Glad you like it! So next up...' Don't ask 'I didn't understand, could you repeat?'
+
+Current: Short text fast-path treats <4 chars as 'answer', but 'haha' or 'nice' would be misinterpreted as data input.
+
+partial
+"good morning" / "hey" / "hi again"
+
+Greet back warmly. If mid-flow, greet AND remind them where they are. If new conversation, start fresh.
+
+Current: Works for new conversations (welcome handler) but greetings mid-flow get classified as data.
+
+partial
+"I'm not sure about this, is it really worth it?"
+
+Sales objection moment. Validate concern, provide social proof, offer a lower-commitment option. Don't push — guide.
+
+Current: RAG might pull pricing/value info but response won't feel empathetic.
+
+gap
+"Can you speak Urdu/Spanish/Arabic?"
+
+Detect language preference. If LLM supports it, switch. If not, explain politely and offer alternatives.
+
+Current: No language detection or switching. Response will be in English regardless.
+
+gap
+"I had a bad experience with another agency"
+
+Listen. Validate. Don't immediately pitch. 'I'm sorry to hear that. What happened?' Then differentiate.
+
+Current: Would try to answer with RAG content about services — misses the emotional moment entirely.
+
+partial
+"You're just a bot, I want to talk to a real person"
+
+Don't be defensive. Acknowledge: 'Totally understand! Let me connect you with our team.' Trigger human handoff immediately.
+
+Current: No automatic detection. User would need to know about human takeover. Admin can manually toggle but bot doesn't offer it.
+
+partial
+"I need help with my business"
+
+Ask a clarifying question that's specific but not overwhelming: 'Happy to help! Are you looking to get more customers online, build a website, or something else?'
+
+Current: Sales bot will try to pitch broadly. Works-ish but feels like a monologue.
+
+gap
+"How much?"
+
+Context-dependent. If mid-flow, answer for that service. If at menu, ask 'For which service?' with quick options.
+
+Current: No context memory for which service the user might mean.
+
+partial
+"Yes" / "Sure" / "Go ahead"
+
+Interpret based on the last question asked. If you offered a CTA, treat as acceptance. If you asked a question, treat as affirmative.
+
+Current: Short-text fast-path helps but doesn't check what was last asked.
+
+gap
+"whatever you think is best"
+
+Make a sensible default choice, state it clearly, and ask for confirmation: 'I'll go with modern blue tones — sound good?'
+
+Current: Collection states expect specific data. This would stall or misparse.
+
+gap
+"something professional"
+
+When asked for colors/style and user gives a vague aesthetic term, translate it to concrete options: 'Professional look — I'd suggest navy blue and white. Want to go with that?'
+
+Current: Would try to use the raw text as the color value.
+
+partial
+"idk" / "not sure" / "skip"
+
+Offer to skip with a smart default, or rephrase the question more helpfully. 'No worries! I can pick colors that match your industry — or you can choose later. Want me to decide?'
+
+Current: 'skip' is fast-pathed but others aren't. No smart defaults offered.
+
+gap
+"My business is called Fresh Cuts, we're a barbershop in Karachi, here's my number 03001234567"
+
+Extract ALL entities in one pass (name, industry, location, phone). Don't re-ask for info already provided. The 'parameter chain' pattern.
+
+Current: State machine processes one field at a time. Data given out-of-order is lost.
+
+gap
+"I want a website and also some ads and a logo"
+
+Acknowledge all three needs. Suggest a logical order: 'Great combo! Let's start with the website (we'll need the brand elements), then create your logo, then use both for ads. Sound good?'
+
+Current: matchServiceFromText picks the first match. Other services are ignored.
+
+gap
+"Here's my business info: [sends 5 messages rapidly]"
+
+Buffer and consolidate rapid messages before responding. Don't fire a response after each one.
+
+Current: Each message triggers a separate handler invocation. Race conditions possible.
+
+partial
+"I checked the website you made and the phone number is wrong, it should be 0300-1234567, also change the color to green"
+
+Parse multiple revision requests from one message. Apply all changes, confirm each one.
+
+Current: Revision handler sends to LLM which may catch multiple requests, but it's not guaranteed.
+
+gap
+"My friend Ahmed also wants a website, can you help him too?"
+
+Explain that each WhatsApp number gets its own session. Share the agency number so Ahmed can message directly.
+
+Current: No handling. Would try to parse as current user's data.
+
+partial
+"What's the weather like?" / "Tell me a joke"
+
+Answer briefly and cheerfully, then steer back: 'Ha! Here's one: Why did the website go to therapy? Too many issues! 😄 Now, back to your project...'
+
+Current: Intent classifier tags as 'question' and tries RAG, which won't have weather/jokes.
+
+gap
+"Can you help me hack a website?" / spam / abuse
+
+Firmly decline inappropriate requests. Flag for admin review. Don't engage further on the topic.
+
+Current: No content filtering or abuse detection.
+
+partial
+"[sends only an image with no text]"
+
+Acknowledge the image: 'Got your image! Is this your logo, a product photo, or something else you'd like me to use?'
+
+Current: Image is downloaded and stored but if no text accompanies it, the handler may not know what to do with it.
+
+handled
+"[sends a voice note]"
+
+Transcribe and process naturally. Respond acknowledging it was a voice note: 'Got your voice message!' then respond to content.
+
+Current: Whisper transcription works. But response doesn't acknowledge it was audio.
+
+gap
+"[sends a PDF or document]"
+
+Acknowledge: 'Thanks for the document! Let me take a look.' Process if relevant (business plan, menu, etc.) or ask what they'd like done with it.
+
+Current: No document handling beyond images and audio.
+
+partial
+"Do you work with businesses in [other country]?"
+
+Answer based on agency's actual service area. If yes, proceed. If no, be honest and helpful.
+
+Current: RAG may have this info but answer depends on knowledge base content.
+
+gap
+"[sends location pin]"
+
+Extract coordinates/address. Use for service area verification, local SEO, or website contact info.
+
+Current: Location messages not parsed in webhook parser.
+
+partial
+"How do I know this isn't a scam?"
+
+Critical trust moment. Share credentials, portfolio links, reviews, Meta verification status. Offer a call. Don't be defensive.
+
+Current: RAG may have FAQ answer but delivery feels generic, not reassuring.
+
+partial
+"That's too expensive" / "Can I get a discount?"
+
+Acknowledge the concern. Explain value. Offer tier options or payment plans if available. Don't immediately cave on price.
+
+Current: Sales bot handles objections via LLM but no structured pricing negotiation flow.
+
+partial
+"Let me think about it"
+
+Respect it completely. Set a follow-up: 'Of course! I'll check in tomorrow. In the meantime, here's a summary of what we discussed.' Seed the follow-up scheduler.
+
+Current: Follow-up scheduler exists but no immediate summary or graceful handoff to 'thinking' state.
+
+partial
+"Can I see reviews/testimonials from other clients?"
+
+Share real social proof — case studies, before/after, client quotes. This is high-intent behavior.
+
+Current: RAG might have case studies but no structured testimonial delivery.
+
+partial
+"What happens if I don't like the website?"
+
+Explain revision process, satisfaction guarantee, or refund policy clearly. Reduce risk perception.
+
+Current: Depends entirely on knowledge base content.
+
+handled
+"I want to talk to someone before I pay"
+
+Immediately offer scheduling: 'Absolutely! Let me get you on a call with our team.' Push to Calendly or human handoff.
+
+Current: Scheduling handler and Calendly integration exist. But detecting this intent from free text is inconsistent.
+
+partial
+"Hey it's me again, remember that website we made?"
+
+Pull up their history. Reference specifics: 'Of course! Your Fresh Cuts barbershop site at freshcuts.netlify.app. How can I help?'
+
+Current: User data persists in metadata but bot doesn't proactively recall or reference past work.
+
+gap
+"My website is down" / "Something broke on my site"
+
+Urgent support case. Check site status, acknowledge the urgency, escalate to admin immediately.
+
+Current: No site monitoring or support flow. Would go to sales bot or informative bot.
+
+gap
+"I want to add a page to my website" / "Update my hours"
+
+Post-purchase service request. Pull up their site data, make the change, redeploy.
+
+Current: No post-purchase modification flow. Website generation is one-shot.
+
+gap
+"I recommended you to my friend, do I get anything?"
+
+Referral program moment. Whether you have one or not, acknowledge and thank them warmly.
+
+Current: No referral tracking or reward system.
+
+partial
+"Can I upgrade my plan?" / "I want the premium version"
+
+Upsell path. Show tier comparison, handle payment upgrade, apply changes.
+
+Current: Upsell scheduler exists for emails but no in-chat upgrade flow.
+
+gap
+"Your message got cut off" / "I can't see the image"
+
+Resend the content. Apologize for the glitch. WhatsApp has message size limits — break content into smaller chunks proactively.
+
+Current: No retry or resend mechanism. No detection of delivery failures.
+
+partial
+"How do I click the button?" (older user unfamiliar with WhatsApp interactive messages)
+
+Send text-based alternatives: 'You can also just type 1 for SEO, 2 for Website...' Always have a text fallback.
+
+Current: Interactive messages sent but no text fallback offered proactively.
+
+gap
+"[double-taps a button, sending it twice]"
+
+Deduplicate. Don't process the same action twice. Ignore the second tap.
+
+Current: No deduplication. Both taps would trigger the handler.
+
+gap
+"I accidentally picked the wrong option"
+
+Let them undo easily: 'No problem! What would you like instead?' Don't force them through /reset.
+
+Current: No undo mechanism. /reset clears everything — nuclear option only.
+
+gap
+"[sends a message in a language other than English]"
+
+Detect language, respond in kind if possible. If not, politely switch to English with explanation.
+
+Current: No language detection. LLM may respond in English regardless of input language.
+
+PLAN:
+1.1
+Build messageAnalyzer.js
+
+New module that replaces the intent classifier. Single LLM call per message that returns a structured JSON: { intent, sentiment, entities, topicSwitch, urgency, language, isNoise }. Intent expands from 3 values (answer/question/menu) to 8+: answer, question, objection, greeting, gratitude, frustration, service_switch, farewell, noise, human_request. Sentiment is a 1-5 scale. Entities extracts any business data found (name, phone, email, industry, url, colors, etc).
+
+new file
+src/llm/messageAnalyzer.js
+critical path
+Start this task ↗
+1.2
+Write the analysis prompt
+
+System prompt that instructs the LLM to output structured JSON. Must include the current conversation state, last bot message, and user metadata as context so the LLM knows WHAT we're collecting and can extract entities intelligently. Key: include 15+ few-shot examples covering tricky cases (gratitude parsed as data, greetings mid-flow, multi-entity messages).
+
+edit
+src/llm/prompts.js
+depends: 1.1
+Start this task ↗
+1.3
+Rewire router.js to use messageAnalyzer
+
+Replace the current intent classifier interceptor block in router.js with calls to messageAnalyzer. The analysis result gets attached to the message object so every handler can read intent, sentiment, entities without re-calling the LLM. Short-text fast-path stays but is widened — 'haha', 'lol', 'nice', 'thanks' get classified as noise/gratitude, not answer.
+
+edit
+src/conversation/router.js
+depends: 1.1, 1.2
+critical path
+Start this task ↗
+1.4
+Add noise/gratitude handler
+
+New lightweight handler for messages classified as noise or gratitude. For gratitude: warm acknowledgment + continue flow. For noise ('haha', 'ok', 'cool'): casual acknowledge + next step. For greetings mid-flow: greet back + remind where we are. None of these should re-ask the current question robotically.
+
+new file
+src/conversation/handlers/socialHandler.js
+depends: 1.3
+Start this task ↗
+
+2.1
+Frustration detection and response
+
+When messageAnalyzer returns sentiment <= 2 (frustrated/angry): pause the flow, acknowledge with empathy ('I hear you, let me help sort this out'), offer options: skip remaining steps / talk to human / explain what's happening. Track frustration_count in metadata — if 2+ frustrations in a session, auto-offer human handoff.
+
+edit
+src/conversation/router.js
+depends: 1.1
+Start this task ↗
+2.2
+Human handoff request detection
+
+When messageAnalyzer detects intent=human_request (e.g. 'talk to a real person', 'get me a human', 'you're just a bot'), immediately offer handoff: 'Absolutely! Let me connect you with our team.' Set humanTakeover flag. Also add a persistent 'Talk to human' option in every interactive message footer.
+
+edit
+src/conversation/handlers/socialHandler.js
+depends: 1.4
+Start this task ↗
+2.3
+Sales objection handler
+
+When messageAnalyzer returns intent=objection (too expensive, not sure, need to think): route to a dedicated objection-handling prompt that validates the concern, provides relevant social proof from RAG, and offers a lower-commitment next step. Never push — guide. Track objection topics in metadata for follow-up scheduler.
+
+new file
+src/conversation/handlers/objectionHandler.js
+depends: 1.1
+Start this task ↗
+2.4
+Language detection and switching
+
+messageAnalyzer already returns detected language. Add a language preference field to user metadata. If non-English detected, respond in the same language (LLM handles this naturally). Store preference so all future messages use it. Add a system prompt instruction for Pixie persona in other languages.
+
+edit
+src/conversation/router.js
+edit
+src/db/users.js
+depends: 1.1
+Start this task ↗
+
+3.1
+Build entityAccumulator.js
+
+New module that sits between messageAnalyzer and handlers. Maintains a 'collected fields' map per flow. When messageAnalyzer extracts entities (business_name, email, phone, industry, colors, etc), entityAccumulator merges them into user.metadata automatically. Each handler's collection states check 'do I already have this field?' before asking — if yes, skip to the next missing field.
+
+new file
+src/conversation/entityAccumulator.js
+depends: 1.1
+critical path
+Start this task ↗
+3.2
+Refactor webDev.js collection states
+
+Website flow has 10+ collection states. Refactor to use entityAccumulator: each state checks if its field is already populated. If user says 'My business is Fresh Cuts, we're a barbershop in Karachi, call me at 0300-1234567' — all four fields are captured in one message and the flow jumps straight to the confirmation step.
+
+edit
+src/conversation/handlers/webDev.js
+depends: 3.1
+Start this task ↗
+3.3
+Refactor all other collection flows
+
+Apply the same entityAccumulator pattern to: adGeneration (8 collection states), logoGeneration (7 states), chatbotService (6 states), appDev, marketing. Each gets the parameter-chain treatment. Shared fields (business name, industry, colors) auto-carry across flows.
+
+edit
+multiple handler files
+depends: 3.1, 3.2
+Start this task ↗
+3.4
+Multi-service request handling
+
+When messageAnalyzer detects multiple service intents ('I want a website and a logo'), acknowledge all needs, suggest an optimal order, and store the full service queue in metadata. After completing one flow, auto-transition to the next with shared data preserved.
+
+new file
+src/conversation/serviceQueue.js
+depends: 3.1
+Start this task ↗
+
+4.1
+Build sessionRecap.js
+
+New module that generates a human-readable summary of the user's current progress when they return after inactivity (>30 min gap). Uses metadata + conversation state to produce: 'Welcome back! We were working on your Fresh Cuts barbershop website. I have your name, industry, and services. Next I need your brand colors.' Triggered in router.js when lastActivity gap exceeds threshold.
+
+new file
+src/conversation/sessionRecap.js
+depends: 1.1
+Start this task ↗
+4.2
+Proactive context in every response
+
+Every collection state response should include a subtle progress indicator: 'Step 3 of 6' or 'Almost done — just need your colors and contact info.' This is a prompt engineering change in each handler, not a new module. Users should always know where they are in the process.
+
+edit
+src/llm/prompts.js
+Start this task ↗
+4.3
+Return visitor recognition
+
+When a returning user messages and they have completed projects (sites, audits, logos), Pixie proactively acknowledges them: 'Hey! Great to hear from you again. How's the Fresh Cuts website working out?' Pull from sites/audits tables. Builds relationship, not just transactions.
+
+new file
+src/conversation/returningUser.js
+depends: 4.1
+Start this task ↗
+
+5.1
+Soft service switching
+
+When messageAnalyzer detects intent=service_switch ('actually I want a logo instead'), confirm the switch and carry over reusable data (business name, industry, colors, contact info). Don't wipe metadata — selectively clear only the current flow's data. Much better than /reset.
+
+new file
+src/conversation/flowSwitcher.js
+depends: 1.1, 3.1
+Start this task ↗
+5.2
+Undo last step
+
+Track the last 3 state transitions in metadata as a mini-stack. When user says 'wait go back' or 'I picked the wrong one', pop the stack and re-ask the previous question with their prior answer shown. No need for /reset.
+
+edit
+src/conversation/router.js
+depends: 1.1
+Start this task ↗
+5.3
+Smart defaults for 'skip' and 'whatever'
+
+For every optional collection field, define a smart default based on industry and existing data. When user says 'whatever you think', 'skip', 'not sure', 'you decide': apply the default, state it clearly, and offer to change. Map in a new config file: industry -> default colors, default style, default layout preferences.
+
+new file
+src/config/smartDefaults.js
+Start this task ↗
+
+6.1
+Message deduplication
+
+Add a dedup layer in router.js: cache the last 5 message IDs per user (WhatsApp sends duplicate webhooks). If same message_id arrives within 30s, silently ignore. Also handle double button taps — if same button payload within 5s, ignore the second.
+
+edit
+src/conversation/router.js
+Start this task ↗
+6.2
+Rapid message buffering
+
+When multiple messages arrive within 3 seconds from the same user, buffer them and concatenate before processing. Prevents race conditions and lets entityAccumulator parse all the data at once instead of triggering 5 separate handler calls.
+
+new file
+src/conversation/messageBuffer.js
+Start this task ↗
+6.3
+Document and location handling
+
+Extend webhook parser to handle document messages (PDF, DOCX) and location pins. Documents: download, extract text if possible, store. Locations: extract coordinates and reverse-geocode for address. Both feed into entityAccumulator.
+
+edit
+src/webhook/parser.js
+depends: 3.1
+Start this task ↗
+6.4
+Interactive message text fallbacks
+
+Every WhatsApp interactive button/list message should also include a text hint: 'Or type 1, 2, 3 to choose.' Helps older users, users on basic WhatsApp clients, and Messenger/IG where interactive messages degrade to plain text.
+
+edit
+src/messages/sender.js
+Start this task ↗
+6.5
+Content filtering and abuse detection
+
+Add a lightweight check in messageAnalyzer for abusive, inappropriate, or spam content. Flag for admin, respond firmly but politely, don't engage further. Also detect potential scam/phishing links in user messages.
+
+edit
+src/llm/messageAnalyzer.js
+depends: 1.1
+Start this task ↗

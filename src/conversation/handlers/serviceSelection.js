@@ -57,15 +57,14 @@ async function handleServiceSelection(user, message) {
       await logMessage(user.id, 'Asked for website URL for SEO audit', 'assistant');
       return STATES.SEO_COLLECT_URL;
 
-    case 'svc_webdev':
-      await sendWithMenuButton(
-        user.phone_number,
-        '🌐 *Website Development*\n\n' +
-          'I\'ll help you create a professional website! I just need a few details about your business.\n\n' +
-          'First, what\'s your *business name*?'
-      );
+    case 'svc_webdev': {
+      // Unified LLM-driven collector. `enterWebCollecting` hydrates from
+      // extracted* metadata first and sends its own dynamic ack-and-ask
+      // message, so we don't pre-send the old form-style prompt.
       await logMessage(user.id, 'Starting website development flow', 'assistant');
-      return STATES.WEB_COLLECT_NAME;
+      const { enterWebCollecting } = require('./webDev');
+      return enterWebCollecting(user);
+    }
 
     case 'svc_ecommerce': {
       const pitch =

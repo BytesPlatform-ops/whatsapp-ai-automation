@@ -149,7 +149,7 @@ async function advanceWebDevFlow(user) {
   await ensureSiteRecord(user);
 
   if (!email) {
-    await sendTextMessage(phone, `Nice, *${name}*! What's a good email for updates? (or say "skip")`);
+    await sendTextMessage(phone, `Nice, *${name}*! What's a good email for updates? (No worries if you'd rather skip it.)`);
     return STATES.WEB_COLLECT_EMAIL;
   }
 
@@ -160,7 +160,7 @@ async function advanceWebDevFlow(user) {
 
   if (!wd.services || wd.services.length === 0) {
     const hint = isSalonIndustry(wd.industry) ? ' e.g. hair cut, hair color, nails' : '';
-    await sendTextMessage(phone, `Got it — ${wd.industry}. What do you offer?${hint} (comma-separated, or "skip")`);
+    await sendTextMessage(phone, `Got it — ${wd.industry}. What do you offer?${hint} Just list them out.`);
     return STATES.WEB_COLLECT_SERVICES;
   }
 
@@ -169,25 +169,25 @@ async function advanceWebDevFlow(user) {
     if (!wd.bookingMode) {
       await sendTextMessage(
         phone,
-        "Quick one — do you already use a booking tool (Fresha, Booksy, Vagaro, Calendly)? Paste the link if you do, or say *\"no\"* and I'll build one in."
+        "Quick one — do you already use a booking tool (Fresha, Booksy, Vagaro, Calendly)? Paste the link if you do, or let me know you don't and I'll build one in."
       );
       return STATES.SALON_BOOKING_TOOL;
     }
     if (!wd.instagramHandle && wd.instagramHandle !== null) {
-      await sendTextMessage(phone, "What's your Insta handle? (or say \"skip\")");
+      await sendTextMessage(phone, "What's your Insta handle? No worries if you don't have one.");
       return STATES.SALON_INSTAGRAM;
     }
     if (wd.bookingMode === 'native' && !wd.weeklyHours) {
       await sendTextMessage(
         phone,
-        "What hours are you open? Something like *\"Tue-Sat 9-7, Sun-Mon closed\"* works — or say *\"default\"* for standard salon hours."
+        "What hours are you open? Something like *\"Tue-Sat 9-7, Sun-Mon closed\"* works. If you want me to use standard salon hours, type *default*."
       );
       return STATES.SALON_HOURS;
     }
     if (wd.bookingMode === 'native' && (wd.services || []).length > 0 && (!Array.isArray(wd.salonServices) || wd.salonServices.length === 0)) {
       await sendTextMessage(
         phone,
-        `How long and how much for each? e.g. *"Haircut 30min €25, Colour 90min €85"*. Your services: ${wd.services.join(', ')}.\n\nSay *"default"* to use 30min with no price.`
+        `How long and how much for each? e.g. *"Haircut 30min €25, Colour 90min €85"*. Your services: ${wd.services.join(', ')}.\n\nIf you want me to use 30min with no price, type *default*.`
       );
       return STATES.SALON_SERVICE_DURATIONS;
     }
@@ -196,7 +196,7 @@ async function advanceWebDevFlow(user) {
   // Contact (phone/address — email already captured)
   const needsContact = !wd.contactPhone && !wd.contactAddress && !wd.contactEmail;
   if (needsContact) {
-    await sendTextMessage(phone, "Last thing — drop your phone and address so I can put them on the site. (or \"skip\")");
+    await sendTextMessage(phone, "Last thing — drop your phone and address so I can put them on the site. No worries if you'd rather leave that for later.");
     return STATES.WEB_COLLECT_CONTACT;
   }
 
@@ -226,7 +226,7 @@ async function showConfirmSummary(user) {
     bookingLine +
     igLine +
     `\n*Contact:* ${contactInfo}\n\n` +
-    `Look right? Say *"yes"* to build it, or tell me what to fix.`;
+    `Look right? Let me know if you want to change anything, or we can start building!`;
   await sendTextMessage(user.phone_number, summary);
   await logMessage(user.id, 'Showing confirmation summary', 'assistant');
   return STATES.WEB_CONFIRM;

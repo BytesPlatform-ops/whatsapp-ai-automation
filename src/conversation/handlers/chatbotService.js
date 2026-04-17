@@ -6,6 +6,8 @@ const { logger } = require('../../utils/logger');
 const { createClient } = require('../../chatbot/db/clients');
 const { generateUniqueSlug } = require('../../chatbot/services/slug-generator');
 const { env } = require('../../config/env');
+const { isAffirmative } = require('../../utils/intentHelpers');
+const { fillFromMetadata } = require('../entityAccumulator');
 
 // Base URL for demo/chat pages
 const BASE_URL = env.chatbot.baseUrl;
@@ -37,6 +39,30 @@ async function handleChatbotService(user, message) {
 
 // Step 1: Collect business name
 async function handleCollectName(user, message) {
+  // Accumulator carryover — if we already know business name / industry
+  // from a previous flow, skip straight to FAQs.
+  const existingCb = user.metadata?.chatbotData || {};
+  if (!existingCb.businessName) {
+    const { data: seeded } = fillFromMetadata('chatbot', user);
+    if (seeded.businessName) {
+      await updateUserMetadata(user.id, { chatbotData: { ...existingCb, ...seeded } });
+      user.metadata = { ...(user.metadata || {}), chatbotData: { ...existingCb, ...seeded } };
+      await logMessage(user.id, `[ACCUMULATOR] chatbot prefilled: ${Object.keys(seeded).join(', ')}`, 'assistant');
+      if (seeded.industry) {
+        await sendWithMenuButton(
+          user.phone_number,
+          `Got it, *${seeded.businessName}* (${seeded.industry}) from earlier. What are the top questions your customers usually ask? Send them one per message, then type *done* when you're finished.`
+        );
+        return STATES.CB_COLLECT_FAQS;
+      }
+      await sendWithMenuButton(
+        user.phone_number,
+        `Got it, *${seeded.businessName}*! What industry are you in? (e.g., restaurant, dental clinic, salon, real estate, gym, etc.)`
+      );
+      return STATES.CB_COLLECT_INDUSTRY;
+    }
+  }
+
   const text = (message.text || '').trim();
   if (!text || text.length < 2) {
     await sendWithMenuButton(user.phone_number, "What's your business name?");
@@ -44,7 +70,7 @@ async function handleCollectName(user, message) {
   }
 
   await updateUserMetadata(user.id, {
-    chatbotData: { businessName: text },
+    chatbotData: { ...existingCb, businessName: text },
   });
 
   await sendWithMenuButton(
@@ -265,8 +291,10 @@ async function handleDemoSent(user, message) {
   const buttonId = message.buttonId || '';
 
   // Check if they want to proceed
-  const wantsToProceed = buttonId === 'cb_proceed' ||
-    /\b(yes|yeah|ready|proceed|activate|trial|start|sign up|interested|let'?s go|i want|go ahead)\b/i.test(text);
+  const wantsToProceed =
+    buttonId === 'cb_proceed' ||
+    isAffirmative(message) ||
+    /\b(ready|proceed|activate|trial|start|sign up|interested|go ahead)\b/i.test(text);
 
   if (wantsToProceed) {
     return activateTrial(user);
@@ -295,8 +323,10 @@ async function handleFollowUp(user, message) {
   const buttonId = message.buttonId || '';
   const text = (message.text || '').trim().toLowerCase();
 
-  const wantsToProceed = buttonId === 'cb_proceed' ||
-    /\b(yes|yeah|ready|proceed|starter|growth|premium|trial|start|sign up|interested|go ahead)\b/i.test(text);
+  const wantsToProceed =
+    buttonId === 'cb_proceed' ||
+    isAffirmative(message) ||
+    /\b(ready|proceed|starter|growth|premium|trial|start|sign up|interested|go ahead)\b/i.test(text);
 
   if (wantsToProceed) {
     return activateTrial(user);

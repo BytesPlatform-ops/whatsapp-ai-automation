@@ -30,6 +30,9 @@ const { logger } = require('../../utils/logger');
 const { generateAdIdeas, expandIdeaToPrompt } = require('../../adGeneration/ideation');
 const { generateAdImage } = require('../../adGeneration/imageGen');
 const { uploadAdImage } = require('../../adGeneration/imageUploader');
+const { isSkip } = require('../../utils/intentHelpers');
+const { defaultsFor, describeDefault } = require('../../config/smartDefaults');
+const { fillFromMetadata } = require('../entityAccumulator');
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -96,19 +99,46 @@ async function handleAdGeneration(user, message) {
  * Entry point — clear any previous adData and ask for business name
  */
 async function handleStart(user, message) {
+  // Seed adData from accumulator so cross-flow carryover works.
+  const { data: seeded, filled } = fillFromMetadata('adgen', user);
   await saveAdData(user, {
-    businessName: null, industry: null, niche: null, productType: null,
-    slogan: null, pricing: null, brandColors: null, imageBase64: null, ideas: null, selectedIdeaIndex: null,
+    niche: null, productType: null, slogan: null, pricing: null,
+    imageBase64: null, ideas: null, selectedIdeaIndex: null,
+    ...seeded,
   });
 
   await sendWithMenuButton(
     user.phone_number,
     '🎨 *Marketing Ad Generator*\n\n' +
-      'I\'ll create a professional marketing ad image for your brand — the same quality used by top digital agencies!\n\n' +
-      'Let\'s start with the basics.\n\n' +
-      'What is your *business name*?'
+      'I\'ll create a professional marketing ad image for your brand — the same quality used by top digital agencies!'
   );
-  await logMessage(user.id, 'Started ad generation flow', 'assistant');
+  await logMessage(user.id, `Started ad generation flow (prefilled: ${filled.join(', ') || 'none'})`, 'assistant');
+
+  if (seeded.businessName) {
+    if (seeded.industry) {
+      await sendWithMenuButton(
+        user.phone_number,
+        `I've got *${seeded.businessName}* (${seeded.industry}) from earlier. What *product or service* is this ad promoting?\n\n` +
+          'Examples:\n' +
+          '• Premium Basmati Rice\n• Wedding Photography Package\n• Online Excel Course\n• Handmade Leather Bags'
+      );
+      return STATES.AD_COLLECT_NICHE;
+    }
+    await sendWithMenuButton(
+      user.phone_number,
+      `Designing a new ad for *${seeded.businessName}* 👍\n\nWhat *industry* are you in?\n\n` +
+        'Examples:\n' +
+        '• Food & Beverage\n• Fashion & Apparel\n• Beauty & Skincare\n' +
+        '• Tech / Software\n• Real Estate\n• Fitness & Gym\n• Education\n• Retail / E-commerce\n\n' +
+        'Type your industry:'
+    );
+    return STATES.AD_COLLECT_INDUSTRY;
+  }
+
+  await sendWithMenuButton(
+    user.phone_number,
+    "Let's start with the basics. What is your *business name*?"
+  );
   return STATES.AD_COLLECT_BUSINESS;
 }
 
@@ -268,10 +298,10 @@ async function handleCollectType(user, message) {
 
   await sendWithMenuButton(
     user.phone_number,
-    '✍️ *Brand Slogan / Tagline*\n\n' +
-      'Type your slogan to display on the ad:\n\n' +
+    "✍️ *Brand Slogan / Tagline*\n\n" +
+      "Got a slogan you want on the ad?\n\n" +
       'Examples: _"Fresh From Farm"_ or _"Style Redefined"_\n\n' +
-      'Or type *skip* to continue without one:'
+      "No worries if you don't — just let me know and I'll design without one."
   );
   await logMessage(user.id, `Product type: ${productType}`, 'assistant');
   return STATES.AD_COLLECT_SLOGAN;
@@ -279,7 +309,7 @@ async function handleCollectType(user, message) {
 
 async function handleCollectSlogan(user, message) {
   const text = (message.text || '').trim();
-  let slogan = text.toLowerCase() === 'skip' ? null : text || null;
+  let slogan = isSkip(message) ? null : text || null;
 
   // Strip leading confirmation words: "yes fresh from farm" → "fresh from farm"
   if (slogan) {
@@ -290,9 +320,9 @@ async function handleCollectSlogan(user, message) {
 
   await sendWithMenuButton(
     user.phone_number,
-    'Any *pricing info* to display on the ad?\n\n' +
+    "Any *pricing info* to show on the ad?\n\n" +
       'Examples: _Rs. 250/kg_, _Starting from Rs. 999_, _20% OFF Today_\n\n' +
-      'Type it or type *skip*:'
+      "If there's no price to show, just let me know."
   );
   await logMessage(user.id, `Slogan: ${slogan || 'skipped'}`, 'assistant');
   return STATES.AD_COLLECT_PRICING;
@@ -300,16 +330,16 @@ async function handleCollectSlogan(user, message) {
 
 async function handleCollectPricing(user, message) {
   const text = (message.text || '').trim();
-  const pricing = text.toLowerCase() === 'skip' ? null : text || null;
+  const pricing = isSkip(message) ? null : text || null;
 
   await saveAdData(user, { pricing });
 
   await sendWithMenuButton(
     user.phone_number,
-    '🎨 *Brand Colors*\n\n' +
-      'Do you have specific brand colors?\n\n' +
+    "🎨 *Brand Colors*\n\n" +
+      "Do you have specific brand colors?\n\n" +
       'Examples: _Blue & Gold_, _#1a3a2a & #d4a843_, _Red White Black_\n\n' +
-      'Type your colors — or type *skip* and we\'ll design the perfect palette for your brand automatically:'
+      "If not, no problem — I'll pick a palette that fits your brand."
   );
   await logMessage(user.id, `Pricing: ${pricing || 'skipped'}`, 'assistant');
   return STATES.AD_COLLECT_COLORS;
@@ -317,16 +347,24 @@ async function handleCollectPricing(user, message) {
 
 async function handleCollectColors(user, message) {
   const text = (message.text || '').trim();
-  const brandColors = text.toLowerCase() === 'skip' ? null : text || null;
+  let brandColors = isSkip(message) ? null : text || null;
+
+  if (brandColors === null && isSkip(message)) {
+    const ad = getAdData(user);
+    const d = defaultsFor(ad.industry);
+    brandColors = d.colors;
+    await sendTextMessage(user.phone_number, describeDefault('colors', d, { industry: ad.industry }));
+    await logMessage(user.id, `[SMART-DEFAULT] colors → ${d.colors} (industry=${ad.industry || 'unknown'})`, 'assistant');
+  }
 
   await saveAdData(user, { brandColors });
 
   await sendWithMenuButton(
     user.phone_number,
-    '📸 *Optional: Product or Logo Image*\n\n' +
-      'Send a photo of your product or logo for a much more personalized ad.\n\n' +
-      '_Tip: Good lighting + clear background = better results!_\n\n' +
-      'Send an image *or* type *skip* to generate without one:'
+    "📸 *Product or Logo Image* (optional)\n\n" +
+      "Send a photo of your product or logo for a much more personalized ad.\n\n" +
+      "_Tip: Good lighting + clear background = better results!_\n\n" +
+      "If you don't have one handy, just let me know and I'll design without it."
   );
   await logMessage(user.id, `Brand colors: ${brandColors || 'skipped'}`, 'assistant');
   return STATES.AD_COLLECT_IMAGE;
@@ -349,13 +387,13 @@ async function handleCollectImage(user, message) {
         '⚠️ Couldn\'t process your image. Continuing without it.\n\nGenerating your ad concepts now...'
       );
     }
-  } else if ((message.text || '').toLowerCase().trim() === 'skip' || message.type === 'text') {
+  } else if (isSkip(message) || message.type === 'text') {
     // User skipped or typed something — treat as skip
   } else {
     // Unknown message type — ask again
     await sendWithMenuButton(
       user.phone_number,
-      'Please *send an image* (photo from your gallery) or type *skip* to continue without one:'
+      "Send an image (photo from your gallery), or let me know if you'd rather I design without one."
     );
     return STATES.AD_COLLECT_IMAGE;
   }

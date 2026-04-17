@@ -18,8 +18,12 @@ const MODEL = 'claude-sonnet-4-20250514';
 // the API still works but `cache_creation_input_tokens` / `cache_read_input_tokens`
 // will stay 0. We always attach the marker; Anthropic ignores it when the
 // prompt is too short to cache.
-async function generateResponseWithUsage(systemPrompt, messages) {
+// `opts.model` is honored as a per-call override (e.g. to force a more
+// capable model for structured-JSON or intent-classification calls). The
+// default remains MODEL.
+async function generateResponseWithUsage(systemPrompt, messages, opts = {}) {
   const anthropic = getClient();
+  const model = opts.model || MODEL;
 
   const formattedMessages = messages.map((m) => ({
     role: m.role === 'assistant' ? 'assistant' : 'user',
@@ -28,7 +32,7 @@ async function generateResponseWithUsage(systemPrompt, messages) {
 
   try {
     const response = await anthropic.messages.create({
-      model: MODEL,
+      model,
       max_tokens: 2048,
       system: [
         { type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } },
@@ -42,7 +46,7 @@ async function generateResponseWithUsage(systemPrompt, messages) {
     // them separately (reads at ~10%, writes at ~125%).
     return {
       text: response.content[0].text,
-      model: MODEL,
+      model,
       provider: 'claude',
       inputTokens: u.input_tokens || 0,
       cachedInputTokens: u.cache_read_input_tokens || 0,
@@ -55,8 +59,8 @@ async function generateResponseWithUsage(systemPrompt, messages) {
   }
 }
 
-async function generateResponse(systemPrompt, messages) {
-  const { text } = await generateResponseWithUsage(systemPrompt, messages);
+async function generateResponse(systemPrompt, messages, opts = {}) {
+  const { text } = await generateResponseWithUsage(systemPrompt, messages, opts);
   return text;
 }
 

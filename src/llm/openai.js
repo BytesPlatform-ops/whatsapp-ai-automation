@@ -13,8 +13,13 @@ function getClient() {
 
 const MODEL = 'gpt-4o-mini';
 
-async function generateResponseWithUsage(systemPrompt, messages) {
+// Per-call model override is supported via `opts.model`. Use it sparingly
+// for calls that truly need better reasoning / entity extraction
+// (messageAnalyzer, structured-JSON parsers). Telemetry records the model
+// name on each call so cost telemetry splits cleanly per model.
+async function generateResponseWithUsage(systemPrompt, messages, opts = {}) {
   const openai = getClient();
+  const model = opts.model || MODEL;
 
   const formattedMessages = [
     { role: 'system', content: systemPrompt },
@@ -29,7 +34,7 @@ async function generateResponseWithUsage(systemPrompt, messages) {
     // read back the `cached_tokens` counter so the provider can bill the
     // discounted rate for cache hits.
     const response = await openai.chat.completions.create({
-      model: MODEL,
+      model,
       max_tokens: 2048,
       messages: formattedMessages,
     });
@@ -39,7 +44,7 @@ async function generateResponseWithUsage(systemPrompt, messages) {
 
     return {
       text: response.choices[0].message.content,
-      model: MODEL,
+      model,
       provider: 'openai',
       // inputTokens excludes cached tokens so cost math can bill them separately.
       inputTokens: Math.max(0, promptTokens - cachedInputTokens),
@@ -52,8 +57,8 @@ async function generateResponseWithUsage(systemPrompt, messages) {
   }
 }
 
-async function generateResponse(systemPrompt, messages) {
-  const { text } = await generateResponseWithUsage(systemPrompt, messages);
+async function generateResponse(systemPrompt, messages, opts = {}) {
+  const { text } = await generateResponseWithUsage(systemPrompt, messages, opts);
   return text;
 }
 
