@@ -6,17 +6,25 @@
 const { generateHvacPages } = require('./hvac');
 const { generateRealEstatePages } = require('./real-estate');
 
+// Substring matches for unambiguous HVAC terms (safe to use `.includes`).
 const HVAC_KEYWORDS = [
   'hvac',
   'heating',
   'cooling',
   'air conditioning',
-  'ac repair',
-  'ac installation',
+  'air conditioner',
   'furnace',
   'heat pump',
   'hvacr',
+  'ventilation',
+  'hvac technician',
 ];
+
+// Word-bounded patterns for AC-anything so "accounting" / "academic" etc.
+// never match but "AC service", "AC maintenance", "AC tech", "AC install",
+// "AC cleaning" all do. Matches are case-insensitive.
+const HVAC_AC_PATTERN =
+  /\bac\s+(?:repair|install|installation|service|servicing|services|maintenance|tech|technician|cleaning|fitting|fitment)\b/i;
 
 const REAL_ESTATE_KEYWORDS = [
   'real estate',
@@ -30,7 +38,8 @@ const REAL_ESTATE_KEYWORDS = [
 
 function isHvac(industry) {
   const s = String(industry || '').toLowerCase();
-  return HVAC_KEYWORDS.some((k) => s.includes(k));
+  if (HVAC_KEYWORDS.some((k) => s.includes(k))) return true;
+  return HVAC_AC_PATTERN.test(s);
 }
 
 function isRealEstate(industry) {

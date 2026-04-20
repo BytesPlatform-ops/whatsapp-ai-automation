@@ -1,0 +1,183 @@
+// Cross-flow entity extraction. Moves the extraction pass that used to live
+// inside webDev.js into its own module so the ad / logo / chatbot flows can
+// eventually reuse it, and so the router can hydrate entities from SALES_CHAT
+// messages into metadata before the user even lands in a collection state.
+//
+// The extractor runs on every free-text answer during a collection flow.
+// Cheap regex pre-pass catches email + phone; the LLM is only invoked when
+// the message looks like it MIGHT carry richer multi-field info (long-ish,
+// has commas, mentions a place, multi-line), so short single-field answers
+// don't pay for an extra round-trip.
+
+const { generateResponse } = require('../llm/provider');
+const { updateUserMetadata } = require('../db/users');
+const { logger } = require('../utils/logger');
+
+// Email regex — requires word-char parts between every dot, so trailing
+// sentence punctuation like "write me at foo@bar.com." doesn't end up
+// stored as "foo@bar.com." with a trailing period.
+const EMAIL_RX = /[\w.+-]+@[\w-]+(?:\.[\w-]+)+/;
+const PHONE_RX = /(?:\+?\d[\d\s\-().]{6,}\d)/;
+
+/**
+ * Extract any website-relevant fields from a free-text message. Returns only
+ * fields that weren't already present in `known` — callers merge the result
+ * into existing metadata.
+ *
+ * Fields handled: businessName, industry, primaryCity, serviceAreas,
+ * services, contactEmail, contactPhone, contactAddress.
+ */
+async function extractWebsiteFields(text, known = {}, user = null) {
+  const raw = String(text || '').trim();
+  if (!raw) return {};
+  const out = {};
+
+  // Cheap regex pre-pass — no LLM cost.
+  if (!known.contactEmail) {
+    const m = raw.match(EMAIL_RX);
+    if (m) out.contactEmail = m[0];
+  }
+  if (!known.contactPhone) {
+    const m = raw.match(PHONE_RX);
+    // Avoid matching dates like "16/04/2026" — require at least one separator
+    // OR length >= 10.
+    if (m && (m[0].length >= 10 || /[\s\-+().]/.test(m[0]))) out.contactPhone = m[0].trim();
+  }
+
+  // Decide if it's worth running the LLM extractor. Skip on short replies
+  // that almost certainly only answer the current question.
+  const looksRich =
+    raw.length >= 18 ||
+    /[,;]/.test(raw) ||
+    /\b(in|at|serving|near)\s+[A-Z]/.test(raw) ||
+    /[\n]/.test(raw);
+  if (!looksRich) return out;
+
+  // LLM extraction — focused, JSON-only, told to omit unknown fields.
+  const missing = [];
+  if (!known.businessName) missing.push('businessName');
+  if (!known.industry) missing.push('industry');
+  if (!known.primaryCity) missing.push('primaryCity');
+  if (!Array.isArray(known.serviceAreas) || !known.serviceAreas.length) missing.push('serviceAreas');
+  if (!Array.isArray(known.services) || !known.services.length) missing.push('services');
+  if (!known.contactAddress) missing.push('contactAddress');
+
+  if (!missing.length) return out;
+
+  const prompt = `You are a structured-data extractor. Read the user's message and return ONLY valid JSON with any of the listed fields you can confidently extract. Omit fields not clearly stated. Never guess or hallucinate. Never include a field that's already known.
+
+Fields you may extract (only the ones in this list — ignore others):
+${missing.map((f) => `- ${f}`).join('\n')}
+
+Field rules:
+- businessName: the trade name of the business (NOT the user's personal name unless explicitly stated as the business name).
+- industry: 1-3 word niche label, e.g. "HVAC", "Salon", "Restaurant", "Real estate".
+- primaryCity: the city the business is based in.
+- serviceAreas: array of cities/neighborhoods they serve. May overlap with primaryCity.
+- services: array of services or products offered.
+- contactAddress: physical street address.
+
+Already known (do NOT re-extract these): ${JSON.stringify({
+    businessName: known.businessName || undefined,
+    industry: known.industry || undefined,
+    primaryCity: known.primaryCity || undefined,
+    serviceAreas: (known.serviceAreas && known.serviceAreas.length) ? known.serviceAreas : undefined,
+    services: (known.services && known.services.length) ? known.services : undefined,
+    contactEmail: known.contactEmail || undefined,
+    contactPhone: known.contactPhone || undefined,
+    contactAddress: known.contactAddress || undefined,
+  })}
+
+Return JSON like {"industry":"HVAC","primaryCity":"Austin"} or {} if nothing found. No commentary.`;
+
+  try {
+    const response = await generateResponse(prompt, [{ role: 'user', content: raw }], {
+      userId: user?.id,
+      operation: 'webdev_field_extract',
+    });
+    const m = response.match(/\{[\s\S]*\}/);
+    if (m) {
+      const parsed = JSON.parse(m[0]);
+      for (const k of missing) {
+        const v = parsed[k];
+        if (v == null) continue;
+        if (typeof v === 'string') {
+          const trimmed = v.trim();
+          if (trimmed.length >= 2 && trimmed.length < 120) out[k] = trimmed;
+        } else if (Array.isArray(v)) {
+          const cleaned = v
+            .map((x) => (typeof x === 'string' ? x.trim() : ''))
+            .filter((x) => x && x.length < 80);
+          if (cleaned.length) out[k] = cleaned;
+        }
+      }
+    }
+  } catch (err) {
+    logger.warn(`[ENTITY-ACC] extractWebsiteFields failed: ${err.message}`);
+  }
+
+  return out;
+}
+
+/**
+ * Merge newly-extracted website fields into `known`, returning the merged
+ * object AND the list of field keys that were freshly captured. Does NOT
+ * overwrite existing non-empty values.
+ */
+function mergeWebsiteFields(known, extracted) {
+  const merged = { ...known };
+  const captured = [];
+  for (const [k, v] of Object.entries(extracted || {})) {
+    if (v == null) continue;
+    if (Array.isArray(v) && v.length === 0) continue;
+    if (merged[k] && (Array.isArray(merged[k]) ? merged[k].length > 0 : String(merged[k]).length > 0)) {
+      continue;
+    }
+    merged[k] = v;
+    captured.push(k);
+  }
+  return { merged, captured };
+}
+
+/**
+ * Run extraction + merge + persist in one shot. Returns
+ *   { websiteData, captured, updatedUser }
+ * where websiteData is the merged value stored in metadata, captured is the
+ * list of newly-populated field keys, and updatedUser is the user object
+ * with the in-memory metadata updated to match.
+ */
+async function hydrateWebsiteData(user, text) {
+  const known = user.metadata?.websiteData || {};
+  const extracted = await extractWebsiteFields(text, known, user);
+  const { merged, captured } = mergeWebsiteFields(known, extracted);
+
+  if (captured.length === 0) {
+    return { websiteData: known, captured: [], updatedUser: user };
+  }
+
+  const update = { websiteData: merged };
+  // Legacy top-level metadata.email is also checked by the rest of the
+  // codebase (see nextMissingWebDevState's emailCollected check), so mirror
+  // an extracted contactEmail there too.
+  if (captured.includes('contactEmail') && merged.contactEmail) {
+    update.email = merged.contactEmail;
+  }
+
+  await updateUserMetadata(user.id, update);
+  const updatedUser = {
+    ...user,
+    metadata: {
+      ...(user.metadata || {}),
+      websiteData: merged,
+      ...(update.email ? { email: update.email } : {}),
+    },
+  };
+
+  return { websiteData: merged, captured, updatedUser };
+}
+
+module.exports = {
+  extractWebsiteFields,
+  mergeWebsiteFields,
+  hydrateWebsiteData,
+};

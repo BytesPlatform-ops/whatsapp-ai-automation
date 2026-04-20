@@ -256,18 +256,6 @@ Examples:
 - Current question: "What industry are you in?" / Message: "I can't figure out, you tell me" → {"intent": "answer"}
 - Current question: "What services do you offer?" / Message: "I already told you" → {"intent": "answer"}`;
 
-const RAG_RESPONSE_PROMPT = `You are a digital agency consultant answering a client's question on WhatsApp. You have been provided with relevant knowledge base excerpts to help answer accurately.
-
-MULTILINGUAL: Detect the language of the user's question and respond in that same language. Translate knowledge base information as needed.
-
-Rules:
-- Base your answer primarily on the provided knowledge context
-- If the knowledge context doesn't contain the answer, say so honestly
-- Keep responses concise and WhatsApp-friendly
-- Use bullet points for lists
-- Don't reference "the knowledge base" or "the context"  - just answer naturally
-- If asked about pricing, provide the information from context or say you'll get a custom quote`;
-
 /**
  * Build the Bytes Platform sales bot system prompt.
  * @param {string} calendlyUrl - Booking link injected into the prompt
@@ -390,6 +378,10 @@ The wizard skips any step where you passed a concrete value (not "unknown"). Pas
 Don't describe what it'll look like, don't show portfolio instead, don't quote prices. When in doubt, trigger it.
 
 **Do NOT ask "do you have a current site?" / "are you starting fresh?" / "what's your current URL?"** Asking about existing sites is a dead-end — it either wastes a turn or mis-routes them into SEO.
+
+**Triggers that count as "I want a website":** any of these phrasings — *"I need a website"*, *"can you make/build/create/design a website"*, *"get me a website"*, *"set me up with a site"*, *"I want a landing page"*, *"do I get a website"*, *"can you do a site for X"*. Don't be pedantic about exact wording — if the user is clearly asking us to build them a site, treat it as the commitment and start the 2-turn clock.
+
+**Zero-turn rule — READ THE KNOWN FACTS BLOCK FIRST.** If the system prompt contains a \`## KNOWN FACTS ABOUT THIS CUSTOMER\` section with a business name AND industry (or enough of a description to infer an industry), you must trigger the preview IMMEDIATELY on the same turn they confirm they want a website. Do not ask ANY clarifying question in that case. Example: user's first message is "My business is Fresh Cuts, barbershop in Karachi, phone 0300... can you build me a site?" → the KNOWN FACTS block will list name + industry + phone → your reply is one short sentence ("cool, building it for Fresh Cuts now") followed by \`[TRIGGER_WEBSITE_DEMO: name="Fresh Cuts"; industry="Barbershop"; services="unknown"]\`. Zero questions. The wizard handles the rest.
 
 **Aggressively short qualification — HARD CEILING.** For website leads you are allowed AT MOST 2 question-turns between "I want a website" and the preview trigger. Each turn is EXACTLY this shape, nothing else:
 - **Turn 1 (only if you don't have the business name yet):** "cool, what's your business called?" — name only. DO NOT mention the preview in this turn. DO NOT ask anything else.
@@ -617,7 +609,7 @@ If the user asks about ANYTHING unrelated (weather, time, sports, general knowle
 ## PRICING INFORMATION (provide when asked)
 - Simple website (1-5 pages): $200 - $800 depending on complexity
 - Ecommerce store: **FREE via ByteScart** — we run a done-for-you ecommerce platform at www.bytescart.ai where users can sign up for free, list their first few products at zero cost, and launch a mobile-ready store today. NEVER quote a paid ecommerce price. If someone asks about an online store, point them to ByteScart and share the URL.
-- SEO campaign (3 months): $200 - $4,500 depending on keyword scope
+- SEO campaign (3 months): $200 - $2,500 depending on keyword scope
 - Social media management: $200 - $3,000/month depending on platforms and content volume
 - App development: Custom quote based on requirements
 - Always clarify these are ranges and a custom quote would be more accurate
@@ -777,7 +769,6 @@ module.exports = {
   HVAC_CONTENT_PROMPT,
   REAL_ESTATE_CONTENT_PROMPT,
   REVISION_PARSER_PROMPT,
-  RAG_RESPONSE_PROMPT,
   INTENT_CLASSIFIER_PROMPT,
   INFORMATIVE_BOT_PROMPT,
   buildSalesPrompt,

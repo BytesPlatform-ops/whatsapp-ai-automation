@@ -9,11 +9,43 @@ const { STATES } = require('../states');
 const { env } = require('../../config/env');
 const { saveLeadSummary } = require('../../db/leadSummaries');
 const { buildSummaryContext } = require('../summaryManager');
+const { hydrateWebsiteData } = require('../entityAccumulator');
 
 /**
  * Extract and strip the [LEAD_BRIEF]...[/LEAD_BRIEF] block from the LLM response.
  * Returns { leadBrief: string|null, cleanText: string }
  */
+/**
+ * Build a compact "KNOWN FACTS" block for the sales prompt from whatever
+ * entity info we've accumulated into metadata. Injecting this into the
+ * system prompt lets the LLM skip re-asking for things the user already
+ * said — and trust that the wizard can start with these values pre-filled
+ * if they trigger the website demo.
+ */
+function buildKnownContext(user) {
+  const wd = user?.metadata?.websiteData || {};
+  const entries = [];
+  if (wd.businessName) entries.push(`- Business name: ${wd.businessName}`);
+  if (wd.industry) entries.push(`- Industry: ${wd.industry}`);
+  if (wd.primaryCity) entries.push(`- City: ${wd.primaryCity}`);
+  if (Array.isArray(wd.services) && wd.services.length) {
+    entries.push(`- Services: ${wd.services.slice(0, 5).join(', ')}`);
+  }
+  if (wd.contactEmail) entries.push(`- Email: ${wd.contactEmail}`);
+  if (wd.contactPhone) entries.push(`- Phone: ${wd.contactPhone}`);
+  if (wd.contactAddress) entries.push(`- Address: ${wd.contactAddress}`);
+
+  if (!entries.length) return '';
+
+  return `\n\n---\n\n## KNOWN FACTS ABOUT THIS CUSTOMER
+The user has already shared these details in-conversation. Do NOT re-ask for any of them. Treat them as authoritative for triggering flows:
+${entries.join('\n')}
+
+When emitting [TRIGGER_WEBSITE_DEMO], fill the structured tag from these facts so the wizard skips the corresponding steps.
+---
+`;
+}
+
 function extractLeadBrief(text) {
   const match = text.match(/\[LEAD_BRIEF\]([\s\S]*?)\[\/LEAD_BRIEF\]/i);
   if (!match) return { leadBrief: null, cleanText: text };
@@ -46,6 +78,22 @@ async function handleSalesBot(user, message) {
     return STATES.SALES_CHAT;
   }
 
+  // Extract any website-relevant entities the user just dropped into sales
+  // chat (business name, industry, city, email, phone, address, services).
+  // Storing them here means the website-demo trigger can pre-fill the wizard
+  // without having to re-ask the user for things they already said, and the
+  // LLM itself gets told about them via buildKnownContext below so it stops
+  // asking "what's your business called?" when the user already said it.
+  try {
+    const { updatedUser, captured } = await hydrateWebsiteData(user, text);
+    if (captured.length) {
+      logger.info(`[SALES] Hydrated from sales-chat message: ${captured.join(', ')}`);
+      user = updatedUser;
+    }
+  } catch (err) {
+    logger.warn(`[SALES] Entity hydration failed: ${err.message}`);
+  }
+
   // Get conversation history (last 40 messages for full context)
   const history = await getConversationHistory(user.id, 40);
 
@@ -67,6 +115,7 @@ async function handleSalesBot(user, message) {
 
   let systemPrompt = buildSalesPrompt(env.calendlyUrl, env.portfolio, adSource);
   systemPrompt += buildSummaryContext(user);
+  systemPrompt += buildKnownContext(user);
 
   // If we just ran an SEO audit, inject the findings so the bot can pitch based on real data
   const seoAnalysis = user.metadata?.lastSeoAnalysis;
@@ -487,18 +536,27 @@ async function handleSalesBot(user, message) {
     const site = await createSite(user.id, 'business-starter');
     await updateUserMetadata(user.id, { currentSiteId: site.id });
 
-    // Trusted sources for the business name, in priority order:
-    //   1. Structured trigger tag (LLM extracted it from the conversation).
-    //   2. Name already stored in metadata from a prior flow.
+    // Resolve each field in priority order:
+    //   1. Structured trigger tag (LLM just extracted it from conversation).
+    //   2. metadata.websiteData.* (hydrated from prior sales-chat turns).
+    //   3. Other flow metadata (adData / logoData / chatbotData) for name only.
     // Heuristic message-scanning is gone — it used to pick arbitrary phrases
     // like "do what you think is goo" as business names.
+    const wd = user.metadata?.websiteData || {};
+
     const businessName =
       websiteDemoBusinessName ||
-      user.metadata?.websiteData?.businessName ||
+      wd.businessName ||
       user.metadata?.adData?.businessName ||
       user.metadata?.logoData?.businessName ||
       user.metadata?.chatbotData?.businessName ||
       null;
+
+    const industry = websiteDemoIndustry || wd.industry || null;
+
+    const services =
+      (websiteDemoServices && websiteDemoServices.length ? websiteDemoServices : null) ||
+      (Array.isArray(wd.services) && wd.services.length ? wd.services : null);
 
     if (!businessName) {
       await sendTextMessage(user.phone_number, "Let's build it! What's your business name?");
@@ -506,60 +564,79 @@ async function handleSalesBot(user, message) {
       return STATES.WEB_COLLECT_NAME;
     }
 
-    // Pre-seed every field we got from the structured trigger so the wizard
-    // doesn't re-ask for things the LLM already heard in sales chat.
-    const existing = user.metadata?.websiteData || {};
-    const websiteData = { ...existing, businessName };
-    if (websiteDemoIndustry) websiteData.industry = websiteDemoIndustry;
-    if (websiteDemoServices) websiteData.services = websiteDemoServices;
+    // Pre-seed every field we resolved so the wizard doesn't re-ask for
+    // things the LLM already heard.
+    const websiteData = { ...wd, businessName };
+    if (industry) websiteData.industry = industry;
+    if (services) websiteData.services = services;
     await updateUserMetadata(user.id, { websiteData });
     user.metadata = { ...(user.metadata || {}), websiteData };
 
+    const hasContact = !!(websiteData.contactEmail || websiteData.contactPhone || websiteData.contactAddress);
+
     logger.info(
-      `[SALES] Website demo pre-seeded: name="${businessName}", industry="${websiteDemoIndustry || '(ask)'}", services=${
-        websiteDemoServices ? `[${websiteDemoServices.join(', ')}]` : '(ask)'
-      }`
+      `[SALES] Website demo pre-seeded: name="${businessName}", industry="${industry || '(ask)'}", services=${
+        services ? `[${services.join(', ')}]` : '(ask)'
+      }, hasContact=${hasContact}`
     );
 
-    const { isSalonIndustry, startSalonFlow } = require('./webDev');
+    const {
+      isSalonIndustry,
+      startSalonFlow,
+      showConfirmSummary,
+      nextMissingWebDevState,
+      questionForState,
+    } = require('./webDev');
 
-    // Salon industry has a dedicated sub-flow (booking tool / hours / prices).
-    // Kick that off instead of proceeding through the generic flow.
-    if (websiteDemoIndustry && isSalonIndustry(websiteDemoIndustry)) {
+    // Salon industry has its own sub-flow (booking tool / hours / prices /
+    // instagram) that isn't covered by nextMissingWebDevState's generic
+    // ladder. Route to startSalonFlow so those questions get asked.
+    if (industry && isSalonIndustry(industry)) {
       await sendTextMessage(
         user.phone_number,
-        `Awesome — building *${businessName}* (${websiteDemoIndustry}). Quick salon-specific questions coming up.`
+        `Nice, let's get *${businessName}* set up. Just a couple more things to personalize your site.`
       );
       await logMessage(user.id, `Website demo → salon flow (name + industry pre-filled)`, 'assistant');
       return startSalonFlow(user);
     }
 
-    // Pick the right next state based on what's already filled.
-    // Order in the wizard: name → industry → services → contact → confirm.
-    if (websiteDemoIndustry && websiteDemoServices) {
+    // Ask the wizard what field is actually missing next. This handles the
+    // per-industry nuances automatically — HVAC needs primaryCity + service
+    // areas, real-estate needs agent profile + listings, generic needs
+    // services + contact — all without salesBot having to know.
+    const nextState = nextMissingWebDevState(websiteData, user.metadata || {});
+
+    // Nothing left to collect → straight to the confirmation summary.
+    if (nextState === STATES.WEB_CONFIRM) {
       await sendTextMessage(
         user.phone_number,
-        `Great — building *${businessName}* (${websiteDemoIndustry}, services: ${websiteDemoServices.join(', ')}).\n\nLast thing — what contact info do you want on the site? Email, phone, and/or address.`
+        `Perfect, I've got everything I need for *${businessName}*. Pulling up the summary.`
       );
-      await logMessage(user.id, `Website demo → contact step (name + industry + services pre-filled)`, 'assistant');
-      return STATES.WEB_COLLECT_CONTACT;
+      await logMessage(user.id, `Website demo → confirm (all pre-filled from sales chat)`, 'assistant');
+      return showConfirmSummary(user);
     }
 
-    if (websiteDemoIndustry) {
-      await sendTextMessage(
-        user.phone_number,
-        `Building *${businessName}* (${websiteDemoIndustry}). What services or products do you offer? List them separated by commas, or just skip.`
-      );
-      await logMessage(user.id, `Website demo → services step (name + industry pre-filled)`, 'assistant');
-      return STATES.WEB_COLLECT_SERVICES;
+    // Build an ack that lists what we already captured so the user sees
+    // the question in context, then send the next question for the state
+    // the wizard wants us to land on.
+    const ackParts = [];
+    if (industry) ackParts.push(industry);
+    if (services && services.length) {
+      ackParts.push(`services: ${services.slice(0, 4).join(', ')}${services.length > 4 ? '…' : ''}`);
     }
+    if (hasContact) ackParts.push('contact saved');
+    const contextLine = ackParts.length
+      ? `Building *${businessName}* (${ackParts.join(', ')}).`
+      : `Building it for *${businessName}*.`;
 
-    await sendTextMessage(
-      user.phone_number,
-      `Building it for *${businessName}* — what industry are you in? (e.g. tech, healthcare, salon, restaurant)`
+    const question = questionForState(nextState, websiteData);
+    await sendTextMessage(user.phone_number, `${contextLine}\n\n${question}`);
+    await logMessage(
+      user.id,
+      `Website demo → ${nextState} (pre-filled: name${industry ? ', industry' : ''}${services ? ', services' : ''}${hasContact ? ', contact' : ''})`,
+      'assistant'
     );
-    await logMessage(user.id, `Website demo → industry step (name pre-filled)`, 'assistant');
-    return STATES.WEB_COLLECT_INDUSTRY;
+    return nextState;
   }
 
   // Trigger ad generator flow
