@@ -1,5 +1,6 @@
 const { env } = require('../../config/env');
 const { computeHeroPaletteFromConfig } = require('../heroPalette');
+const { renderActivationBanner } = require('../activationBanner');
 
 // Public URL the static salon site uses to reach the booking API.
 const PUBLIC_API_BASE = process.env.PUBLIC_API_BASE_URL || env.chatbot.baseUrl;
@@ -425,7 +426,7 @@ function wrap(c, cur, body, { navDark = false, heroPal = null } = {}) {
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
 <style>${getStyles(pc, ac, heroPal)}</style>
-</head><body>${getNav(c, cur, { dark: navDark })}<main>${body}</main>${getFooter(c)}${getScript()}</body></html>`;
+</head><body>${renderActivationBanner(c)}${getNav(c, cur, { dark: navDark })}<main>${body}</main>${getFooter(c)}${getScript()}</body></html>`;
 }
 
 // ─── HOME ──────────────────────────────────────────────────────────────────

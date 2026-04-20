@@ -3,6 +3,7 @@ const crypto = require('crypto');
 const { env } = require('../config/env');
 const { logger } = require('../utils/logger');
 const salonTemplate = require('./templates/salon');
+const { renderActivationBanner } = require('./activationBanner');
 
 const NETLIFY_API = 'https://api.netlify.com/api/v1';
 
@@ -313,7 +314,7 @@ function wrap(c, cur, body) {
 <script src="https://cdn.tailwindcss.com"><\/script>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
-<style>${getStyles(pc, ac, { onPc, heroPageHasLightBg })}</style></head><body>${getNav(c,cur)}<main>${body}</main>${getFoot(c)}${getScript()}</body></html>`;
+<style>${getStyles(pc, ac, { onPc, heroPageHasLightBg })}</style></head><body>${renderActivationBanner(c)}${getNav(c,cur)}<main>${body}</main>${getFoot(c)}${getScript()}</body></html>`;
 }
 
 // ─── Arrow SVG shortcut ─────────────────────────────────────────────────────

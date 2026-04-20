@@ -503,6 +503,23 @@ async function runPaymentPolling() {
             paidAt: new Date().toISOString(),
           });
 
+          // Remove the activation banner — redeploy the site in 'paid' mode
+          // so visitors no longer see "Preview Mode" or hit locked contact
+          // forms. Fire-and-forget: never blocks the payment confirmation
+          // message flow below. If redeploy fails, admin will see the
+          // warning log and can retry manually.
+          try {
+            const siteForBanner = await getSite(payment.user_id);
+            if (siteForBanner?.id) {
+              const { redeployAsPaid } = require('../website-gen/redeployer');
+              redeployAsPaid(siteForBanner.id).catch((err) =>
+                logger.warn(`[PAYMENT] redeployAsPaid threw for site ${siteForBanner.id}: ${err.message}`)
+              );
+            }
+          } catch (err) {
+            logger.warn(`[PAYMENT] Could not trigger banner-removal redeploy: ${err.message}`);
+          }
+
           if (selectedDomain && meta.domainPaymentPending) {
             // Domain payment confirmed — start auto-purchase flow
             await runWithContext({ channel: targetChannel, phoneNumberId: targetVia }, async () => {

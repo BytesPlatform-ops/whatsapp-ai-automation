@@ -4,6 +4,8 @@
 // See hvac_context.md at the repo root for the full plan and research that
 // drives these design choices.
 
+const { renderActivationBanner } = require('../../activationBanner');
+
 // ─── Utilities ──────────────────────────────────────────────────────────────
 
 function esc(str) {
@@ -996,6 +998,7 @@ function wrapHvacPage(c, cur, body, opts = {}) {
 ${schemas}
 </head>
 <body>
+${renderActivationBanner(c)}
 ${getEmergencyStrip(c)}
 ${getHvacNav(c, cur)}
 <main>${body}</main>

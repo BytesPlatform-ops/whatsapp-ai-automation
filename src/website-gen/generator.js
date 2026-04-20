@@ -446,6 +446,11 @@ Generate compelling website copy for this business. Return ONLY valid JSON.`;
     // Template selector + salon pass-through (harmless for non-salon templates).
     templateId: extras.templateId || 'business-starter',
     siteId: extras.siteId || null,
+    // Activation banner state — 'preview' by default; flips to 'paid' via
+    // redeployAsPaid() after the payment poller confirms a successful
+    // Stripe charge. paymentLinkUrl is the Stripe URL the banner points to.
+    paymentStatus: extras.paymentStatus || 'preview',
+    paymentLinkUrl: extras.paymentLinkUrl || null,
     bookingMode: bookingMode || null,
     bookingUrl: bookingUrl || null,
     instagramHandle: instagramHandle || null,

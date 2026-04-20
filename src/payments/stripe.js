@@ -78,6 +78,19 @@ async function createPaymentLink({ userId, phoneNumber, amount, serviceType, pac
     });
 
     logger.info(`[STRIPE] Payment link created: ${paymentLink.url} | Amount: $${amount} | Service: ${serviceType}`);
+
+    // Keep the site's activation banner in sync with whatever Stripe link
+    // the user sees in chat. Fire-and-forget — if redeploy fails, the
+    // chat link still works, banner will self-heal on next redeploy.
+    try {
+      const { updateSiteBannerLink } = require('../website-gen/redeployer');
+      updateSiteBannerLink(userId, paymentLink.url).catch((err) =>
+        logger.warn(`[STRIPE] Banner sync threw for user ${userId}: ${err.message}`)
+      );
+    } catch (err) {
+      logger.warn(`[STRIPE] Could not dispatch banner sync: ${err.message}`);
+    }
+
     return { url: paymentLink.url, paymentId: payment.id, linkId: paymentLink.id };
   } catch (error) {
     logger.error('[STRIPE] Create payment link error:', error.message);

@@ -4,6 +4,8 @@
 //
 // See real_estate_context.md at the repo root for the full plan.
 
+const { renderActivationBanner } = require('../../activationBanner');
+
 // ─── Utilities ──────────────────────────────────────────────────────────────
 
 function esc(str) {
@@ -995,6 +997,7 @@ function wrapRealEstatePage(c, cur, body, opts = {}) {
 ${schemas}
 </head>
 <body>
+${renderActivationBanner(c)}
 ${getNav(c, cur)}
 <main>${body}</main>
 ${getFooter(c)}

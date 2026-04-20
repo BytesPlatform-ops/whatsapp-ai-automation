@@ -1590,7 +1590,53 @@ async function generateWebsite(user) {
     const templateId = isSalonIndustry(websiteData.industry) ? 'salon' : 'business-starter';
     const siteId = freshUser.metadata?.currentSiteId;
     logger.info(`[WEBGEN] Step 2/5: Generating website content via LLM for "${websiteData.businessName}" (template=${templateId})`);
-    const siteConfig = await generateWebsiteContent(websiteData, { templateId, siteId, userId: user.id });
+
+    // 1a. Ensure there's a Stripe payment link for the activation banner.
+    // If the sales bot has already created one for this user, reuse it;
+    // otherwise create a default ($299 "Website Activation") link so the
+    // banner's "Activate Now" button always has somewhere to go.
+    let paymentLinkUrl = null;
+    try {
+      const { supabase } = require('../../config/database');
+      const { data: existingPayment } = await supabase
+        .from('payments')
+        .select('payment_link_url, amount, status')
+        .eq('user_id', user.id)
+        .eq('status', 'pending')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (existingPayment?.payment_link_url) {
+        paymentLinkUrl = existingPayment.payment_link_url;
+        logger.info(`[WEBGEN] Reusing existing pending payment link for activation banner`);
+      } else {
+        const { createPaymentLink } = require('../../payments/stripe');
+        const defaultAmount = parseInt(process.env.DEFAULT_ACTIVATION_PRICE || '299', 10);
+        const linkResult = await createPaymentLink({
+          userId: user.id,
+          phoneNumber: user.phone_number,
+          amount: defaultAmount,
+          serviceType: 'website',
+          packageTier: 'activation',
+          description: `Website activation — ${websiteData.businessName || 'site'}`,
+          customerEmail: user.metadata?.email || websiteData.contactEmail || null,
+          customerName: websiteData.businessName || null,
+        });
+        paymentLinkUrl = linkResult?.url || null;
+        logger.info(`[WEBGEN] Created default activation payment link: $${defaultAmount}`);
+      }
+    } catch (err) {
+      // Non-fatal — banner will fall back to a WhatsApp CTA if no link
+      logger.warn(`[WEBGEN] Activation payment link setup failed: ${err.message}`);
+    }
+
+    const siteConfig = await generateWebsiteContent(websiteData, {
+      templateId,
+      siteId,
+      userId: user.id,
+      paymentStatus: 'preview',
+      paymentLinkUrl,
+    });
     logger.info(`[WEBGEN] Content generated:`, {
       headline: siteConfig.headline,
       servicesCount: siteConfig.services?.length,
@@ -1639,6 +1685,17 @@ async function generateWebsite(user) {
       user.phone_number,
       `Your website is ready! Here's the preview:\n\n${previewUrl}\n\nHave a look - it's a ${pageSummary}.`
     );
+
+    // Send the Stripe activation link as its own message so the user sees
+    // the EXACT same URL in chat that the "Activate Now" button on the
+    // site points to. One tap either way — same outcome.
+    if (paymentLinkUrl) {
+      await sendTextMessage(
+        user.phone_number,
+        `🔒 *Preview mode.* To make it live and unlock the contact form:\n\n👉 ${paymentLinkUrl}\n\nSame link as the *Activate Now* button on your site. Pay either way — the banner disappears once payment clears.`
+      );
+      await logMessage(user.id, `Activation link sent: ${paymentLinkUrl}`, 'assistant');
+    }
 
     await logMessage(user.id, `Website deployed: ${previewUrl}`, 'assistant');
     logger.info(`[WEBGEN] ✅ Complete! Preview sent to ${user.phone_number}: ${previewUrl}`);
