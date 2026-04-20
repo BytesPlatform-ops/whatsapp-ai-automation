@@ -185,7 +185,7 @@ const STATE_QUESTION = {
   [STATES.WEB_COLLECT_NAME]: 'What is your business name?',
   [STATES.WEB_COLLECT_INDUSTRY]: 'What industry are you in?',
   [STATES.WEB_COLLECT_AREAS]: 'Which city are you based in, and which areas do you serve?',
-  [STATES.WEB_COLLECT_AGENT_PROFILE]: 'Tell me your brokerage, years in real estate, and any designations (or say skip).',
+  [STATES.WEB_COLLECT_AGENT_PROFILE]: 'Tell me your brokerage, years in real estate, and any designations (or just skip).',
   [STATES.WEB_COLLECT_LISTINGS_ASK]: 'Do you have any listings to showcase? (yes / skip)',
   [STATES.WEB_COLLECT_LISTINGS_DETAILS]: 'Send your listing details in natural language, or say done.',
   [STATES.WEB_COLLECT_LISTINGS_PHOTOS]: 'Send a listing photo, or say done / skip for stock photos.',
@@ -228,10 +228,10 @@ async function classifyIntent(state, text, userId) {
   if (!currentQuestion) return 'answer';
 
   // Fast-path — these are unambiguously answers, never menu/exit/question.
-  // The LLM classifier sometimes misfires on single-word replies (e.g. "skip"
-  // gets routed to "menu", which resets the user back to service selection
-  // mid-flow). Treat the obvious short replies as plain answers and skip the
-  // LLM call entirely.
+  // The LLM classifier sometimes misfires on short replies (e.g. "skip" or
+  // "lets just skip it" gets routed to "menu", which resets the user back to
+  // service selection mid-flow). Treat the obvious short replies as plain
+  // answers and skip the LLM call entirely.
   const t = String(text || '').trim().toLowerCase();
   if (!t) return 'answer';
   if (/^(skip|none|no|nope|nah|n\/?a|na|next|continue|done|same|ok|okay|yes|yeah|yep|ya|sure|y|n)$/.test(t)) return 'answer';
@@ -241,6 +241,15 @@ async function classifyIntent(state, text, userId) {
   if (/@/.test(t) && t.length < 100 && !/[?]/.test(t)) return 'answer';
   // Very short replies (< 4 chars) almost always answers, never menu requests
   if (t.length < 4) return 'answer';
+  // Short messages that clearly express skip / delegate / acceptance intent.
+  // These are still answers to the current question — not menu/exit — so
+  // short-circuit before the LLM classifier has a chance to misroute them.
+  if (
+    t.length <= 40 &&
+    /\b(?:skip(?:\s*(?:it|this|that|for\s*now))?|pass(?:\s*for\s*now)?|move\s*on|next\s*one|just\s*move|leave\s*it|forget\s*it|don'?t\s*have|none\s*for\s*now|no\s*(?:services|idea)|idk|dunno|not\s*sure|whatever(?:\s*you\s*(?:think|want|pick))?|you\s*(?:pick|decide|choose)|your\s*call|up\s*to\s*you|default|defaults|standard|typical|same\s*as|usual)\b/i.test(t)
+  ) {
+    return 'answer';
+  }
 
   try {
     const prompt = INTENT_CLASSIFIER_PROMPT.replace('{{CURRENT_QUESTION}}', currentQuestion);

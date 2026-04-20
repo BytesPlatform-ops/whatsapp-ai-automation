@@ -18,12 +18,28 @@ const { recordUsage } = require('../db/llmUsage');
  *   etc.) — anything unset lands in the "unknown" bucket.
  * @returns {Promise<string>} The generated response text.
  */
+// Default per-call timeout for LLM generations. Without this the call can
+// stall forever on a dead socket and any handler awaiting it just hangs,
+// which manifests to the user as the bot silently ignoring them. 90s is
+// generous for even long website-content generations; anything beyond that
+// is almost certainly a network/API problem worth surfacing.
+const DEFAULT_LLM_TIMEOUT_MS = 90_000;
+
 async function generateResponse(systemPrompt, messages, options = {}) {
   const provider = env.llm.provider;
   const impl = provider === 'openai' ? openai : claude;
   const start = Date.now();
 
-  const result = await impl.generateResponseWithUsage(systemPrompt, messages);
+  const timeoutMs = options.timeoutMs || DEFAULT_LLM_TIMEOUT_MS;
+  const result = await Promise.race([
+    impl.generateResponseWithUsage(systemPrompt, messages),
+    new Promise((_, reject) =>
+      setTimeout(
+        () => reject(new Error(`LLM call timed out after ${timeoutMs}ms (operation=${options.operation || 'unknown'})`)),
+        timeoutMs
+      )
+    ),
+  ]);
   const {
     text,
     model,

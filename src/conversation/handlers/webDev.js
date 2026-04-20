@@ -10,6 +10,37 @@ const { logger } = require('../../utils/logger');
 const { generateResponse } = require('../../llm/provider');
 const { STATES } = require('../states');
 
+// Strip common conversational wrappers from the start of a user reply so the
+// stored value ends up clean. Handles: interjections ("oh", "well", "alright"),
+// hedges ("i think", "maybe"), subject-verb ("it's", "they're", "we offer"),
+// possessive framings ("my industry is", "the services are"), and echoed
+// question words ("services?"). Safe to call on any input — leaves a clean
+// 1-N word reply untouched.
+function stripConversationalPrefix(text) {
+  if (!text) return '';
+  let t = String(text).trim();
+  const patterns = [
+    /^(?:oh|yeah|yes|ok|okay|well|alright|so|hmm|uhh?|umm?|hey|nah|nope|yup|sure|right)[\s,!.?:]+/i,
+    /^(?:i\s+think|i\s+guess|i'?d\s+say|maybe|kinda|probably|actually|honestly|basically|like)\s+/i,
+    /^(?:it'?s|it\s+is|its|they'?re|theyre|they\s+are|we'?re|we\s+are|we\s+have|we\s+offer|we\s+do|we\s+provide|we\s+sell|i'?m|im|i\s+am|i\s+have|i\s+offer|i\s+do|i\s+provide|i\s+sell)\s+/i,
+    /^(?:my|our|the)\s+(?:business|industry|services?|niche|field|company)\s*(?:is|are)\s+/i,
+    /^(?:industry|services?|business|niche|field)\s*\??\s*[:\-]?\s*(?:is|are)?\s+/i,
+    /^(?:in|into)\s+/i,
+  ];
+  for (let pass = 0; pass < 5; pass++) {
+    let changed = false;
+    for (const re of patterns) {
+      const next = t.replace(re, '');
+      if (next !== t) {
+        t = next.trim();
+        changed = true;
+      }
+    }
+    if (!changed) break;
+  }
+  return t.replace(/^["']+|["'.!?]+$/g, '').trim();
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // SMART MULTI-FIELD EXTRACTOR (Path B — natural-conversation collector)
 //
@@ -229,29 +260,29 @@ async function smartAdvance(user, message, ackPrefix = null) {
 function questionForState(state, websiteData) {
   switch (state) {
     case STATES.WEB_COLLECT_NAME: return "What's your business name?";
-    case STATES.WEB_COLLECT_EMAIL: return "Before we continue, what's your email address? We'll use it to send you updates about your website. (Or say *skip*.)";
+    case STATES.WEB_COLLECT_EMAIL: return "Before we continue, what's your email address? We'll use it to send you updates about your website. No worries if you'd rather skip it.";
     case STATES.WEB_COLLECT_INDUSTRY: return 'What industry are you in? For example - tech, healthcare, restaurant, real estate, creative, etc.';
     case STATES.WEB_COLLECT_AREAS: return 'Which city are you based in, and which areas do you serve? Example: *Austin — Round Rock, Cedar Park, Pflugerville*';
     case STATES.WEB_COLLECT_SERVICES: {
       const { isHvac } = require('../../website-gen/templates');
       if (isHvac(websiteData.industry)) {
-        return 'Which HVAC services do you offer? List them separated by commas, or say *skip* to use our default list (AC repair, heating, heat pumps, duct cleaning, thermostats, and more).';
+        return "Which HVAC services do you offer? List them separated by commas — or just skip to use our default list (AC repair, heating, heat pumps, duct cleaning, thermostats, and more).";
       }
-      return 'What services or products do you offer? List them separated by commas, or say *skip*.';
+      return "What services or products do you offer? List them separated by commas, or just skip this one.";
     }
     case STATES.WEB_COLLECT_AGENT_PROFILE:
       return (
         'Quick agent profile so the site feels authentic:\n' +
-        '• Your brokerage (or say *solo* if independent)\n' +
+        '• Your brokerage (just tell me *solo* if independent)\n' +
         '• Years in real estate\n' +
         '• Designations (CRS, ABR, SRS, GRI, etc. — or *none*)\n\n' +
-        'Answer all three in one message, or say *skip* to use sensible defaults.'
+        'Answer all three in one message, or skip to use sensible defaults.'
       );
     case STATES.WEB_COLLECT_LISTINGS_ASK:
       return (
         'Koi current listings showcase karne hain? I can feature up to 3 on the homepage.\n\n' +
-        '• Say *yes* to send them (natural language is fine — e.g. *"45 Elm St, $525k, 4 bed 3 bath, 2200 sqft"*)\n' +
-        '• Say *skip* and I\'ll use professional placeholder listings'
+        '• Yes — send them now (natural language is fine, e.g. *"45 Elm St, $525k, 4 bed 3 bath, 2200 sqft"*)\n' +
+        '• Skip — I\'ll use professional placeholder listings'
       );
     case STATES.WEB_COLLECT_LISTINGS_DETAILS: {
       const got = (websiteData.listings || []).length;
@@ -259,10 +290,10 @@ function questionForState(state, websiteData) {
         return (
           'Great — send me your first listing. Natural language is fine:\n\n' +
           '*"45 Elm St, $525k, 4 bed 3 bath, 2200 sqft, for sale"*\n\n' +
-          'Send one per message. Say *done* any time you\'re finished (up to 3).'
+          'Send one per message. Reply *done* whenever you\'re finished (up to 3).'
         );
       }
-      return `Got listing ${got}. Send the next one, or say *done* to move on.`;
+      return `Got listing ${got}. Send the next one, or reply *done* to move on.`;
     }
     case STATES.WEB_COLLECT_LISTINGS_PHOTOS: {
       const list = websiteData.listings || [];
@@ -305,7 +336,7 @@ async function sendConfirmation(user, websiteData) {
   }
   const contact = [websiteData.contactEmail, websiteData.contactPhone, websiteData.contactAddress].filter(Boolean).join(' | ');
   if (contact) lines.push(`*Contact:* ${contact}`);
-  lines.push('', 'Does everything look good? Say *"yes"* to proceed, or tell me what to change.');
+  lines.push('', 'Does everything look good? Reply *yes* to build it, or tell me what you\'d like to change.');
   await sendTextMessage(user.phone_number, lines.join('\n'));
   return STATES.WEB_CONFIRM;
 }
@@ -408,7 +439,7 @@ async function handleCollectEmail(user, message) {
     // Not a valid email and not a skip — ask again gently
     await sendTextMessage(
       user.phone_number,
-      "That doesn't look like an email address. Could you double-check? Or say *\"skip\"* to continue without it."
+      "That doesn't look like an email address. Could you double-check? Or just skip to continue without it."
     );
     return STATES.WEB_COLLECT_EMAIL;
   }
@@ -427,6 +458,52 @@ async function handleCollectIndustry(user, message) {
     return STATES.WEB_COLLECT_INDUSTRY;
   }
 
+  // Strip conversational wrappers so "i think its tech" becomes "tech",
+  // "oh its in tech" becomes "tech", "we're in food" becomes "food".
+  // Only applied when the user came in via free text (not a list selection).
+  if (!message.listId) {
+    const stripped = stripConversationalPrefix(industry);
+    if (stripped) industry = stripped;
+  }
+
+  // Reject punctuation-only / nonsense / clearly-non-industry input. Without
+  // this, messages like "?" / "im waiting" / "hello" / "ok" get silently
+  // stored as the industry and show up in the final summary.
+  const nonIndustryWord = /^(?:waiting|hello|hi|hey|what|why|how|when|where|ok|okay|sure|yeah|yup|no|idk|dunno|wait|hold\s*on|what\?|huh|eh|um|uh)$/i;
+  if (
+    !/[a-zA-Z]{2,}/.test(industry) ||
+    industry.length > 80 ||
+    nonIndustryWord.test(industry)
+  ) {
+    await sendTextMessage(
+      user.phone_number,
+      "Didn't catch that — what industry are you in? Something like tech, healthcare, salon, restaurant, food, or creative."
+    );
+    return STATES.WEB_COLLECT_INDUSTRY;
+  }
+
+  // If stripping still left a long phrase (5+ words), the user wrote prose
+  // that didn't fit our heuristic. Route through LLM inference to extract
+  // a clean 1-3 word industry, same path we use for "skip" / "idk".
+  if (industry.split(/\s+/).length >= 5) {
+    try {
+      const history = await getConversationHistory(user.id, 10);
+      const websiteData = user.metadata?.websiteData || {};
+      const context = history.map((m) => `${m.role}: ${m.message_text}`).join('\n');
+      const inferred = await generateResponse(
+        `The user just answered the industry question for their website. Their answer may contain filler words ("I think it's", "oh yeah we're in") — extract ONLY the clean industry/niche name (1-3 words, e.g. "Tech", "Food & Beverage", "Real Estate"). Use the business name "${websiteData.businessName || ''}" and conversation below as additional context. Return ONLY the industry name, no explanation. If you truly can't tell, return exactly: unknown.\n\nConversation:\n${context}\n\nTheir industry answer: ${industry}`,
+        [{ role: 'user', content: industry }],
+        { userId: user.id, operation: 'webdev_industry_clean' }
+      );
+      const cleaned = (inferred || '').trim().replace(/^["']|["']$/g, '');
+      if (cleaned && cleaned.length > 1 && cleaned.length < 40 && !/^unknown$/i.test(cleaned)) {
+        industry = cleaned;
+      }
+    } catch (err) {
+      logger.error('Industry clean-extract error:', err.message);
+    }
+  }
+
   // Handle name corrections: "the name should be X" or "change name to X"
   const nameCorrection = industry.match(/(?:name\s*(?:should be|is|to)|change.*name.*to|actually.*called|it'?s\s+called)\s*["']?(.+?)["']?\s*$/i);
   if (nameCorrection) {
@@ -438,29 +515,38 @@ async function handleCollectIndustry(user, message) {
     return STATES.WEB_COLLECT_INDUSTRY;
   }
 
-  // If the user asks the bot to figure it out, infer from conversation context
-  const inferPhrases = /figure.?it.?out|you.?tell.?me|i.?don.?t.?know|idk|from.?(the|my).?(idea|description|above|prev)|you.?already.?know|can.?t.?figure|same.?as/i;
+  // If the user asks the bot to figure it out OR tries to skip (skip/none/nah/
+  // whatever/you pick), infer from conversation context. Industry drives
+  // template selection, so we can't just store "skip" — we either infer a
+  // real value or fall back to a sensible generic.
+  const inferPhrases = /^(?:skip|none|nah|nope|no\s*idea|whatever|you\s*(?:pick|decide|choose)|your\s*call|up\s*to\s*you|dunno)\b|figure.?it.?out|you.?tell.?me|i.?don.?t.?know|idk|from.?(the|my).?(idea|description|above|prev)|you.?already.?know|can.?t.?figure|same.?as/i;
   if (inferPhrases.test(industry)) {
+    let inferredValue = '';
     try {
       const history = await getConversationHistory(user.id, 10);
       const websiteData = user.metadata?.websiteData || {};
       const context = history.map(m => `${m.role}: ${m.message_text}`).join('\n');
       const inferred = await generateResponse(
-        `Based on the conversation below and the business name "${websiteData.businessName || ''}", determine the most appropriate industry/niche for this business. Return ONLY the industry name (1-3 words, e.g. "Education", "Poetry & Literature", "Food & Beverage"). No explanation.\n\nConversation:\n${context}`,
+        `Based on the conversation below and the business name "${websiteData.businessName || ''}", determine the most appropriate industry/niche for this business. Return ONLY the industry name (1-3 words, e.g. "Education", "Poetry & Literature", "Food & Beverage"). No explanation. If the conversation genuinely doesn't hint at an industry, return exactly: unknown.\n\nConversation:\n${context}`,
         [{ role: 'user', content: industry }],
         { userId: user.id, operation: 'webdev_industry_infer' }
       );
-      if (inferred && inferred.trim().length > 1) {
-        industry = inferred.trim().replace(/^["']|["']$/g, '');
-        await sendTextMessage(user.phone_number, `Got it - I'll go with *${industry}*!`);
-      } else {
-        await sendTextMessage(user.phone_number, "I couldn't figure that out from our conversation. Could you just type the industry? For example: tech, education, food, creative, etc.");
-        return STATES.WEB_COLLECT_INDUSTRY;
-      }
+      inferredValue = (inferred || '').trim().replace(/^["']|["']$/g, '');
     } catch (error) {
       logger.error('Industry inference error:', error);
-      await sendTextMessage(user.phone_number, "Could you just type the industry? For example: tech, education, food, creative, etc.");
-      return STATES.WEB_COLLECT_INDUSTRY;
+    }
+
+    if (inferredValue && inferredValue.length > 1 && !/^unknown$/i.test(inferredValue)) {
+      industry = inferredValue;
+      await sendTextMessage(user.phone_number, `Got it — I'll go with *${industry}*.`);
+    } else {
+      // Fall back to a safe generic so we can still pick a template and keep
+      // the flow moving. The user can correct it from the confirmation summary.
+      industry = 'General Business';
+      await sendTextMessage(
+        user.phone_number,
+        "No worries — I'll go with a general business setup. You can tell me the industry later from the summary if you want to change it."
+      );
     }
   }
 
@@ -631,18 +717,26 @@ function domainExampleFor(businessName) {
 }
 
 async function handleCollectServices(user, message) {
-  const servicesText = (message.text || '').trim();
+  let servicesText = (message.text || '').trim();
   if (!servicesText || servicesText.length < 2) {
     await sendTextMessage(
       user.phone_number,
-      'Please list your services/products separated by commas, or say "skip" if you don\'t have specific services:'
+      'Please list your services/products separated by commas, or skip if you don\'t have specific ones:'
     );
     return STATES.WEB_COLLECT_SERVICES;
   }
 
+  // Strip conversational wrappers BEFORE skip/phrase checks so "oh services?
+  // theyre web dev, marketing" becomes "web dev, marketing" and splits cleanly.
+  const stripped = stripConversationalPrefix(servicesText);
+  if (stripped) servicesText = stripped;
+
   const skipWords = /^(idk|i don'?t know|skip|none|no|n\/a|na|nah|nothing|not sure|no idea|no services|no products|don'?t have any|dont have any)$/i;
-  // Also catch longer phrases like "I don't offer any services"
-  const skipPhrases = /\b(no services|no products|don'?t (offer|have|provide)|dont (offer|have|provide)|nothing to (list|offer)|not applicable)\b/i;
+  // Also catch longer phrases like "I don't offer any services" or
+  // "lets just skip it" / "skip for now" / "move on". Bounded to short
+  // messages so a legit service list like "skip-the-dishes, doordash" isn't
+  // mistaken for a skip directive.
+  const skipPhrases = /\b(no services|no products|don'?t (offer|have|provide)|dont (offer|have|provide)|nothing to (list|offer)|not applicable|skip (it|this|that|for now|this one)|lets (just )?skip|let'?s (just )?skip|just skip|move on|next one|pass for now|you (pick|decide|choose)|whatever you (think|want|pick))\b/i;
   const industry = user.metadata?.websiteData?.industry || '';
   const colors = getColorsForIndustry(industry);
 
@@ -655,7 +749,12 @@ async function handleCollectServices(user, message) {
     return smartAdvance(user, message, 'No worries — we\'ll use a sensible default.');
   }
 
-  const services = servicesText.split(',').map((s) => s.trim()).filter(Boolean);
+  // Split on "," and on natural " and " connectors so "web dev, marketing
+  // and seo" becomes three items, not two.
+  const services = servicesText
+    .split(/\s*,\s*|\s+(?:and|&)\s+/i)
+    .map((s) => s.trim())
+    .filter(Boolean);
 
   const websiteData = { ...(user.metadata?.websiteData || {}), services, ...colors };
   await updateUserMetadata(user.id, { websiteData });
@@ -968,7 +1067,7 @@ async function handleCollectListingsDetails(user, message) {
   if (!parsed.address && !parsed.price) {
     await sendTextMessage(
       user.phone_number,
-      'I couldn\'t pick up an address or price. Try again like *"45 Elm St, $525k, 4 bed 3 bath, 2200 sqft"* — or say *done* to stop.'
+      'I couldn\'t pick up an address or price. Try again like *"45 Elm St, $525k, 4 bed 3 bath, 2200 sqft"* — or reply *done* to stop.'
     );
     return STATES.WEB_COLLECT_LISTINGS_DETAILS;
   }
@@ -1004,7 +1103,7 @@ async function handleCollectListingsDetails(user, message) {
     return STATES.WEB_COLLECT_LISTINGS_PHOTOS;
   }
 
-  await sendTextMessage(user.phone_number, `${ack}\n\nSend the next listing, or say *done* to move on.`);
+  await sendTextMessage(user.phone_number, `${ack}\n\nSend the next listing, or reply *done* to move on.`);
   return STATES.WEB_COLLECT_LISTINGS_DETAILS;
 }
 
@@ -1021,7 +1120,7 @@ async function handleCollectListingsPhotos(user, message) {
       const merged = { ...wd, pendingPhotoAssign: null };
       await updateUserMetadata(user.id, { websiteData: merged });
       user.metadata = { ...(user.metadata || {}), websiteData: merged };
-      await sendTextMessage(user.phone_number, 'Skipped. Send another photo or say *done* to finish.');
+      await sendTextMessage(user.phone_number, 'Skipped. Send another photo or reply *done* to finish.');
       return STATES.WEB_COLLECT_LISTINGS_PHOTOS;
     }
     const numMatch = raw.match(/^([1-9])$/);
@@ -1047,14 +1146,14 @@ async function handleCollectListingsPhotos(user, message) {
       await updateUserMetadata(user.id, { websiteData: merged });
       user.metadata = { ...(user.metadata || {}), websiteData: merged };
       await logMessage(user.id, `Listing ${n} photo uploaded: ${url}`, 'assistant');
-      await sendTextMessage(user.phone_number, `Attached to *${listings[n - 1].address}*. Send another photo or say *done* to finish.`);
+      await sendTextMessage(user.phone_number, `Attached to *${listings[n - 1].address}*. Send another photo or reply *done* to finish.`);
       return STATES.WEB_COLLECT_LISTINGS_PHOTOS;
     } catch (err) {
       logger.error('[WEBDEV-LISTING] photo upload failed:', err);
       const merged = { ...wd, pendingPhotoAssign: null, pendingPhotoMediaId: null };
       await updateUserMetadata(user.id, { websiteData: merged });
       user.metadata = { ...(user.metadata || {}), websiteData: merged };
-      await sendTextMessage(user.phone_number, 'Upload failed — stock photo will be used for that one. Try another, or say *done*.');
+      await sendTextMessage(user.phone_number, 'Upload failed — stock photo will be used for that one. Try another, or reply *done*.');
       return STATES.WEB_COLLECT_LISTINGS_PHOTOS;
     }
   }
@@ -1072,11 +1171,11 @@ async function handleCollectListingsPhotos(user, message) {
         const merged = { ...wd, listings };
         await updateUserMetadata(user.id, { websiteData: merged });
         user.metadata = { ...(user.metadata || {}), websiteData: merged };
-        await sendTextMessage(user.phone_number, `Attached to *${listings[0].address}*. Send another photo or say *done* to finish.`);
+        await sendTextMessage(user.phone_number, `Attached to *${listings[0].address}*. Send another photo or reply *done* to finish.`);
         return STATES.WEB_COLLECT_LISTINGS_PHOTOS;
       } catch (err) {
         logger.error('[WEBDEV-LISTING] photo upload failed:', err);
-        await sendTextMessage(user.phone_number, 'Upload failed — stock photo will be used. Say *done* to continue.');
+        await sendTextMessage(user.phone_number, 'Upload failed — stock photo will be used. Reply *done* to continue.');
         return STATES.WEB_COLLECT_LISTINGS_PHOTOS;
       }
     }
@@ -1102,7 +1201,7 @@ async function handleCollectListingsPhotos(user, message) {
   // Any other text — gentle nudge
   await sendTextMessage(
     user.phone_number,
-    'Send a listing photo (image), or say *done* / *skip* to use stock photos.'
+    'Send a listing photo (image), or reply *done* / *skip* to use stock photos.'
   );
   return STATES.WEB_COLLECT_LISTINGS_PHOTOS;
 }
@@ -1176,7 +1275,7 @@ async function showConfirmSummary(user) {
     bookingLine +
     igLine +
     `\n*Contact:* ${contactInfo}\n\n` +
-    `Say *"yes"* to build the site, or tell me what else to change.`;
+    `Reply *yes* to build the site, or tell me what else to change.`;
 
   await sendTextMessage(user.phone_number, summary);
   return STATES.WEB_CONFIRM;
@@ -1195,7 +1294,7 @@ async function handleSalonBookingTool(user, message) {
     await logMessage(user.id, `Booking mode: embed (${wd.bookingUrl})`, 'assistant');
     await sendTextMessage(
       user.phone_number,
-      `Got it — we'll embed *${wd.bookingUrl}* on your booking page.\n\nWhat's your Instagram handle? (e.g. @glowstudio). Say *"skip"* if you don't have one.`
+      `Got it — we'll embed *${wd.bookingUrl}* on your booking page.\n\nWhat's your Instagram handle? (e.g. @glowstudio). Just skip if you don't have one.`
     );
     return STATES.SALON_INSTAGRAM;
   }
@@ -1206,7 +1305,7 @@ async function handleSalonBookingTool(user, message) {
     await logMessage(user.id, 'Booking mode: native', 'assistant');
     await sendTextMessage(
       user.phone_number,
-      'Perfect — we\'ll build you a booking system. What\'s your Instagram handle? (e.g. @glowstudio). Say *"skip"* if you don\'t have one.'
+      "Perfect — we'll build you a booking system. What's your Instagram handle? (e.g. @glowstudio). Just skip if you don't have one."
     );
     return STATES.SALON_INSTAGRAM;
   }
@@ -1237,7 +1336,7 @@ async function handleSalonInstagram(user, message) {
   if (wd.bookingMode === 'native') {
     await sendTextMessage(
       user.phone_number,
-      'What are your opening hours? A quick line is fine — for example: *"Tue-Sat 9-7, Sun-Mon closed"*.\n\nSay *"default"* for standard salon hours (Tue-Sat 9-7).'
+      'What are your opening hours? A quick line is fine — for example: *"Tue-Sat 9-7, Sun-Mon closed"*.\n\nOr just tell me *default* for standard salon hours (Tue-Sat 9-7).'
     );
     return STATES.SALON_HOURS;
   }
@@ -1270,7 +1369,7 @@ async function handleSalonHours(user, message) {
       `How long does each service take, and what's the price?\n\n` +
       `Example: *"Haircut 30min €25, Colour 90min €85, Nails 45min €35"*.\n\n` +
       `Your services: ${services.join(', ')}.\n\n` +
-      `Say *"default"* to use 30min with no price.`
+      `Or just reply *default* to use 30min with no price.`
   );
   return STATES.SALON_SERVICE_DURATIONS;
 }
@@ -1347,6 +1446,60 @@ async function handleSalonServiceDurations(user, message) {
 }
 
 /**
+ * Detect an edit-intent message targeting a specific previously-collected
+ * field (business name, industry, services, email, phone, address). Returns
+ * { field, value } if one was detected, or null otherwise.
+ *
+ * Permissive enough to catch phrasings like
+ *   "actually the business name is wrong, it should be Glow Salon"
+ *   "change the name to Glow Salon"
+ *   "name: Glow Salon"
+ *   "the industry is actually food"
+ * without stealing plain contact-info entries.
+ */
+function detectFieldEdit(text) {
+  if (!text) return null;
+  const t = String(text).trim();
+
+  // Field anchor — must match somewhere in the message. If no field keyword
+  // appears at all, it's not an edit. We require the anchor to either start
+  // the line or follow an edit verb / "the|my" so plain contact input like
+  // "address: 123 Main" still matches but arbitrary mentions don't.
+  const fieldAnchor = (fieldRegex) =>
+    new RegExp(
+      `^\\s*(?:actually[,\\s]+|change\\s+|update\\s+|fix\\s+|correct\\s+|set\\s+|make\\s+|the\\s+|my\\s+)*${fieldRegex}\\b`,
+      'i'
+    );
+
+  // Separator (greedy left → rightmost match) picks the LAST "should be|is|
+  // are|to|:" so "name is wrong, it should be X" captures "X" not
+  // "wrong, it should be X".
+  const tailPattern = /.*(?:should\s+be|are|is|to|:)\s+(.+)$/i;
+
+  const fields = [
+    { field: 'businessName',   re: fieldAnchor('(?:business\\s*)?name') },
+    { field: 'industry',       re: fieldAnchor('industry') },
+    { field: 'services',       re: fieldAnchor('services?') },
+    { field: 'contactEmail',   re: fieldAnchor('e-?mail') },
+    { field: 'contactPhone',   re: fieldAnchor('(?:phone|tel|mobile|number)') },
+    { field: 'contactAddress', re: fieldAnchor('(?:address|location|addr)') },
+  ];
+
+  for (const { field, re } of fields) {
+    if (!re.test(t)) continue;
+    const m = t.match(tailPattern);
+    if (!m) continue;
+    let value = m[1].trim().replace(/^["']|["'\.]$/g, '');
+    // Strip a leading "actually" if it leaked through into the value
+    // (e.g. "industry is actually food" → "food", not "actually food").
+    value = value.replace(/^(?:actually|really|now|just)[,\s]+/i, '').trim();
+    if (!value) continue;
+    return { field, value };
+  }
+  return null;
+}
+
+/**
  * Parse a free-text contact blob into { contactEmail, contactPhone, contactAddress }.
  * Handles both labeled input ("email: x, phone: y, address: z") and unlabeled input.
  */
@@ -1355,14 +1508,27 @@ function parseContactFields(text) {
   const phoneMatch = text.match(/[\+]?[\d][\d\s\-()]{6,}/);
 
   // Try labeled address first — handles "address: 123 Main St" on its own line or inline.
-  // Stops at the next known label or end of string.
+  // Stops at the next known label word (with OR without a colon) or end of
+  // string, so prose like "address is X email Y@Z.com phone 555" splits
+  // cleanly into the three fields instead of collapsing into the address.
   const labeledAddressMatch = text.match(
-    /(?:address|location|addr)\s*[:\-]?\s*([^\n]+?)(?=\s*(?:email|phone|tel|mobile|e-?mail)\s*[:\-]|$)/i
+    /(?:address|location|addr)\s*[:\-]?\s*([^\n]+?)(?=\s*(?:email|e-?mail|phone|tel|mobile)\b|$)/i
   );
+
+  // Clean a captured address: strip a leading copula/separator that sneaks in
+  // when the user writes prose ("the address is ABC, Street" captures "is
+  // ABC, Street" without this), plus trailing punctuation and stray "and"
+  // connectors ("123 Main St, and" → "123 Main St").
+  const stripAddressSeparator = (v) =>
+    v
+      .replace(/^(?:is|are|=|:|-|at|of|for)\s+/i, '')
+      .replace(/\s+(?:and|plus)\s*$/i, '')
+      .replace(/[,;.\s]+$/, '')
+      .trim();
 
   let addressValue = '';
   if (labeledAddressMatch) {
-    addressValue = labeledAddressMatch[1].trim();
+    addressValue = stripAddressSeparator(labeledAddressMatch[1].trim());
   } else {
     // Fallback: strip the matched email/phone and any leftover label words, return the rest.
     addressValue = text
@@ -1372,6 +1538,7 @@ function parseContactFields(text) {
       .replace(/[,\n\r]+/g, ' ')
       .replace(/\s{2,}/g, ' ')
       .trim();
+    addressValue = stripAddressSeparator(addressValue);
   }
 
   return {
@@ -1385,21 +1552,100 @@ async function handleCollectContact(user, message) {
   const contactText = (message.text || '').trim();
   const skipWords = /^(nothing|none|no|skip|n\/a|na|nah|nope|don'?t|dont|no thanks)$/i;
 
+  // If the input is a multi-field contact blob (2+ labeled fields like
+  // "address: X, email: Y, phone: Z"), skip the single-field edit detector
+  // entirely — otherwise the greedy tail regex inside detectFieldEdit picks
+  // the LAST colon in the message and misreads "+123456789056" as the
+  // address value.
+  const labelCount = (contactText.match(/\b(?:email|e-?mail|phone|tel|mobile|address|location|addr)\s*[:\-]/gi) || []).length;
+
+  // Edit-intent guard: if the user is trying to correct an earlier field
+  // ("actually the name should be Glow Salon"), update that field and bounce
+  // to WEB_CONFIRM instead of storing their sentence as contactAddress.
+  if (contactText && contactText.length >= 3 && !skipWords.test(contactText) && labelCount < 2) {
+    const edit = detectFieldEdit(contactText);
+    if (edit) {
+      const wd = { ...(user.metadata?.websiteData || {}) };
+      let ackValue = edit.value;
+      if (edit.field === 'services') {
+        wd.services = edit.value.split(',').map((s) => s.trim()).filter(Boolean);
+        ackValue = wd.services.join(', ');
+      } else if (edit.field === 'contactEmail') {
+        const m = edit.value.match(/[\w.-]+@[\w.-]+\.\w+/);
+        wd.contactEmail = m ? m[0] : edit.value;
+        ackValue = wd.contactEmail;
+      } else {
+        wd[edit.field] = edit.value;
+      }
+      await updateUserMetadata(user.id, { websiteData: wd });
+      user.metadata = { ...(user.metadata || {}), websiteData: wd };
+
+      const fieldLabel = {
+        businessName: 'business name',
+        industry: 'industry',
+        services: 'services',
+        contactEmail: 'email',
+        contactPhone: 'phone',
+        contactAddress: 'address',
+      }[edit.field] || edit.field;
+      await sendTextMessage(
+        user.phone_number,
+        `Got it — updated ${fieldLabel} to *${ackValue}*. Let's take one more look before we build.`
+      );
+      await logMessage(user.id, `Edit at contact step: ${edit.field} → ${ackValue}`, 'assistant');
+
+      // Show the confirmation summary by re-entering WEB_CONFIRM's summary display.
+      // Re-use the summary block by calling into the same code path: bump state
+      // and let handleConfirm render on the next turn — but we also want to
+      // proactively show the summary now so the user knows where they are.
+      return showConfirmSummary(user);
+    }
+  }
+
   let contactData;
   if (!contactText || contactText.length < 3 || skipWords.test(contactText)) {
     contactData = { contactEmail: '', contactPhone: '', contactAddress: '' };
   } else {
     contactData = parseContactFields(contactText);
+
+    // Reject junk / stray replies like "hello?", "?", "im waiting". If we
+    // got no email, no phone, and the "address" we parsed looks like
+    // conversational filler (no digits, no street keyword, very short, or
+    // matches a common non-contact word), don't store it — re-prompt.
+    const hasEmail = !!contactData.contactEmail;
+    const hasPhone = !!contactData.contactPhone;
+    const addr = contactData.contactAddress || '';
+    const addrHasDigits = /\d/.test(addr);
+    const addrHasStreetKeyword = /\b(?:st|street|ave|avenue|road|rd|blvd|boulevard|lane|ln|drive|dr|way|plaza|square|sq|apt|suite|floor|block|sector|phase)\b/i.test(addr);
+    const addrLooksLikeJunk =
+      /^(?:hello\??|hi\??|hey\??|waiting|im\s+waiting|what\??|huh\??|eh\??|um+|uh+|ok\??|sure\??|yeah\??|yes\??|no\??)$/i.test(addr);
+    const addrTooShort = addr.length < 8;
+
+    if (!hasEmail && !hasPhone && (addrLooksLikeJunk || (addrTooShort && !addrHasStreetKeyword && !addrHasDigits))) {
+      await sendTextMessage(
+        user.phone_number,
+        "Didn't catch any contact info there. Send your email, phone, and/or address — any format is fine, or just skip if you'd rather not add contact details."
+      );
+      return STATES.WEB_COLLECT_CONTACT;
+    }
   }
 
   await updateUserMetadata(user.id, {
     websiteData: { ...(user.metadata?.websiteData || {}), ...contactData },
   });
+  user.metadata = {
+    ...(user.metadata || {}),
+    websiteData: { ...(user.metadata?.websiteData || {}), ...contactData },
+  };
 
-  // Show confirmation summary before generating — real-estate agents see
-  // brokerage / years / designations in place of the services line.
+  return showConfirmSummary(user);
+}
+
+// Render the pre-generation confirmation summary. Shared by handleCollectContact
+// and the edit-intent fast-path so the user always lands on the same screen.
+async function showConfirmSummary(user) {
   const { isRealEstate } = require('../../website-gen/templates');
-  const wd = { ...(user.metadata?.websiteData || {}), ...contactData };
+  const wd = { ...(user.metadata?.websiteData || {}) };
   const realEstate = isRealEstate(wd.industry);
   const contactInfo = [wd.contactEmail, wd.contactPhone, wd.contactAddress].filter(Boolean).join(' | ') || 'None';
 
@@ -1426,10 +1672,10 @@ async function handleCollectContact(user, message) {
     lines.push(`*Services:* ${servicesList}`);
   }
   lines.push(`*Contact:* ${contactInfo}`);
-  lines.push(``, `Does everything look good? You can say *"yes"* to proceed, or tell me what you'd like to change.`);
+  lines.push(``, `Does everything look good? Reply *yes* to build it, or tell me what you'd like to change.`);
 
   await sendTextMessage(user.phone_number, lines.join('\n'));
-  await logMessage(user.id, 'Contact info collected, showing confirmation', 'assistant');
+  await logMessage(user.id, 'Showing website confirmation summary', 'assistant');
 
   return STATES.WEB_CONFIRM;
 }
@@ -1460,16 +1706,23 @@ async function handleConfirm(user, message) {
   const addressChange = originalText.match(/(?:address|location|addr)\s*(?:to|:|should be|is)\s*(.+)/i);
   const contactChange = originalText.match(/contact\s*(?:to|:|should be|is)\s*(.+)/i);
 
+  // Helper: persist the edit, ack it, and re-render the full summary so the
+  // user sees the updated state at a glance instead of having to remember
+  // which fields were changed.
+  const applyAndReshow = async (ackLabel) => {
+    await updateUserMetadata(user.id, { websiteData: wd });
+    user.metadata = { ...(user.metadata || {}), websiteData: wd };
+    await sendTextMessage(user.phone_number, `✅ ${ackLabel}. Here's the updated summary:`);
+    return showConfirmSummary(user);
+  };
+
   if (nameChange) {
     wd.businessName = nameChange[1].trim();
-    await updateUserMetadata(user.id, { websiteData: wd });
-    await sendTextMessage(user.phone_number, `Updated business name to *${wd.businessName}*. Anything else to change, or say *"yes"* to proceed.`);
-    return STATES.WEB_CONFIRM;
+    return applyAndReshow(`Business name updated to *${wd.businessName}*`);
   }
   if (industryChange) {
     const newIndustry = industryChange[1].trim();
     wd.industry = newIndustry;
-    await updateUserMetadata(user.id, { websiteData: wd });
     // If the user just switched into a salon industry and we haven't yet
     // collected the salon-specific details (booking tool, hours, prices),
     // pivot into the salon sub-flow and return to CONFIRM when it's done.
@@ -1478,47 +1731,40 @@ async function handleConfirm(user, message) {
       !wd.bookingMode &&
       (!Array.isArray(wd.salonServices) || wd.salonServices.length === 0);
     if (needsSalonFlow) {
-      await updateUserMetadata(user.id, { salonFlowOrigin: 'CONFIRM' });
+      await updateUserMetadata(user.id, { websiteData: wd, salonFlowOrigin: 'CONFIRM' });
+      user.metadata = { ...(user.metadata || {}), websiteData: wd };
       await sendTextMessage(user.phone_number, `Updated industry to *${newIndustry}* — a few quick salon-specific questions, then we'll build it.`);
       return startSalonFlow(user);
     }
-    await sendTextMessage(user.phone_number, `Updated industry to *${wd.industry}*. Anything else, or say *"yes"* to proceed.`);
-    return STATES.WEB_CONFIRM;
+    return applyAndReshow(`Industry updated to *${wd.industry}*`);
   }
   if (servicesChange) {
-    wd.services = servicesChange[1].split(',').map(s => s.trim()).filter(Boolean);
-    await updateUserMetadata(user.id, { websiteData: wd });
-    await sendTextMessage(user.phone_number, `Updated services to *${wd.services.join(', ')}*. Anything else, or say *"yes"* to proceed.`);
-    return STATES.WEB_CONFIRM;
+    wd.services = servicesChange[1]
+      .split(/\s*,\s*|\s+(?:and|&)\s+/i)
+      .map((s) => s.trim())
+      .filter(Boolean);
+    return applyAndReshow(`Services updated to *${wd.services.join(', ')}*`);
   }
   if (emailChange) {
     const val = emailChange[1].trim();
     const m = val.match(/[\w.-]+@[\w.-]+\.\w+/);
     wd.contactEmail = m ? m[0] : val;
-    await updateUserMetadata(user.id, { websiteData: wd });
-    await sendTextMessage(user.phone_number, `Updated email to *${wd.contactEmail}*. Anything else, or say *"yes"* to proceed.`);
-    return STATES.WEB_CONFIRM;
+    return applyAndReshow(`Email updated to *${wd.contactEmail}*`);
   }
   if (phoneChange) {
     wd.contactPhone = phoneChange[1].trim();
-    await updateUserMetadata(user.id, { websiteData: wd });
-    await sendTextMessage(user.phone_number, `Updated phone to *${wd.contactPhone}*. Anything else, or say *"yes"* to proceed.`);
-    return STATES.WEB_CONFIRM;
+    return applyAndReshow(`Phone updated to *${wd.contactPhone}*`);
   }
   if (addressChange) {
     wd.contactAddress = addressChange[1].trim();
-    await updateUserMetadata(user.id, { websiteData: wd });
-    await sendTextMessage(user.phone_number, `Updated address to *${wd.contactAddress}*. Anything else, or say *"yes"* to proceed.`);
-    return STATES.WEB_CONFIRM;
+    return applyAndReshow(`Address updated to *${wd.contactAddress}*`);
   }
   if (contactChange) {
     const parsed = parseContactFields(contactChange[1].trim());
     if (parsed.contactEmail) wd.contactEmail = parsed.contactEmail;
     if (parsed.contactPhone) wd.contactPhone = parsed.contactPhone;
     if (parsed.contactAddress) wd.contactAddress = parsed.contactAddress;
-    await updateUserMetadata(user.id, { websiteData: wd });
-    await sendTextMessage(user.phone_number, `Updated contact info. Anything else, or say *"yes"* to proceed.`);
-    return STATES.WEB_CONFIRM;
+    return applyAndReshow('Contact info updated');
   }
 
   // Couldn't parse the change — ask them to be more specific
@@ -1531,7 +1777,7 @@ async function handleConfirm(user, message) {
       '• "Email to hello@example.com"\n' +
       '• "Phone to +1 555 123 4567"\n' +
       '• "Address to 123 Main St, City"\n\n' +
-      'Or say *"yes"* to proceed with the current details.'
+      'Or just reply *yes* to proceed with the current details.'
   );
   return STATES.WEB_CONFIRM;
 }
@@ -1569,6 +1815,9 @@ async function generateWebsite(user) {
   // Set state to GENERATING immediately to prevent duplicate builds
   const { updateUserState } = require('../../db/users');
   await updateUserState(user.id, STATES.WEB_GENERATING);
+  // Stamp the start time so handleGenerating can detect a stuck build and
+  // offer the user a way out instead of infinitely replying "Still generating…".
+  await updateUserMetadata(user.id, { webGenStartedAt: new Date().toISOString() });
 
   try {
     const { generateWebsiteContent } = require('../../website-gen/generator');
@@ -1643,26 +1892,6 @@ async function generateWebsite(user) {
     await logMessage(user.id, `Website deployed: ${previewUrl}`, 'assistant');
     logger.info(`[WEBGEN] ✅ Complete! Preview sent to ${user.phone_number}: ${previewUrl}`);
 
-    // Shareable-preview nudge: send a pre-formatted message the user can
-    // long-press → forward to a partner/friend without rewriting anything.
-    // Every forward is a free impression, and a second opinion often closes
-    // the deal faster than solo deliberation. Fire-and-forget — if it fails
-    // we don't want to derail the approval flow.
-    try {
-      const businessLabel = websiteData?.businessName ? ` for ${websiteData.businessName}` : '';
-      await sendTextMessage(
-        user.phone_number,
-        `💬 *Want a second opinion?* Long-press the message below and forward it to a partner or friend:`
-      );
-      await sendTextMessage(
-        user.phone_number,
-        `Hey — just got this website preview built${businessLabel}. What do you think?\n\n${previewUrl}`
-      );
-      await logMessage(user.id, 'Shareable-preview nudge sent', 'assistant');
-    } catch (shareErr) {
-      logger.warn(`[WEBGEN] Shareable-preview nudge failed: ${shareErr.message}`);
-    }
-
     // Always go to revisions state — user can approve, request changes, or reject.
     // Tell them upfront how many free rounds of changes they get — surfacing
     // the cap here avoids the trust-breaking moment of discovering it only
@@ -1697,9 +1926,35 @@ async function generateWebsite(user) {
 }
 
 async function handleGenerating(user, message) {
+  const text = (message.text || '').trim().toLowerCase();
+  const startedAt = user.metadata?.webGenStartedAt;
+  const ageMs = startedAt ? Date.now() - new Date(startedAt).getTime() : 0;
+  const STUCK_THRESHOLD_MS = 5 * 60 * 1000;
+  const isStuck = ageMs > STUCK_THRESHOLD_MS;
+
+  // Explicit user escape hatches: retry / cancel / reset. Let them out of the
+  // "Still generating…" loop even if the build genuinely hung.
+  if (/^(?:retry|try\s*again|reset|cancel|stuck|start\s*over)$/i.test(text) || isStuck) {
+    logger.warn(
+      `[WEBGEN] Recovering user ${user.phone_number} from stuck WEB_GENERATING (age=${Math.round(ageMs / 1000)}s, input="${text.slice(0, 30)}")`
+    );
+    await sendTextMessage(
+      user.phone_number,
+      isStuck
+        ? "Looks like the build stalled — sorry about that. Want me to try again?"
+        : "Cancelling the current build. Want me to try again, or go back to the details?"
+    );
+    await sendInteractiveButtons(user.phone_number, 'What would you like to do?', [
+      { id: 'web_retry', title: '🔄 Try Again' },
+      { id: 'svc_general', title: '💬 Chat with Us' },
+    ]);
+    await logMessage(user.id, `Recovered from stuck WEB_GENERATING (age=${Math.round(ageMs / 1000)}s)`, 'assistant');
+    return STATES.WEB_GENERATION_FAILED;
+  }
+
   await sendTextMessage(
     user.phone_number,
-    '⏳ Still generating your website... Please hold on a moment.'
+    `⏳ Still generating your website — hang tight. If this feels stuck, reply *retry* and I'll start over.`
   );
   return STATES.WEB_GENERATING;
 }
@@ -1749,7 +2004,7 @@ async function handleRevisions(user, message) {
     const example = domainExampleFor(user.metadata?.websiteData?.businessName);
     await sendTextMessage(
       user.phone_number,
-      `🎉 *Awesome!* Your website is approved.\n\nWould you like to put it on your own custom domain? (e.g., ${example})\n\nJust say *"yes"* and I'll help you find one, or *"no"* if you want to skip it for now.`
+      `🎉 *Awesome!* Your website is approved.\n\nWould you like to put it on your own custom domain? (e.g., ${example})\n\nReply *yes* and I'll help you find one, or *no* to skip it for now.`
     );
     await logMessage(user.id, 'Website approved, offering custom domain', 'assistant');
     return STATES.DOMAIN_OFFER;
@@ -1895,7 +2150,7 @@ async function handleRevisions(user, message) {
         const example = domainExampleFor(currentConfig?.businessName || user.metadata?.websiteData?.businessName);
         await sendTextMessage(
           user.phone_number,
-          `🎉 *Awesome!* Your website is approved.\n\nWould you like to put it on your own custom domain? (e.g., ${example})\n\nJust say *"yes"* and I'll help you find one, or *"no"* if you want to skip it for now.`
+          `🎉 *Awesome!* Your website is approved.\n\nWould you like to put it on your own custom domain? (e.g., ${example})\n\nReply *yes* and I'll help you find one, or *no* to skip it for now.`
         );
         await logMessage(user.id, 'Website approved, offering custom domain', 'assistant');
         return STATES.DOMAIN_OFFER;
@@ -2023,4 +2278,12 @@ async function handleRevisions(user, message) {
   return STATES.WEB_REVISIONS;
 }
 
-module.exports = { handleWebDev, handleGenerationFailed };
+module.exports = {
+  handleWebDev,
+  handleGenerationFailed,
+  // Exposed so salesBot can pre-seed webdev fields from its trigger tag and
+  // route to the correct next step instead of always asking for industry first.
+  nextMissingWebDevState,
+  isSalonIndustry,
+  startSalonFlow,
+};

@@ -30,8 +30,34 @@ async function handleCustomDomain(user, message) {
 }
 
 // ─── DOMAIN_OFFER ──────────────────────────────────────────────────
+
+// Confusion / question markers that should trigger the "what is a domain?"
+// explainer instead of stuffing the user's sentence into a domain search.
+// Covers "what is a domain", "wut is domain", "how does this work", "huh?", etc.
+const DOMAIN_CONFUSION_RE = /(?:^|\b)(what|wut|wat|whats|what'?s|how|why|explain|huh|confused|not\s*sure|no\s*idea|idk|don'?t\s*(?:know|get|understand)|tell\s*me|\?|meaning|means|mean)\b/i;
+
+function isDomainExplainer(text) {
+  if (!text) return false;
+  // Any question mark, any confusion keyword, or any text that contains
+  // the word "domain" together with a question marker.
+  if (text.includes('?')) return true;
+  return DOMAIN_CONFUSION_RE.test(text);
+}
+
+async function sendDomainExplainer(user) {
+  await sendTextMessage(
+    user.phone_number,
+    "A *custom domain* is your own web address — like *glowstudio.com* instead of the long preview URL we built on. " +
+      "Visitors type it into their browser to reach your site, and it makes your brand look way more professional.\n\n" +
+      "Would you like one? Reply *yes* to pick one out, or *no* if you'd rather skip it for now."
+  );
+  await logMessage(user.id, 'Explained what a domain is', 'assistant');
+  return STATES.DOMAIN_OFFER;
+}
+
 async function handleDomainOffer(user, message) {
-  const text = (message.text || '').trim().toLowerCase();
+  const rawText = (message.text || '').trim();
+  const text = rawText.toLowerCase();
 
   const isYes = /^(yes|yeah|yep|sure|ok|okay|y|domain|set up|set it up)$/i.test(text);
   const isNo = /^(no|nah|nope|later|not now|n|skip|maybe later)$/i.test(text);
@@ -59,21 +85,64 @@ async function handleDomainOffer(user, message) {
     return runDomainSearch(user, sanitized);
   }
 
+  // Confused / asking a question — explain instead of auto-searching for the
+  // sentence. This protects against things like "what even is a domain" being
+  // turned into a search for *whatevenisamain.com*.
+  if (isDomainExplainer(rawText)) {
+    return sendDomainExplainer(user);
+  }
+
+  // Fall-through to search ONLY if the input looks like a plausible single-word
+  // domain name (no spaces, alphanumerics + hyphens, reasonable length).
+  const noSpaces = !/\s/.test(rawText);
   const cleaned = text.replace(/[^a-z0-9-]/g, '');
-  if (cleaned.length >= 2) {
+  if (noSpaces && cleaned.length >= 2 && cleaned.length <= 30) {
     return runDomainSearch(user, cleaned);
   }
 
   await sendTextMessage(
     user.phone_number,
-    'Would you like to set up a custom domain? Just say *"yes"* and I\'ll help you find one, or *"no"* if you want to skip it.'
+    "Would you like to set up a custom domain? Reply *yes* to pick one out, or *no* to skip it."
   );
   return STATES.DOMAIN_OFFER;
 }
 
 // ─── DOMAIN_SEARCH ─────────────────────────────────────────────────
+
+// Phrases that mean "get me out of this domain search", so we don't go hunting
+// for *nahforgetit.com* when the user types "nah forget it".
+const DOMAIN_EXIT_KEYWORDS = /\b(?:skip|nah|nope|forget\s*(?:it|about\s*it)|never\s*mind|nvm|not\s*now|maybe\s*later|later|cancel|stop|exit|back|menu|no\s*thanks?|thx|thanks|thank\s*you|bail|drop\s*it|screw\s*it)\b/i;
+
+function isDomainExit(text) {
+  const t = (text || '').trim();
+  if (!t || t.length > 40) return false;
+  // A full domain name ("mybrand.com") is NOT an exit even if it contains
+  // a trigger word, so guard against that first.
+  if (/[\w-]+\.(?:com|co|io|net|org|app|dev|biz|info|store|shop|me|ai|xyz)\b/i.test(t)) return false;
+  return DOMAIN_EXIT_KEYWORDS.test(t);
+}
+
+async function exitDomainFlow(user) {
+  await sendTextMessage(
+    user.phone_number,
+    "No problem — we'll skip the custom domain for now. Your site is still live on its preview URL, and you can always grab a domain later. Anything else I can help with?"
+  );
+  await logMessage(user.id, 'User exited domain search', 'assistant');
+  return STATES.SALES_CHAT;
+}
+
 async function handleDomainSearch(user, message) {
   const text = (message.text || '').trim();
+
+  // Exit path — user has bailed on the domain search.
+  if (isDomainExit(text)) {
+    return exitDomainFlow(user);
+  }
+
+  // Question / confusion — explain and bump them back to the offer state.
+  if (isDomainExplainer(text)) {
+    return sendDomainExplainer(user);
+  }
 
   const domainOptions = user.metadata?.domainOptions || [];
   const availableOptions = domainOptions.filter(d => d.available && !d.premium);

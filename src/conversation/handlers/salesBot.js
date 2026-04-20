@@ -109,8 +109,49 @@ async function handleSalesBot(user, message) {
     });
   }
 
-  // Check for trigger tags before sending the response
-  let websiteDemoTrigger = cleanText.includes('[TRIGGER_WEBSITE_DEMO]');
+  // Check for trigger tags before sending the response.
+  // Website trigger supports three forms:
+  //   1. Bare:       [TRIGGER_WEBSITE_DEMO]
+  //   2. Plain name: [TRIGGER_WEBSITE_DEMO: BytesMobile]
+  //   3. Structured: [TRIGGER_WEBSITE_DEMO: name="X"; industry="Y"; services="A, B"]
+  // The structured form lets the wizard skip steps the LLM already heard
+  // answers for, so the user isn't asked again for things they already said.
+  const websiteDemoMatch = cleanText.match(/\[TRIGGER_WEBSITE_DEMO(?::\s*([^\]]*))?\]/i);
+  let websiteDemoTrigger = !!websiteDemoMatch;
+  let websiteDemoBusinessName = null;
+  let websiteDemoIndustry = null;
+  let websiteDemoServices = null;
+  if (websiteDemoMatch && websiteDemoMatch[1]) {
+    const payload = websiteDemoMatch[1].trim();
+    const isStructured = /[;=]/.test(payload);
+    const clean = (v) => {
+      const x = String(v || '').trim().replace(/^["']|["']$/g, '').trim();
+      return x && !/^unknown$/i.test(x) ? x : null;
+    };
+    if (isStructured) {
+      for (const pair of payload.split(/;\s*/)) {
+        const eq = pair.indexOf('=');
+        if (eq < 0) continue;
+        const key = pair.slice(0, eq).trim().toLowerCase();
+        const val = clean(pair.slice(eq + 1));
+        if (!val) continue;
+        if (key === 'name' || key === 'business') {
+          if (val.length <= 60) websiteDemoBusinessName = val;
+        } else if (key === 'industry' || key === 'niche') {
+          if (val.length <= 40) websiteDemoIndustry = val;
+        } else if (key === 'services' || key === 'service') {
+          websiteDemoServices = val
+            .split(/\s*,\s*|\s+(?:and|&)\s+/i)
+            .map((s) => s.trim())
+            .filter(Boolean);
+          if (!websiteDemoServices.length) websiteDemoServices = null;
+        }
+      }
+    } else {
+      const name = clean(payload);
+      if (name && name.length <= 60) websiteDemoBusinessName = name;
+    }
+  }
   let chatbotDemoTrigger = cleanText.includes('[TRIGGER_CHATBOT_DEMO]');
   let adGeneratorTrigger = cleanText.includes('[TRIGGER_AD_GENERATOR]');
   let logoMakerTrigger = cleanText.includes('[TRIGGER_LOGO_MAKER]');
@@ -265,7 +306,7 @@ async function handleSalesBot(user, message) {
 
   // Strip all trigger tags from the response
   let responseText = cleanText
-    .replace(/\[TRIGGER_WEBSITE_DEMO\]/g, '')
+    .replace(/\[TRIGGER_WEBSITE_DEMO(?::[^\]]*)?\]/gi, '')
     .replace(/\[TRIGGER_CHATBOT_DEMO\]/g, '')
     .replace(/\[TRIGGER_AD_GENERATOR\]/g, '')
     .replace(/\[TRIGGER_LOGO_MAKER\]/g, '')
@@ -446,13 +487,79 @@ async function handleSalesBot(user, message) {
     const site = await createSite(user.id, 'business-starter');
     await updateUserMetadata(user.id, { currentSiteId: site.id });
 
-    // Always ask — don't try to auto-extract. Prevents wrong names.
+    // Trusted sources for the business name, in priority order:
+    //   1. Structured trigger tag (LLM extracted it from the conversation).
+    //   2. Name already stored in metadata from a prior flow.
+    // Heuristic message-scanning is gone — it used to pick arbitrary phrases
+    // like "do what you think is goo" as business names.
+    const businessName =
+      websiteDemoBusinessName ||
+      user.metadata?.websiteData?.businessName ||
+      user.metadata?.adData?.businessName ||
+      user.metadata?.logoData?.businessName ||
+      user.metadata?.chatbotData?.businessName ||
+      null;
+
+    if (!businessName) {
+      await sendTextMessage(user.phone_number, "Let's build it! What's your business name?");
+      await logMessage(user.id, 'Starting website demo flow', 'assistant');
+      return STATES.WEB_COLLECT_NAME;
+    }
+
+    // Pre-seed every field we got from the structured trigger so the wizard
+    // doesn't re-ask for things the LLM already heard in sales chat.
+    const existing = user.metadata?.websiteData || {};
+    const websiteData = { ...existing, businessName };
+    if (websiteDemoIndustry) websiteData.industry = websiteDemoIndustry;
+    if (websiteDemoServices) websiteData.services = websiteDemoServices;
+    await updateUserMetadata(user.id, { websiteData });
+    user.metadata = { ...(user.metadata || {}), websiteData };
+
+    logger.info(
+      `[SALES] Website demo pre-seeded: name="${businessName}", industry="${websiteDemoIndustry || '(ask)'}", services=${
+        websiteDemoServices ? `[${websiteDemoServices.join(', ')}]` : '(ask)'
+      }`
+    );
+
+    const { isSalonIndustry, startSalonFlow } = require('./webDev');
+
+    // Salon industry has a dedicated sub-flow (booking tool / hours / prices).
+    // Kick that off instead of proceeding through the generic flow.
+    if (websiteDemoIndustry && isSalonIndustry(websiteDemoIndustry)) {
+      await sendTextMessage(
+        user.phone_number,
+        `Awesome — building *${businessName}* (${websiteDemoIndustry}). Quick salon-specific questions coming up.`
+      );
+      await logMessage(user.id, `Website demo → salon flow (name + industry pre-filled)`, 'assistant');
+      return startSalonFlow(user);
+    }
+
+    // Pick the right next state based on what's already filled.
+    // Order in the wizard: name → industry → services → contact → confirm.
+    if (websiteDemoIndustry && websiteDemoServices) {
+      await sendTextMessage(
+        user.phone_number,
+        `Great — building *${businessName}* (${websiteDemoIndustry}, services: ${websiteDemoServices.join(', ')}).\n\nLast thing — what contact info do you want on the site? Email, phone, and/or address.`
+      );
+      await logMessage(user.id, `Website demo → contact step (name + industry + services pre-filled)`, 'assistant');
+      return STATES.WEB_COLLECT_CONTACT;
+    }
+
+    if (websiteDemoIndustry) {
+      await sendTextMessage(
+        user.phone_number,
+        `Building *${businessName}* (${websiteDemoIndustry}). What services or products do you offer? List them separated by commas, or just skip.`
+      );
+      await logMessage(user.id, `Website demo → services step (name + industry pre-filled)`, 'assistant');
+      return STATES.WEB_COLLECT_SERVICES;
+    }
+
     await sendTextMessage(
       user.phone_number,
-      "Let's build it! What's your business name?"
+      `Building it for *${businessName}* — what industry are you in? (e.g. tech, healthcare, salon, restaurant)`
     );
-    await logMessage(user.id, 'Starting website demo flow', 'assistant');
-    return STATES.WEB_COLLECT_NAME;
+    await logMessage(user.id, `Website demo → industry step (name pre-filled)`, 'assistant');
+    return STATES.WEB_COLLECT_INDUSTRY;
   }
 
   // Trigger ad generator flow
