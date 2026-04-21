@@ -12,38 +12,11 @@ const { STATES } = require('../states');
 const {
   extractWebsiteFields,
   mergeWebsiteFields,
+  extractIndustry,
+  extractServices,
 } = require('../entityAccumulator');
+const { isDelegation, classifyDelegation } = require('../../config/smartDefaults');
 
-// Strip common conversational wrappers from the start of a user reply so the
-// stored value ends up clean. Handles: interjections ("oh", "well", "alright"),
-// hedges ("i think", "maybe"), subject-verb ("it's", "they're", "we offer"),
-// possessive framings ("my industry is", "the services are"), and echoed
-// question words ("services?"). Safe to call on any input — leaves a clean
-// 1-N word reply untouched.
-function stripConversationalPrefix(text) {
-  if (!text) return '';
-  let t = String(text).trim();
-  const patterns = [
-    /^(?:oh|yeah|yes|ok|okay|well|alright|so|hmm|uhh?|umm?|hey|nah|nope|yup|sure|right)[\s,!.?:]+/i,
-    /^(?:i\s+think|i\s+guess|i'?d\s+say|maybe|kinda|probably|actually|honestly|basically|like)\s+/i,
-    /^(?:it'?s|it\s+is|its|they'?re|theyre|they\s+are|we'?re|we\s+are|we\s+have|we\s+offer|we\s+do|we\s+provide|we\s+sell|i'?m|im|i\s+am|i\s+have|i\s+offer|i\s+do|i\s+provide|i\s+sell)\s+/i,
-    /^(?:my|our|the)\s+(?:business|industry|services?|niche|field|company)\s*(?:is|are)\s+/i,
-    /^(?:industry|services?|business|niche|field)\s*\??\s*[:\-]?\s*(?:is|are)?\s+/i,
-    /^(?:in|into)\s+/i,
-  ];
-  for (let pass = 0; pass < 5; pass++) {
-    let changed = false;
-    for (const re of patterns) {
-      const next = t.replace(re, '');
-      if (next !== t) {
-        t = next.trim();
-        changed = true;
-      }
-    }
-    if (!changed) break;
-  }
-  return t.replace(/^["']+|["'.!?]+$/g, '').trim();
-}
 
 // Walk the website-dev checklist and return the first state whose field
 // is still missing. Used to fast-forward past steps already covered. Email
@@ -347,63 +320,27 @@ async function handleCollectEmail(user, message) {
 }
 
 async function handleCollectIndustry(user, message) {
-  let industry = message.listId
-    ? message.text // Use the title from the list selection
+  const rawInput = message.listId
+    ? message.text
     : (message.text || '').trim();
 
-  if (!industry) {
+  if (!rawInput) {
     await sendTextMessage(user.phone_number, 'Please select or type your industry:');
     return STATES.WEB_COLLECT_INDUSTRY;
   }
 
-  // Strip conversational wrappers so "i think its tech" becomes "tech",
-  // "oh its in tech" becomes "tech", "we're in food" becomes "food".
-  // Only applied when the user came in via free text (not a list selection).
-  if (!message.listId) {
-    const stripped = stripConversationalPrefix(industry);
-    if (stripped) industry = stripped;
+  // List selections are trusted as-is — the user picked a pre-defined option.
+  if (message.listId) {
+    const websiteData = { ...(user.metadata?.websiteData || {}), industry: rawInput };
+    await updateUserMetadata(user.id, { websiteData });
+    user.metadata = { ...(user.metadata || {}), websiteData };
+    await logMessage(user.id, `Industry: ${rawInput}`, 'assistant');
+    return smartAdvance(user, message);
   }
 
-  // Reject punctuation-only / nonsense / clearly-non-industry input. Without
-  // this, messages like "?" / "im waiting" / "hello" / "ok" get silently
-  // stored as the industry and show up in the final summary.
-  const nonIndustryWord = /^(?:waiting|hello|hi|hey|what|why|how|when|where|ok|okay|sure|yeah|yup|no|idk|dunno|wait|hold\s*on|what\?|huh|eh|um|uh)$/i;
-  if (
-    !/[a-zA-Z]{2,}/.test(industry) ||
-    industry.length > 80 ||
-    nonIndustryWord.test(industry)
-  ) {
-    await sendTextMessage(
-      user.phone_number,
-      "Didn't catch that — what industry are you in? Something like tech, healthcare, salon, restaurant, food, or creative."
-    );
-    return STATES.WEB_COLLECT_INDUSTRY;
-  }
-
-  // If stripping still left a long phrase (5+ words), the user wrote prose
-  // that didn't fit our heuristic. Route through LLM inference to extract
-  // a clean 1-3 word industry, same path we use for "skip" / "idk".
-  if (industry.split(/\s+/).length >= 5) {
-    try {
-      const history = await getConversationHistory(user.id, 10);
-      const websiteData = user.metadata?.websiteData || {};
-      const context = history.map((m) => `${m.role}: ${m.message_text}`).join('\n');
-      const inferred = await generateResponse(
-        `The user just answered the industry question for their website. Their answer may contain filler words ("I think it's", "oh yeah we're in") — extract ONLY the clean industry/niche name (1-3 words, e.g. "Tech", "Food & Beverage", "Real Estate"). Use the business name "${websiteData.businessName || ''}" and conversation below as additional context. Return ONLY the industry name, no explanation. If you truly can't tell, return exactly: unknown.\n\nConversation:\n${context}\n\nTheir industry answer: ${industry}`,
-        [{ role: 'user', content: industry }],
-        { userId: user.id, operation: 'webdev_industry_clean' }
-      );
-      const cleaned = (inferred || '').trim().replace(/^["']|["']$/g, '');
-      if (cleaned && cleaned.length > 1 && cleaned.length < 40 && !/^unknown$/i.test(cleaned)) {
-        industry = cleaned;
-      }
-    } catch (err) {
-      logger.error('Industry clean-extract error:', err.message);
-    }
-  }
-
-  // Handle name corrections: "the name should be X" or "change name to X"
-  const nameCorrection = industry.match(/(?:name\s*(?:should be|is|to)|change.*name.*to|actually.*called|it'?s\s+called)\s*["']?(.+?)["']?\s*$/i);
+  // Edit-intent fast path: "the name should be X" / "change name to X" —
+  // user corrected business name, not an industry reply.
+  const nameCorrection = rawInput.match(/(?:name\s*(?:should be|is|to)|change.*name.*to|actually.*called|it'?s\s+called)\s*["']?(.+?)["']?\s*$/i);
   if (nameCorrection) {
     const newName = nameCorrection[1].trim();
     await updateUserMetadata(user.id, {
@@ -413,44 +350,48 @@ async function handleCollectIndustry(user, message) {
     return STATES.WEB_COLLECT_INDUSTRY;
   }
 
-  // If the user asks the bot to figure it out OR tries to skip (skip/none/nah/
-  // whatever/you pick), infer from conversation context. Industry drives
-  // template selection, so we can't just store "skip" — we either infer a
-  // real value or fall back to a sensible generic.
-  const inferPhrases = /^(?:skip|none|nah|nope|no\s*idea|whatever|you\s*(?:pick|decide|choose)|your\s*call|up\s*to\s*you|dunno)\b|figure.?it.?out|you.?tell.?me|i.?don.?t.?know|idk|from.?(the|my).?(idea|description|above|prev)|you.?already.?know|can.?t.?figure|same.?as/i;
-  if (inferPhrases.test(industry)) {
-    let inferredValue = '';
-    try {
-      const history = await getConversationHistory(user.id, 10);
-      const websiteData = user.metadata?.websiteData || {};
-      const context = history.map(m => `${m.role}: ${m.message_text}`).join('\n');
-      const inferred = await generateResponse(
-        `Based on the conversation below and the business name "${websiteData.businessName || ''}", determine the most appropriate industry/niche for this business. Return ONLY the industry name (1-3 words, e.g. "Education", "Poetry & Literature", "Food & Beverage"). No explanation. If the conversation genuinely doesn't hint at an industry, return exactly: unknown.\n\nConversation:\n${context}`,
-        [{ role: 'user', content: industry }],
-        { userId: user.id, operation: 'webdev_industry_infer' }
-      );
-      inferredValue = (inferred || '').trim().replace(/^["']|["']$/g, '');
-    } catch (error) {
-      logger.error('Industry inference error:', error);
-    }
+  // LLM-first extraction. The extractor fast-paths clean 1-3 word answers
+  // through without an LLM call; everything else (prose, delegation,
+  // compound phrases) gets normalized to a clean industry label.
+  const websiteData = user.metadata?.websiteData || {};
+  let industry = null;
+  let announcedByFallback = false;
 
-    if (inferredValue && inferredValue.length > 1 && !/^unknown$/i.test(inferredValue)) {
-      industry = inferredValue;
-      await sendTextMessage(user.phone_number, `Got it — I'll go with *${industry}*.`);
-    } else {
-      // Fall back to a safe generic so we can still pick a template and keep
-      // the flow moving. The user can correct it from the confirmation summary.
-      industry = 'General Business';
-      await sendTextMessage(
-        user.phone_number,
-        "No worries — I'll go with a general business setup. You can tell me the industry later from the summary if you want to change it."
-      );
-    }
+  try {
+    const history = await getConversationHistory(user.id, 10);
+    const recentConversation = history.map((m) => `${m.role}: ${m.message_text}`).join('\n');
+    industry = await extractIndustry(rawInput, {
+      businessName: websiteData.businessName,
+      recentConversation,
+      userId: user.id,
+    });
+  } catch (err) {
+    logger.error('Industry extraction error:', err.message);
   }
 
-  const websiteData = { ...(user.metadata?.websiteData || {}), industry };
-  await updateUserMetadata(user.id, { websiteData });
-  user.metadata = { ...(user.metadata || {}), websiteData };
+  // Extractor returns null when the reply was delegation/nonsense AND the
+  // LLM couldn't infer from context. Fall back to a generic so the flow
+  // doesn't stall — the user can fix it from the confirmation summary.
+  if (!industry) {
+    industry = 'General Business';
+    await sendTextMessage(
+      user.phone_number,
+      "No worries, I'll go with a general business setup. You can tell me the industry later from the summary if you want to change it."
+    );
+    announcedByFallback = true;
+  } else if (/^[\w\s&\-']+$/.test(rawInput.trim()) && rawInput.trim().toLowerCase() === industry.toLowerCase()) {
+    // User gave a clean answer the extractor just echoed back. No need to
+    // announce a "corrected" value.
+  } else if (rawInput.trim().toLowerCase() !== industry.toLowerCase()) {
+    // Extractor normalized the reply — tell the user what got saved so they
+    // can catch it if the normalization was off.
+    await sendTextMessage(user.phone_number, `Got it, I'll go with *${industry}*.`);
+    announcedByFallback = true;
+  }
+
+  const merged = { ...websiteData, industry };
+  await updateUserMetadata(user.id, { websiteData: merged });
+  user.metadata = { ...(user.metadata || {}), websiteData: merged };
   await logMessage(user.id, `Industry: ${industry}`, 'assistant');
 
   return smartAdvance(user, message);
@@ -648,7 +589,7 @@ function instagramHandleExampleFor(businessName) {
 }
 
 async function handleCollectServices(user, message) {
-  let servicesText = (message.text || '').trim();
+  const servicesText = (message.text || '').trim();
   if (!servicesText || servicesText.length < 2) {
     await sendTextMessage(
       user.phone_number,
@@ -657,44 +598,48 @@ async function handleCollectServices(user, message) {
     return STATES.WEB_COLLECT_SERVICES;
   }
 
-  // Strip conversational wrappers BEFORE skip/phrase checks so "oh services?
-  // theyre web dev, marketing" becomes "web dev, marketing" and splits cleanly.
-  const stripped = stripConversationalPrefix(servicesText);
-  if (stripped) servicesText = stripped;
-
-  const skipWords = /^(idk|i don'?t know|skip|none|no|n\/a|na|nah|nothing|not sure|no idea|no services|no products|don'?t have any|dont have any)$/i;
-  // Also catch longer phrases like "I don't offer any services" or
-  // "lets just skip it" / "skip for now" / "move on". Bounded to short
-  // messages so a legit service list like "skip-the-dishes, doordash" isn't
-  // mistaken for a skip directive.
-  const skipPhrases = /\b(no services|no products|don'?t (offer|have|provide)|dont (offer|have|provide)|nothing to (list|offer)|not applicable|skip (it|this|that|for now|this one)|lets (just )?skip|let'?s (just )?skip|just skip|move on|next one|pass for now|you (pick|decide|choose)|whatever you (think|want|pick))\b/i;
-  const industry = user.metadata?.websiteData?.industry || '';
+  const wd = user.metadata?.websiteData || {};
+  const industry = wd.industry || '';
   const colors = getColorsForIndustry(industry);
 
-  if (skipWords.test(servicesText) || skipPhrases.test(servicesText)) {
-    const websiteData = { ...(user.metadata?.websiteData || {}), services: [], ...colors };
-    await updateUserMetadata(user.id, { websiteData });
-    user.metadata = { ...(user.metadata || {}), websiteData };
-    await logMessage(user.id, `Services: skipped | Colors auto-assigned for ${industry}`, 'assistant');
-    if (isSalonIndustry(industry)) return startSalonFlow(user);
-    return smartAdvance(user, message, 'No worries — we\'ll use a sensible default.');
+  // LLM-first extraction. The extractor fast-paths clean comma lists through
+  // without an LLM call, normalizes prose like "we just rent trucks" →
+  // ["Truck rental"], and returns an empty array for delegation / skip
+  // phrases. Falls back to a direct comma split if the LLM call fails so
+  // we never silently lose the user's answer.
+  let services = null;
+  try {
+    services = await extractServices(servicesText, {
+      businessName: wd.businessName,
+      industry,
+      userId: user.id,
+    });
+  } catch (err) {
+    logger.warn(`[WEBDEV] extractServices threw: ${err.message}`);
+  }
+  if (services === null) {
+    services = servicesText
+      .split(/\s*,\s*|\s+(?:and|&)\s+/i)
+      .map((s) => s.trim())
+      .filter(Boolean);
   }
 
-  // Split on "," and on natural " and " connectors so "web dev, marketing
-  // and seo" becomes three items, not two.
-  const services = servicesText
-    .split(/\s*,\s*|\s+(?:and|&)\s+/i)
-    .map((s) => s.trim())
-    .filter(Boolean);
-
-  const websiteData = { ...(user.metadata?.websiteData || {}), services, ...colors };
+  const skipped = services.length === 0;
+  const websiteData = { ...wd, services, ...colors };
   await updateUserMetadata(user.id, { websiteData });
   user.metadata = { ...(user.metadata || {}), websiteData };
-  await logMessage(user.id, `Services: ${services.join(', ')} | Colors auto-assigned for ${industry}`, 'assistant');
+  await logMessage(
+    user.id,
+    `Services: ${skipped ? 'skipped' : services.join(', ')} | Colors auto-assigned for ${industry}`,
+    'assistant'
+  );
 
   if (isSalonIndustry(industry)) return startSalonFlow(user);
 
-  return smartAdvance(user, message, `Got it — *${services.slice(0, 4).join(', ')}${services.length > 4 ? '…' : ''}*.`);
+  const ack = skipped
+    ? "No worries, we'll use a sensible default."
+    : `Got it — *${services.slice(0, 4).join(', ')}${services.length > 4 ? '…' : ''}*.`;
+  return smartAdvance(user, message, ack);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -708,9 +653,12 @@ async function handleCollectAgentProfile(user, message) {
   const wd = { ...(user.metadata?.websiteData || {}) };
   const industry = wd.industry || '';
   const colors = getColorsForIndustry(industry);
-  const skipWords = /^(skip|none|no|n\/?a|nah|nope|don'?t (know|have)|dont (know|have)|not sure|idk)$/i;
 
-  if (!raw || skipWords.test(raw)) {
+  // Fast regex + LLM fallback covers both the short "skip / idk" phrasings
+  // and natural prose like "i have no idea about this" / "just use whatever
+  // sounds right" that the regex can't enumerate.
+  const agentQuestion = 'What is your brokerage, years in real estate, and any designations (CRS, ABR, etc.)?';
+  if (await classifyDelegation(raw, agentQuestion)) {
     const merged = {
       ...wd,
       ...colors,
@@ -721,7 +669,7 @@ async function handleCollectAgentProfile(user, message) {
     await updateUserMetadata(user.id, { websiteData: merged });
     user.metadata = { ...(user.metadata || {}), websiteData: merged };
     await logMessage(user.id, 'Agent profile: skipped (using defaults)', 'assistant');
-    return smartAdvance(user, message, 'No problem — we\'ll use sensible defaults.');
+    return smartAdvance(user, message, "No problem, we'll go with solo / no designations. You can add details from the summary later.");
   }
 
   // Regex pre-pass for years (common patterns: "10 years", "10+ years", "a decade").
@@ -1194,7 +1142,6 @@ async function finishSalonFlow(user) {
 async function handleSalonBookingTool(user, message) {
   const text = (message.text || '').trim();
   const wd = { ...(user.metadata?.websiteData || {}) };
-  const noWords = /^(no|none|nope|nah|n\/a|na|skip|don'?t have|dont have|not yet)$/i;
   const urlMatch = text.match(/https?:\/\/\S+/i);
 
   const igExample = instagramHandleExampleFor(wd.businessName);
@@ -1211,7 +1158,14 @@ async function handleSalonBookingTool(user, message) {
     return STATES.SALON_INSTAGRAM;
   }
 
-  if (noWords.test(text)) {
+  // Any form of "no / I don't have one / whatever / idk / haven't got one
+  // yet / I have no idea about this" lands on the built-in booking system.
+  // Regex handles the common phrasings; LLM covers natural prose the regex
+  // inevitably misses. Without the fallback the user stalls in a re-prompt
+  // loop on anything outside the keyword list.
+  const bookingQuestion =
+    'Do you already use a booking tool like Fresha, Booksy, Vagaro, or Calendly for appointments?';
+  if (await classifyDelegation(text, bookingQuestion)) {
     wd.bookingMode = 'native';
     await updateUserMetadata(user.id, { websiteData: wd });
     await logMessage(user.id, 'Booking mode: native', 'assistant');
@@ -1232,18 +1186,31 @@ async function handleSalonBookingTool(user, message) {
 async function handleSalonInstagram(user, message) {
   const text = (message.text || '').trim();
   const wd = { ...(user.metadata?.websiteData || {}) };
-  const skipWords = /^(skip|no|none|n\/a|na|nah|nope|don'?t|dont)$/i;
 
-  if (!skipWords.test(text) && text.length > 0) {
-    // Accept @handle, bare handle, or full URL — normalise to handle.
-    const urlHandle = text.match(/instagram\.com\/([\w.]+)/i);
-    const raw = urlHandle ? urlHandle[1] : text.replace(/^@/, '').split(/\s/)[0];
-    if (raw && /^[\w.]{1,30}$/.test(raw)) {
-      wd.instagramHandle = raw;
-    }
+  // Only accept an obvious handle shape: an instagram.com URL, a @-prefixed
+  // token, or a single bare handle-shaped word. Anything else (delegation,
+  // prose, "i dont have one") is treated as skip. No re-prompt loop.
+  const urlHandle = text.match(/instagram\.com\/([\w.]+)/i);
+  let candidate = null;
+  if (urlHandle) {
+    candidate = urlHandle[1];
+  } else if (/^@[\w.]{3,30}$/.test(text)) {
+    candidate = text.slice(1);
+  } else if (/^[\w.]{3,30}$/.test(text)) {
+    candidate = text;
+  }
+  if (candidate && /^[\w.]{3,30}$/.test(candidate)) {
+    wd.instagramHandle = candidate;
   }
   await updateUserMetadata(user.id, { websiteData: wd });
   await logMessage(user.id, `Instagram: ${wd.instagramHandle || '(skipped)'}`, 'assistant');
+
+  // Announce what got saved so the user knows we moved on.
+  if (wd.instagramHandle) {
+    await sendTextMessage(user.phone_number, `Got it — @${wd.instagramHandle}.`);
+  } else {
+    await sendTextMessage(user.phone_number, `No worries, no Instagram link on the site.`);
+  }
 
   if (wd.bookingMode === 'native') {
     await sendTextMessage(
@@ -1343,7 +1310,9 @@ async function handleSalonServiceDurations(user, message) {
   const text = (message.text || '').trim();
   const wd = { ...(user.metadata?.websiteData || {}) };
   const services = wd.services || [];
-  const useDefault = /^(default|skip|idk|dunno|not sure|30)$/i.test(text);
+  // Delegation ("whatever you think" / "default" / "idk" / etc.) or a bare
+  // "30" both mean "apply the 30min-no-price default to every service."
+  const useDefault = isDelegation(text) || /^30$/.test(text);
   const salonServices = useDefault
     ? services.map((s) => ({ name: s, durationMinutes: 30, priceText: '' }))
     : parseServiceDurations(text, services);
@@ -1354,6 +1323,24 @@ async function handleSalonServiceDurations(user, message) {
     `Salon services: ${salonServices.map((s) => `${s.name} ${s.durationMinutes}m${s.priceText ? ' ' + s.priceText : ''}`).join(', ')}`,
     'assistant'
   );
+
+  // Announce what we picked so the user isn't left wondering what got saved.
+  if (useDefault) {
+    await sendTextMessage(
+      user.phone_number,
+      `Got it, I'll set every service to *30 minutes with no price listed*. You can tweak durations and prices later from the summary.`
+    );
+  } else {
+    const preview = salonServices
+      .slice(0, 3)
+      .map((s) => `${s.name} ${s.durationMinutes}m${s.priceText ? ' ' + s.priceText : ''}`)
+      .join(', ');
+    await sendTextMessage(
+      user.phone_number,
+      `Got it — ${preview}${salonServices.length > 3 ? '…' : ''}.`
+    );
+  }
+
   return finishSalonFlow(user);
 }
 
@@ -1424,7 +1411,7 @@ function parseContactFields(text) {
   // string, so prose like "address is X email Y@Z.com phone 555" splits
   // cleanly into the three fields instead of collapsing into the address.
   const labeledAddressMatch = text.match(
-    /(?:address|location|addr)\s*[:\-]?\s*([^\n]+?)(?=\s*(?:email|e-?mail|phone|tel|mobile)\b|$)/i
+    /(?:address|location|addr)\s*[:\-=]?\s*([^\n]+?)(?=\s*(?:email|e-?mail|phone|tel|mobile|contact)\b|$)/i
   );
 
   // Clean a captured address: strip a leading copula/separator that sneaks in
@@ -1435,23 +1422,41 @@ function parseContactFields(text) {
     v
       .replace(/^(?:is|are|=|:|-|at|of|for)\s+/i, '')
       .replace(/\s+(?:and|plus)\s*$/i, '')
-      .replace(/[,;.\s]+$/, '')
+      .replace(/[,;.\s=:\-]+$/, '')
       .trim();
+
+  // Reject addresses that look like leftover junk from a labeled message
+  // (e.g. "contact =", "email", "phone"). An address worth keeping has at
+  // least one digit OR a recognizable street keyword OR is a reasonable
+  // length of actual words (≥8 chars).
+  const isPlausibleAddress = (v) => {
+    if (!v) return false;
+    if (/\d/.test(v)) return true;
+    if (/\b(?:st|street|ave|avenue|road|rd|blvd|boulevard|lane|ln|drive|dr|way|plaza|suite|apt|floor|block|sector|phase)\b/i.test(v)) return true;
+    if (v.length >= 8 && /[a-zA-Z]/.test(v)) return true;
+    return false;
+  };
 
   let addressValue = '';
   if (labeledAddressMatch) {
     addressValue = stripAddressSeparator(labeledAddressMatch[1].trim());
   } else {
     // Fallback: strip the matched email/phone and any leftover label words, return the rest.
+    // Expanded label list includes "contact" (common when users write
+    // "contact = 555-1234" to mean phone) and accepts = as a separator too.
     addressValue = text
       .replace(emailMatch?.[0] || '', '')
       .replace(phoneMatch?.[0] || '', '')
-      .replace(/\b(email|e-?mail|phone|tel|mobile|address|location|addr)\s*[:\-]?/gi, '')
+      .replace(/\b(email|e-?mail|phone|tel|mobile|contact|contact\s*number|address|location|addr)\s*[:\-=]?/gi, '')
       .replace(/[,\n\r]+/g, ' ')
       .replace(/\s{2,}/g, ' ')
       .trim();
     addressValue = stripAddressSeparator(addressValue);
   }
+
+  // Final junk filter: if what we captured doesn't look like a real address,
+  // discard it rather than showing "contact =" in the summary.
+  if (!isPlausibleAddress(addressValue)) addressValue = '';
 
   return {
     contactEmail: emailMatch?.[0] || '',
@@ -1470,6 +1475,33 @@ async function handleCollectContact(user, message) {
   // the LAST colon in the message and misreads "+123456789056" as the
   // address value.
   const labelCount = (contactText.match(/\b(?:email|e-?mail|phone|tel|mobile|address|location|addr)\s*[:\-]/gi) || []).length;
+
+  // Delegation path: the user doesn't want to provide contact info and is
+  // saying so in a non-literal way ("surprise me", "just add something
+  // random", "make something up", "whatever you think", etc.). Store empty
+  // contact (site will just omit the contact line) and move on.
+  // Fast regex first; LLM fallback for prose the regex can't enumerate.
+  // Gate the check with a cheap "does this LOOK like real contact info?" test
+  // so we don't waste an LLM call on obvious emails/phones/addresses.
+  const hasContactSignal =
+    /@/.test(contactText) ||
+    /\d{3,}/.test(contactText) ||
+    /\b(?:st|street|ave|avenue|road|rd|blvd|boulevard|lane|ln|drive|dr|way|plaza|suite|apt|floor|block|sector|phase)\b/i.test(contactText);
+  if (contactText && labelCount === 0 && !hasContactSignal) {
+    const contactQuestion = 'What contact info do you want on the site? (email, phone, and/or address)';
+    const delegated = await classifyDelegation(contactText, contactQuestion);
+    if (delegated) {
+      const wd = { ...(user.metadata?.websiteData || {}), contactEmail: '', contactPhone: '', contactAddress: '' };
+      await updateUserMetadata(user.id, { websiteData: wd });
+      user.metadata = { ...(user.metadata || {}), websiteData: wd };
+      await sendTextMessage(
+        user.phone_number,
+        `No problem, I'll leave contact details off the site. You can add them later from the summary.`
+      );
+      await logMessage(user.id, 'Contact: skipped via delegation', 'assistant');
+      return showConfirmSummary(user);
+    }
+  }
 
   // Edit-intent guard: if the user is trying to correct an earlier field
   // ("actually the name should be Glow Salon"), update that field and bounce

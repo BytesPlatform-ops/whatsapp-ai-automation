@@ -8,6 +8,7 @@ const { generateResponse } = require('../llm/provider');
 const { INTENT_CLASSIFIER_PROMPT, GENERAL_CHAT_PROMPT } = require('../llm/prompts');
 const { transcribeAudio } = require('../llm/transcribe');
 const { maybeUpdateSummary } = require('./summaryManager');
+const { isDelegation } = require('../config/smartDefaults');
 
 /**
  * Identify which product an ad is promoting based on the ad body text.
@@ -242,14 +243,12 @@ async function classifyIntent(state, text, userId) {
   // Very short replies (< 4 chars) almost always answers, never menu requests
   if (t.length < 4) return 'answer';
   // Short messages that clearly express skip / delegate / acceptance intent.
-  // These are still answers to the current question — not menu/exit — so
-  // short-circuit before the LLM classifier has a chance to misroute them.
-  if (
-    t.length <= 40 &&
-    /\b(?:skip(?:\s*(?:it|this|that|for\s*now))?|pass(?:\s*for\s*now)?|move\s*on|next\s*one|just\s*move|leave\s*it|forget\s*it|don'?t\s*have|none\s*for\s*now|no\s*(?:services|idea)|idk|dunno|not\s*sure|whatever(?:\s*you\s*(?:think|want|pick))?|you\s*(?:pick|decide|choose)|your\s*call|up\s*to\s*you|default|defaults|standard|typical|same\s*as|usual)\b/i.test(t)
-  ) {
-    return 'answer';
-  }
+  // Single source of truth is smartDefaults.isDelegation — covers "surprise
+  // me", "just add something random", "idk you pick", "i dont have it yet",
+  // etc. Without this short-circuit the LLM intent classifier sometimes
+  // misroutes them as "question" or "exit" and the user gets dumped out of
+  // their flow mid-step.
+  if (isDelegation(t)) return 'answer';
 
   try {
     const prompt = INTENT_CLASSIFIER_PROMPT.replace('{{CURRENT_QUESTION}}', currentQuestion);
@@ -274,7 +273,38 @@ async function routeMessage(message) {
   // Pin the inbound phone_number_id into the async context so every
   // sendTextMessage / sendInteractiveButtons / etc. inside this turn replies
   // from the same business number the user messaged.
-  return runWithContext({ channel, phoneNumberId: message.phoneNumberId || null }, () => _routeMessage(message));
+  return runWithContext({ channel, phoneNumberId: message.phoneNumberId || null }, async () => {
+    // First attempt.
+    try {
+      return await _routeMessage(message);
+    } catch (err) {
+      logger.warn(`[ROUTER] First attempt failed for ${message.from}: ${err.message}. Retrying once.`);
+      // Brief pause so a transient LLM/DB timeout has a chance to clear.
+      await new Promise((r) => setTimeout(r, 600));
+    }
+
+    // Second attempt — most silent stalls are transient (slow LLM, brief
+    // network blip) and succeed on retry. If this one works, the user gets
+    // a proper reply to their actual message instead of a generic "try
+    // again" nudge.
+    try {
+      return await _routeMessage(message);
+    } catch (err) {
+      logger.error(`[ROUTER] Retry also failed for ${message.from}:`, {
+        message: err.message,
+        stack: err.stack?.split('\n').slice(0, 5).join('\n'),
+      });
+      // Only now, after two honest attempts, surface a user-visible nudge.
+      try {
+        await sendTextMessage(
+          message.from,
+          "Hmm, something glitched on my end. Try sending that again in a sec?"
+        );
+      } catch {
+        // If even the nudge fails, we're truly stuck — just log.
+      }
+    }
+  });
 }
 
 async function _routeMessage(message) {
@@ -470,15 +500,21 @@ async function _routeMessage(message) {
     }
 
     if (intent === 'question') {
-      // Answer their question, then bring them back to where they were
+      // Answer their question, then bring them back to where they were.
+      // If the LLM call fails, skip the aside and just re-prompt — better
+      // than stalling silently.
       const currentQuestion = STATE_QUESTION[user.state];
-      const aside = await generateResponse(
-        GENERAL_CHAT_PROMPT,
-        [{ role: 'user', content: text }],
-        { userId: user.id, operation: 'off_topic_aside' }
-      );
-      await sendTextMessage(user.phone_number, aside);
-      await logMessage(user.id, aside, 'assistant');
+      try {
+        const aside = await generateResponse(
+          GENERAL_CHAT_PROMPT,
+          [{ role: 'user', content: text }],
+          { userId: user.id, operation: 'off_topic_aside' }
+        );
+        await sendTextMessage(user.phone_number, aside);
+        await logMessage(user.id, aside, 'assistant');
+      } catch (err) {
+        logger.warn(`[ROUTER] Off-topic aside LLM call failed for ${from}: ${err.message}`);
+      }
 
       // Remind them of the current step
       await sendWithMenuButton(

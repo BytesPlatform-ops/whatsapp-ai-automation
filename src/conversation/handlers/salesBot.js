@@ -65,6 +65,25 @@ async function handleSalesBot(user, message) {
     return STATES.SALES_CHAT;
   }
 
+  // Un-stick: if websiteDemoTriggered was set in a previous turn but the
+  // demo never actually produced a preview (no site deployed), clear the
+  // flag so the next trigger attempt can fire. Without this, the LLM
+  // sometimes says "Here's your preview!" with no link — the user is
+  // trapped because the gate thinks the demo already ran.
+  if (user.metadata?.websiteDemoTriggered) {
+    try {
+      const { getLatestSite } = require('../../db/sites');
+      const latest = await getLatestSite(user.id);
+      if (!latest || !latest.preview_url) {
+        logger.info(`[SALES] websiteDemoTriggered=true but no preview_url for ${user.phone_number} — un-sticking the flag`);
+        await updateUserMetadata(user.id, { websiteDemoTriggered: false });
+        user.metadata = { ...(user.metadata || {}), websiteDemoTriggered: false };
+      }
+    } catch (err) {
+      logger.warn(`[SALES] Stuck-flag check failed: ${err.message}`);
+    }
+  }
+
   // Detect "not interested" and stop follow-ups (not a closed lead — just opted out of follow-ups)
   const notInterested = /\b(not interested|no thanks|stop messaging|leave me alone|don'?t contact|don'?t message|unsubscribe|stop contacting|i'?m good|no need|pass|not for me)\b/i.test(text);
   if (notInterested && !user.metadata?.followupOptOut) {
@@ -261,6 +280,31 @@ async function handleSalesBot(user, message) {
   ) {
     websiteDemoTrigger = true;
     logger.info(`[SALES] Fallback: website demo trigger detected for ${user.phone_number}`);
+  }
+
+  // Hard-commit fallback: catches the case where the bot says it's building
+  // / about to build / has built a preview but forgets to emit the
+  // [TRIGGER_WEBSITE_DEMO] tag. Covers three commitment shapes:
+  //   1. Present-tense active: "Building a preview for X", "spinning up now"
+  //   2. Near-future commit:   "I'll build a preview", "let me spin one up"
+  //   3. Past-tense claim:     "here's your preview" (LLM hallucinating done)
+  // Without catching all three the user can stall silently while the LLM
+  // just narrates a site that was never actually generated.
+  const commitPatterns = [
+    /\b(building|creating|generating|spinning\s*up|preparing|prepping|setting\s*up|making|putting\s*together)\s.{0,50}\b(website|site|page|landing|preview)\b/i,
+    /\b(?:i'?ll|let\s*me|going\s*to|gonna|let'?s)\s+(?:build|create|make|spin\s*up|put\s*together|generate|set\s*up)\s.{0,50}\b(?:website|site|page|landing|preview)\b/i,
+    /\bhere(?:'?s|\s+is)\s+(?:your|the)\s+(?:\w+\s+){0,4}(?:preview|site|website|landing)\b/i,
+    /\b(?:preview|site|website)\s+is\s+(?:ready|built|done|live)\b/i,
+  ];
+  if (
+    !websiteDemoTrigger &&
+    !user.metadata?.websiteDemoTriggered &&
+    !chatbotDemoTrigger &&
+    !isChatbotContext &&
+    commitPatterns.some((re) => re.test(cleanText))
+  ) {
+    websiteDemoTrigger = true;
+    logger.info(`[SALES] Hard-commit fallback: LLM promised/claimed a preview without emitting trigger tag`);
   }
 
   // Ad generator fallback: detect ad intent in conversation and trigger when user agrees
@@ -540,11 +584,15 @@ async function handleSalesBot(user, message) {
     //   1. Structured trigger tag (LLM just extracted it from conversation).
     //   2. metadata.websiteData.* (hydrated from prior sales-chat turns).
     //   3. Other flow metadata (adData / logoData / chatbotData) for name only.
+    //   4. LLM rescue — pull the name out of recent conversation. Catches
+    //      the case where the user gave a short business name ("Noman ki
+    //      dukaan") that didn't trip hydrate's looksRich gate, AND the LLM
+    //      triggered the demo without filling the name in the tag.
     // Heuristic message-scanning is gone — it used to pick arbitrary phrases
     // like "do what you think is goo" as business names.
     const wd = user.metadata?.websiteData || {};
 
-    const businessName =
+    let businessName =
       websiteDemoBusinessName ||
       wd.businessName ||
       user.metadata?.adData?.businessName ||
@@ -557,6 +605,30 @@ async function handleSalesBot(user, message) {
     const services =
       (websiteDemoServices && websiteDemoServices.length ? websiteDemoServices : null) ||
       (Array.isArray(wd.services) && wd.services.length ? wd.services : null);
+
+    // Rescue: one cheap LLM call to pull the business name out of recent
+    // turns before giving up and re-asking. The user almost always said it
+    // earlier; we just couldn't cheaply regex it out.
+    if (!businessName) {
+      try {
+        const convo = messages
+          .slice(-10)
+          .map((m) => `${m.role}: ${m.content}`)
+          .join('\n');
+        const rescue = await generateResponse(
+          `Extract the business name the user mentioned in this short conversation. Return ONLY the business name as plain text — no quotes, no punctuation, no "the business name is". If the user has NOT mentioned a business name yet, return exactly: unknown.\n\n${convo}`,
+          [{ role: 'user', content: '[extract business name]' }],
+          { userId: user.id, operation: 'webdev_trigger_name_rescue' }
+        );
+        const clean = (rescue || '').trim().replace(/^["']|["']$/g, '');
+        if (clean && clean.length > 1 && clean.length < 60 && !/^unknown$/i.test(clean)) {
+          businessName = clean;
+          logger.info(`[SALES] Rescued business name from conversation: "${businessName}"`);
+        }
+      } catch (err) {
+        logger.warn(`[SALES] Business-name rescue failed: ${err.message}`);
+      }
+    }
 
     if (!businessName) {
       await sendTextMessage(user.phone_number, "Let's build it! What's your business name?");

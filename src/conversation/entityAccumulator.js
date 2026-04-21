@@ -176,8 +176,127 @@ async function hydrateWebsiteData(user, text) {
   return { websiteData: merged, captured, updatedUser };
 }
 
+/**
+ * Extract a clean, normalized INDUSTRY label from a user reply. LLM-first.
+ * Fast-path short clean answers ("Tech", "Food & Beverage") through without
+ * an LLM call; everything else gets normalized by the LLM so "we just rent
+ * trucks" → "Trucking" and "i think its tech" → "Tech".
+ *
+ * `context` may include { businessName, recentConversation } to help the LLM
+ * disambiguate. Returns null if the reply was empty / truly no signal / the
+ * LLM couldn't confidently extract an industry.
+ */
+async function extractIndustry(userReply, context = {}) {
+  const raw = String(userReply || '').trim();
+  if (!raw) return null;
+
+  // Fast path: clean 1-3 word answer already in good shape. Saves an LLM
+  // call for the common "Tech" / "Barbershop" / "Real Estate" replies.
+  const clean1to3 = /^[A-Za-z][A-Za-z\s&\-']{0,28}$/;
+  const fillerWords = /\b(?:we|i|its|it'?s|is|are|we'?re|im|i'?m|just|only|mainly|basically|probably|maybe|sort\s*of|kind\s*of|think|guess)\b/i;
+  if (clean1to3.test(raw) && raw.split(/\s+/).length <= 3 && !fillerWords.test(raw)) {
+    return raw;
+  }
+
+  const businessLine = context.businessName ? `Business name: "${context.businessName}"\n` : '';
+  const historyLine = context.recentConversation
+    ? `Recent conversation (most recent last):\n${context.recentConversation}\n\n`
+    : '';
+
+  const prompt = `${businessLine}${historyLine}The user was asked "What industry are you in?" and replied: "${raw}"
+
+Extract the industry as a clean 1-3 word label (examples: "Tech", "Food & Beverage", "Real Estate", "HVAC", "Barbershop", "Trucking", "Photography").
+
+Rules:
+- Normalize, don't echo. "we just rent trucks" → "Trucking". "i think its tech" → "Tech". "oh we do AI stuff" → "AI / Software".
+- If the user is delegating ("whatever", "you pick", "idk"), use the business name + conversation context to infer. If that's also not enough, return: unknown
+- If the reply isn't an industry at all (nonsense, "?", greeting), return: unknown
+
+Return ONLY the industry label or the single word "unknown". No quotes, no explanation, no punctuation.`;
+
+  try {
+    const response = await generateResponse(
+      prompt,
+      [{ role: 'user', content: raw }],
+      { userId: context.userId, operation: 'industry_extract' }
+    );
+    const cleaned = (response || '').trim().replace(/^["']|["'.!?]$/g, '').trim();
+    if (!cleaned || /^unknown$/i.test(cleaned)) return null;
+    // Sanity cap — industries are short labels.
+    if (cleaned.length > 40) return null;
+    return cleaned;
+  } catch (err) {
+    logger.warn(`[ENTITY-ACC] extractIndustry failed: ${err.message}`);
+    return null;
+  }
+}
+
+/**
+ * Extract a clean, normalized services array from a user reply. LLM-first.
+ * Fast-path obviously-clean comma-separated lists (no prose) through without
+ * an LLM call. Everything else gets normalized so "we just rent trucks" →
+ * ["Truck rental"], "oh we do haircuts, nails, and also facials" →
+ * ["Haircut", "Nails", "Facials"].
+ *
+ * Returns an empty array for delegation ("whatever", "skip"), a non-empty
+ * array for real service lists, or null if the LLM failed.
+ */
+async function extractServices(userReply, context = {}) {
+  const raw = String(userReply || '').trim();
+  if (!raw) return [];
+
+  // Fast path: obviously-clean comma-separated list — no personal pronouns,
+  // no filler. "haircut, nails, facials" goes straight through.
+  const fillerWords = /\b(?:we|i|its|it'?s|we'?re|im|i'?m|our|my|the|a|an|just|only|basically|mainly|mostly|offer|do|provide|sell|make|rent|serve|help)\b/i;
+  const allSimpleTokens = raw.split(/\s*,\s*/).every((t) => t.trim().length >= 2 && t.trim().length < 40);
+  if (
+    raw.length <= 120 &&
+    /[a-zA-Z]/.test(raw) &&
+    raw.includes(',') &&
+    !fillerWords.test(raw) &&
+    allSimpleTokens
+  ) {
+    return raw.split(/\s*,\s*/).map((t) => t.trim()).filter(Boolean);
+  }
+
+  const businessLine = context.businessName ? `Business name: "${context.businessName}"\n` : '';
+  const industryLine = context.industry ? `Industry: "${context.industry}"\n` : '';
+
+  const prompt = `${businessLine}${industryLine}The user was asked "What services or products do you offer?" and replied: "${raw}"
+
+Extract the services as a JSON array of clean, normalized service names.
+
+Rules:
+- Normalize, don't echo the user's prose. "we just rent trucks" → ["Truck rental"]. "we offer haircut, nails and facials" → ["Haircut", "Nails", "Facials"]. "hair cuts and transplant" → ["Haircut", "Hair transplant"].
+- Drop filler words ("we do", "we offer", "basically", "just", "also").
+- If the user is delegating ("whatever", "skip", "idk", "you pick"), return an empty array: []
+- If the reply doesn't describe services at all (nonsense, greeting), return an empty array: []
+
+Return ONLY a JSON array like ["Service 1", "Service 2"] or []. No commentary.`;
+
+  try {
+    const response = await generateResponse(
+      prompt,
+      [{ role: 'user', content: raw }],
+      { userId: context.userId, operation: 'services_extract' }
+    );
+    const match = (response || '').match(/\[[\s\S]*?\]/);
+    if (!match) return [];
+    const parsed = JSON.parse(match[0]);
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .map((s) => String(s).trim().replace(/^["']|["']$/g, ''))
+      .filter((s) => s && s.length < 80);
+  } catch (err) {
+    logger.warn(`[ENTITY-ACC] extractServices failed: ${err.message}`);
+    return null;
+  }
+}
+
 module.exports = {
   extractWebsiteFields,
   mergeWebsiteFields,
   hydrateWebsiteData,
+  extractIndustry,
+  extractServices,
 };
