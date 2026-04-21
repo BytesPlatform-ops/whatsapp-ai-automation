@@ -10,6 +10,7 @@ const adminRoutes = require('./admin/routes');
 const { startFollowupScheduler } = require('./followup/scheduler');
 const chatbotApiRoutes = require('./chatbot/api');
 const chatbotPageRoutes = require('./chatbot/pages/routes');
+const leadRoutes = require('./leads/routes');
 const { startChatbotScheduler } = require('./chatbot/jobs/scheduler');
 const { startInstagramTokenRefreshScheduler } = require('./jobs/instagramTokenRefresh');
 const { startUpsellScheduler } = require('./jobs/upsellScheduler');
@@ -64,6 +65,11 @@ app.use('/', calendlyRoutes);
 
 // Salon booking API — endpoints are public (called from static salon sites on Netlify).
 app.use('/', bookingRoutes);
+
+// Lead-capture API — contact forms on generated sites POST here, we save
+// + email the owner. Public on purpose (called from random *.netlify.app
+// hostnames); endpoint-level rate-limit and honeypot handle spam.
+app.use('/', leadRoutes);
 
 // Messenger & Instagram webhook routes
 const messengerRoutes = require('./webhook/messengerRoutes');

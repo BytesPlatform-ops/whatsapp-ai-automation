@@ -18,8 +18,8 @@ function generateContactPage(c) {
     </section>`;
 
   const form = `
-    <form ${netlifyFormAttrs('quote')}>
-      ${netlifyHiddenFields('quote')}
+    <form ${netlifyFormAttrs('quote', c.siteId)}>
+      ${netlifyHiddenFields('quote', '/contact')}
       <div class="form-grid">
         <div>
           <label class="form-label" for="name">Your Name *</label>

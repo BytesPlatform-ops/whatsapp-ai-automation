@@ -3,6 +3,17 @@ const crypto = require('crypto');
 const { env } = require('../config/env');
 const { logger } = require('../utils/logger');
 const salonTemplate = require('./templates/salon');
+
+// Base URL for the Pixie lead-capture endpoint — generated generic sites
+// POST their contact forms here. Overrideable via env so staging/local
+// deploys can point at a tunnel URL instead of production.
+const LEAD_API_BASE = process.env.PUBLIC_API_BASE_URL || env.chatbot?.baseUrl || '';
+
+function genericLeadAction(c) {
+  return LEAD_API_BASE && c?.siteId
+    ? `${LEAD_API_BASE}/public/leads/${c.siteId}`
+    : '/thank-you/';
+}
 const { renderActivationBanner } = require('./activationBanner');
 
 const NETLIFY_API = 'https://api.netlify.com/api/v1';
@@ -729,9 +740,10 @@ function generateContactPage(c) {
         <h2 style="font-size:clamp(28px,4vw,40px);font-weight:800;color:#1a1a2e;letter-spacing:-1px;margin-bottom:12px">Send Us a Message</h2>
         <p style="font-size:16px;color:#888">Fill out the form below and we'll get back to you soon.</p>
       </div>
-      <form name="contact" method="POST" data-netlify="true" netlify-honeypot="bot-field" class="rv d2" onsubmit="event.preventDefault();const f=this;const b=f.querySelector('button');b.disabled=true;b.innerHTML='Sending...';fetch('/',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams(new FormData(f)).toString()}).then(()=>{b.innerHTML='Message Sent! &#10003;';b.style.background='#10b981';f.reset()}).catch(()=>{b.innerHTML='Error — try again';b.style.background='#ef4444';b.disabled=false})" style="display:flex;flex-direction:column;gap:20px">
-        <input type="hidden" name="form-name" value="contact">
-        <p style="display:none"><label>Don't fill this out: <input name="bot-field"></label></p>
+      <form name="contact" method="POST" action="${genericLeadAction(c)}" data-pixie-form="1" class="rv d2" onsubmit="event.preventDefault();const f=this;const b=f.querySelector('button');b.disabled=true;b.innerHTML='Sending...';fetch(f.action,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams(new FormData(f)).toString()}).then(r=>r.json()).then(r=>{if(!r||r.ok===false)throw new Error('submit-failed');b.innerHTML='Message Sent! &#10003;';b.style.background='#10b981';f.reset()}).catch(()=>{b.innerHTML='Error — try again';b.style.background='#ef4444';b.disabled=false})" style="display:flex;flex-direction:column;gap:20px">
+        <input type="hidden" name="form_name" value="contact">
+        <input type="hidden" name="source_page" value="/contact">
+        <input type="hidden" name="_honey" value="" tabindex="-1" autocomplete="off" style="position:absolute;left:-9999px;width:1px;height:1px;opacity:0;pointer-events:none" aria-hidden="true">
         <div class="mobile-1col" style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
           <div><label style="display:block;font-size:14px;font-weight:600;color:#333;margin-bottom:8px">First Name</label><input type="text" name="first-name" required placeholder="John" style="width:100%;padding:14px 18px;border:2px solid #eee;border-radius:12px;font-size:15px;font-family:inherit;transition:all 0.3s;outline:none" onfocus="this.style.borderColor='${pc}';this.style.boxShadow='0 0 0 4px ${pc}15'" onblur="this.style.borderColor='#eee';this.style.boxShadow='none'"></div>
           <div><label style="display:block;font-size:14px;font-weight:600;color:#333;margin-bottom:8px">Last Name</label><input type="text" name="last-name" required placeholder="Doe" style="width:100%;padding:14px 18px;border:2px solid #eee;border-radius:12px;font-size:15px;font-family:inherit;transition:all 0.3s;outline:none" onfocus="this.style.borderColor='${pc}';this.style.boxShadow='0 0 0 4px ${pc}15'" onblur="this.style.borderColor='#eee';this.style.boxShadow='none'"></div>

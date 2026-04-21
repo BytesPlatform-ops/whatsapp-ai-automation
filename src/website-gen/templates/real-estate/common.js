@@ -743,16 +743,25 @@ function getRealEstateScript() {
   var io=new IntersectionObserver(function(entries){entries.forEach(function(e){if(e.isIntersecting){e.target.classList.add('is-visible');io.unobserve(e.target)}})},{threshold:0.1,rootMargin:'0px 0px -60px 0px'});
   document.querySelectorAll('.rv').forEach(function(el){io.observe(el)});
 
-  // Quote/CMA form — AJAX submit with redirect to thank-you
-  document.querySelectorAll('form[data-netlify]').forEach(function(form){
+  // Quote/CMA form — AJAX submit to the Pixie lead-capture endpoint.
+  // Reads the success-redirect target from the data-thank-you attribute
+  // so the CMA form lands on /thank-you-cma/ while the consultation form
+  // lands on /thank-you/.
+  document.querySelectorAll('form[data-pixie-form]').forEach(function(form){
     form.addEventListener('submit',function(ev){
       ev.preventDefault();
       var btn=form.querySelector('button[type="submit"]');
-      if(btn){btn.disabled=true;btn.style.opacity='0.7';var orig=btn.innerHTML;btn.innerHTML='Sending...'}
+      if(btn){btn.disabled=true;btn.style.opacity='0.7';btn.innerHTML='Sending...'}
       var data=new FormData(form),params=new URLSearchParams();
       data.forEach(function(v,k){params.append(k,v)});
-      var done=function(){window.location.href=form.getAttribute('action')||'/thank-you/'};
-      fetch('/',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:params.toString()}).then(done).catch(function(){setTimeout(done,400)});
+      var thankYouPath=form.getAttribute('data-thank-you')||'/thank-you/';
+      var endpoint=form.getAttribute('action');
+      var redirect=function(){window.location.href=thankYouPath};
+      var showError=function(){if(btn){btn.disabled=false;btn.style.opacity='1';btn.innerHTML='Try again'}};
+      fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded','Accept':'application/json'},body:params.toString()})
+        .then(function(r){return r.json().catch(function(){return {}})})
+        .then(function(json){if(json && json.ok===false){showError();return}redirect()})
+        .catch(function(){setTimeout(redirect,400)});
     });
   });
 
@@ -928,14 +937,26 @@ function getFAB(c) {
   return `<a class="fab" href="${esc(url)}"${isExternal ? ' target="_blank" rel="noopener"' : ''} aria-label="Schedule a call">${icon('calendar', 22, TOKENS.navy)}</a>`;
 }
 
-// ─── Netlify form attrs ─────────────────────────────────────────────────────
+// ─── Form attrs / hidden fields ─────────────────────────────────────────────
+// Contact-form submissions now POST to the Pixie lead-capture endpoint
+// (/public/leads/:siteId). Function names kept for zero-churn compat.
 
-function netlifyFormAttrs(formName, action) {
-  return `name="${formName}" method="POST" data-netlify="true" data-netlify-honeypot="bot-field" action="${action || '/thank-you/'}"`;
+const { env } = require('../../../config/env');
+const LEAD_API_BASE = process.env.PUBLIC_API_BASE_URL || env.chatbot?.baseUrl || '';
+
+function netlifyFormAttrs(formName, siteId, fallbackAction) {
+  const action = LEAD_API_BASE && siteId
+    ? `${LEAD_API_BASE}/public/leads/${siteId}`
+    : (fallbackAction || '/thank-you/');
+  return `name="${formName}" method="POST" action="${action}" data-pixie-form="1"`;
 }
 
-function netlifyHiddenFields(formName) {
-  return `<input type="hidden" name="form-name" value="${formName}"><p class="form-hidden"><label>Don&#39;t fill this out: <input name="bot-field"></label></p>`;
+function netlifyHiddenFields(formName, sourcePage = '') {
+  return [
+    `<input type="hidden" name="form_name" value="${formName}">`,
+    sourcePage ? `<input type="hidden" name="source_page" value="${esc(sourcePage)}">` : '',
+    `<input type="hidden" name="_honey" value="" tabindex="-1" autocomplete="off" style="position:absolute;left:-9999px;width:1px;height:1px;opacity:0;pointer-events:none" aria-hidden="true">`,
+  ].filter(Boolean).join('');
 }
 
 // ─── JSON-LD Schema ─────────────────────────────────────────────────────────

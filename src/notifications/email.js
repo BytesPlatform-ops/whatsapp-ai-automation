@@ -11,6 +11,13 @@ const FROM = {
   email: env.sendgrid?.fromEmail || 'developer@bytesplatform.com',
   name: env.sendgrid?.fromName || 'Bytes Platform',
 };
+// Lead-notification emails use a Pixie-branded friendly name so owners
+// see "Pixie <developer@bytesplatform.com>" in their inbox instead of
+// the generic team alias.
+const PIXIE_FROM = {
+  email: FROM.email,
+  name: 'Pixie',
+};
 
 /**
  * Send an email via SendGrid. Fails silently with logging.
@@ -192,10 +199,127 @@ async function sendMeetingLinkToLead({ toEmail, leadName, joinUrl, topic, dateSt
   });
 }
 
+/**
+ * Notify a site owner that a visitor filled out their contact form. Sends
+ * under the "Pixie" friendly name so the alert looks branded. Falls back
+ * silently when SendGrid isn't configured (dev environments). The body is
+ * designed to be scannable on mobile — name/email/phone stacked, message
+ * in its own block, Reply button opens the visitor's email with a useful
+ * pre-filled subject.
+ */
+async function sendLeadNotification({ toEmail, businessName, visitor, sourcePage, previewUrl, leadId }) {
+  if (!toEmail) {
+    logger.warn('[EMAIL] sendLeadNotification: no recipient email');
+    return false;
+  }
+  if (!env.sendgrid?.apiKey) {
+    logger.warn('[EMAIL] SendGrid not configured — skipping lead notification');
+    return false;
+  }
+
+  const safeBiz = businessName || 'your website';
+  const safeName = visitor?.name || 'A visitor';
+  const safeEmail = visitor?.email || '';
+  const safePhone = visitor?.phone || '';
+  const safeMessage = visitor?.message || '(no message)';
+  const submittedAt = new Date().toLocaleString('en-US', {
+    dateStyle: 'medium', timeStyle: 'short',
+  });
+
+  const replySubject = encodeURIComponent(`Re: your message to ${safeBiz}`);
+  const replyHref = safeEmail ? `mailto:${safeEmail}?subject=${replySubject}` : null;
+
+  const html = `
+    <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:600px;margin:0 auto;background:#ffffff">
+      <!-- Teal header -->
+      <div style="background:#0F766E;padding:28px 32px;border-radius:12px 12px 0 0">
+        <div style="color:rgba(255,255,255,0.75);font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;margin-bottom:6px">PIXIE · LEAD NOTIFICATION</div>
+        <h1 style="color:#fff;font-size:22px;font-weight:800;margin:0;line-height:1.3">New lead from ${escape(safeBiz)}</h1>
+      </div>
+
+      <!-- Body -->
+      <div style="padding:28px 32px;border:1px solid #e5e7eb;border-top:none;border-radius:0 0 12px 12px">
+
+        <!-- Visitor block -->
+        <div style="margin-bottom:22px">
+          <div style="font-size:11px;font-weight:700;color:#6b7280;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:10px">From</div>
+          <div style="font-size:17px;font-weight:700;color:#0f172a;line-height:1.35">${escape(safeName)}</div>
+          ${safeEmail ? `<div style="margin-top:4px;font-size:14px"><a href="mailto:${escape(safeEmail)}" style="color:#0F766E;text-decoration:none">${escape(safeEmail)}</a></div>` : ''}
+          ${safePhone ? `<div style="margin-top:2px;font-size:14px"><a href="tel:${escape(safePhone.replace(/[^\d+]/g,''))}" style="color:#0F766E;text-decoration:none">${escape(safePhone)}</a></div>` : ''}
+        </div>
+
+        <!-- Message block -->
+        <div style="margin-bottom:22px">
+          <div style="font-size:11px;font-weight:700;color:#6b7280;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:10px">Message</div>
+          <div style="background:#f8fafc;border-left:3px solid #0F766E;border-radius:6px;padding:14px 16px;font-size:15px;color:#1f2937;line-height:1.6;white-space:pre-wrap">${escape(safeMessage)}</div>
+        </div>
+
+        ${replyHref ? `
+        <!-- CTA -->
+        <div style="margin:24px 0 20px">
+          <a href="${replyHref}" style="display:inline-block;background:#25D366;color:#0A1628;padding:12px 24px;border-radius:999px;font-weight:700;text-decoration:none;font-size:15px">Reply to ${escape(safeName.split(' ')[0] || safeName)}</a>
+        </div>` : ''}
+
+        <!-- Meta strip -->
+        <div style="margin-top:28px;padding-top:18px;border-top:1px solid #e5e7eb;font-size:12px;color:#9ca3af;line-height:1.6">
+          <div>Submitted from <strong style="color:#475569">${escape(sourcePage || 'contact form')}</strong> · ${submittedAt}</div>
+          ${previewUrl ? `<div style="margin-top:3px">Site: <a href="${escape(previewUrl)}" style="color:#6b7280">${escape(previewUrl.replace(/^https?:\/\//, ''))}</a></div>` : ''}
+          ${leadId ? `<div style="margin-top:3px">Lead ID: <span style="font-family:monospace;color:#94a3b8">${escape(String(leadId).slice(0, 8))}</span></div>` : ''}
+        </div>
+      </div>
+
+      <!-- Footer -->
+      <div style="padding:16px 32px;text-align:center;font-size:11px;color:#9ca3af">
+        Sent by Pixie · <a href="https://pixiebot.co" style="color:#6b7280;text-decoration:none">pixiebot.co</a>
+      </div>
+    </div>
+  `;
+
+  const text = `New lead from ${safeBiz}\n\n` +
+    `From: ${safeName}\n` +
+    (safeEmail ? `Email: ${safeEmail}\n` : '') +
+    (safePhone ? `Phone: ${safePhone}\n` : '') +
+    `\nMessage:\n${safeMessage}\n\n` +
+    `Submitted: ${submittedAt}\n` +
+    (sourcePage ? `Page: ${sourcePage}\n` : '') +
+    (previewUrl ? `Site: ${previewUrl}\n` : '') +
+    (leadId ? `Lead ID: ${String(leadId).slice(0, 8)}\n` : '') +
+    `\n— Sent by Pixie · pixiebot.co`;
+
+  try {
+    await sgMail.send({
+      to: toEmail,
+      from: PIXIE_FROM,
+      replyTo: safeEmail || undefined,  // Let owner reply directly to the visitor
+      subject: `New lead from ${safeBiz}${safeName && safeName !== 'A visitor' ? ` — ${safeName}` : ''}`,
+      html,
+      text,
+    });
+    logger.info(`[EMAIL] Lead notification sent to ${toEmail} (lead ${leadId || '?'})`);
+    return true;
+  } catch (err) {
+    logger.error(`[EMAIL] Lead notification failed for ${toEmail}:`, err.response?.body || err.message);
+    return false;
+  }
+}
+
+// Minimal HTML-escape so visitor-supplied content can't break the email
+// or inject arbitrary markup. Matches the other escape helpers in the
+// codebase (templates use the same 5-replacement pattern).
+function escape(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 module.exports = {
   sendEmail,
   sendPaymentNotification,
   sendDomainRequestNotification,
   sendUpsellEmail,
   sendMeetingLinkToLead,
+  sendLeadNotification,
 };

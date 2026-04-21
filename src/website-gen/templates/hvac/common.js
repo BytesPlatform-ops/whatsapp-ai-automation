@@ -765,10 +765,12 @@ function getHvacScript() {
   var io=new IntersectionObserver(function(entries){entries.forEach(function(e){if(e.isIntersecting){e.target.classList.add('is-visible');io.unobserve(e.target)}})},{threshold:0.12,rootMargin:'0px 0px -40px 0px'});
   document.querySelectorAll('.rv').forEach(function(el){io.observe(el)});
 
-  // Quote form — AJAX submit with visual feedback + redirect to /thank-you/.
-  // Works both locally (redirects to the static thank-you page) and on Netlify
-  // (POST is captured by Netlify Forms, then we redirect the user).
-  document.querySelectorAll('form[data-netlify]').forEach(function(form){
+  // Quote form — AJAX submit to the Pixie lead-capture endpoint. Parses
+  // the JSON response (ok/false) before redirecting so genuine failures
+  // surface as an error state instead of silently bouncing the visitor
+  // to the thank-you page. Falls back to native form post if JS fails
+  // entirely (old browsers, blocked fetch).
+  document.querySelectorAll('form[data-pixie-form]').forEach(function(form){
     form.addEventListener('submit',function(ev){
       ev.preventDefault();
       var btn=form.querySelector('button[type="submit"]');
@@ -777,13 +779,19 @@ function getHvacScript() {
       var data=new FormData(form);
       var params=new URLSearchParams();
       data.forEach(function(v,k){params.append(k,v)});
-      var done=function(){
-        var target=form.getAttribute('action')||'/thank-you/';
-        window.location.href=target;
+      var thankYouPath=form.getAttribute('data-thank-you')||'/thank-you/';
+      var endpoint=form.getAttribute('action');
+      var redirect=function(){window.location.href=thankYouPath};
+      var showError=function(){
+        if(btn){btn.disabled=false;btn.style.opacity='1';btn.innerHTML='Try again'}
       };
-      fetch('/',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:params.toString()})
-        .then(done)
-        .catch(function(){setTimeout(done,400)});
+      fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded','Accept':'application/json'},body:params.toString()})
+        .then(function(r){return r.json().catch(function(){return {}})})
+        .then(function(json){
+          if(json && json.ok===false){showError();return}
+          redirect();
+        })
+        .catch(function(){setTimeout(redirect,400)});
     });
   });
 
@@ -906,14 +914,30 @@ function getFAB(c) {
   return `<a class="fab" href="tel:${esc(telHref(phone))}" aria-label="Call ${esc(phone)}">${icon('phone', 22, '#fff')}</a>`;
 }
 
-// ─── Netlify form attrs / hidden fields ─────────────────────────────────────
+// ─── Form attrs / hidden fields ─────────────────────────────────────────────
+// Contact-form submissions now POST to the Pixie lead-capture endpoint
+// (/public/leads/:siteId). The endpoint persists to `form_submissions`
+// and fires a SendGrid email to the site owner. Function names kept as
+// `netlifyFormAttrs` / `netlifyHiddenFields` to avoid touching every
+// caller — they're semantic leftovers from the previous Netlify Forms
+// integration.
 
-function netlifyFormAttrs(formName) {
-  return `name="${formName}" method="POST" data-netlify="true" data-netlify-honeypot="bot-field" action="/thank-you/"`;
+const { env } = require('../../../config/env');
+const LEAD_API_BASE = process.env.PUBLIC_API_BASE_URL || env.chatbot?.baseUrl || '';
+
+function netlifyFormAttrs(formName, siteId) {
+  const action = LEAD_API_BASE && siteId
+    ? `${LEAD_API_BASE}/public/leads/${siteId}`
+    : '/thank-you/';
+  return `name="${formName}" method="POST" action="${action}" data-pixie-form="1"`;
 }
 
-function netlifyHiddenFields(formName) {
-  return `<input type="hidden" name="form-name" value="${formName}"><p class="form-hidden"><label>Don&#39;t fill this out: <input name="bot-field"></label></p>`;
+function netlifyHiddenFields(formName, sourcePage = '') {
+  return [
+    `<input type="hidden" name="form_name" value="${formName}">`,
+    sourcePage ? `<input type="hidden" name="source_page" value="${esc(sourcePage)}">` : '',
+    `<input type="hidden" name="_honey" value="" tabindex="-1" autocomplete="off" style="position:absolute;left:-9999px;width:1px;height:1px;opacity:0;pointer-events:none" aria-hidden="true">`,
+  ].filter(Boolean).join('');
 }
 
 // ─── JSON-LD Schema ─────────────────────────────────────────────────────────

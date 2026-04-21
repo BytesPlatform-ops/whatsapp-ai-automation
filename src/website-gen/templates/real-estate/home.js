@@ -226,8 +226,8 @@ function generateHomePage(c) {
         </div>
         <div class="valuation-card rv">
           <h3>Request your free CMA</h3>
-          <form ${netlifyFormAttrs('valuation', '/thank-you-cma/')}>
-            ${netlifyHiddenFields('valuation')}
+          <form ${netlifyFormAttrs('valuation', c.siteId, '/thank-you-cma/')} data-thank-you="/thank-you-cma/">
+            ${netlifyHiddenFields('valuation', '/')}
             <div class="form-grid">
               <div class="form-row-full">
                 <label class="form-label" for="v-address">Property Address</label>

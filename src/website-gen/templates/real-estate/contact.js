@@ -56,8 +56,8 @@ function generateContactPage(c) {
             <span class="eyebrow">Send a Message</span>
             <h2 class="h2" style="margin-top:12px">Tell me what you&apos;re looking for.</h2>
             <span class="bar-accent bar-accent-l"></span>
-            <form ${netlifyFormAttrs('consultation')} style="margin-top:32px">
-              ${netlifyHiddenFields('consultation')}
+            <form ${netlifyFormAttrs('consultation', c.siteId)} style="margin-top:32px">
+              ${netlifyHiddenFields('consultation', '/contact')}
               <div class="form-grid">
                 <div>
                   <label class="form-label" for="c-name">Your Name</label>
