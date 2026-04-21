@@ -3,7 +3,9 @@ import { WhatsAppButton } from '@/components/WhatsAppButton';
 import { Navigation } from '@/components/sections/Navigation';
 import { Footer } from '@/components/sections/Footer';
 import { SiteCard } from '@/components/examples/SiteCard';
+import { AuditCard } from '@/components/examples/AuditCard';
 import { DEMO_SITES } from '@/lib/demoSites';
+import { AUDIT_EXAMPLES } from '@/lib/auditExamples';
 import { siteConfig } from '@/lib/config';
 
 export const metadata: Metadata = {
@@ -76,12 +78,45 @@ export default function ExamplesPage() {
       </section>
 
       {/* ─── Grid ────────────────────────────────────────────────────── */}
-      <section className="relative pb-24 sm:pb-32">
+      <section className="relative pb-20 sm:pb-28">
         <div className="container-page max-w-6xl">
           <div className="grid gap-6 sm:gap-8 lg:grid-cols-2">
             {DEMO_SITES.map((site, i) => (
               <SiteCard key={site.id} site={site} index={i} />
             ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ─── SEO Audits section ──────────────────────────────────────── */}
+      <section id="seo-audits" className="relative border-t border-white/5 py-20 sm:py-28 scroll-mt-20">
+        <div className="container-page max-w-6xl">
+          <div className="mx-auto mb-12 max-w-2xl text-center sm:mb-14">
+            <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-wa-green">
+              Also built by Pixie
+            </p>
+            <h2 className="font-display text-display-lg text-balance text-white">
+              Free SEO audits, straight in WhatsApp.
+            </h2>
+            <div className="mx-auto mt-3 h-0.5 w-10 rounded-full bg-wa-green/60" />
+            <p className="mt-5 text-lg leading-relaxed text-white/75">
+              Send a URL — get a full PDF audit in under a minute: Lighthouse scores, Core Web
+              Vitals, indexability gaps, security headers, and a top 3 action list.
+            </p>
+          </div>
+
+          <div className="grid gap-6 sm:gap-7 lg:grid-cols-2">
+            {AUDIT_EXAMPLES.map((audit, i) => (
+              <AuditCard key={audit.id} audit={audit} index={i} />
+            ))}
+          </div>
+
+          <div className="mx-auto mt-12 flex justify-center">
+            <WhatsAppButton
+              size="lg"
+              label="Audit my site"
+              prefill="Hi! I'd like a free SEO audit for my site — here's the URL:"
+            />
           </div>
         </div>
       </section>

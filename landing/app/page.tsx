@@ -3,6 +3,7 @@ import { Hero } from '@/components/sections/Hero';
 import { TrustStrip } from '@/components/sections/TrustStrip';
 import { HowItWorks } from '@/components/sections/HowItWorks';
 import { ExamplesPreview } from '@/components/sections/ExamplesPreview';
+import { SeoAuditFeature } from '@/components/sections/SeoAuditFeature';
 import { Services } from '@/components/sections/Services';
 import { WhyUs } from '@/components/sections/WhyUs';
 import { Testimonials } from '@/components/sections/Testimonials';
@@ -20,6 +21,7 @@ export default function Page() {
         <TrustStrip />
         <HowItWorks />
         <ExamplesPreview />
+        <SeoAuditFeature />
         <Services />
         <WhyUs />
         <Testimonials />
