@@ -9,6 +9,13 @@ const { INTENT_CLASSIFIER_PROMPT, GENERAL_CHAT_PROMPT } = require('../llm/prompt
 const { transcribeAudio } = require('../llm/transcribe');
 const { maybeUpdateSummary } = require('./summaryManager');
 const { isDelegation } = require('../config/smartDefaults');
+const {
+  classifyUndoOrKeep,
+  pushStateHistory,
+  handleUndo,
+  clearUndoPending,
+  UNDOABLE_STATES,
+} = require('./undoStack');
 
 /**
  * Identify which product an ad is promoting based on the ad body text.
@@ -474,6 +481,94 @@ async function _routeMessage(message) {
     }
   }
 
+  // ── Undo / keep classifier ────────────────────────────────────────────────
+  // When the user is at an undo-able state, one LLM call decides if their
+  // reply means "go back", "keep the previous value", or neither. The LLM
+  // handles natural phrasings ("actually let's revisit that", "one step
+  // back", "nah, back up") without a brittle regex list. Long messages
+  // and non-text inputs short-circuit to skip the LLM call.
+  if (
+    text &&
+    !message.buttonId &&
+    !message.listId &&
+    message.type === 'text' &&
+    UNDOABLE_STATES.has(user.state)
+  ) {
+    const intent = await classifyUndoOrKeep(text, {
+      undoPending: user.metadata?.undoPendingState === user.state,
+      userId: user.id,
+    });
+    if (intent === 'undo') {
+      await handleUndo(user);
+      return;
+    }
+    if (intent === 'keep') {
+      await clearUndoPending(user);
+      try {
+      const webDev = require('./handlers/webDev');
+      const wd = user.metadata?.websiteData || {};
+
+      // Compute next state. Salon sub-flow has its own linear order; other
+      // states defer to nextMissingWebDevState.
+      let nextState;
+      if (user.state === STATES.SALON_BOOKING_TOOL) {
+        nextState = STATES.SALON_INSTAGRAM;
+      } else if (user.state === STATES.SALON_INSTAGRAM) {
+        // Embed mode skips hours/durations; native goes through them.
+        nextState = wd.bookingMode === 'embed'
+          ? null  // sentinel — finishSalonFlow handles rest
+          : STATES.SALON_HOURS;
+      } else if (user.state === STATES.SALON_HOURS) {
+        nextState = (wd.services && wd.services.length > 0)
+          ? STATES.SALON_SERVICE_DURATIONS
+          : null;
+      } else if (user.state === STATES.SALON_SERVICE_DURATIONS) {
+        nextState = null; // finishSalonFlow handles what's next
+      } else {
+        nextState = webDev.nextMissingWebDevState(wd, user.metadata || {});
+      }
+
+      // Null sentinel for salon → route through finishSalonFlow. It
+      // handles contact-already-collected vs needs-collection vs confirm.
+      if (nextState === null) {
+        // Inline minimal finishSalonFlow: show summary if contact known,
+        // else ask for contact. finishSalonFlow is not exported but we
+        // can mimic its decision.
+        const hasContact = !!(wd.contactEmail || wd.contactPhone || wd.contactAddress);
+        if (hasContact) {
+          await sendTextMessage(user.phone_number, 'Kept as is.');
+          await webDev.showConfirmSummary(user);
+        } else {
+          await sendTextMessage(
+            user.phone_number,
+            "Kept as is.\n\nLast thing — what contact info do you want on the site? Send your email, phone, and/or address."
+          );
+          await updateUserState(user.id, STATES.WEB_COLLECT_CONTACT);
+        }
+        await logMessage(user.id, `Undo: kept, advanced through salon flow`, 'assistant');
+        return;
+      }
+
+      if (nextState && nextState !== user.state) {
+        await updateUserState(user.id, nextState);
+        user.state = nextState;
+      }
+      if (nextState === STATES.WEB_CONFIRM) {
+        await webDev.showConfirmSummary(user);
+      } else {
+        const question = webDev.questionForState(nextState, wd);
+        await sendTextMessage(user.phone_number, `Kept as is. ${question}`);
+      }
+      await logMessage(user.id, `Undo: kept, advanced to ${nextState}`, 'assistant');
+      } catch (err) {
+        logger.error(`[UNDO] Keep-advance failed: ${err.message}`);
+        await sendTextMessage(user.phone_number, "Kept as is. What's next?");
+      }
+      return;
+    }
+    // intent === 'none' — fall through to normal routing
+  }
+
   // ── Intent interceptor ─────────────────────────────────────────────────────
   // For collection states with free-text (no button press), classify intent
   // before blindly passing the text to the handler.
@@ -534,11 +629,21 @@ async function _routeMessage(message) {
 
   logger.debug(`Routing message for ${from}`, { state: user.state });
 
+  // Remember the state we were in BEFORE the handler runs, so the undo
+  // stack can push it once the handler tells us we're transitioning.
+  const stateBeforeHandler = user.state;
+
   // Execute the handler
   const newState = await handler(user, message);
 
   // If handler returned a new state, update it
   if (newState && newState !== user.state) {
+    // Push the OLD state onto the undo history so the user can walk back
+    // a step later. pushStateHistory filters to undo-able states only.
+    await pushStateHistory(user, stateBeforeHandler);
+    // Clear the undo-pending marker — once the user has answered a popped
+    // step, there's nothing pending anymore.
+    if (user.metadata?.undoPendingState) await clearUndoPending(user);
     await updateUserState(user.id, newState);
     logger.debug(`State transition for ${from}: ${user.state} → ${newState}`);
   }
