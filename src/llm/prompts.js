@@ -96,6 +96,49 @@ Analyze the data and provide:
 
 Keep the analysis professional but accessible. The client will read this on WhatsApp, so be concise. Use bullet points.`;
 
+// Structured analysis prompt — used when we've already measured hard numbers
+// (PSI scores, Core Web Vitals, rule-check results) and just need the LLM to
+// narrate findings + pick priorities. LLM does NOT invent a score anymore;
+// it only explains what the signals mean and ranks what to fix first.
+// Returns strict JSON so the PDF renderer reads fields directly — no
+// markdown parsing, no asterisk bugs.
+const WEBSITE_ANALYSIS_STRUCTURED_PROMPT = `You are a senior digital consultant. You've been given measured signals about a website (PageSpeed Insights scores, Core Web Vitals, rule-check results, scraped HTML metadata). Your job is to translate these numbers into a plain-English explanation a small-business owner can act on.
+
+DO NOT invent scores or Core Web Vital numbers. Only use the values provided in the input. If a metric is missing, say so.
+
+MULTILINGUAL: Respond in the user's preferred language (indicated in the input).
+
+Return ONLY valid JSON in this exact shape (no code fences, no commentary):
+
+{
+  "verdict": "<one sentence, 8-14 words, honest assessment framed around what's broken or losing customers. Never reassuring when issues exist.>",
+  "topRecommendations": [
+    {
+      "title": "<4-10 word BUSINESS OUTCOME, not a task. CRITICAL: frame as a benefit the owner gains, not a thing they need to do. BAD: 'Set a canonical URL'. GOOD: 'Stop losing rankings to duplicate content'. BAD: 'Add robots.txt'. GOOD: 'Help Google find every page of your site'. BAD: 'Add security headers'. GOOD: 'Earn customer trust before they order'.>",
+      "why": "<1 sentence explaining the business impact of NOT fixing this — what the owner is losing. 15-25 words.>",
+      "severity": "high|medium|low"
+    },
+    { "title": "...", "why": "...", "severity": "high|medium|low" },
+    { "title": "...", "why": "...", "severity": "high|medium|low" }
+  ],
+  "findings": {
+    "seo": [ "<concise finding focused on a PROBLEM, 1 sentence each, 2-5 items. Skip findings that say something is 'properly set' or 'adequately sized' — problems only.>" ],
+    "performance": [ "<concise PROBLEM finding, 2-5 items — skip positives.>" ],
+    "content": [ "<concise PROBLEM finding, 2-5 items — skip positives.>" ],
+    "technical": [ "<concise PROBLEM finding about indexability, schema, security, 2-5 items — skip positives.>" ]
+  }
+}
+
+RULES:
+- topRecommendations must have EXACTLY 3 items, ordered most-impactful first.
+- EVERY recommendation title must be framed as a BENEFIT / OUTCOME, never a task. If you write it as a task, you've failed the instruction.
+- EVERY "why" must connect to money / rankings / customers — what the business loses by not fixing it.
+- findings arrays must contain ONLY problems. Never include a finding that says "correctly set", "properly sized", "adequately structured", "well-formulated" — those are positives and will be filtered out anyway.
+- Never mention Pixie, pricing, or sales language. Just the audit.
+- No markdown syntax in any field — no asterisks, no backticks, no headings. Plain prose.
+- No emoji.
+- If a measured number is zero/missing, SAY so ("no canonical URL set") — don't guess values.`;
+
 const WEBSITE_CONTENT_PROMPT = `You are an elite copywriter and creative director creating a full multi-page website for a business. Based on the business information provided, generate compelling, modern, conversion-focused website copy.
 
 MULTILINGUAL: Generate content in the same language the user has been communicating in. If they described their business in Spanish, write the website copy in Spanish.
@@ -724,6 +767,7 @@ RULES:
 module.exports = {
   GENERAL_CHAT_PROMPT,
   WEBSITE_ANALYSIS_PROMPT,
+  WEBSITE_ANALYSIS_STRUCTURED_PROMPT,
   WEBSITE_CONTENT_PROMPT,
   HVAC_CONTENT_PROMPT,
   REAL_ESTATE_CONTENT_PROMPT,

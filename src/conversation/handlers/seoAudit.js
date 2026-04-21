@@ -87,22 +87,26 @@ async function handleCollectUrl(user, message) {
       throw new Error(`Failed to scrape website: ${scrapeErr.message}`);
     }
 
-    // 2. Analyze with LLM
-    logger.info('[SEO] Step 2/6: Analyzing with LLM');
-    let analysis;
+    // 2. Analyze — now runs PSI + rule checks + LLM narration in one call,
+    //    returns a structured audit object (not a markdown string).
+    logger.info('[SEO] Step 2/6: Running full audit (PSI + rule checks + LLM)');
+    let auditResult;
     try {
-      analysis = await analyzer.analyzeWebsite(scrapedData, { userId: user.id });
-      logger.info(`[SEO] Analysis done: ${analysis.length} chars`);
+      auditResult = await analyzer.analyzeWebsite(scrapedData, { userId: user.id });
+      logger.info(`[SEO] Audit done: score=${auditResult.score?.overall}, text=${auditResult.text?.length || 0} chars`);
     } catch (analyzeErr) {
-      logger.error(`[SEO] LLM Analysis FAILED: ${analyzeErr.message}`);
-      throw new Error(`LLM analysis failed: ${analyzeErr.message}`);
+      logger.error(`[SEO] Audit FAILED: ${analyzeErr.message}`);
+      throw new Error(`Audit failed: ${analyzeErr.message}`);
     }
+    // Keep a plain-text copy for downstream consumers (DB column, top-fix
+    // extractor, follow-up LLM context) that still expect a string.
+    const analysis = auditResult.text || '';
 
     // 3. Generate report
     logger.info('[SEO] Step 3/6: Generating report');
     let summary, pdfBuffer;
     try {
-      const reportResult = await report.generateReport(url, analysis);
+      const reportResult = await report.generateReport(url, auditResult);
       summary = reportResult.summary;
       pdfBuffer = reportResult.pdfBuffer;
       logger.info(`[SEO] Report done: summary ${summary.length} chars, PDF ${pdfBuffer.length} bytes`);
