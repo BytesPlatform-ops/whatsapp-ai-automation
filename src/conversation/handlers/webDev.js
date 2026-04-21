@@ -16,6 +16,7 @@ const {
   extractServices,
 } = require('../entityAccumulator');
 const { isDelegation, classifyDelegation } = require('../../config/smartDefaults');
+const { localize } = require('../../utils/localizer');
 
 
 // Walk the website-dev checklist and return the first state whose field
@@ -120,7 +121,13 @@ async function smartAdvance(user, message, ackPrefix = null) {
   const nextQuestion = questionForState(nextState, merged);
   const fullMsg = ack ? `${ack}\n\n${nextQuestion}` : nextQuestion;
 
-  await sendTextMessage(user.phone_number, fullMsg);
+  // Localize to the user's language if they're chatting in something
+  // other than English. Hardcoded questions like "What's your business
+  // name?" get translated to Urdu / Spanish / Arabic / etc. to match.
+  const userReply = (message && message.text) || '';
+  const localized = await localize(fullMsg, user, userReply);
+
+  await sendTextMessage(user.phone_number, localized);
   return nextState;
 }
 
@@ -154,9 +161,9 @@ function questionForState(state, websiteData) {
       );
     case STATES.WEB_COLLECT_LISTINGS_ASK:
       return (
-        'Koi current listings showcase karne hain? I can feature up to 3 on the homepage.\n\n' +
+        "Any current listings you'd like to showcase? I can feature up to 3 on the homepage.\n\n" +
         '• Yes — send them now (natural language is fine, e.g. *"45 Elm St, $525k, 4 bed 3 bath, 2200 sqft"*)\n' +
-        '• Skip — I\'ll use professional placeholder listings'
+        "• Skip — I'll use professional placeholder listings"
       );
     case STATES.WEB_COLLECT_LISTINGS_DETAILS: {
       const got = (websiteData.listings || []).length;
@@ -177,8 +184,8 @@ function questionForState(state, websiteData) {
         return `For this photo, which listing?\n${options}\n*skip* — don\'t use this photo`;
       }
       return (
-        'Photos lena hai to ek ek karke forward karein — main har photo pe poochunga kaunsa listing hai. ' +
-        'Ya *skip* bolein, professional stock photos lag jayengi.'
+        "Want to add photos? Forward them one at a time — I'll ask which listing each one belongs to. " +
+        "Or reply *skip* and I'll use professional stock photos."
       );
     }
     case STATES.WEB_COLLECT_CONTACT: return "Last thing — what contact info do you want on the site? Send your email, phone, and/or address.";
@@ -195,7 +202,58 @@ async function sendConfirmation(user /* websiteData unused — showConfirmSummar
   return showConfirmSummary(user);
 }
 
+// States where "what are my current details?" should re-render the summary.
+// Excludes WEB_PREVIEW/WEB_REVISIONS (the user is viewing the live site
+// there — we don't want to dump a metadata summary over that) and the
+// transitional WEB_GENERATING.
+const SUMMARY_REQUEST_STATES = new Set([
+  STATES.WEB_COLLECT_NAME,
+  STATES.WEB_COLLECT_EMAIL,
+  STATES.WEB_COLLECT_INDUSTRY,
+  STATES.WEB_COLLECT_AREAS,
+  STATES.WEB_COLLECT_SERVICES,
+  STATES.WEB_COLLECT_AGENT_PROFILE,
+  STATES.WEB_COLLECT_LISTINGS_ASK,
+  STATES.WEB_COLLECT_LISTINGS_DETAILS,
+  STATES.WEB_COLLECT_LISTINGS_PHOTOS,
+  STATES.SALON_BOOKING_TOOL,
+  STATES.SALON_INSTAGRAM,
+  STATES.SALON_HOURS,
+  STATES.SALON_SERVICE_DURATIONS,
+  STATES.WEB_COLLECT_CONTACT,
+  STATES.WEB_CONFIRM,
+]);
+
 async function handleWebDev(user, message) {
+  // "Show me my current details" intent — fire a summary mid-flow so the
+  // user can see what's been collected. Works in any language via the LLM
+  // classifier. Non-text messages (buttons, images, listings photos) skip
+  // this check entirely.
+  const text = (message?.text || '').trim();
+  if (
+    text &&
+    !message.buttonId &&
+    !message.listId &&
+    message.type === 'text' &&
+    SUMMARY_REQUEST_STATES.has(user.state)
+  ) {
+    const wantsSummary = await classifyShowSummaryIntent(text, user.id);
+    if (wantsSummary) {
+      await logMessage(user.id, 'User asked to see current details', 'assistant');
+      // Only render a peek — never the full confirm-style summary, since
+      // that trailing "Reply yes to build" line is misleading when we're
+      // still mid-collection.
+      await showSummaryPeek(user);
+      // After the peek, re-send the question we were asking so the user
+      // knows we haven't jumped states and can keep answering.
+      const currentQuestion = questionForState(user.state, user.metadata?.websiteData || {});
+      if (currentQuestion) {
+        await sendTextMessage(user.phone_number, await localize(currentQuestion, user, text));
+      }
+      return user.state;
+    }
+  }
+
   switch (user.state) {
     case STATES.WEB_COLLECT_NAME:
       return handleCollectName(user, message);
@@ -439,7 +497,7 @@ async function handleCollectAreas(user, message) {
     if (!serviceAreas.length) serviceAreas = [existingCity];
   } else {
     // No city yet — parse the reply as "City: Area1, Area2, ..." or
-    // "City - Area1, Area2" or a single value treated as both.
+    // "City - Area1, Area2" or a bare comma/and-separated list.
     const parts = raw
       .split(/\r?\n+|\s*[—\-–:|]\s+|\s+serving\s+/i)
       .map((p) => p.trim())
@@ -447,33 +505,41 @@ async function handleCollectAreas(user, message) {
     primaryCity = (parts[0] || '').replace(/[,.]$/, '');
     const areasStr = parts.slice(1).join(', ').trim();
     serviceAreas = areasStr
-      ? areasStr.split(/[,;]|\band\b/i).map((s) => s.trim()).filter(Boolean)
+      ? areasStr.split(/\s*[,;]\s*|\s+and\s+|\s+&\s+/i).map((s) => s.trim()).filter(Boolean)
       : [];
 
-    // Single value — could be just a city OR a bare comma-list of areas.
+    // Single value — could be just a city OR a bare "A, B and C" list.
     if (!serviceAreas.length && primaryCity) {
-      if (primaryCity.includes(',')) {
-        const tokens = primaryCity.split(',').map((s) => s.trim()).filter(Boolean);
-        if (tokens.length > 1) {
-          primaryCity = tokens[0];
-          serviceAreas = tokens;
-        } else {
-          serviceAreas = [primaryCity];
-        }
+      // Split on commas AND natural " and " / " & " connectors so
+      // "Austin, New York and Texas" becomes three tokens, not two.
+      const tokens = primaryCity
+        .split(/\s*,\s*|\s+and\s+|\s+&\s+/i)
+        .map((s) => s.trim())
+        .filter(Boolean);
+      if (tokens.length > 1) {
+        primaryCity = tokens[0];
+        // Service areas are the OTHER tokens — don't repeat the primary
+        // city inside its own areas list. If the user only named one
+        // place, we'll fall through to the single-value branch below.
+        serviceAreas = tokens.slice(1);
       } else {
         serviceAreas = [primaryCity];
       }
     }
   }
 
-  // If parsing clearly failed (primaryCity looks like a sentence), ask LLM to
-  // extract structured fields.
-  if (!primaryCity || primaryCity.length > 40) {
+  // If parsing clearly failed (primaryCity looks like a sentence — too long,
+  // too many words, or contains non-English connectives we don't split on
+  // like Urdu "aur", Spanish "y", Hindi "aur/या"), ask LLM to extract
+  // structured fields. Regex-based splitting can't cover every language.
+  const primaryWordCount = primaryCity ? primaryCity.trim().split(/\s+/).length : 0;
+  const looksLikeSentence = primaryWordCount >= 3;
+  if (!primaryCity || primaryCity.length > 40 || looksLikeSentence) {
     try {
       const extracted = await generateResponse(
-        `Extract the primary city and the list of service areas from this HVAC business owner message. Return ONLY JSON: {"primaryCity":"...","serviceAreas":["..."]}. If unclear, make reasonable guesses.`,
+        `Extract the primary city and list of service areas from the user's message. The user may write in ANY language (English, Roman Urdu, Urdu, Hindi, Spanish, Arabic, etc.) and use connectors like "and", "aur" (Urdu), "y" (Spanish), "و" (Arabic), etc. Return ONLY JSON: {"primaryCity":"<city>","serviceAreas":["<city or neighborhood>", ...]}. Rules: (1) primaryCity is the single main city they're based in — a short proper noun like "Karachi", NEVER a full phrase like "pakistan k andar karachi". (2) serviceAreas is an array of cities/neighborhoods they serve. If they named multiple cities (e.g. Karachi and Lahore), include all of them; the first becomes primaryCity and the rest go into serviceAreas. (3) Strip filler words like "based in", "pakistan k andar", "in the city of", etc. (4) If genuinely unclear, make a reasonable guess from place-name tokens you recognize.`,
         [{ role: 'user', content: raw }],
-        { userId: user.id, operation: 'webdev_hvac_areas' }
+        { userId: user.id, operation: 'webdev_areas_extract' }
       );
       const m = extracted.match(/\{[\s\S]*\}/);
       if (m) {
@@ -483,7 +549,7 @@ async function handleCollectAreas(user, message) {
         if (!serviceAreas.length && primaryCity) serviceAreas = [primaryCity];
       }
     } catch (err) {
-      logger.warn(`[HVAC] LLM area extraction failed: ${err.message}`);
+      logger.warn(`[AREAS] LLM extraction failed: ${err.message}`);
     }
   }
 
@@ -496,7 +562,16 @@ async function handleCollectAreas(user, message) {
   user.metadata = { ...(user.metadata || {}), websiteData };
   await logMessage(user.id, `Areas captured: ${primaryCity} / ${serviceAreas.join(', ')}`, 'assistant');
 
-  const ackPrefix = `Got it — based in *${primaryCity || 'your area'}* serving *${serviceAreas.slice(0, 4).join(', ')}${serviceAreas.length > 4 ? '…' : ''}*.`;
+  // De-dupe areas against primaryCity so a single-location reply like
+  // "Karachi" doesn't produce an awkward "based in *Karachi* serving
+  // *Karachi*" — reads as a bug even though the data is correct. Only
+  // mention the "serving X" clause when we have neighborhoods beyond the
+  // primary city.
+  const cityLower = (primaryCity || '').toLowerCase();
+  const extraAreas = (serviceAreas || []).filter((a) => a && a.toLowerCase() !== cityLower);
+  const ackPrefix = extraAreas.length
+    ? `Got it — based in *${primaryCity}* serving *${extraAreas.slice(0, 4).join(', ')}${extraAreas.length > 4 ? '…' : ''}*.`
+    : `Got it — based in *${primaryCity || 'your area'}*.`;
   return smartAdvance(user, message, ackPrefix);
 }
 
@@ -785,20 +860,107 @@ const MAX_LISTINGS = 3;
  * the obvious numerics fast (price / beds / baths / sqft) and LLM fills in
  * address + status + anything missing. Returns {} if nothing usable.
  */
+// Currency code → display symbol. Falls through to the ISO code itself
+// (e.g. "AED") when we don't have a specific symbol.
+const CURRENCY_SYMBOLS = {
+  USD: '$', CAD: 'CA$', AUD: 'A$',
+  GBP: '£', EUR: '€',
+  PKR: 'Rs', INR: '₹', BDT: '৳', LKR: 'Rs',
+  AED: 'AED', SAR: 'SAR', QAR: 'QAR', KWD: 'KWD', OMR: 'OMR', BHD: 'BHD',
+};
+
+// Well-known city → currency lookup. Only cities where the correct currency
+// is unambiguous and the city name is unlikely to clash. Expand as needed.
+const CITY_TO_CURRENCY = {
+  karachi: 'PKR', lahore: 'PKR', islamabad: 'PKR', rawalpindi: 'PKR',
+  faisalabad: 'PKR', peshawar: 'PKR', quetta: 'PKR', multan: 'PKR', hyderabad: 'PKR',
+  delhi: 'INR', mumbai: 'INR', bangalore: 'INR', bengaluru: 'INR', kolkata: 'INR',
+  chennai: 'INR', pune: 'INR', ahmedabad: 'INR', jaipur: 'INR',
+  london: 'GBP', manchester: 'GBP', birmingham: 'GBP', glasgow: 'GBP', edinburgh: 'GBP',
+  paris: 'EUR', madrid: 'EUR', barcelona: 'EUR', berlin: 'EUR', munich: 'EUR',
+  rome: 'EUR', milan: 'EUR', amsterdam: 'EUR', dublin: 'EUR', lisbon: 'EUR',
+  dubai: 'AED', 'abu dhabi': 'AED', sharjah: 'AED',
+  riyadh: 'SAR', jeddah: 'SAR', mecca: 'SAR',
+  doha: 'QAR', toronto: 'CAD', vancouver: 'CAD', montreal: 'CAD',
+  sydney: 'AUD', melbourne: 'AUD', brisbane: 'AUD', perth: 'AUD',
+  dhaka: 'BDT', colombo: 'LKR',
+};
+
+function detectCurrency(text, primaryCity) {
+  const t = String(text || '').toLowerCase();
+  // Explicit currency markers in the message win.
+  if (/\bpkr\b|\brs\.?\b|\brupees?\b|₨/i.test(t) && !/indian\s+rupee/i.test(t)) return 'PKR';
+  if (/\binr\b|indian\s+rupees?|₹/i.test(t)) return 'INR';
+  if (/\bgbp\b|\bpounds?\b|£/i.test(t)) return 'GBP';
+  if (/\beur\b|\beuros?\b|€/i.test(t)) return 'EUR';
+  if (/\baed\b|\bdirhams?\b/i.test(t)) return 'AED';
+  if (/\bsar\b|\briyals?\b/i.test(t)) return 'SAR';
+  if (/\bcad\b/i.test(t)) return 'CAD';
+  if (/\baud\b/i.test(t)) return 'AUD';
+  if (/\busd\b|\bdollars?\b|\$/i.test(t)) return 'USD';
+  // Fall back to inferred currency from the user's primary city.
+  if (primaryCity) {
+    const code = CITY_TO_CURRENCY[String(primaryCity).trim().toLowerCase()];
+    if (code) return code;
+  }
+  return 'USD';
+}
+
+// Plausible price ranges per currency. Rentals can land at the bottom of
+// the range and full sales at the top. Widened relative to the old
+// USD-only bounds so PKR rent (~100k) and INR rent (~10k) aren't rejected.
+function priceRangeFor(currency) {
+  switch ((currency || 'USD').toUpperCase()) {
+    case 'PKR': return { min: 20000, max: 2_000_000_000 };
+    case 'INR': return { min: 5000, max: 500_000_000 };
+    case 'BDT': return { min: 5000, max: 500_000_000 };
+    case 'LKR': return { min: 10000, max: 500_000_000 };
+    case 'AED': return { min: 500, max: 100_000_000 };
+    case 'SAR': case 'QAR': return { min: 500, max: 100_000_000 };
+    case 'GBP': case 'EUR': case 'USD': case 'CAD': case 'AUD':
+    default:
+      return { min: 300, max: 50_000_000 };
+  }
+}
+
+// Format a price with the right currency symbol, falling back to the code.
+function formatPrice(price, currency) {
+  if (!price && price !== 0) return 'price on request';
+  const code = (currency || 'USD').toUpperCase();
+  const symbol = CURRENCY_SYMBOLS[code];
+  const formatted = Number(price).toLocaleString();
+  if (!symbol) return `${code} ${formatted}`;
+  // Letter-prefix symbols (Rs, AED, SAR, ...) read better with a space;
+  // sign symbols ($, £, €, ₹) are flush.
+  return /^[A-Z]/.test(symbol) ? `${symbol} ${formatted}` : `${symbol}${formatted}`;
+}
+
 async function parseListingText(raw, user) {
   const text = String(raw || '').trim();
   if (!text) return {};
   const out = {};
 
-  // Price: $525k, $1.2M, $450000, "525 thousand"
-  const priceMatch = text.match(/\$?\s*([\d,]+(?:\.\d+)?)\s*([kKmM])?/);
+  // Currency detection — explicit mention wins, then infer from primaryCity,
+  // then default USD. We try this BEFORE price so validator ranges can scale
+  // to the currency (PKR rent is ~100k; USD rent is ~1k; a single int range
+  // can't cover both honestly).
+  out.currency = detectCurrency(text, user?.metadata?.websiteData?.primaryCity);
+
+  // Price — accept both sale ($525k, PKR 1.2M, ₹45L) and rental figures
+  // (100000pkr, 85k rent). The numeric extractor is currency-agnostic; the
+  // validator range is widened when a non-USD currency was detected since
+  // rentals in PKR/INR/etc. are a valid much-smaller number.
+  const priceMatch = text.match(/\$?\s*([\d,]+(?:\.\d+)?)\s*([kKmMlL])?/);
   if (priceMatch) {
     let n = parseFloat(priceMatch[1].replace(/,/g, ''));
     const suffix = (priceMatch[2] || '').toLowerCase();
     if (suffix === 'k') n *= 1000;
     else if (suffix === 'm') n *= 1000000;
+    // South Asian "lakh" (1L = 100,000) — common in PKR/INR listings
+    else if (suffix === 'l') n *= 100000;
     else if (n < 1000 && !suffix) n = null; // probably beds/sqft, not price
-    if (n && n >= 50000 && n <= 50000000) out.price = Math.round(n);
+    const { min, max } = priceRangeFor(out.currency);
+    if (n && n >= min && n <= max) out.price = Math.round(n);
   }
   // Beds/baths: "4 bed 3 bath", "4bd/3ba", "4/3"
   const bbMatch = text.match(/(\d+)\s*\/\s*(\d+(?:\.\d+)?)/);
@@ -841,12 +1003,13 @@ Requested: ${missingList.join(', ')}
 
 Rules:
 - address: street address only (e.g. "45 Elm Street"). No city/state unless clearly part of address.
-- price: integer USD. "$525k" → 525000. "1.2M" → 1200000. Omit if unclear.
+- price: integer numeric amount. "$525k" → 525000. "1.2M" → 1200000. "45L" (lakh) → 4500000. Omit if unclear.
+- currency: ISO currency code the listing is in — USD, PKR, INR, GBP, EUR, AED, SAR, CAD, AUD, etc. Detect from explicit markers in the message ("pkr", "rs", "rupees", "₹", "£", "€", "$", "AED", ...) OR infer from the business location context. Omit only if genuinely indeterminable.
 - beds, baths: numbers. baths can be .5.
 - sqft: integer square feet.
 - status: one of "For Sale", "Just Listed", "Pending", "Sold". Default "For Sale" only if message implies active listing.
 
-Return like {"address":"45 Elm St","price":525000,"beds":4,"baths":3} or {} if nothing usable.`;
+Return like {"address":"45 Elm St","price":525000,"currency":"USD","beds":4,"baths":3} or {} if nothing usable.`;
     const resp = await generateResponse(prompt, [{ role: 'user', content: text }], {
       userId: user?.id,
       operation: 'webdev_listing_parse',
@@ -854,11 +1017,18 @@ Return like {"address":"45 Elm St","price":525000,"beds":4,"baths":3} or {} if n
     const m = resp.match(/\{[\s\S]*\}/);
     if (m) {
       const parsed = JSON.parse(m[0]);
+      // Accept an LLM-supplied currency before validating price, so the
+      // price range is scaled to the right currency.
+      if (parsed.currency && typeof parsed.currency === 'string') {
+        const code = parsed.currency.trim().toUpperCase();
+        if (/^[A-Z]{3}$/.test(code)) out.currency = code;
+      }
+      const { min, max } = priceRangeFor(out.currency);
       for (const k of missingList) {
         const v = parsed[k];
         if (v == null) continue;
         if (k === 'address' && typeof v === 'string' && v.trim().length >= 4 && v.trim().length < 100) out.address = v.trim();
-        else if (k === 'price' && Number.isFinite(v) && v >= 50000 && v <= 50000000) out.price = Math.round(v);
+        else if (k === 'price' && Number.isFinite(v) && v >= min && v <= max) out.price = Math.round(v);
         else if (k === 'beds' && Number.isInteger(v) && v >= 0 && v < 20) out.beds = v;
         else if (k === 'baths' && Number.isFinite(v) && v >= 0 && v < 20) out.baths = v;
         else if (k === 'sqft' && Number.isInteger(v) && v >= 200 && v <= 20000) out.sqft = v;
@@ -874,13 +1044,200 @@ Return like {"address":"45 Elm St","price":525000,"beds":4,"baths":3} or {} if n
   return out;
 }
 
+/**
+ * Classify a short reply as yes / skip / unclear using the LLM. Works for
+ * ANY language — English, Roman Urdu, Urdu, Hindi, Spanish, Arabic, French,
+ * etc. — so we don't need to maintain a keyword list per language. Falls
+ * back to 'unclear' on any LLM failure so we re-ask instead of guessing
+ * wrong. Empty input is treated as unclear.
+ */
+async function classifyYesSkip(text, userId) {
+  const t = String(text || '').trim();
+  if (!t) return 'unclear';
+  // Long free-text almost always carries real content (a listing, a
+  // question, a long refusal). Treat as unclear so the handler either
+  // re-asks or the structured-listing fast-path picks it up first.
+  if (t.length > 80) return 'unclear';
+
+  try {
+    const prompt = `A chatbot just asked the user: "Do you want to send your property listings now, or skip and use placeholder listings?"
+
+Classify the user's reply into ONE of:
+- "yes": user wants to send / share / add their listings (in any language — "yes", "yeah add them", "haan bhai bhejta hoon", "sí, los tengo", "oui je veux", "نعم, أريد").
+- "skip": user wants to skip / use placeholders / doesn't have listings / not now (in any language — "skip", "skip kar do", "no", "nahi", "later", "no thanks", "dont have any", "saltar", "non merci", "لا, تخطى").
+- "unclear": anything else — a question, garbage text, "?", an off-topic reply, or anything ambiguous.
+
+The user said: "${t}"
+
+Respond with ONLY one word: yes, skip, or unclear.`;
+
+    const response = await generateResponse(
+      prompt,
+      [{ role: 'user', content: t }],
+      { userId, operation: 'yes_skip_classify' }
+    );
+    const clean = String(response || '').trim().toLowerCase().replace(/[^a-z]/g, '');
+    if (clean === 'yes') return 'yes';
+    if (clean === 'skip') return 'skip';
+    return 'unclear';
+  } catch (err) {
+    logger.warn(`[YES_SKIP] LLM classify failed: ${err.message}`);
+    return 'unclear';
+  }
+}
+
+/**
+ * Classify a reply to the WEB_CONFIRM summary as confirm / edit / unclear.
+ * LLM-based so it works for any language ("perfect hai", "sí dale",
+ * "parfait allons-y", etc.) without per-language keyword lists. Returns
+ * 'unclear' on any failure so the caller falls through to edit-parsing
+ * instead of silently mis-building.
+ */
+async function classifyConfirmIntent(text, userId) {
+  const t = String(text || '').trim();
+  if (!t) return 'unclear';
+  // Long replies are almost always edit instructions ("change name to X,
+  // update the email too") or free-text corrections. Skip the classifier.
+  if (t.length > 120) return 'edit';
+
+  try {
+    const prompt = `A chatbot showed the user a summary of their website details and asked "Does this look right? Reply yes to build, or tell me what to change."
+
+Classify the user's reply into ONE of:
+- "confirm": user is approving the summary and wants to proceed / build the site (in any language — "yes", "perfect", "perfect hai", "looks good", "dale", "parfait allons-y", "sí, construye", "تمام, ابن").
+- "edit": user wants to change a specific field ("change the name to X", "email should be Y", "naam X kar do", "cambia el email", etc.) OR is correcting a value.
+- "unclear": anything else — a question, off-topic reply, or genuinely ambiguous.
+
+The user said: "${t}"
+
+Respond with ONLY one word: confirm, edit, or unclear.`;
+
+    const response = await generateResponse(
+      prompt,
+      [{ role: 'user', content: t }],
+      { userId, operation: 'confirm_intent_classify' }
+    );
+    const clean = String(response || '').trim().toLowerCase().replace(/[^a-z]/g, '');
+    if (clean === 'confirm') return 'confirm';
+    if (clean === 'edit') return 'edit';
+    return 'unclear';
+  } catch (err) {
+    logger.warn(`[CONFIRM_INTENT] LLM classify failed: ${err.message}`);
+    return 'unclear';
+  }
+}
+
+/**
+ * Detect whether the user is asking to see a summary of what the bot has
+ * collected so far ("what are my current details?", "mere details kya hain",
+ * "show me the summary", "¿qué tienes de mí?", etc.). LLM-based so it works
+ * in any language. Returns false on any LLM failure so the flow continues.
+ */
+async function classifyShowSummaryIntent(text, userId) {
+  const t = String(text || '').trim();
+  if (!t) return false;
+  if (t.length > 120) return false;
+
+  try {
+    const prompt = `A chatbot is collecting info from a user to build their business website (name, industry, services, hours, contact, etc.).
+
+Classify whether the user's message is asking to SEE / RECAP / SHOW the information they've given so far. Examples in any language count:
+- "what are my current details?" / "what do you have so far?" / "show me what you've got" / "what have i told you?" / "can you show me the summary?" / "recap please" → yes
+- "mere details kya hain" / "abhi tak kya collect kiya hai" / "summary dikhao" → yes
+- "¿qué tienes de mí?" / "muéstrame el resumen" / "qu'est-ce que tu as de moi?" → yes
+
+NOT this intent (return no):
+- user is answering the current question
+- user is asking an unrelated question ("do you do SEO?")
+- user is confirming / approving / editing a field
+- user is saying skip / default / whatever
+
+The user said: "${t}"
+
+Respond with ONLY: yes or no.`;
+
+    const response = await generateResponse(
+      prompt,
+      [{ role: 'user', content: t }],
+      { userId, operation: 'show_summary_classify' }
+    );
+    const clean = String(response || '').trim().toLowerCase().replace(/[^a-z]/g, '');
+    return clean === 'yes';
+  } catch (err) {
+    logger.warn(`[SHOW_SUMMARY] LLM classify failed: ${err.message}`);
+    return false;
+  }
+}
+
+/**
+ * Detect whether the user is asking us to reuse the phone number they're
+ * messaging from (their WhatsApp number) as the contact number on the site.
+ * LLM-based so it works in any language ("use my whatsapp number", "mera
+ * yahi number use kar lo", "usa este mismo número", "utilise mon numéro",
+ * "استخدم رقمي", etc.). Returns true / false; false on any LLM failure.
+ */
+async function classifyUseOwnNumber(text, userId) {
+  const t = String(text || '').trim();
+  if (!t) return false;
+  if (t.length > 120) return false; // long text is almost never this intent
+
+  try {
+    const prompt = `A chatbot just asked the user for their contact info (email, phone, and/or address) for their business website.
+
+Classify whether the user is telling us to REUSE the phone number they're messaging us from (their WhatsApp / current / same number) as the contact phone on the site. Examples in any language count:
+- "use my whatsapp number" / "use this number" / "same number" / "my current number" → yes
+- "mera yahi number use karo" / "whatsapp wala number use kar lo" / "isi number pe" → yes
+- "usa mi número de whatsapp" / "este mismo número" / "mi número actual" → yes
+- "utilise mon numéro whatsapp" / "le même numéro" → yes
+- "استخدم رقم الواتساب" / "نفس الرقم" → yes
+
+NOT this intent (return no):
+- user typed a different phone number
+- user provided an email or address
+- user said skip / nothing / "I don't want to share"
+- user is asking a question
+
+The user said: "${t}"
+
+Respond with ONLY: yes or no.`;
+
+    const response = await generateResponse(
+      prompt,
+      [{ role: 'user', content: t }],
+      { userId, operation: 'use_own_number_classify' }
+    );
+    const clean = String(response || '').trim().toLowerCase().replace(/[^a-z]/g, '');
+    return clean === 'yes';
+  } catch (err) {
+    logger.warn(`[USE_OWN_NUMBER] LLM classify failed: ${err.message}`);
+    return false;
+  }
+}
+
 async function handleCollectListingsAsk(user, message) {
   const raw = (message.text || '').trim();
   const wd = { ...(user.metadata?.websiteData || {}) };
-  const yesWords = /^(yes|yep|yeah|y|sure|ok|okay|add|add them|i have|haan|han)$/i;
-  const skipWords = /^(skip|no|none|n|nah|nope|not (yet|now)|later|don'?t (have|want)|nahi|nahin)$/i;
 
-  if (skipWords.test(raw)) {
+  // Classify the user's reply as yes / skip / unclear. We use the LLM so
+  // this works for ANY language the user might reply in ("skip kar do",
+  // "sí, los tengo", "لا", "non merci", "haan bhai", etc.) without a
+  // language-by-language regex list. Long messages that look like actual
+  // listings (addresses, prices, bed/bath counts) bypass the classifier
+  // and drop straight into the details parser.
+  const looksLikeListing =
+    /\$|\d+\s*(bed|bd|ba|sqft|sf)\b/i.test(raw) ||
+    /\b(listing|property|home|house|condo)\b/i.test(raw);
+
+  if (looksLikeListing) {
+    const merged = { ...wd, listingsAskAnswered: true, listings: wd.listings || [] };
+    await updateUserMetadata(user.id, { websiteData: merged });
+    user.metadata = { ...(user.metadata || {}), websiteData: merged };
+    return handleCollectListingsDetails(user, message);
+  }
+
+  const intent = await classifyYesSkip(raw, user.id);
+
+  if (intent === 'skip') {
     const merged = { ...wd, listingsAskAnswered: true, listingsDetailsDone: true, listingsFlowDone: true, listings: [] };
     await updateUserMetadata(user.id, { websiteData: merged });
     user.metadata = { ...(user.metadata || {}), websiteData: merged };
@@ -888,24 +1245,26 @@ async function handleCollectListingsAsk(user, message) {
     return smartAdvance(user, message, 'No problem — I\'ll use professional placeholder listings.');
   }
 
-  if (yesWords.test(raw) || /\b(listing|property|home|house|condo)\b/i.test(raw)) {
-    // If the message also looks like a listing itself, fall straight into
-    // details parsing so we don't waste a round-trip.
-    const looksLikeListing = /\$|\d+\s*(bed|bd|ba|sqft|sf)\b/i.test(raw);
+  if (intent === 'yes') {
     const merged = { ...wd, listingsAskAnswered: true, listings: wd.listings || [] };
     await updateUserMetadata(user.id, { websiteData: merged });
     user.metadata = { ...(user.metadata || {}), websiteData: merged };
-    if (looksLikeListing) {
-      return handleCollectListingsDetails(user, message);
-    }
-    await sendTextMessage(user.phone_number, questionForState(STATES.WEB_COLLECT_LISTINGS_DETAILS, merged));
+    await sendTextMessage(
+      user.phone_number,
+      await localize(questionForState(STATES.WEB_COLLECT_LISTINGS_DETAILS, merged), user, raw)
+    );
     return STATES.WEB_COLLECT_LISTINGS_DETAILS;
   }
 
-  // Unclear answer — re-ask
+  // Unclear answer — re-ask. Localize so we don't accidentally drop back to
+  // English mid-conversation when the user is chatting in Roman Urdu / etc.
   await sendTextMessage(
     user.phone_number,
-    'Just to confirm — *yes* to send your listings, or *skip* to use professional placeholder listings?'
+    await localize(
+      'Just to confirm — *yes* to send your listings, or *skip* to use professional placeholder listings?',
+      user,
+      raw
+    )
   );
   return STATES.WEB_COLLECT_LISTINGS_ASK;
 }
@@ -955,6 +1314,7 @@ async function handleCollectListingsDetails(user, message) {
   const listing = {
     address: parsed.address || 'Address on request',
     price: parsed.price || 0,
+    currency: parsed.currency || 'USD',
     beds: parsed.beds != null ? parsed.beds : 3,
     baths: parsed.baths != null ? parsed.baths : 2,
     sqft: parsed.sqft != null ? parsed.sqft : 1800,
@@ -969,9 +1329,9 @@ async function handleCollectListingsDetails(user, message) {
   if (reachedMax) merged.listingsDetailsDone = true;
   await updateUserMetadata(user.id, { websiteData: merged });
   user.metadata = { ...(user.metadata || {}), websiteData: merged };
-  await logMessage(user.id, `Listing ${listings.length} captured: ${listing.address} / $${listing.price}`, 'assistant');
+  const priceStr = formatPrice(listing.price, listing.currency);
+  await logMessage(user.id, `Listing ${listings.length} captured: ${listing.address} / ${priceStr}`, 'assistant');
 
-  const priceStr = listing.price ? `$${listing.price.toLocaleString()}` : 'price on request';
   const ack = `Got it — *${listing.address}*, ${priceStr}, ${listing.beds}bd/${listing.baths}ba${listing.sqft ? `, ${listing.sqft.toLocaleString()}sf` : ''}.`;
 
   if (reachedMax) {
@@ -1101,12 +1461,10 @@ async function startSalonFlow(user) {
       logger.warn(`[SALON] Could not update template_id on site ${siteId}: ${err.message}`);
     }
   }
-  await sendTextMessage(
-    user.phone_number,
-    'Do you already use a booking tool (Fresha, Booksy, Vagaro, Calendly, etc.)?\n\n' +
-      '• If yes, just paste the link and we\'ll embed it on your site.\n' +
-      '• If not, type *"no"* and we\'ll build a built-in booking system for you.'
-  );
+  const msg = 'Do you already use a booking tool (Fresha, Booksy, Vagaro, Calendly, etc.)?\n\n' +
+    '• If yes, just paste the link and we\'ll embed it on your site.\n' +
+    '• If not, type *"no"* and we\'ll build a built-in booking system for you.';
+  await sendTextMessage(user.phone_number, await localize(msg, user));
   return STATES.SALON_BOOKING_TOOL;
 }
 
@@ -1134,7 +1492,10 @@ async function finishSalonFlow(user) {
 
   await sendTextMessage(
     user.phone_number,
-    "Last thing — what contact info do you want on the site? Just send your email, phone, and/or address."
+    await localize(
+      "Last thing — what contact info do you want on the site? Just send your email, phone, and/or address.",
+      user
+    )
   );
   return STATES.WEB_COLLECT_CONTACT;
 }
@@ -1151,10 +1512,8 @@ async function handleSalonBookingTool(user, message) {
     wd.bookingUrl = urlMatch[0].replace(/[)\]]+$/, '');
     await updateUserMetadata(user.id, { websiteData: wd });
     await logMessage(user.id, `Booking mode: embed (${wd.bookingUrl})`, 'assistant');
-    await sendTextMessage(
-      user.phone_number,
-      `Got it, we'll embed *${wd.bookingUrl}* on your booking page.\n\nWhat's your Instagram handle? (e.g. ${igExample}). Just skip if you don't have one.`
-    );
+    const msg = `Got it, we'll embed *${wd.bookingUrl}* on your booking page.\n\nWhat's your Instagram handle? (e.g. ${igExample}). Just skip if you don't have one.`;
+    await sendTextMessage(user.phone_number, await localize(msg, user, text));
     return STATES.SALON_INSTAGRAM;
   }
 
@@ -1169,16 +1528,18 @@ async function handleSalonBookingTool(user, message) {
     wd.bookingMode = 'native';
     await updateUserMetadata(user.id, { websiteData: wd });
     await logMessage(user.id, 'Booking mode: native', 'assistant');
-    await sendTextMessage(
-      user.phone_number,
-      `Perfect, we'll build you a booking system. What's your Instagram handle? (e.g. ${igExample}). Just skip if you don't have one.`
-    );
+    const msg = `Perfect, we'll build you a booking system. What's your Instagram handle? (e.g. ${igExample}). Just skip if you don't have one.`;
+    await sendTextMessage(user.phone_number, await localize(msg, user, text));
     return STATES.SALON_INSTAGRAM;
   }
 
   await sendTextMessage(
     user.phone_number,
-    'Please either paste your booking tool link (Fresha/Booksy/Vagaro/etc.) or type *"no"* and we\'ll build one for you.'
+    await localize(
+      'Please either paste your booking tool link (Fresha/Booksy/Vagaro/etc.) or type *"no"* and we\'ll build one for you.',
+      user,
+      text
+    )
   );
   return STATES.SALON_BOOKING_TOOL;
 }
@@ -1188,14 +1549,16 @@ async function handleSalonInstagram(user, message) {
   const wd = { ...(user.metadata?.websiteData || {}) };
 
   // Only accept an obvious handle shape: an instagram.com URL, a @-prefixed
-  // token, or a single bare handle-shaped word. Anything else (delegation,
-  // prose, "i dont have one") is treated as skip. No re-prompt loop.
+  // token (either standalone or embedded in a sentence like "han, X kar do
+  // @asnhbukharu"), or a single bare handle-shaped word. Anything else
+  // (delegation, prose, "i dont have one") is treated as skip.
   const urlHandle = text.match(/instagram\.com\/([\w.]+)/i);
+  const inlineAt = text.match(/@([\w.]{3,30})\b/);
   let candidate = null;
   if (urlHandle) {
     candidate = urlHandle[1];
-  } else if (/^@[\w.]{3,30}$/.test(text)) {
-    candidate = text.slice(1);
+  } else if (inlineAt) {
+    candidate = inlineAt[1];
   } else if (/^[\w.]{3,30}$/.test(text)) {
     candidate = text;
   }
@@ -1206,16 +1569,19 @@ async function handleSalonInstagram(user, message) {
   await logMessage(user.id, `Instagram: ${wd.instagramHandle || '(skipped)'}`, 'assistant');
 
   // Announce what got saved so the user knows we moved on.
-  if (wd.instagramHandle) {
-    await sendTextMessage(user.phone_number, `Got it — @${wd.instagramHandle}.`);
-  } else {
-    await sendTextMessage(user.phone_number, `No worries, no Instagram link on the site.`);
-  }
+  const ack = wd.instagramHandle
+    ? `Got it — @${wd.instagramHandle}.`
+    : `No worries, no Instagram link on the site.`;
+  await sendTextMessage(user.phone_number, await localize(ack, user, text));
 
   if (wd.bookingMode === 'native') {
     await sendTextMessage(
       user.phone_number,
-      'What are your opening hours? A quick line is fine — for example: *"Tue-Sat 9-7, Sun-Mon closed"*.\n\nOr just tell me *default* for standard salon hours (Tue-Sat 9-7).'
+      await localize(
+        'What are your opening hours? A quick line is fine — for example: *"Tue-Sat 9-7, Sun-Mon closed"*.\n\nOr just tell me *default* for standard salon hours (Tue-Sat 9-7).',
+        user,
+        text
+      )
     );
     return STATES.SALON_HOURS;
   }
@@ -1227,6 +1593,23 @@ async function handleSalonInstagram(user, message) {
 async function handleSalonHours(user, message) {
   const text = (message.text || '').trim();
   const wd = { ...(user.metadata?.websiteData || {}) };
+
+  // Defensive guard: an empty / too-short text that isn't a button or list
+  // press should NOT auto-apply the default schedule. The hours parser
+  // treats empty input as delegation → default hours, which is fine when
+  // the user typed "skip" but disastrous if we ever got here with no real
+  // input (ghost webhook, race, retry). Re-ask instead of silently moving on.
+  if (!text && !message.buttonId && !message.listId) {
+    await sendTextMessage(
+      user.phone_number,
+      await localize(
+        'What are your opening hours? A quick line is fine — for example: *"Tue-Sat 9-7, Sun-Mon closed"*.\n\nOr just reply *default* for standard salon hours (Tue-Sat 9-7).',
+        user
+      )
+    );
+    return STATES.SALON_HOURS;
+  }
+
   const { parseWeeklyHours, formatHoursForDisplay } = require('../../website-gen/hoursParser');
   const { hours, usedDefault } = await parseWeeklyHours(text);
   wd.weeklyHours = hours;
@@ -1239,17 +1622,15 @@ async function handleSalonHours(user, message) {
   const services = (wd.services || []);
   if (services.length === 0) {
     // No services to price/tag — wrap up the salon flow.
-    await sendTextMessage(user.phone_number, prefix.trim());
+    await sendTextMessage(user.phone_number, await localize(prefix.trim(), user, text));
     return finishSalonFlow(user);
   }
-  await sendTextMessage(
-    user.phone_number,
-    prefix +
-      `How long does each service take, and what's the price?\n\n` +
-      `Example: *"Haircut 30min €25, Colour 90min €85, Nails 45min €35"*.\n\n` +
-      `Your services: ${services.join(', ')}.\n\n` +
-      `Or just reply *default* to use 30min with no price.`
-  );
+  const fullMsg = prefix +
+    `How long does each service take, and what's the price?\n\n` +
+    `Example: *"Haircut 30min €25, Colour 90min €85, Nails 45min €35"*.\n\n` +
+    `Your services: ${services.join(', ')}.\n\n` +
+    `Or just reply *default* to use 30min with no price.`;
+  await sendTextMessage(user.phone_number, await localize(fullMsg, user, text));
   return STATES.SALON_SERVICE_DURATIONS;
 }
 
@@ -1325,21 +1706,17 @@ async function handleSalonServiceDurations(user, message) {
   );
 
   // Announce what we picked so the user isn't left wondering what got saved.
+  let ackMsg;
   if (useDefault) {
-    await sendTextMessage(
-      user.phone_number,
-      `Got it, I'll set every service to *30 minutes with no price listed*. You can tweak durations and prices later from the summary.`
-    );
+    ackMsg = `Got it, I'll set every service to *30 minutes with no price listed*. You can tweak durations and prices later from the summary.`;
   } else {
     const preview = salonServices
       .slice(0, 3)
       .map((s) => `${s.name} ${s.durationMinutes}m${s.priceText ? ' ' + s.priceText : ''}`)
       .join(', ');
-    await sendTextMessage(
-      user.phone_number,
-      `Got it — ${preview}${salonServices.length > 3 ? '…' : ''}.`
-    );
+    ackMsg = `Got it — ${preview}${salonServices.length > 3 ? '…' : ''}.`;
   }
+  await sendTextMessage(user.phone_number, await localize(ackMsg, user, text));
 
   return finishSalonFlow(user);
 }
@@ -1417,11 +1794,13 @@ function parseContactFields(text) {
   // Clean a captured address: strip a leading copula/separator that sneaks in
   // when the user writes prose ("the address is ABC, Street" captures "is
   // ABC, Street" without this), plus trailing punctuation and stray "and"
-  // connectors ("123 Main St, and" → "123 Main St").
+  // connectors ("123 Main St, and" → "123 Main St"). Covers common copulas
+  // from Roman Urdu / Hindi / Spanish / French too so "address hai X" /
+  // "direccion es X" / "l'adresse est X" don't leak the verb into the value.
   const stripAddressSeparator = (v) =>
     v
-      .replace(/^(?:is|are|=|:|-|at|of|for)\s+/i, '')
-      .replace(/\s+(?:and|plus)\s*$/i, '')
+      .replace(/^(?:is|are|=|:|-|at|of|for|hai|hain|ka|ki|ke|ye|yeh|es|son|est|sont|ist|sind)\s+/i, '')
+      .replace(/\s+(?:and|plus|aur|y|et|und)\s*$/i, '')
       .replace(/[,;.\s=:\-]+$/, '')
       .trim();
 
@@ -1468,6 +1847,51 @@ function parseContactFields(text) {
 async function handleCollectContact(user, message) {
   const contactText = (message.text || '').trim();
   const skipWords = /^(nothing|none|no|skip|n\/a|na|nah|nope|don'?t|dont|no thanks)$/i;
+
+  // "Use my WhatsApp / current / this number" intent — save the number they're
+  // messaging from as contactPhone without making them type it out. LLM-based
+  // so it works in any language ("use my whatsapp number", "mera yahi
+  // number use kar lo", "usa mi número de whatsapp", "cet numéro", etc.).
+  // Gated by length + no @ / no multi-digit run so we don't waste a call
+  // when the user is clearly pasting a real email/phone/address.
+  const looksLikeRealContact =
+    /@/.test(contactText) ||
+    /\d{5,}/.test(contactText) ||
+    contactText.length > 80;
+  if (contactText && !looksLikeRealContact && user.phone_number) {
+    const wantsOwnNumber = await classifyUseOwnNumber(contactText, user.id);
+    if (wantsOwnNumber) {
+      const wd = { ...(user.metadata?.websiteData || {}) };
+      wd.contactPhone = user.phone_number;
+      // Preserve any email / address they may have already given earlier
+      // (via hydration or a prior turn). Don't overwrite those.
+      await updateUserMetadata(user.id, { websiteData: wd });
+      user.metadata = { ...(user.metadata || {}), websiteData: wd };
+      await logMessage(user.id, `Contact phone: ${wd.contactPhone} (user asked to reuse WhatsApp number)`, 'assistant');
+      await sendTextMessage(
+        user.phone_number,
+        await localize(
+          `Got it — using *${wd.contactPhone}* as the contact number on your site.`,
+          user,
+          contactText
+        )
+      );
+      // If we still don't have an email or address, stay in contact-collection
+      // so the user can add them; otherwise move on to the summary.
+      if (!wd.contactEmail && !wd.contactAddress) {
+        await sendTextMessage(
+          user.phone_number,
+          await localize(
+            'Anything else you want on the site — email or address? Or reply *skip* to use just the phone number.',
+            user,
+            contactText
+          )
+        );
+        return STATES.WEB_COLLECT_CONTACT;
+      }
+      return showConfirmSummary(user);
+    }
+  }
 
   // If the input is a multi-field contact blob (2+ labeled fields like
   // "address: X, email: Y, phone: Z"), skip the single-field edit detector
@@ -1588,7 +2012,68 @@ async function handleCollectContact(user, message) {
 // Render the pre-generation confirmation summary. Shared by handleCollectContact,
 // the edit-intent fast-path, the salon-flow loopback, and the sales bot's
 // website-demo trigger when everything is already known.
-async function showConfirmSummary(user) {
+/**
+ * Read-only peek at the current website-details summary — used when the
+ * user asks "what are my current details?" mid-flow. Same content as
+ * showConfirmSummary but without the "Reply *yes* to build it" trailing
+ * line and without forcing a state transition, because we're still in the
+ * middle of collecting.
+ */
+async function showSummaryPeek(user) {
+  const { isRealEstate, isHvac } = require('../../website-gen/templates');
+
+  let wd;
+  try {
+    const { findOrCreateUser } = require('../../db/users');
+    const fresh = await findOrCreateUser(user.phone_number, user.channel, user.via_phone_number_id);
+    wd = { ...(fresh.metadata?.websiteData || {}) };
+    user.metadata = fresh.metadata || {};
+  } catch (err) {
+    logger.warn(`[WEBDEV] showSummaryPeek DB refetch failed, falling back to in-memory: ${err.message}`);
+    wd = { ...(user.metadata?.websiteData || {}) };
+  }
+
+  const realEstate = isRealEstate(wd.industry);
+  const hvac = !realEstate && isHvac(wd.industry);
+  const contactInfo = [wd.contactEmail, wd.contactPhone, wd.contactAddress].filter(Boolean).join(' | ') || 'Not yet';
+
+  const lines = [`Here's what I've got so far:`, ``];
+  lines.push(`*${realEstate ? 'Agent' : 'Business'} Name:* ${wd.businessName || '-'}`);
+  lines.push(`*Industry:* ${wd.industry || '-'}`);
+
+  if (realEstate) {
+    if (wd.primaryCity) lines.push(`*City:* ${wd.primaryCity}`);
+    const extraAreas = (Array.isArray(wd.serviceAreas) ? wd.serviceAreas : [])
+      .filter((a) => a && a.toLowerCase() !== (wd.primaryCity || '').toLowerCase());
+    if (extraAreas.length) lines.push(`*Neighborhoods:* ${extraAreas.join(', ')}`);
+    if (wd.brokerageName) lines.push(`*Brokerage:* ${wd.brokerageName}`);
+    if (wd.yearsExperience != null) lines.push(`*Years:* ${wd.yearsExperience}`);
+    if (Array.isArray(wd.designations) && wd.designations.length) lines.push(`*Designations:* ${wd.designations.join(', ')}`);
+    if (Array.isArray(wd.listings) && wd.listings.length) {
+      lines.push(`*Listings:* ${wd.listings.length}`);
+    }
+  } else {
+    if (hvac && wd.primaryCity) lines.push(`*City:* ${wd.primaryCity}`);
+    if (hvac && Array.isArray(wd.serviceAreas) && wd.serviceAreas.length) {
+      const extraAreas = wd.serviceAreas.filter((a) => a && a.toLowerCase() !== (wd.primaryCity || '').toLowerCase());
+      if (extraAreas.length) lines.push(`*Service Areas:* ${extraAreas.join(', ')}`);
+    }
+    if (Array.isArray(wd.services) && wd.services.length) lines.push(`*Services:* ${wd.services.join(', ')}`);
+  }
+
+  if (wd.bookingMode === 'embed') lines.push(`*Booking:* External link (${wd.bookingUrl || 'set'})`);
+  else if (wd.bookingMode === 'native') lines.push(`*Booking:* Built-in system`);
+  if (wd.weeklyHours) lines.push(`*Hours:* set`);
+  if (Array.isArray(wd.salonServices) && wd.salonServices.length) lines.push(`*Priced services:* ${wd.salonServices.length}`);
+  if (wd.instagramHandle) lines.push(`*Instagram:* @${wd.instagramHandle}`);
+  lines.push(`*Contact:* ${contactInfo}`);
+
+  const summary = lines.join('\n');
+  await sendTextMessage(user.phone_number, await localize(summary, user));
+  await logMessage(user.id, 'Showed summary peek (mid-flow)', 'assistant');
+}
+
+async function showConfirmSummary(user, prefix = '') {
   const { isRealEstate, isHvac } = require('../../website-gen/templates');
 
   // Re-fetch from DB so we never render stale data after a sub-flow updated
@@ -1657,7 +2142,18 @@ async function showConfirmSummary(user) {
   lines.push(`*Contact:* ${contactInfo}`);
   lines.push(``, `Does everything look good? Reply *yes* to build it, or tell me what you'd like to change.`);
 
-  await sendTextMessage(user.phone_number, lines.join('\n'));
+  // Localize the summary (all labels + prompt are hardcoded English).
+  // The actual stored values stay verbatim — the localizer prompt preserves
+  // placeholder values via "keep URLs / @handles / phone numbers as-is".
+  //
+  // Ack prefix (e.g. "✅ Business name updated to X.") is folded into the
+  // SAME send as the summary. Earlier they were two sequential sends and
+  // if the second one ever failed, the user saw "Here's the updated
+  // summary:" with no summary under it — confusing and blocked progress.
+  const summary = lines.join('\n');
+  const combined = prefix ? `${prefix.trim()}\n\n${summary}` : summary;
+  const localized = await localize(combined, user);
+  await sendTextMessage(user.phone_number, localized);
   await logMessage(user.id, 'Showing website confirmation summary', 'assistant');
 
   return STATES.WEB_CONFIRM;
@@ -1665,13 +2161,21 @@ async function showConfirmSummary(user) {
 
 async function handleConfirm(user, message) {
   const originalText = (message.text || '').trim();
-  const text = originalText.toLowerCase();
-  const confirmWords = /^(yes|yeah|yep|yup|y|ok|okay|sure|go|looks good|lgtm|correct|perfect|proceed|generate|build|do it|let'?s go|go ahead)$/i;
 
-  if (confirmWords.test(text)) {
+  // Is the user confirming (approve and build) vs. asking to edit something?
+  // LLM-classified so it works for ANY language — "yes", "perfect hai", "sí
+  // dale", "parfait", "تمام, ابن", etc. — without us maintaining a keyword
+  // list per language.
+  const confirmIntent = await classifyConfirmIntent(originalText, user.id);
+
+  if (confirmIntent === 'confirm') {
     await sendTextMessage(
       user.phone_number,
-      'Alright, give me about 30-60 seconds to build your site...'
+      await localize(
+        'Alright, give me about 30-60 seconds to build your site...',
+        user,
+        originalText
+      )
     );
     await logMessage(user.id, 'Confirmed, generating website', 'assistant');
     return generateWebsite(user);
@@ -1680,7 +2184,23 @@ async function handleConfirm(user, message) {
   // User wants to change something — use originalText to preserve capitalization
   const wd = user.metadata?.websiteData || {};
 
-  // Check for specific field changes (match on originalText to preserve case)
+  // Helper: persist the edit, ack it, and re-render the full summary so the
+  // user sees the updated state at a glance instead of having to remember
+  // which fields were changed. The ack is folded into the same send as the
+  // summary — earlier it was two sends, and if the second (summary) ever
+  // failed the user was left staring at "Here's the updated summary:" with
+  // nothing underneath, unable to proceed.
+  const applyAndReshow = async (ackLabel) => {
+    await updateUserMetadata(user.id, { websiteData: wd });
+    user.metadata = { ...(user.metadata || {}), websiteData: wd };
+    const ackPrefix = `✅ ${ackLabel}. Here's the updated summary:`;
+    return showConfirmSummary(user, ackPrefix);
+  };
+
+  // Try regex first (fast path, covers English "address to X" / "name: X" etc).
+  // If nothing matches, fall through to the LLM classifier below for natural
+  // prose in any language — "address ko Gulshan Iqbal kr do" / "cambia el
+  // email a foo@bar.com" / "change name please to MyCo".
   const nameChange = originalText.match(/(?:business\s*)?name\s*(?:to|:|should be|is)\s*(.+)/i);
   const industryChange = originalText.match(/industry\s*(?:to|:|should be|is)\s*(.+)/i);
   const servicesChange = originalText.match(/services?\s*(?:to|:|should be|are|change)\s*(.+)/i);
@@ -1689,79 +2209,123 @@ async function handleConfirm(user, message) {
   const addressChange = originalText.match(/(?:address|location|addr)\s*(?:to|:|should be|is)\s*(.+)/i);
   const contactChange = originalText.match(/contact\s*(?:to|:|should be|is)\s*(.+)/i);
 
-  // Helper: persist the edit, ack it, and re-render the full summary so the
-  // user sees the updated state at a glance instead of having to remember
-  // which fields were changed.
-  const applyAndReshow = async (ackLabel) => {
-    await updateUserMetadata(user.id, { websiteData: wd });
-    user.metadata = { ...(user.metadata || {}), websiteData: wd };
-    await sendTextMessage(user.phone_number, `✅ ${ackLabel}. Here's the updated summary:`);
-    return showConfirmSummary(user);
+  const applyFieldEdit = async (field, value) => {
+    const v = String(value || '').trim();
+    if (!v) return null;
+    switch (field) {
+      case 'businessName':
+      case 'name': {
+        wd.businessName = v;
+        return applyAndReshow(`Business name updated to *${wd.businessName}*`);
+      }
+      case 'industry': {
+        wd.industry = v;
+        const needsSalonFlow =
+          isSalonIndustry(v) &&
+          !wd.bookingMode &&
+          (!Array.isArray(wd.salonServices) || wd.salonServices.length === 0);
+        if (needsSalonFlow) {
+          await updateUserMetadata(user.id, { websiteData: wd, salonFlowOrigin: 'CONFIRM' });
+          user.metadata = { ...(user.metadata || {}), websiteData: wd };
+          const txt = `Updated industry to *${v}* — a few quick salon-specific questions, then we'll build it.`;
+          await sendTextMessage(user.phone_number, await localize(txt, user, originalText));
+          return startSalonFlow(user);
+        }
+        return applyAndReshow(`Industry updated to *${wd.industry}*`);
+      }
+      case 'services': {
+        wd.services = v
+          .split(/\s*,\s*|\s+(?:and|&|aur|y|et|und)\s+/i)
+          .map((s) => s.trim())
+          .filter(Boolean);
+        return applyAndReshow(`Services updated to *${wd.services.join(', ')}*`);
+      }
+      case 'email':
+      case 'contactEmail': {
+        const m = v.match(/[\w.-]+@[\w.-]+\.\w+/);
+        wd.contactEmail = m ? m[0] : v;
+        return applyAndReshow(`Email updated to *${wd.contactEmail}*`);
+      }
+      case 'phone':
+      case 'contactPhone': {
+        wd.contactPhone = v;
+        return applyAndReshow(`Phone updated to *${wd.contactPhone}*`);
+      }
+      case 'address':
+      case 'contactAddress': {
+        wd.contactAddress = v;
+        return applyAndReshow(`Address updated to *${wd.contactAddress}*`);
+      }
+      case 'contact': {
+        const parsed = parseContactFields(v);
+        if (parsed.contactEmail) wd.contactEmail = parsed.contactEmail;
+        if (parsed.contactPhone) wd.contactPhone = parsed.contactPhone;
+        if (parsed.contactAddress) wd.contactAddress = parsed.contactAddress;
+        return applyAndReshow('Contact info updated');
+      }
+      default:
+        return null;
+    }
   };
 
-  if (nameChange) {
-    wd.businessName = nameChange[1].trim();
-    return applyAndReshow(`Business name updated to *${wd.businessName}*`);
-  }
-  if (industryChange) {
-    const newIndustry = industryChange[1].trim();
-    wd.industry = newIndustry;
-    // If the user just switched into a salon industry and we haven't yet
-    // collected the salon-specific details (booking tool, hours, prices),
-    // pivot into the salon sub-flow and return to CONFIRM when it's done.
-    const needsSalonFlow =
-      isSalonIndustry(newIndustry) &&
-      !wd.bookingMode &&
-      (!Array.isArray(wd.salonServices) || wd.salonServices.length === 0);
-    if (needsSalonFlow) {
-      await updateUserMetadata(user.id, { websiteData: wd, salonFlowOrigin: 'CONFIRM' });
-      user.metadata = { ...(user.metadata || {}), websiteData: wd };
-      await sendTextMessage(user.phone_number, `Updated industry to *${newIndustry}* — a few quick salon-specific questions, then we'll build it.`);
-      return startSalonFlow(user);
+  if (nameChange) { const r = await applyFieldEdit('businessName', nameChange[1]); if (r !== null) return r; }
+  if (industryChange) { const r = await applyFieldEdit('industry', industryChange[1]); if (r !== null) return r; }
+  if (servicesChange) { const r = await applyFieldEdit('services', servicesChange[1]); if (r !== null) return r; }
+  if (emailChange) { const r = await applyFieldEdit('email', emailChange[1]); if (r !== null) return r; }
+  if (phoneChange) { const r = await applyFieldEdit('phone', phoneChange[1]); if (r !== null) return r; }
+  if (addressChange) { const r = await applyFieldEdit('address', addressChange[1]); if (r !== null) return r; }
+  if (contactChange) { const r = await applyFieldEdit('contact', contactChange[1]); if (r !== null) return r; }
+
+  // Regex didn't match. Try the LLM — catches natural prose in any language:
+  // "address ko Gulshan Iqbal kr do" (Urdu), "cambia el email a X" (Spanish),
+  // "change the name please to MyCo", etc.
+  try {
+    const prompt = `The user is reviewing a website-setup summary and may want to change ONE specific field. Identify which field (if any) and the exact new value they provided.
+
+Fields: businessName, industry, services, email, phone, address, contact
+
+Rules:
+- Extract only if the user is clearly asking to change/update/set a field.
+- Understand any language: English, Roman Urdu, Urdu, Hindi, Spanish, Arabic, etc.
+- Preserve emails / phone numbers / URLs / addresses exactly as written.
+- If the user is NOT asking to change a field (e.g. they're saying "yes", "looks good", "cancel", a question, or something unrelated), return {"field": null}.
+
+User said: "${originalText}"
+
+Return JSON ONLY. Examples:
+{"field": "address", "value": "Gulshan Iqbal, Karachi"}
+{"field": "businessName", "value": "MyCo"}
+{"field": "email", "value": "test@example.com"}
+{"field": null}`;
+
+    const response = await generateResponse(
+      prompt,
+      [{ role: 'user', content: originalText }],
+      { userId: user.id, operation: 'confirm_edit_classify' }
+    );
+    const m = (response || '').match(/\{[\s\S]*?\}/);
+    if (m) {
+      const parsed = JSON.parse(m[0]);
+      if (parsed.field && parsed.value) {
+        const r = await applyFieldEdit(parsed.field, parsed.value);
+        if (r !== null) return r;
+      }
     }
-    return applyAndReshow(`Industry updated to *${wd.industry}*`);
-  }
-  if (servicesChange) {
-    wd.services = servicesChange[1]
-      .split(/\s*,\s*|\s+(?:and|&)\s+/i)
-      .map((s) => s.trim())
-      .filter(Boolean);
-    return applyAndReshow(`Services updated to *${wd.services.join(', ')}*`);
-  }
-  if (emailChange) {
-    const val = emailChange[1].trim();
-    const m = val.match(/[\w.-]+@[\w.-]+\.\w+/);
-    wd.contactEmail = m ? m[0] : val;
-    return applyAndReshow(`Email updated to *${wd.contactEmail}*`);
-  }
-  if (phoneChange) {
-    wd.contactPhone = phoneChange[1].trim();
-    return applyAndReshow(`Phone updated to *${wd.contactPhone}*`);
-  }
-  if (addressChange) {
-    wd.contactAddress = addressChange[1].trim();
-    return applyAndReshow(`Address updated to *${wd.contactAddress}*`);
-  }
-  if (contactChange) {
-    const parsed = parseContactFields(contactChange[1].trim());
-    if (parsed.contactEmail) wd.contactEmail = parsed.contactEmail;
-    if (parsed.contactPhone) wd.contactPhone = parsed.contactPhone;
-    if (parsed.contactAddress) wd.contactAddress = parsed.contactAddress;
-    return applyAndReshow('Contact info updated');
+  } catch (err) {
+    logger.warn(`[WEBDEV-CONFIRM] Edit-intent LLM classify failed: ${err.message}`);
   }
 
-  // Couldn't parse the change — ask them to be more specific
-  await sendTextMessage(
-    user.phone_number,
+  // Still nothing — ask the user to be more specific. Localize the hint.
+  const fallback =
     'What would you like to change? You can say things like:\n\n' +
-      '• "Name to MyBusiness"\n' +
-      '• "Industry to Tech"\n' +
-      '• "Services to Web Design, SEO, Branding"\n' +
-      '• "Email to hello@example.com"\n' +
-      '• "Phone to +1 555 123 4567"\n' +
-      '• "Address to 123 Main St, City"\n\n' +
-      'Or just reply *yes* to proceed with the current details.'
-  );
+    '• "Name to MyBusiness"\n' +
+    '• "Industry to Tech"\n' +
+    '• "Services to Web Design, SEO, Branding"\n' +
+    '• "Email to hello@example.com"\n' +
+    '• "Phone to +1 555 123 4567"\n' +
+    '• "Address to 123 Main St, City"\n\n' +
+    'Or just reply *yes* to proceed with the current details.';
+  await sendTextMessage(user.phone_number, await localize(fallback, user, originalText));
   return STATES.WEB_CONFIRM;
 }
 
@@ -2022,6 +2586,34 @@ async function handleRevisions(user, message) {
           { id: 'svc_general', title: '💬 Chat with Us' },
         ]);
         return STATES.WEB_REVISIONS;
+      }
+
+      // Short-circuit clear approval sentiment BEFORE running the heavy
+      // REVISION_PARSER_PROMPT. "i love the website", "perfect hai", "sí
+      // genial", etc. are unambiguous approvals — the revision parser has
+      // been inconsistent about classifying them (returns _unclear for
+      // sentiment it doesn't recognize). LLM classifier handles any
+      // language without a keyword list. Gated at ≤80 chars so long
+      // revision requests like "i love the website but change..." still
+      // go through the full parser.
+      if (revisionText.trim().length <= 80) {
+        const approvalIntent = await classifyConfirmIntent(revisionText, user.id);
+        if (approvalIntent === 'confirm') {
+          const siteId = user.metadata?.currentSiteId;
+          if (siteId) await updateSite(siteId, { status: 'approved' });
+
+          const example = domainExampleFor(user.metadata?.websiteData?.businessName);
+          await sendTextMessage(
+            user.phone_number,
+            await localize(
+              `🎉 *Awesome!* Your website is approved.\n\nWould you like to put it on your own custom domain? (e.g., ${example})\n\nReply *yes* and I'll help you find one, or *no* to skip it for now.`,
+              user,
+              revisionText
+            )
+          );
+          await logMessage(user.id, 'Website approved (sentiment classifier), offering custom domain', 'assistant');
+          return STATES.DOMAIN_OFFER;
+        }
       }
     }
 

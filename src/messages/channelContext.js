@@ -9,7 +9,27 @@ const channelStore = new AsyncLocalStorage();
  * user messaged.
  */
 function runWithContext({ channel, phoneNumberId }, fn) {
-  return channelStore.run({ channel, phoneNumberId: phoneNumberId || null }, fn);
+  // `sendCount` is incremented by sender.js every time a user-visible
+  // message actually goes out. The router reads it after a failed turn to
+  // decide whether a retry would duplicate already-delivered content.
+  return channelStore.run({ channel, phoneNumberId: phoneNumberId || null, sendCount: 0 }, fn);
+}
+
+/**
+ * Called from sender.js after a successful outbound send. Bumps the per-turn
+ * counter so the router can tell whether the user has already seen anything.
+ */
+function noteSendSucceeded() {
+  const store = channelStore.getStore();
+  if (store) store.sendCount = (store.sendCount || 0) + 1;
+}
+
+/**
+ * How many messages this turn has already delivered to the user. 0 when
+ * outside an inbound-triggered context.
+ */
+function getSendCount() {
+  return channelStore.getStore()?.sendCount || 0;
 }
 
 /**
@@ -34,4 +54,11 @@ function getCurrentPhoneNumberId() {
   return channelStore.getStore()?.phoneNumberId || null;
 }
 
-module.exports = { runWithContext, runWithChannel, getCurrentChannel, getCurrentPhoneNumberId };
+module.exports = {
+  runWithContext,
+  runWithChannel,
+  getCurrentChannel,
+  getCurrentPhoneNumberId,
+  noteSendSucceeded,
+  getSendCount,
+};

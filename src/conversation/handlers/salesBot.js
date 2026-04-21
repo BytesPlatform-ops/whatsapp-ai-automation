@@ -10,6 +10,7 @@ const { env } = require('../../config/env');
 const { saveLeadSummary } = require('../../db/leadSummaries');
 const { buildSummaryContext } = require('../summaryManager');
 const { hydrateWebsiteData } = require('../entityAccumulator');
+const { localize } = require('../../utils/localizer');
 
 /**
  * Extract and strip the [LEAD_BRIEF]...[/LEAD_BRIEF] block from the LLM response.
@@ -631,7 +632,10 @@ async function handleSalesBot(user, message) {
     }
 
     if (!businessName) {
-      await sendTextMessage(user.phone_number, "Let's build it! What's your business name?");
+      await sendTextMessage(
+        user.phone_number,
+        await localize("Let's build it! What's your business name?", user, text)
+      );
       await logMessage(user.id, 'Starting website demo flow', 'assistant');
       return STATES.WEB_COLLECT_NAME;
     }
@@ -666,7 +670,11 @@ async function handleSalesBot(user, message) {
     if (industry && isSalonIndustry(industry)) {
       await sendTextMessage(
         user.phone_number,
-        `Nice, let's get *${businessName}* set up. Just a couple more things to personalize your site.`
+        await localize(
+          `Nice, let's get *${businessName}* set up. Just a couple more things to personalize your site.`,
+          user,
+          text
+        )
       );
       await logMessage(user.id, `Website demo → salon flow (name + industry pre-filled)`, 'assistant');
       return startSalonFlow(user);
@@ -682,7 +690,11 @@ async function handleSalesBot(user, message) {
     if (nextState === STATES.WEB_CONFIRM) {
       await sendTextMessage(
         user.phone_number,
-        `Perfect, I've got everything I need for *${businessName}*. Pulling up the summary.`
+        await localize(
+          `Perfect, I've got everything I need for *${businessName}*. Pulling up the summary.`,
+          user,
+          text
+        )
       );
       await logMessage(user.id, `Website demo → confirm (all pre-filled from sales chat)`, 'assistant');
       return showConfirmSummary(user);
@@ -702,7 +714,8 @@ async function handleSalesBot(user, message) {
       : `Building it for *${businessName}*.`;
 
     const question = questionForState(nextState, websiteData);
-    await sendTextMessage(user.phone_number, `${contextLine}\n\n${question}`);
+    const outgoing = `${contextLine}\n\n${question}`;
+    await sendTextMessage(user.phone_number, await localize(outgoing, user, text));
     await logMessage(
       user.id,
       `Website demo → ${nextState} (pre-filled: name${industry ? ', industry' : ''}${services ? ', services' : ''}${hasContact ? ', contact' : ''})`,

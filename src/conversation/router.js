@@ -17,6 +17,54 @@ const {
   UNDOABLE_STATES,
 } = require('./undoStack');
 
+// ── Message dedup ─────────────────────────────────────────────────────────
+// WhatsApp can occasionally redeliver the same inbound message (network blip,
+// ACK miss between Meta and our server). Without this, /reset could fire
+// twice in a row and the user sees duplicate greetings. LRU-capped so
+// memory stays bounded under load.
+const RECENT_MESSAGES = new Map(); // key = `${from}:${messageId}` → timestamp
+const DEDUP_WINDOW_MS = 60_000;
+const DEDUP_MAX_ENTRIES = 2000;
+
+function seenRecently(from, messageId) {
+  if (!messageId) return false; // can't dedup without an ID
+  const key = `${from}:${messageId}`;
+  const now = Date.now();
+  const last = RECENT_MESSAGES.get(key);
+  if (last && now - last < DEDUP_WINDOW_MS) return true;
+  RECENT_MESSAGES.set(key, now);
+  // Cheap eviction: if the map grew past the cap, drop the oldest 20% so
+  // occasional large bursts don't leak memory.
+  if (RECENT_MESSAGES.size > DEDUP_MAX_ENTRIES) {
+    const keys = Array.from(RECENT_MESSAGES.keys()).slice(0, Math.floor(DEDUP_MAX_ENTRIES * 0.2));
+    for (const k of keys) RECENT_MESSAGES.delete(k);
+  }
+  return false;
+}
+
+// ── Per-user serial processing ────────────────────────────────────────────
+// Two inbound webhooks for the same user can land in parallel (/reset
+// followed by the user's first real message, for example). Without a lock
+// they process concurrently, which causes weird races: /reset's DB cleanup
+// is slow, its greeting fires AFTER the next message's reply, and the user
+// sees "greeting → real reply → greeting" out of order.
+//
+// This is a Map<phoneNumber, Promise> that chains pending work. Each turn
+// awaits the previous turn's completion before running.
+const USER_LOCKS = new Map();
+
+function withUserLock(from, fn) {
+  const previous = USER_LOCKS.get(from) || Promise.resolve();
+  const current = previous.then(fn, fn); // run regardless of prior success/failure
+  USER_LOCKS.set(from, current);
+  // Clean up the map entry once this turn finishes, but ONLY if nothing newer
+  // has queued on top of us. Otherwise a later turn would lose its chain.
+  current.finally(() => {
+    if (USER_LOCKS.get(from) === current) USER_LOCKS.delete(from);
+  });
+  return current;
+}
+
 /**
  * Identify which product an ad is promoting based on the ad body text.
  */
@@ -277,23 +325,39 @@ async function classifyIntent(state, text, userId) {
  */
 async function routeMessage(message) {
   const channel = message.channel || 'whatsapp';
-  // Pin the inbound phone_number_id into the async context so every
-  // sendTextMessage / sendInteractiveButtons / etc. inside this turn replies
-  // from the same business number the user messaged.
-  return runWithContext({ channel, phoneNumberId: message.phoneNumberId || null }, async () => {
+  // Serialize processing per user — two concurrent webhooks for the same
+  // phone number would otherwise race each other. The lock chains pending
+  // turns so /reset finishes (including its greeting) before the user's
+  // next message starts processing.
+  return withUserLock(message.from || 'anon', () =>
+    // Pin the inbound phone_number_id into the async context so every
+    // sendTextMessage / sendInteractiveButtons / etc. inside this turn replies
+    // from the same business number the user messaged. The context also
+    // tracks a sendCount that gates the retry logic below.
+    runWithContext({ channel, phoneNumberId: message.phoneNumberId || null }, async () => {
+    const { getSendCount } = require('../messages/channelContext');
+
     // First attempt.
     try {
       return await _routeMessage(message);
     } catch (err) {
-      logger.warn(`[ROUTER] First attempt failed for ${message.from}: ${err.message}. Retrying once.`);
-      // Brief pause so a transient LLM/DB timeout has a chance to clear.
+      const alreadyReplied = getSendCount() > 0;
+      if (alreadyReplied) {
+        // The turn already delivered at least one reply to the user before
+        // throwing. Retrying would duplicate that reply — much worse than
+        // just logging and moving on. This is the common case when a post-
+        // reply step (metadata update, summary refresh, trigger dispatch)
+        // throws but the user got what they needed.
+        logger.warn(`[ROUTER] First attempt failed AFTER ${getSendCount()} reply(ies) for ${message.from}: ${err.message}. NOT retrying (would duplicate).`);
+        return;
+      }
+      logger.warn(`[ROUTER] First attempt failed for ${message.from} with no reply sent: ${err.message}. Retrying once.`);
       await new Promise((r) => setTimeout(r, 600));
     }
 
-    // Second attempt — most silent stalls are transient (slow LLM, brief
-    // network blip) and succeed on retry. If this one works, the user gets
-    // a proper reply to their actual message instead of a generic "try
-    // again" nudge.
+    // Second attempt — only reached when the first attempt threw BEFORE
+    // sending anything. Transient timeouts / network blips fall into this
+    // bucket and usually succeed on retry.
     try {
       return await _routeMessage(message);
     } catch (err) {
@@ -311,12 +375,20 @@ async function routeMessage(message) {
         // If even the nudge fails, we're truly stuck — just log.
       }
     }
-  });
+    })
+  );
 }
 
 async function _routeMessage(message) {
   const { from, text, messageId } = message;
   const channel = message.channel || 'whatsapp';
+
+  // Dedup: WhatsApp sometimes redelivers the same inbound messageId. Without
+  // this, /reset / sales greetings fire twice and the user sees duplicates.
+  if (seenRecently(from, messageId)) {
+    logger.warn(`[ROUTER] Duplicate delivery ignored: from=${from} messageId=${messageId}`);
+    return;
+  }
 
   // Track the message ID so typing indicators work for all outgoing messages
   setLastMessageId(from, messageId);

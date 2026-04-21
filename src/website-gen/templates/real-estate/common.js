@@ -30,13 +30,24 @@ function slugify(s) {
   return String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 }
 
-function fmtMoney(n) {
+// Currency code → rendered prefix used on the generated site. Letter codes
+// (Rs, AED, ...) read better with a trailing space; sigil symbols are flush.
+const MONEY_PREFIX = {
+  USD: '$', CAD: 'CA$', AUD: 'A$',
+  GBP: '£', EUR: '€',
+  PKR: 'Rs ', INR: '₹', BDT: '৳', LKR: 'Rs ',
+  AED: 'AED ', SAR: 'SAR ', QAR: 'QAR ', KWD: 'KWD ', OMR: 'OMR ', BHD: 'BHD ',
+};
+
+function fmtMoney(n, currency = 'USD') {
   if (n == null) return '';
   const num = typeof n === 'number' ? n : Number(String(n).replace(/[^\d.]/g, ''));
   if (!Number.isFinite(num)) return String(n);
-  if (num >= 1_000_000) return `$${(num / 1_000_000).toFixed(num % 1_000_000 === 0 ? 0 : 2).replace(/\.0+$/, '')}M`;
-  if (num >= 1_000) return `$${Math.round(num / 1_000)}K`;
-  return `$${num.toLocaleString()}`;
+  const code = String(currency || 'USD').toUpperCase();
+  const prefix = MONEY_PREFIX[code] || `${code} `;
+  if (num >= 1_000_000) return `${prefix}${(num / 1_000_000).toFixed(num % 1_000_000 === 0 ? 0 : 2).replace(/\.0+$/, '')}M`;
+  if (num >= 1_000) return `${prefix}${Math.round(num / 1_000)}K`;
+  return `${prefix}${num.toLocaleString()}`;
 }
 
 // ─── Design tokens ──────────────────────────────────────────────────────────

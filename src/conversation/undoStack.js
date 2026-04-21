@@ -11,6 +11,7 @@ const { sendTextMessage } = require('../messages/sender');
 const { logMessage } = require('../db/conversations');
 const { logger } = require('../utils/logger');
 const { generateResponse } = require('../llm/provider');
+const { localize } = require('../utils/localizer');
 const { STATES } = require('./states');
 
 const MAX_HISTORY = 3;
@@ -56,12 +57,16 @@ async function classifyUndoOrKeep(text, { undoPending = false, userId } = {}) {
     ? `- "keep": user wants to leave the previously-stored answer as-is and move on (e.g., "keep", "same", "leave it", "fine", "it's fine", "nvm", "no change"). VALID because the bot just asked "change it or keep it?".`
     : `- "keep": DO NOT return "keep". The user is NOT currently at a "change or keep it?" prompt, so "keep" isn't a valid classification right now.`;
 
+  const undoPendingGuidance = undoPending
+    ? `\n\nIMPORTANT context: the bot JUST popped back one step and asked "change it or keep it?". So the user's reply is most likely either "keep" or a NEW VALUE for the field. Only return "undo" if the user explicitly asks to go back ANOTHER step (e.g., "go back further", "one more step back", "no, the one before that"). A reply like "yes change it to X" / "han, X kar do" / "make it X" is supplying the new value — classify as "none", NOT "undo".`
+    : '';
+
   const prompt = `The user is mid-conversation with a chatbot that's collecting info to build a website.
 
 Classify the user's reply as ONE of:
-- "undo": user wants to go back to the previous question / correct an earlier answer (e.g., "wait go back", "let's revisit that", "change the last one", "one step back", "actually, previous step"). NOT "undo" if the user just means "go to the main menu" or "start over".
+- "undo": user wants to go back to the previous question / correct an earlier answer (e.g., "wait go back", "let's revisit that", "change the last one", "one step back", "actually, previous step"). NOT "undo" if the user just means "go to the main menu" or "start over". NOT "undo" if the user is providing a new value for the current field ("change it to X", "make it Y", "han, X kar do") — that's an answer, return "none".
 ${keepClause}
-- "none": neither of the above — user is either giving a real answer, asking an unrelated question, or saying something else.
+- "none": neither of the above — user is either giving a real answer (including "yes, change it to X"), asking an unrelated question, or saying something else.${undoPendingGuidance}
 
 The user said: "${t}"
 
@@ -147,7 +152,12 @@ function storedAnswerForState(state, metadata) {
     case STATES.WEB_COLLECT_INDUSTRY: return wd.industry || null;
     case STATES.WEB_COLLECT_AREAS: {
       const city = wd.primaryCity;
-      const areas = Array.isArray(wd.serviceAreas) ? wd.serviceAreas.filter(Boolean) : [];
+      // Filter out the primary city from service-areas display so it
+      // doesn't read "Austin: Austin, New York, Texas" when the
+      // parser accidentally includes the city in its own areas list.
+      const areas = (Array.isArray(wd.serviceAreas) ? wd.serviceAreas : [])
+        .filter(Boolean)
+        .filter((a) => !city || a.toLowerCase() !== city.toLowerCase());
       if (!city && areas.length === 0) return null;
       if (city && areas.length > 0) return `${city}: ${areas.join(', ')}`;
       return city || areas.join(', ');
@@ -201,10 +211,11 @@ async function handleUndo(user) {
     : [];
 
   if (history.length === 0) {
-    await sendTextMessage(
-      user.phone_number,
-      "Nothing to go back to — we haven't filled anything in yet."
+    const msg = await localize(
+      "Nothing to go back to — we haven't filled anything in yet.",
+      user
     );
+    await sendTextMessage(user.phone_number, msg);
     return false;
   }
 
@@ -236,7 +247,8 @@ async function handleUndo(user) {
     msg = `Sure, going back one step. What would you like to change?`;
   }
 
-  await sendTextMessage(user.phone_number, msg);
+  const localized = await localize(msg, user);
+  await sendTextMessage(user.phone_number, localized);
   await logMessage(user.id, `Undo: popped to ${prevState}`, 'assistant');
   logger.info(`[UNDO] ${user.phone_number} popped to ${prevState}`);
   return true;
