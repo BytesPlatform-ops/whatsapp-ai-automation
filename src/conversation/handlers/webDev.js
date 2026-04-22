@@ -148,10 +148,23 @@ function questionForState(state, websiteData) {
       const { isHvac, resolveTrade } = require('../../website-gen/templates');
       if (isHvac(websiteData.industry)) {
         const trade = resolveTrade(websiteData.industry);
-        if (trade === 'plumbing') {
-          return "Which plumbing services do you offer? List them separated by commas — or just skip to use our default list (leak repair, drain cleaning, water heater install, pipe repair, sewer services, and more).";
-        }
-        return "Which HVAC services do you offer? List them separated by commas — or just skip to use our default list (AC repair, heating, heat pumps, duct cleaning, thermostats, and more).";
+        // Trade-specific prompt with example defaults — keep the example
+        // lists in sync with the DEFAULT_SERVICES arrays in
+        // templates/hvac/common.js so the user's mental model of what
+        // they're about to get matches what actually seeds the site.
+        const TRADE_PROMPT = {
+          hvac: "Which HVAC services do you offer? List them separated by commas — or just skip to use our default list (AC repair, heating, heat pumps, duct cleaning, thermostats, and more).",
+          plumbing: "Which plumbing services do you offer? List them separated by commas — or just skip to use our default list (leak repair, drain cleaning, water heater install, pipe repair, sewer services, and more).",
+          electrical: "Which electrical services do you offer? List them separated by commas — or just skip to use our default list (panel upgrades, wiring, outlet install, EV chargers, lighting, generators, and more).",
+          roofing: "Which roofing services do you offer? List them separated by commas — or just skip to use our default list (roof repair, full replacement, storm damage, shingles, gutters, inspections, and more).",
+          appliance: "Which appliances do you repair? List them separated by commas — or just skip to use our default list (fridge, washer, dryer, dishwasher, oven, microwave, garbage disposal, and more).",
+          'garage-door': "Which garage door services do you offer? List them separated by commas — or just skip to use our default list (spring replacement, opener repair, new install, off-track fix, smart openers, and more).",
+          locksmith: "Which locksmith services do you offer? List them separated by commas — or just skip to use our default list (lockouts, rekeying, lock install, key cutting, car keys, safe opening, and more).",
+          'pest-control': "Which pests do you handle? List them separated by commas — or just skip to use our default list (general pest control, termites, rodents, bed bugs, mosquitoes, bees, and more).",
+          'water-damage': "Which restoration services do you offer? List them separated by commas — or just skip to use our default list (water extraction, structural drying, mold remediation, flood cleanup, sewage cleanup, and more).",
+          'tree-service': "Which tree services do you offer? List them separated by commas — or just skip to use our default list (tree removal, trimming, pruning, stump grinding, storm cleanup, arborist assessments, and more).",
+        };
+        return TRADE_PROMPT[trade] || TRADE_PROMPT.hvac;
       }
       return "What services or products do you offer? List them separated by commas, or just skip this one.";
     }

@@ -1,4 +1,4 @@
-const { DEFAULT_SERVICES, PLUMBING_DEFAULT_SERVICES } = require('./common');
+const { DEFAULT_SERVICES, TRADE_COPY } = require('./common');
 const { generateHomePage } = require('./home');
 const { generateServicesPage } = require('./services');
 const { generateAreasPage } = require('./areas');
@@ -17,7 +17,13 @@ function ensureHvacDefaults(config) {
     const { resolveTrade } = require('../');
     c.trade = resolveTrade(c.industry);
   }
-  const defaults = c.trade === 'plumbing' ? PLUMBING_DEFAULT_SERVICES : DEFAULT_SERVICES;
+  // Look up the trade's default service list from TRADE_COPY so adding a
+  // new trade is a single-map change — ensureHvacDefaults doesn't need
+  // touching. Falls back to the HVAC defaults when the trade entry or
+  // its defaultServices is missing (shouldn't happen in practice but
+  // keeps the generator resilient).
+  const tradeEntry = TRADE_COPY[c.trade] || TRADE_COPY.hvac;
+  const defaults = tradeEntry.defaultServices || DEFAULT_SERVICES;
   if (!Array.isArray(c.services) || c.services.length === 0) {
     c.services = defaults.map((s) => ({
       title: s.title,

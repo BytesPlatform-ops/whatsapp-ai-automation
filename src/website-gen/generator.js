@@ -268,7 +268,21 @@ Generate compelling website copy for this business. Return ONLY valid JSON.`;
     imageQuery = (generatedContent.heroImageQuery || '').trim();
     if (!imageQuery) {
       if (hvacMode) {
-        imageQuery = trade === 'plumbing' ? 'plumber service work' : 'hvac technician service';
+        // Hero query tuned per trade — each produces meaningfully different
+        // Unsplash results. Keep these in sync with TRADE_COPY / HVAC_TRADE_PHRASES.
+        const HERO_QUERY = {
+          hvac: 'hvac technician service',
+          plumbing: 'plumber service work',
+          electrical: 'electrician working panel',
+          roofing: 'residential roofing crew',
+          appliance: 'appliance repair technician',
+          'garage-door': 'garage door installation',
+          locksmith: 'locksmith changing lock',
+          'pest-control': 'pest control technician',
+          'water-damage': 'water damage restoration',
+          'tree-service': 'tree removal crew',
+        };
+        imageQuery = HERO_QUERY[trade] || HERO_QUERY.hvac;
       } else if (realEstateMode) {
         imageQuery = primaryCity ? `${primaryCity} skyline` : 'luxury home interior';
       } else {

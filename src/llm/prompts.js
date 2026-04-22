@@ -716,6 +716,62 @@ const HVAC_TRADE_PHRASES = {
     heroImgExamples: "'plumber service work', 'water heater installation', 'leak repair tools'",
     exampleTestimonialDetails: '"came at 11pm to stop a burst pipe", "fixed the leak before the guests arrived", "told me the drain line did NOT need replacing"',
   },
+  electrical: {
+    label: 'electrical',
+    specialtyTail: '(wiring, panel upgrades, outlets, lighting, EV chargers) contractors',
+    panicExamples: 'half the house lost power, a breaker kept tripping, or they smelled burning near an outlet',
+    heroImgExamples: "'electrician working on panel', 'electrical wiring installation', 'licensed electrician residential'",
+    exampleTestimonialDetails: '"came at midnight when the panel sparked", "installed my EV charger the same week", "told me the panel was fine and just needed two breakers swapped"',
+  },
+  roofing: {
+    label: 'roofing',
+    specialtyTail: '(roof repair, replacement, storm damage, shingles, gutters) contractors',
+    panicExamples: 'a tree came through the roof, shingles blew off in a storm, or a ceiling started leaking during rain',
+    heroImgExamples: "'residential roofing crew', 'shingle roof installation', 'roofer on rooftop'",
+    exampleTestimonialDetails: '"tarped the roof at sunrise after the storm", "did the whole tear-off and reroof in a single day", "told me it was flashing, not a whole new roof"',
+  },
+  appliance: {
+    label: 'appliance repair',
+    specialtyTail: '(refrigerator, washer, dryer, dishwasher, oven, range) repair technicians',
+    panicExamples: 'the fridge stopped cooling with a full load of groceries, the washer flooded the laundry room, or the dryer stopped heating right before a trip',
+    heroImgExamples: "'appliance repair technician', 'refrigerator repair', 'washing machine service technician'",
+    exampleTestimonialDetails: '"came on a Sunday when the fridge died", "replaced the door gasket instead of the whole washer", "explained why the dryer kept tripping the breaker"',
+  },
+  'garage-door': {
+    label: 'garage door',
+    specialtyTail: '(spring replacement, opener repair, new door install) contractors',
+    panicExamples: 'a spring snapped and the door was stuck closed with a car inside, the opener died mid-cycle, or the door came off its track',
+    heroImgExamples: "'garage door installation', 'residential garage door', 'garage door opener repair'",
+    exampleTestimonialDetails: '"had the exact torsion spring on the truck", "installed a smart opener in under an hour", "repaired two panels instead of replacing the whole door"',
+  },
+  locksmith: {
+    label: 'locksmith',
+    specialtyTail: '(lockouts, rekeying, lock installation, smart locks, car keys) services',
+    panicExamples: 'they were locked out at 1am with no spare key, lost the car key with no dealership around, or needed every lock rekeyed after a move-in',
+    heroImgExamples: "'locksmith changing lock', 'key programming service', 'deadbolt installation'",
+    exampleTestimonialDetails: '"was at the door in 22 minutes at 1am", "cut and programmed the car key in the parking lot", "rekeyed every lock in the house the afternoon we moved in"',
+  },
+  'pest-control': {
+    label: 'pest control',
+    specialtyTail: '(rodents, termites, bed bugs, roaches, mosquitoes) extermination services',
+    panicExamples: 'they saw mice in the kitchen, bed bugs after a hotel trip, or a swarm of bees in the yard before a weekend party',
+    heroImgExamples: "'pest control technician spraying', 'exterminator residential', 'licensed pest control'",
+    exampleTestimonialDetails: '"sealed six mouse entry points I never would have found", "heat-treated for bed bugs and they were gone after one visit", "told me it was carpenter ants and treated the source"',
+  },
+  'water-damage': {
+    label: 'water damage restoration',
+    specialtyTail: '(emergency water extraction, structural drying, mold remediation, flood cleanup) specialists',
+    panicExamples: 'a pipe burst while they were on vacation and the basement was inches deep in water, or a toilet backed up and flooded a whole floor',
+    heroImgExamples: "'water damage restoration', 'flood cleanup equipment', 'mold remediation technician'",
+    exampleTestimonialDetails: '"were on site within the hour of the pipe bursting", "handled every conversation with the insurance adjuster", "used moisture meters to prove only a 4-foot section needed to come out"',
+  },
+  'tree-service': {
+    label: 'tree service',
+    specialtyTail: '(removal, trimming, pruning, stump grinding, storm cleanup) companies',
+    panicExamples: 'a big oak fell across the driveway during a storm, a tree was leaning hard toward the house, or limbs were scraping the roof in wind',
+    heroImgExamples: "'tree removal crew', 'arborist trimming tree', 'storm damage cleanup'",
+    exampleTestimonialDetails: '"were on site by 7am after the storm", "dropped a tall pine in sections right next to the house without a scratch", "walked the property and told me six of eight trees were fine"',
+  },
 };
 
 function buildHvacContentPrompt(trade = 'hvac') {
