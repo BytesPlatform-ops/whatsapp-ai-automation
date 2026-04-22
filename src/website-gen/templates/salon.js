@@ -874,68 +874,88 @@ function generateContactPage(c) {
 // layer — no server call, no secrets. If the user lands here directly
 // (typed URL, shared link), a generic fallback copy renders instead.
 function generateThankYouPage(c) {
+  // Compact, above-the-fold layout. Avoids the .page-head hero style used
+  // on other pages — that clamps H1 at 140px which turns "Thank you, <long
+  // name>" into a screen-filling monolith. Here everything lives in one
+  // centered column: greeting → summary card → email note → CTAs.
   const body = `
-<section class="page-head">
-  <div class="page-head-inner">
-    <p class="eyebrow rv">— Reserved —</p>
-    <h1 class="rv d1">Thank you<em id="ty-name-dot">.</em></h1>
-    <p id="ty-sub" class="rv d2" style="max-width:560px;margin-top:32px;color:var(--mute);font-size:17px;line-height:1.75;font-weight:300">Your reservation is confirmed. We look forward to seeing you.</p>
-  </div>
-</section>
+<section class="ty-hero">
+  <div class="ty-shell rv">
+    <p class="eyebrow">— Reserved —</p>
+    <h1 class="ty-title">Thank you<em>.</em></h1>
+    <p id="ty-greet" class="ty-greet">Your reservation is confirmed. We look forward to seeing you.</p>
 
-<section style="padding:70px 0 120px;background:var(--paper)">
-  <div class="bk-wrap">
-    <div id="ty-card" class="bk-panel rv" style="display:none">
-      <p class="eyebrow" style="margin-bottom:14px">— Your Reservation —</p>
-      <div style="display:grid;gap:26px;margin-top:20px">
-        <div>
-          <p class="bk-label">Treatment</p>
-          <p id="ty-svc" style="font-family:'Cormorant Garamond',serif;font-size:28px;font-weight:500;margin:4px 0 0;color:var(--ink)"></p>
-        </div>
-        <div>
-          <p class="bk-label">When</p>
-          <p id="ty-time" style="font-family:'Cormorant Garamond',serif;font-size:22px;font-weight:500;margin:4px 0 0;color:var(--ink)"></p>
-          <p id="ty-tz" style="font-size:12px;color:var(--mute);margin:4px 0 0"></p>
-        </div>
+    <div id="ty-card" class="ty-card" style="display:none">
+      <div class="ty-row">
+        <span class="ty-key">Treatment</span>
+        <span id="ty-svc" class="ty-val"></span>
+      </div>
+      <div class="ty-row">
+        <span class="ty-key">When</span>
+        <span id="ty-time" class="ty-val"></span>
+      </div>
+      <div class="ty-row" id="ty-tz-row" style="display:none">
+        <span class="ty-key">Timezone</span>
+        <span id="ty-tz" class="ty-val ty-val-sm"></span>
       </div>
     </div>
 
-    <p id="ty-email" class="bk-note rv d1" style="text-align:center;margin:40px auto 0;max-width:520px;display:none">
-      A confirmation email with a cancellation link is on its way to <strong id="ty-email-value" style="color:var(--ink);font-weight:500"></strong>. Check your inbox (and spam, just in case) — it will arrive shortly.
+    <p id="ty-email" class="ty-note" style="display:none">
+      A confirmation email with a cancellation link is on its way to <strong id="ty-email-value"></strong>. Check your inbox (and spam, just in case).
     </p>
-    <p id="ty-email-fallback" class="bk-note rv d1" style="text-align:center;margin:40px auto 0;max-width:520px">
-      A confirmation email is on its way. Check your inbox (and spam) — it will arrive shortly.
+    <p id="ty-email-fallback" class="ty-note">
+      A confirmation email with a cancellation link is on its way. Check your inbox (and spam).
     </p>
 
-    <div class="rv d2" style="display:flex;gap:14px;justify-content:center;margin-top:44px;flex-wrap:wrap">
+    <div class="ty-cta">
       <a href="/" class="btn btn-ink">Back to Home</a>
       <a href="/booking" class="btn btn-p">Book Another Visit</a>
     </div>
   </div>
 </section>
 
-<section class="close-cta">
-  <p class="eyebrow eyebrow--light rv" style="margin-bottom:22px">— Until then —</p>
-  <h2 class="rv d1">A warm welcome awaits.</h2>
-</section>
+<style>
+  .ty-hero{padding:120px 24px 90px;background:var(--bone);min-height:calc(100vh - 180px);display:flex;align-items:center;justify-content:center}
+  .ty-shell{max-width:560px;width:100%;text-align:center}
+  .ty-shell .eyebrow{margin-bottom:18px}
+  .ty-title{font-family:'Cormorant Garamond',serif;font-size:clamp(44px,6.5vw,84px);font-weight:500;letter-spacing:-0.02em;line-height:1.02;margin:0;color:var(--ink)}
+  .ty-title em{font-style:normal;color:var(--pc)}
+  .ty-greet{margin:22px auto 0;max-width:460px;color:var(--mute);font-size:16px;line-height:1.7;font-weight:300}
+  .ty-card{margin:40px auto 0;max-width:440px;background:var(--paper);border:1px solid var(--line);padding:24px 28px;text-align:left}
+  .ty-row{display:flex;justify-content:space-between;align-items:baseline;padding:12px 0;border-bottom:1px solid var(--line);gap:18px}
+  .ty-row:first-child{padding-top:4px}
+  .ty-row:last-child{border-bottom:none;padding-bottom:4px}
+  .ty-key{font-family:'Inter',sans-serif;font-size:10px;font-weight:500;letter-spacing:0.3em;text-transform:uppercase;color:var(--mute);flex-shrink:0}
+  .ty-val{font-family:'Cormorant Garamond',serif;font-size:20px;font-weight:500;color:var(--ink);text-align:right}
+  .ty-val-sm{font-size:14px;font-family:'Inter',sans-serif;font-weight:400;color:var(--mute);letter-spacing:0.04em}
+  .ty-note{margin:28px auto 0;max-width:460px;color:var(--mute);font-size:13.5px;line-height:1.65;font-weight:300}
+  .ty-note strong{color:var(--ink);font-weight:500}
+  .ty-cta{display:flex;gap:12px;justify-content:center;margin-top:34px;flex-wrap:wrap}
+  @media(max-width:640px){
+    .ty-hero{padding:90px 18px 60px;min-height:calc(100vh - 140px)}
+    .ty-card{padding:18px 20px}
+    .ty-val{font-size:17px}
+  }
+</style>
 
 <script>
 (function(){
   var q=new URLSearchParams(window.location.search);
-  var svc=q.get('svc'), time=q.get('time'), tz=q.get('tz'), name=q.get('name'), email=q.get('email');
   function decode(s){try{return decodeURIComponent(s||'').trim()}catch(e){return (s||'').trim()}}
-  svc=decode(svc); time=decode(time); tz=decode(tz); name=decode(name); email=decode(email);
+  var svc=decode(q.get('svc')), time=decode(q.get('time')), tz=decode(q.get('tz')), name=decode(q.get('name')), email=decode(q.get('email'));
+  function esc(s){return String(s).replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/&/g,'&amp;')}
   if(name){
-    var h1=document.querySelector('.page-head h1');
-    if(h1){h1.innerHTML='Thank you, '+name.replace(/</g,'&lt;')+'<em>.</em>';}
+    var first=name.split(/\\s+/)[0];
+    document.getElementById('ty-greet').innerHTML='Hi '+esc(first)+', your reservation is confirmed. We look forward to seeing you.';
   }
   if(svc && time){
     document.getElementById('ty-svc').textContent=svc;
     document.getElementById('ty-time').textContent=time;
-    document.getElementById('ty-tz').textContent=tz||'';
+    if(tz){
+      document.getElementById('ty-tz').textContent=tz;
+      document.getElementById('ty-tz-row').style.display='flex';
+    }
     document.getElementById('ty-card').style.display='block';
-    var sub=document.getElementById('ty-sub');
-    if(sub){sub.textContent='Your reservation is confirmed. We look forward to seeing you.';}
   }
   if(email){
     document.getElementById('ty-email-value').textContent=email;

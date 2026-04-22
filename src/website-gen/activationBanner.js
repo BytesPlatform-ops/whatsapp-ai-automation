@@ -117,6 +117,15 @@ function renderActivationBanner(config = {}) {
   html.pixie-preview-mode body {
     padding-top: 48px !important;
   }
+  /* Fixed/sticky top-0 navs (salon, real-estate, generic) and sticky
+     HVAC nav overlap the banner otherwise. Offset them by banner height
+     so the business nav is visible right under the Pixie banner. Also
+     covers the scroll-progress bar used on the generic template. */
+  html.pixie-preview-mode .nav,
+  html.pixie-preview-mode nav.nav,
+  html.pixie-preview-mode .scroll-bar {
+    top: 48px !important;
+  }
   /* Mobile: stack text over button, keep compact */
   @media (max-width: 640px) {
     #pixie-activation-banner {
@@ -138,6 +147,11 @@ function renderActivationBanner(config = {}) {
     }
     html.pixie-preview-mode body {
       padding-top: 44px !important;
+    }
+    html.pixie-preview-mode .nav,
+    html.pixie-preview-mode nav.nav,
+    html.pixie-preview-mode .scroll-bar {
+      top: 44px !important;
     }
   }
   @media (min-width: 641px) {
