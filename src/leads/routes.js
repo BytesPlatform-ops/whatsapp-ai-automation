@@ -56,7 +56,12 @@ router.post('/public/leads/:siteId', async (req, res) => {
     return res.json({ ok: true });
   }
 
-  const name = clip(pickStr(body, ['name', 'full_name', 'full-name']), MAX_FIELD);
+  let name = clip(pickStr(body, ['name', 'full_name', 'full-name']), MAX_FIELD);
+  if (!name) {
+    const first = pickStr(body, ['first-name', 'first_name', 'firstname']);
+    const last = pickStr(body, ['last-name', 'last_name', 'lastname']);
+    name = clip([first, last].filter(Boolean).join(' ').trim(), MAX_FIELD);
+  }
   const email = clip(pickStr(body, ['email', 'email_address']), MAX_FIELD);
   const phone = clip(pickStr(body, ['phone', 'phone_number', 'tel']), MAX_FIELD);
   const message = clip(pickStr(body, ['message', 'comments', 'notes', 'body']), MAX_MESSAGE);

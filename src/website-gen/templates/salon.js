@@ -774,6 +774,9 @@ function generateBookingPage(c) {
 // ─── CONTACT ────────────────────────────────────────────────────────────────
 function generateContactPage(c) {
   const hours = c.weeklyHours ? renderHoursRows(c.weeklyHours) : '';
+  const formAction = PUBLIC_API_BASE && c.siteId
+    ? `${PUBLIC_API_BASE}/public/leads/${c.siteId}`
+    : '/thank-you/';
 
   const body = `
 <section class="page-head">
@@ -783,7 +786,7 @@ function generateContactPage(c) {
   </div>
 </section>
 
-<section style="padding:90px 0 130px;background:var(--paper)">
+<section style="padding:90px 0 110px;background:var(--paper)">
   <div class="contact-grid">
     <div class="contact-block rv">
       <h3>In person</h3>
@@ -799,6 +802,50 @@ function generateContactPage(c) {
       <ul style="list-style:none;padding:0;margin-top:10px">${hours}</ul>
       <p class="bk-note" style="margin-top:24px;text-align:left">Last booking 30 min before close.</p>
     </div>` : ''}
+  </div>
+</section>
+
+<section style="padding:20px 0 130px;background:var(--paper)">
+  <div class="bk-wrap rv">
+    <div style="text-align:center;margin-bottom:40px">
+      <p class="eyebrow" style="margin-bottom:14px">— Write to us —</p>
+      <h2 style="font-family:'Cormorant Garamond',serif;font-size:44px;font-weight:500;letter-spacing:-0.01em;color:var(--ink);margin:0">Send a note<em style="color:var(--pc);font-style:normal">.</em></h2>
+      <p class="bk-note" style="margin-top:14px;max-width:440px;margin-left:auto;margin-right:auto">For questions, private events, or a service you can&rsquo;t find &mdash; we&rsquo;ll write back shortly.</p>
+    </div>
+
+    <form name="contact" method="POST" action="${attr(formAction)}" data-pixie-form="1" data-thank-you="/contact/?sent=1" onsubmit="event.preventDefault();var f=this;var b=f.querySelector('.bk-submit');var s=f.querySelector('.bk-status');b.disabled=true;b.innerText='Sending...';fetch(f.action,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded','Accept':'application/json'},body:new URLSearchParams(new FormData(f)).toString()}).then(function(r){return r.json().catch(function(){return{}})}).then(function(j){if(j&&j.ok===false){throw new Error(j.error||'send-failed')}s.className='success';s.innerHTML='<h3>Message received<em style=&quot;color:var(--pc);font-style:normal&quot;>.</em></h3><p style=&quot;color:var(--mute);font-weight:300;margin-top:4px&quot;>We&rsquo;ll be in touch soon.</p>';f.reset();f.style.display='none'}).catch(function(){b.disabled=false;b.innerText='Send message';s.className='error';s.innerText='Something went wrong &mdash; please try again or email us directly.'})">
+      <input type="hidden" name="form_name" value="contact">
+      <input type="hidden" name="source_page" value="/contact">
+      <input type="hidden" name="_honey" value="" tabindex="-1" autocomplete="off" aria-hidden="true" style="position:absolute;left:-9999px;width:1px;height:1px;opacity:0;pointer-events:none">
+
+      <div class="bk-status" role="status" aria-live="polite"></div>
+
+      <div class="bk-row">
+        <div>
+          <label class="bk-label" for="contact-first">First name</label>
+          <input id="contact-first" class="bk-input" type="text" name="first-name" required placeholder="Jane">
+        </div>
+        <div>
+          <label class="bk-label" for="contact-last">Last name</label>
+          <input id="contact-last" class="bk-input" type="text" name="last-name" placeholder="Doe">
+        </div>
+      </div>
+      <div class="bk-row">
+        <div>
+          <label class="bk-label" for="contact-email">Email</label>
+          <input id="contact-email" class="bk-input" type="email" name="email" required placeholder="you@email.com">
+        </div>
+        <div>
+          <label class="bk-label" for="contact-phone">Phone <span style="text-transform:none;letter-spacing:0;opacity:0.55">(optional)</span></label>
+          <input id="contact-phone" class="bk-input" type="tel" name="phone" placeholder="+1 (555) 123-4567">
+        </div>
+      </div>
+      <div style="margin-bottom:28px">
+        <label class="bk-label" for="contact-message">Message</label>
+        <textarea id="contact-message" class="bk-input" name="message" required placeholder="Tell us what you&rsquo;re looking for&hellip;" style="min-height:140px;resize:vertical;font-family:inherit"></textarea>
+      </div>
+      <button type="submit" class="bk-submit">Send message</button>
+    </form>
   </div>
 </section>
 
