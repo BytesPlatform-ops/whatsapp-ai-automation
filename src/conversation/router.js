@@ -16,6 +16,7 @@ const {
   clearUndoPending,
   UNDOABLE_STATES,
 } = require('./undoStack');
+const messageBuffer = require('./messageBuffer');
 
 // ── Message dedup ─────────────────────────────────────────────────────────
 // WhatsApp can occasionally redeliver the same inbound message (network blip,
@@ -321,14 +322,13 @@ async function classifyIntent(state, text, userId) {
 }
 
 /**
- * Main message router. Called for every incoming message (WhatsApp, Messenger, Instagram).
+ * Inner processor: acquires the per-user lock, pins channel context, runs
+ * _routeMessage with one retry if the first attempt threw before sending
+ * anything. Called via routeMessage directly for non-text / button / slash
+ * messages, and via the message buffer for debounced text batches.
  */
-async function routeMessage(message) {
+function _processTurn(message) {
   const channel = message.channel || 'whatsapp';
-  // Serialize processing per user — two concurrent webhooks for the same
-  // phone number would otherwise race each other. The lock chains pending
-  // turns so /reset finishes (including its greeting) before the user's
-  // next message starts processing.
   return withUserLock(message.from || 'anon', () =>
     // Pin the inbound phone_number_id into the async context so every
     // sendTextMessage / sendInteractiveButtons / etc. inside this turn replies
@@ -379,16 +379,44 @@ async function routeMessage(message) {
   );
 }
 
+/**
+ * Main message router. Called for every incoming message (WhatsApp, Messenger, Instagram).
+ *
+ * Dedup runs up front so redelivered messages never enter the buffer or the
+ * lock chain. Plain text goes through the 1s debounce buffer (Phase 7) so
+ * rapid bursts merge into one turn; everything else (media, button taps,
+ * slash commands) takes the direct path and flushes any pending text first
+ * to preserve arrival order.
+ */
+async function routeMessage(message) {
+  const from = message.from || 'anon';
+
+  // Dedup: WhatsApp occasionally redelivers the same inbound messageId.
+  // Checking here (before the buffer and lock) means a dup can never ride
+  // into a merged batch and accidentally re-trigger a reply.
+  if (seenRecently(from, message.messageId)) {
+    logger.warn(`[ROUTER] Duplicate delivery ignored: from=${from} messageId=${message.messageId}`);
+    return;
+  }
+
+  if (messageBuffer.isBufferable(message)) {
+    return messageBuffer.enqueue(message, _processTurn);
+  }
+
+  // Non-text / button / slash: drain any pending text for this user first
+  // so the user-visible order matches the send order (typed "hi" then
+  // tapped a button → "hi" gets a reply, then the button tap processes).
+  await messageBuffer.flushPendingWith(from, _processTurn);
+  return _processTurn(message);
+}
+
 async function _routeMessage(message) {
   const { from, text, messageId } = message;
   const channel = message.channel || 'whatsapp';
 
-  // Dedup: WhatsApp sometimes redelivers the same inbound messageId. Without
-  // this, /reset / sales greetings fire twice and the user sees duplicates.
-  if (seenRecently(from, messageId)) {
-    logger.warn(`[ROUTER] Duplicate delivery ignored: from=${from} messageId=${messageId}`);
-    return;
-  }
+  // Dedup already ran in routeMessage before the buffer / lock — don't
+  // re-check here. seenRecently is stateful and a second call for the same
+  // id would mis-flag this turn as a duplicate.
 
   // Track the message ID so typing indicators work for all outgoing messages
   setLastMessageId(from, messageId);
