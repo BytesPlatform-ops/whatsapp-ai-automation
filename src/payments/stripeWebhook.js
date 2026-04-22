@@ -80,8 +80,7 @@ router.post('/webhook/stripe', express.raw({ type: 'application/json' }), async 
           await handleCheckoutSessionCompleted(s, event.data.object);
           break;
         case 'charge.refunded':
-          // Future: revert site to preview mode when payment is refunded.
-          logger.info(`[STRIPE-WEBHOOK] Refund received for charge ${event.data.object?.id} — no-op for now`);
+          await handleChargeRefunded(s, event.data.object);
           break;
         default:
           logger.debug(`[STRIPE-WEBHOOK] Ignoring unhandled event type: ${event.type}`);
@@ -155,6 +154,86 @@ async function handleCheckoutSessionCompleted(stripeClient, session) {
     logger.info(`[STRIPE-WEBHOOK] Payment ${paymentRow.id} already processed (idempotent)`);
   } else if (!result.ok) {
     logger.error(`[STRIPE-WEBHOOK] handleConfirmedPayment failed: ${result.reason}`);
+  }
+}
+
+/**
+ * Handle a charge.refunded event. Looks up the original payment by
+ * stripe_payment_intent_id, marks it refunded, and redeploys the user's
+ * paid site back into preview mode (banner reappears, forms re-lock).
+ *
+ * Idempotent — Stripe may re-send the event (partial refund follow-ups,
+ * delivery retries). Second call short-circuits on the 'refunded' status.
+ */
+async function handleChargeRefunded(stripeClient, charge) {
+  if (!charge?.id) return;
+  const paymentIntentId = charge.payment_intent || null;
+  if (!paymentIntentId) {
+    logger.warn(`[STRIPE-WEBHOOK] Refund charge ${charge.id} has no payment_intent — cannot match to payments row`);
+    return;
+  }
+
+  const { data: payment } = await supabase
+    .from('payments')
+    .select('*')
+    .eq('stripe_payment_intent_id', paymentIntentId)
+    .maybeSingle();
+
+  if (!payment) {
+    logger.warn(`[STRIPE-WEBHOOK] No payment row found for refunded charge ${charge.id} (intent=${paymentIntentId})`);
+    return;
+  }
+  if (payment.status === 'refunded') {
+    logger.info(`[STRIPE-WEBHOOK] Payment ${payment.id} already marked refunded — skipping`);
+    return;
+  }
+
+  // Mark the payment refunded. Refund details go in metadata so no schema
+  // migration is needed; auditing queries can read them from the JSONB.
+  await supabase
+    .from('payments')
+    .update({
+      status: 'refunded',
+      metadata: {
+        ...(payment.metadata || {}),
+        refund: {
+          charge_id: charge.id,
+          amount_refunded: charge.amount_refunded,
+          refunded_at: new Date().toISOString(),
+        },
+      },
+    })
+    .eq('id', payment.id);
+
+  // Re-gate the user's paid site. Fetch all of this user's sites and pick
+  // the most recent one currently in 'paid' state — that's the one this
+  // refund maps to. (Payments aren't linked to a specific site row, so
+  // the mapping is by "which site was flipped to paid most recently".)
+  const { data: sites } = await supabase
+    .from('generated_sites')
+    .select('id, site_data, created_at, netlify_site_id')
+    .eq('user_id', payment.user_id)
+    .order('created_at', { ascending: false });
+  const paidSite = (sites || []).find((s) => s.site_data?.paymentStatus === 'paid');
+
+  if (!paidSite) {
+    logger.warn(`[STRIPE-WEBHOOK] Refund for payment ${payment.id}: no paid site found for user ${payment.user_id} — nothing to revert`);
+    return;
+  }
+
+  try {
+    const { redeployAsPreview } = require('../website-gen/redeployer');
+    // Reuse the original payment link so the banner still points at a
+    // working URL. If the user wants a fresh quote they can ask the bot
+    // and createPaymentLink will regenerate + resync via updateSiteBannerLink.
+    const result = await redeployAsPreview(paidSite.id, payment.stripe_payment_link_url || null);
+    if (result.ok) {
+      logger.info(`[STRIPE-WEBHOOK] Reverted site ${paidSite.id} to preview after refund (payment ${payment.id})`);
+    } else {
+      logger.error(`[STRIPE-WEBHOOK] redeployAsPreview failed for site ${paidSite.id}: ${result.reason}`);
+    }
+  } catch (err) {
+    logger.error(`[STRIPE-WEBHOOK] Refund revert threw for site ${paidSite.id}: ${err.message}`);
   }
 }
 

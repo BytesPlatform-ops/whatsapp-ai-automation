@@ -2,19 +2,26 @@
  * Site Cleanup Job
  *
  * Unpaid preview sites get deleted from Netlify 22 hours after they were
- * generated, then archived in Supabase. Paid sites are skipped entirely
- * (checked via user.metadata.paymentConfirmed, which the post-payment
- * handler flips the moment Stripe confirms a successful checkout).
+ * generated, then archived in Supabase. Paid sites are skipped.
+ *
+ * "Paid" is checked at the site level (site_data.paymentStatus === 'paid')
+ * not at the user level. Each generated_sites row tracks its own payment
+ * state — redeployAsPaid(siteId) writes 'paid' to that specific site's
+ * site_data, and the refund handler writes 'preview' back. This means a
+ * customer with three businesses on one phone who pays for only one
+ * gets exactly one site spared; the other two are eligible for cleanup.
+ *
+ * A short race-window safeguard also runs before any delete: if this user
+ * has a 'paid' payment row in the last 10 minutes, we assume the Stripe
+ * webhook's post-processing (redeployAsPaid + site_data write) may still
+ * be mid-flight and skip the site for this pass. Covers the rare case
+ * where a user finishes checkout at t=21:59 and cleanup fires at t=22:00
+ * before redeployAsPaid has finished writing the 'paid' flag.
  *
  * Previously this job also redeployed a "Preview Only" watermark after
  * an hour — removed because the activation banner (injected into every
  * preview build) already communicates "this isn't live yet" far more
  * visibly, and the double treatment just added noise.
- *
- * 15-minute cadence keeps the delete window tight — worst-case a paid
- * site is deleted if Stripe's webhook + the cleanup pass race within the
- * same minute, but the 15-min gap plus the paymentConfirmed re-read on
- * every pass makes that vanishingly unlikely in practice.
  */
 
 const axios = require('axios');
@@ -24,6 +31,7 @@ const { logger } = require('../utils/logger');
 
 const NETLIFY_API = 'https://api.netlify.com/api/v1';
 const DELETE_AFTER_HOURS = 22;
+const RECENT_PAYMENT_WINDOW_MS = 10 * 60 * 1000;
 
 async function runSiteCleanup() {
   if (!env.netlify.token) return;
@@ -46,16 +54,24 @@ async function runSiteCleanup() {
 
       if (ageHours < DELETE_AFTER_HOURS) continue; // Still within grace window
 
-      // Re-read payment status right before acting. paymentConfirmed is
-      // user-level — a returning customer who paid for any site stays on
-      // the allow-list (matches the existing semantics).
-      const { data: user } = await supabase
-        .from('users')
-        .select('metadata')
-        .eq('id', site.user_id)
-        .single();
+      // Per-site check: this specific site is in paid state.
+      if (site.site_data?.paymentStatus === 'paid') continue;
 
-      if (user?.metadata?.paymentConfirmed) continue;
+      // Race-window safeguard — if this user just paid, redeployAsPaid
+      // may still be writing the 'paid' flag onto this site. One-query
+      // check: any 'paid' payment in the last 10 min for this user.
+      const sinceIso = new Date(now - RECENT_PAYMENT_WINDOW_MS).toISOString();
+      const { data: recentPaid } = await supabase
+        .from('payments')
+        .select('id')
+        .eq('user_id', site.user_id)
+        .eq('status', 'paid')
+        .gte('paid_at', sinceIso)
+        .limit(1);
+      if (recentPaid && recentPaid.length > 0) {
+        logger.info(`[CLEANUP] Skipping site ${site.id} — user has a paid payment in the last 10min (webhook may be in flight)`);
+        continue;
+      }
 
       if (!site.netlify_site_id) {
         // Nothing to delete on Netlify's side — just archive the orphan.
