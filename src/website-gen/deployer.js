@@ -740,7 +740,7 @@ function generateContactPage(c) {
         <h2 style="font-size:clamp(28px,4vw,40px);font-weight:800;color:#1a1a2e;letter-spacing:-1px;margin-bottom:12px">Send Us a Message</h2>
         <p style="font-size:16px;color:#888">Fill out the form below and we'll get back to you soon.</p>
       </div>
-      <form name="contact" method="POST" action="${genericLeadAction(c)}" data-pixie-form="1" class="rv d2" onsubmit="event.preventDefault();const f=this;const b=f.querySelector('button');b.disabled=true;b.innerHTML='Sending...';fetch(f.action,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams(new FormData(f)).toString()}).then(r=>r.json()).then(r=>{if(!r||r.ok===false)throw new Error('submit-failed');b.innerHTML='Message Sent! &#10003;';b.style.background='#10b981';f.reset()}).catch(()=>{b.innerHTML='Error — try again';b.style.background='#ef4444';b.disabled=false})" style="display:flex;flex-direction:column;gap:20px">
+      <form name="contact" method="POST" action="${genericLeadAction(c)}" data-pixie-form="1" class="rv d2" onsubmit="event.preventDefault();var f=this;var b=f.querySelector('button');b.disabled=true;b.innerHTML='Sending...';var fd=new FormData(f);fetch(f.action,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded','Accept':'application/json'},body:new URLSearchParams(fd).toString()}).then(function(r){return r.json().catch(function(){return{}})}).then(function(r){if(!r||r.ok===false)throw new Error('submit-failed');var q=new URLSearchParams({name:((fd.get('first-name')||'')+' '+(fd.get('last-name')||'')).trim(),email:fd.get('email')||''}).toString();window.location.href='/thank-you/?'+q}).catch(function(){b.innerHTML='Error — try again';b.style.background='#ef4444';b.disabled=false})" style="display:flex;flex-direction:column;gap:20px">
         <input type="hidden" name="form_name" value="contact">
         <input type="hidden" name="source_page" value="/contact">
         <input type="hidden" name="_honey" value="" tabindex="-1" autocomplete="off" style="position:absolute;left:-9999px;width:1px;height:1px;opacity:0;pointer-events:none" aria-hidden="true">
@@ -770,6 +770,59 @@ function generateContactPage(c) {
   return wrap(c, '/contact', body);
 }
 
+// ─── THANK-YOU ──────────────────────────────────────────────────────────────
+// Shown after a successful contact-form submit. Visitor first-name + email
+// arrive via query string (set by the contact form's onsubmit handler) so
+// the greeting can read "Hi John" without a round-trip. Falls back to a
+// generic thank-you when the page is visited directly.
+function generateThankYouPage(c) {
+  const pc = c.primaryColor || '#2563EB';
+  const ac = c.accentColor || '#60A5FA';
+  const hasServices = (c.services || []).length > 0;
+
+  const body = `
+    <section style="padding:160px 24px 100px;position:relative;overflow:hidden;background:linear-gradient(135deg,${pc}06,${ac}06);min-height:72vh;display:flex;align-items:center">
+      <div class="dot-grid" style="position:absolute;inset:0"></div>
+      <div class="ctn" style="position:relative;z-index:10;max-width:640px;text-align:center">
+        <div class="rv" style="display:inline-flex;align-items:center;justify-content:center;width:96px;height:96px;border-radius:50%;background:linear-gradient(135deg,${pc},${ac});margin-bottom:28px;box-shadow:0 20px 40px -12px ${pc}55">
+          <svg width="48" height="48" fill="none" viewBox="0 0 24 24" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 12.5l5 5L20 7"/>
+          </svg>
+        </div>
+        <h1 id="ty-heading" class="rv d1" style="font-size:clamp(36px,5.5vw,60px);font-weight:900;color:#1a1a2e;letter-spacing:-1.5px;line-height:1.05;margin:0">Message received<span style="color:${pc}">.</span></h1>
+        <p id="ty-sub" class="rv d2" style="font-size:17px;color:#555;max-width:480px;margin:22px auto 0;line-height:1.7">Thanks for reaching out. We&rsquo;ll review what you&rsquo;ve sent and get back to you within <strong style="color:#1a1a2e">24 hours</strong>.</p>
+
+        <div id="ty-email-note" class="rv d3" style="display:none;margin-top:28px;padding:18px 22px;background:#fff;border:1px solid ${pc}20;border-radius:14px;font-size:14.5px;color:#555;line-height:1.6">
+          A confirmation is on its way to <strong id="ty-email-value" style="color:#1a1a2e"></strong>. Check your inbox (and spam, just in case).
+        </div>
+
+        <div class="rv d3" style="display:flex;gap:14px;justify-content:center;margin-top:40px;flex-wrap:wrap">
+          <a href="/" class="btn-p" style="padding:14px 28px;border-radius:12px;font-weight:700;font-size:15px;text-decoration:none;display:inline-flex;align-items:center;gap:8px">Back to Home ${ARR}</a>
+          ${hasServices ? `<a href="/services" style="padding:14px 28px;border-radius:12px;font-weight:700;font-size:15px;text-decoration:none;display:inline-flex;align-items:center;gap:8px;background:#fff;color:#1a1a2e;border:2px solid #eaeaea;transition:all 0.2s">Browse Services</a>` : ''}
+        </div>
+      </div>
+    </section>
+
+    <script>
+    (function(){
+      var q=new URLSearchParams(window.location.search);
+      function decode(s){try{return decodeURIComponent(s||'').trim()}catch(e){return (s||'').trim()}}
+      function esc(s){return String(s).replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/&/g,'&amp;')}
+      var name=decode(q.get('name')), email=decode(q.get('email'));
+      if(name){
+        var first=name.split(/\\s+/)[0];
+        var sub=document.getElementById('ty-sub');
+        if(sub){sub.innerHTML='Thanks, '+esc(first)+'. We&rsquo;ll review what you&rsquo;ve sent and get back to you within <strong style="color:#1a1a2e">24 hours</strong>.';}
+      }
+      if(email){
+        document.getElementById('ty-email-value').textContent=email;
+        document.getElementById('ty-email-note').style.display='inline-block';
+      }
+    })();
+    </script>`;
+  return wrap(c, '/thank-you', body);
+}
+
 // ─── Helpers ────────────────────────────────────────────────────────────────
 const WATERMARK_HTML = `<div style="position:fixed;bottom:0;left:0;right:0;background:rgba(0,0,0,0.9);color:#fff;text-align:center;padding:14px 20px;z-index:99999;font-family:sans-serif;font-size:14px;backdrop-filter:blur(8px)">Preview Only — <a href="https://bytesplatform.com" style="color:#818cf8;text-decoration:underline;font-weight:600">Built by Pixie</a></div>`;
 
@@ -785,6 +838,7 @@ function generateAllPages(config, watermark = false) {
       '/index.html': generateHomePage(config),
       '/about/index.html': generateAboutPage(config),
       '/contact/index.html': generateContactPage(config),
+      '/thank-you/index.html': generateThankYouPage(config),
     };
     if ((config.services || []).length > 0) {
       pages['/services/index.html'] = generateServicesPage(config);
