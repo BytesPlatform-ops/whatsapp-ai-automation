@@ -733,9 +733,18 @@ function generateBookingPage(c) {
           })}).then(function(r){return r.json().then(function(j){return {ok:r.ok,j:j}})}).then(function(x){
             submitBtn.disabled=false;submitBtn.textContent='Confirm Reservation';
             if(!x.ok){showError(x.j.error||'Booking failed');return;}
-            document.getElementById('booking-root').querySelectorAll('*').forEach(function(el){el.style.display='none';});
-            doneEl.style.display='block';
-            doneMsg.textContent=state.service+' — '+x.j.displayTime+' ('+TZ+')';
+            // Redirect to standalone thank-you page. Booking details travel
+            // via query string so the page can render a rich summary without
+            // needing a server round-trip. Inline success card stays as a
+            // fallback in case navigation is blocked.
+            var q=new URLSearchParams({
+              svc:state.service,
+              time:x.j.displayTime||'',
+              tz:TZ,
+              name:name,
+              email:email
+            }).toString();
+            window.location.href='/thank-you/?'+q;
           }).catch(function(e){
             submitBtn.disabled=false;submitBtn.textContent='Confirm Reservation';
             showError('Network error: '+e.message);
@@ -858,6 +867,87 @@ function generateContactPage(c) {
   return wrap(c, '/contact', body);
 }
 
+// ─── THANK-YOU ──────────────────────────────────────────────────────────────
+// Shown after a successful booking. Booking details arrive as query-string
+// params from the booking page's submit handler, so this page is fully
+// static and doesn't need a round-trip. Query params are the only dynamic
+// layer — no server call, no secrets. If the user lands here directly
+// (typed URL, shared link), a generic fallback copy renders instead.
+function generateThankYouPage(c) {
+  const body = `
+<section class="page-head">
+  <div class="page-head-inner">
+    <p class="eyebrow rv">— Reserved —</p>
+    <h1 class="rv d1">Thank you<em id="ty-name-dot">.</em></h1>
+    <p id="ty-sub" class="rv d2" style="max-width:560px;margin-top:32px;color:var(--mute);font-size:17px;line-height:1.75;font-weight:300">Your reservation is confirmed. We look forward to seeing you.</p>
+  </div>
+</section>
+
+<section style="padding:70px 0 120px;background:var(--paper)">
+  <div class="bk-wrap">
+    <div id="ty-card" class="bk-panel rv" style="display:none">
+      <p class="eyebrow" style="margin-bottom:14px">— Your Reservation —</p>
+      <div style="display:grid;gap:26px;margin-top:20px">
+        <div>
+          <p class="bk-label">Treatment</p>
+          <p id="ty-svc" style="font-family:'Cormorant Garamond',serif;font-size:28px;font-weight:500;margin:4px 0 0;color:var(--ink)"></p>
+        </div>
+        <div>
+          <p class="bk-label">When</p>
+          <p id="ty-time" style="font-family:'Cormorant Garamond',serif;font-size:22px;font-weight:500;margin:4px 0 0;color:var(--ink)"></p>
+          <p id="ty-tz" style="font-size:12px;color:var(--mute);margin:4px 0 0"></p>
+        </div>
+      </div>
+    </div>
+
+    <p id="ty-email" class="bk-note rv d1" style="text-align:center;margin:40px auto 0;max-width:520px;display:none">
+      A confirmation email with a cancellation link is on its way to <strong id="ty-email-value" style="color:var(--ink);font-weight:500"></strong>. Check your inbox (and spam, just in case) — it will arrive shortly.
+    </p>
+    <p id="ty-email-fallback" class="bk-note rv d1" style="text-align:center;margin:40px auto 0;max-width:520px">
+      A confirmation email is on its way. Check your inbox (and spam) — it will arrive shortly.
+    </p>
+
+    <div class="rv d2" style="display:flex;gap:14px;justify-content:center;margin-top:44px;flex-wrap:wrap">
+      <a href="/" class="btn btn-ink">Back to Home</a>
+      <a href="/booking" class="btn btn-p">Book Another Visit</a>
+    </div>
+  </div>
+</section>
+
+<section class="close-cta">
+  <p class="eyebrow eyebrow--light rv" style="margin-bottom:22px">— Until then —</p>
+  <h2 class="rv d1">A warm welcome awaits.</h2>
+</section>
+
+<script>
+(function(){
+  var q=new URLSearchParams(window.location.search);
+  var svc=q.get('svc'), time=q.get('time'), tz=q.get('tz'), name=q.get('name'), email=q.get('email');
+  function decode(s){try{return decodeURIComponent(s||'').trim()}catch(e){return (s||'').trim()}}
+  svc=decode(svc); time=decode(time); tz=decode(tz); name=decode(name); email=decode(email);
+  if(name){
+    var h1=document.querySelector('.page-head h1');
+    if(h1){h1.innerHTML='Thank you, '+name.replace(/</g,'&lt;')+'<em>.</em>';}
+  }
+  if(svc && time){
+    document.getElementById('ty-svc').textContent=svc;
+    document.getElementById('ty-time').textContent=time;
+    document.getElementById('ty-tz').textContent=tz||'';
+    document.getElementById('ty-card').style.display='block';
+    var sub=document.getElementById('ty-sub');
+    if(sub){sub.textContent='Your reservation is confirmed. We look forward to seeing you.';}
+  }
+  if(email){
+    document.getElementById('ty-email-value').textContent=email;
+    document.getElementById('ty-email').style.display='block';
+    document.getElementById('ty-email-fallback').style.display='none';
+  }
+})();
+</script>`;
+
+  return wrap(c, '/thank-you', body);
+}
+
 // ─── deployer entry ────────────────────────────────────────────────────────
 function generateAllPages(config, watermark = false) {
   const pages = {
@@ -865,6 +955,7 @@ function generateAllPages(config, watermark = false) {
     '/booking/index.html': generateBookingPage(config),
     '/about/index.html': generateAboutPage(config),
     '/contact/index.html': generateContactPage(config),
+    '/thank-you/index.html': generateThankYouPage(config),
   };
   if ((config.salonServices || []).length > 0) {
     pages['/services/index.html'] = generateServicesPage(config);
