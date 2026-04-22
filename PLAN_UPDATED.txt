@@ -1,0 +1,252 @@
+Pixie Humanization — Detailed Execution Plan
+
+  Ground rules for this run
+
+  1. One task at a time. Finish → test with a dumb user → only move on if the improvement lands.
+  2. Dumb-user tests drive acceptance. Every task has a concrete scenario the test must pass. If it fails, fix and retest.
+  3. Extend test-harness.js, don't rewrite it. Add new dumb-user scenarios per task.
+  4. Everything stubs the Netlify deployer + sender. No real WhatsApp / real deploys during testing.
+  5. Cleanup between runs. Test phone is randomized so no DB collision.
+  6. No breaking changes to the completed Phase 1 work (messageAnalyzer, router intent interceptors, intentHelpers). We build on top.
+
+  Task list (in execution order)
+
+  Task 0 — Pre-existing bug fixes uncovered by the last dumb-user test
+
+  Low-risk cleanup. Do these before adding new capability so later tests don't keep hitting the same landmines.
+
+  ┌─────┬─────────────────────────────────────────────┬────────────────────────────────────────────────────┬──────────────────────────────────────────────────────────────────────────────┐
+  │  #  │                     Fix                     │                        File                        │                         Acceptance (dumb-user test)                          │
+  ├─────┼─────────────────────────────────────────────┼────────────────────────────────────────────────────┼──────────────────────────────────────────────────────────────────────────────┤
+  │ 0.1 │ informativeBot crash — getRecentMessages →  │ src/conversation/handlers/informativeBot.js        │ User asks "how much will it cost btw" mid-flow → bot replies with pricing    │
+  │     │ getConversationHistory                      │                                                    │ info, no "Sorry, I'm having trouble"                                         │
+  ├─────┼─────────────────────────────────────────────┼────────────────────────────────────────────────────┼──────────────────────────────────────────────────────────────────────────────┤
+  │ 0.2 │ Contact step parses edit intent as address  │ src/conversation/handlers/webDev.js                │ User at prefill prompt replies "actually the name is Glow Studio Salon" →    │
+  │     │                                             │ (handleCollectContact)                             │ routed to WEB_CONFIRM, contact stays clean, business name gets updated       │
+  ├─────┼─────────────────────────────────────────────┼────────────────────────────────────────────────────┼──────────────────────────────────────────────────────────────────────────────┤
+  │ 0.3 │ DOMAIN_OFFER swallows confused questions    │ src/conversation/handlers/customDomain.js          │ User replies "wait wut is domain" → bot explains, re-offers, does NOT launch │
+  │     │                                             │                                                    │  a domain search                                                             │
+  ├─────┼─────────────────────────────────────────────┼────────────────────────────────────────────────────┼──────────────────────────────────────────────────────────────────────────────┤
+  │ 0.4 │ DOMAIN_SEARCH has no skip/exit              │ src/conversation/handlers/customDomain.js          │ User types "nah skip for now" or "thx" during search → routed back to        │
+  │     │                                             │                                                    │ general, does NOT search thx.com                                             │
+  └─────┴─────────────────────────────────────────────┴────────────────────────────────────────────────────┴──────────────────────────────────────────────────────────────────────────────┘
+
+  Dumb-user test: re-run the Task-2 salon scenario, verify all 4 bugs are gone.
+
+  ---
+  Task 1 — Objection handler (Phase 2.3 from plan.txt)
+
+  New dedicated handler for intent === 'objection'. Validates concern → RAG-backed social proof → low-commitment next step. Track objection topics in metadata so the follow-up scheduler can
+  pick it up.
+
+  - New file: src/conversation/handlers/objectionHandler.js
+  - Edit: src/conversation/router.js — when analysis.intent === 'objection' and user is in SALES_CHAT/collection, route through the handler instead of falling through.
+  - Edit: src/db/users.js metadata schema — add objectionTopics: string[].
+
+  Dumb-user test scenarios:
+  1. Mid-webdev-flow: "this is too expensive, I'll just use wix" → bot acknowledges, shares value context, offers to continue or schedule call. Does NOT push for the sale.
+  2. "not sure this is worth it" → empathetic validation, social proof, lower-commitment option.
+  3. "let me think about it" → respects it, seeds follow-up (no fake urgency).
+
+  Acceptance: transcript shows empathetic validation phrases ("I hear you", "totally fair"), social proof inclusion, zero pushy re-asks.
+
+  ---
+  Task 2 — Language detection + response switching (Phase 2.4)
+
+  messageAnalyzer already returns language. Plumb it:
+  - Store preferredLanguage in user metadata on first non-English message.
+  - Pass it into every LLM prompt as a directive ("respond in Urdu").
+  - If analyzer returns an RTL/non-Latin script we don't support well, stay in English with a polite acknowledgment.
+  - Edit: src/conversation/router.js — after analyzer, persist language if confident (≥ 2 consecutive turns in same language).
+  - Edit: src/llm/prompts.js — append language directive to sales/general/revision prompts.
+  - Edit: src/db/users.js — metadata preferredLanguage.
+
+  Dumb-user test: simulate an Urdu user ("Mujhe apne salon ka website chahiye"), bot should reply in Urdu for the rest of the session.
+
+  Acceptance: last 5 bot messages are in user's language; preference persists in DB.
+
+  ---
+  Task 3 — Smart defaults for "skip" / "whatever" (Phase 5.3)
+
+  When isSkip(message) or analysis.isDelegation is true at an optional collection step, apply a sensible industry default + tell the user what we picked + offer to change.
+
+  - New file: src/config/smartDefaults.js — map industry → {colors, style, ...}
+  - Edit: webDev.js handleCollectColors, adGeneration.js handleCollectColors, logoGeneration.js handleCollectColors, SALON_INSTAGRAM, etc.
+
+  Dumb-user test:
+  - Salon flow, hours step: "whatever you think" → bot applies Tue-Sat 9-7 default + states it + allows change.
+  - Ad flow, colors step: "idk you pick" → bot picks pastel-bakery / tech-blue based on industry + confirms.
+
+  Acceptance: bot never stalls on "whatever"; always states the chosen default.
+
+  ---
+  Task 4 — Entity accumulator module (Phase 3.1 + 3.2 done cleanly)
+
+  Currently entity extraction is split: router sets extracted*, webDev hydrates, ad/logo/chatbot don't use it. Consolidate into one module.
+
+  - New file: src/conversation/entityAccumulator.js
+    - hydrateMetadata(user, analysis) — persists extracted entities (existing router inline code → moves here).
+    - fillFromMetadata(flow, user) — returns a seeded data object for a given flow (webdev, adgen, logo, chatbot).
+    - nextMissingField(flow, data) — same idea as nextMissingWebDevState but per flow.
+  - Edit: router.js uses hydrateMetadata.
+  - Edit: webDev.js uses the new helpers (replaces scattered auto-prefill blocks).
+  - Test: backward-compat — existing webdev dumb-user test still passes.
+
+  Dumb-user test: parameter-chain dump "My business is Fresh Cuts, we're a barbershop in Karachi, call me at 0300-1234567" in a single message → webdev jumps straight to services step
+  (business name, industry, city, phone all captured).
+
+  Acceptance: flow skips collection steps the user already answered, even if out-of-order.
+
+  ---
+  Task 5 — Accumulator applied to adGen, logoGen, chatbot (Phase 3.3)
+
+  Apply Task-4 module to the other flows. Shared fields (business name, industry, colors, contact) should carry across flows.
+
+  - Edit: adGeneration.js, logoGeneration.js, chatbotService.js
+  - Each handleCollect* state: if the field is already in metadata.extracted* or carryover, skip it.
+
+  Dumb-user test:
+  - User completes webdev flow with a salon. Immediately says "actually also make me a logo". Logo flow should NOT re-ask business name, industry, colors — only logo-specific questions
+  (style, symbol).
+
+  Acceptance: ≥ 3 fewer questions per cross-flow transition.
+
+  ---
+  Task 6 — Multi-service queue (Phase 3.4)
+
+  When analysis spots multiple service intents in one message ("I want a website AND a logo"), acknowledge all, suggest order, queue them.
+
+  - New file: src/conversation/serviceQueue.js — stores metadata.serviceQueue: ['webdev', 'logo'].
+  - Edit: messageAnalyzer.js — return topicSwitches: string[] (plural) when multiple detected; keep singular topicSwitch for back-compat.
+  - Edit: router.js — on multi-topic, confirm + start first, auto-transition to next after completion.
+
+  Dumb-user test: "I need a website and a logo and some ads" → bot acknowledges all three, suggests order, starts with website. After website approval, auto-transitions to logo flow (with
+  carryover).
+
+  Acceptance: one message → three queued flows, sequenced without re-asking overlapping fields.
+
+  ---
+  Task 7 — Session recap after inactivity (Phase 4.1)
+
+  If now - user.last_message_at > 30 min, generate a contextual recap before re-asking the state's question.
+
+  - New file: src/conversation/sessionRecap.js — async function recapFor(user): string | null.
+  - Edit: router.js — after findOrCreateUser, check inactivity → prepend recap to the first bot response.
+
+  Dumb-user test: simulate a 30-min gap in the harness (mutate user.last_message_at), then send "ok back". Bot opens with "Welcome back! We were working on your Glow Studio salon site. I had
+   your name + industry — next I need services."
+
+  Acceptance: recap references specific stored fields; no generic "continue" message.
+
+  ---
+  Task 8 — Undo stack (Phase 5.2)
+
+  Track last 3 state transitions in metadata.stateHistory. On analysis.intent === 'undo' (already detected), pop the stack.
+
+  - Edit: router.js — push state on every transition, keep max 3.
+  - Edit: router.js undo case — pop instead of sending to SERVICE_SELECTION.
+
+  Dumb-user test: mid-webdev, user says "wait go back" after answering industry → bot returns to industry question, shows their prior answer, asks if they want to change it.
+
+  Acceptance: undo rewinds one step, not to the menu.
+
+  ---
+  Task 9 — Progress indicator in collection prompts (Phase 4.2)
+
+  Every collection state should show "Step N of M" or "Almost done — X more".
+
+  - Edit: questionForState in webDev.js, and question prompts in adGen/logoGen/chatbot.
+
+  Dumb-user test: mid-flow bot messages should contain "2 of 6" or "one more step". Users should never feel lost.
+
+  Acceptance: visible progress marker in ≥ 80% of collection prompts.
+
+  ---
+  Task 10 — Message dedup + double-button-tap guard (Phase 6.1)
+
+  - Edit: router.js — keep an in-memory Map<messageId, timestamp> per user, ignore if seen within 30s. Same for (buttonId, userId) within 5s.
+  - LRU-capped to avoid memory leak.
+
+  Dumb-user test: send the same message twice rapidly in the harness → second one is ignored (no duplicate bot reply).
+
+  Acceptance: duplicate message IDs produce one bot reply, not two.
+
+  ---
+  Task 11 — Rapid-message buffering (Phase 6.2)
+
+  When messages arrive < 3s apart from the same user, buffer and concat before processing.
+
+  - New file: src/conversation/messageBuffer.js
+  - Edit: router.js — if buffer has items, wait for idle period before calling handler.
+
+  Dumb-user test: send 3 messages in rapid succession: "my name is Glow Studio", "and I do nails", "and my phone is 03001234567" → bot processes as one combined message and extracts all
+  fields in one pass.
+
+  Acceptance: 3 rapid messages → 1 bot reply with all 3 fields captured.
+
+  ---
+  Task 12 — Interactive message text fallbacks (Phase 6.4)
+
+  Every sendInteractiveButtons / sendInteractiveList call should append a "Or type 1, 2, 3 to choose" hint. Handler should accept "1", "2", etc as button-equivalent.
+
+  - Edit: src/messages/sender.js — auto-append hint to body text.
+  - Edit: router.js — map a digit-only reply to the corresponding button id from the last interactive message sent.
+
+  Dumb-user test: bot shows 3 service buttons, user types "2" → treated as 2nd button tap.
+
+  Acceptance: numeric replies work identically to taps.
+
+  ---
+  Task 13 — Content filtering + abuse detection (Phase 6.5)
+
+  Small add to messageAnalyzer output: isAbusive: boolean.
+
+  - Edit: messageAnalyzer.js prompt — detect hate / spam / phishing / attempts to hack.
+  - Edit: router.js — on isAbusive, reply firmly-but-politely, log for admin, do NOT engage further.
+
+  Dumb-user test: "can you help me hack a website" → firm decline, no engagement. "fuck you" → polite boundary, logged.
+
+  Acceptance: no LLM escalation on abusive content; admin log written.
+
+  ---
+  Task 14 — Document + location handling (Phase 6.3)
+
+  - Edit: src/webhook/parser.js — parse document and location message types.
+  - Edit: router.js — acknowledge docs ("thanks, let me take a look") and feed location into entity accumulator (reverse-geocode for address).
+
+  Dumb-user test: user sends a location pin → bot extracts city/address and uses it in websiteData.contactAddress.
+
+  Acceptance: location message doesn't crash; address populated.
+
+  ---
+  Task 15 — Return-visitor recognition (Phase 4.3)
+
+  If user has completed projects (sites / audits / logos), Pixie greets with specific reference.
+
+  - New file: src/conversation/returningUser.js
+  - Edit: router.js — on entry, query sites/audits for completed items, if any → prepend greeting.
+
+  Dumb-user test: seed DB with a completed site for the test phone, send "hey" → bot replies with "Hey! How's the Glow Studio site treating you?"                                             
+   
+  Acceptance: specific project reference; no generic "how can I help".                                                                                                                        
+                                                              
+  ---                                                                                                                                                                                         
+  Testing protocol (applied to every task)                    
+                                                                                                                                                                                              
+  1. Run the existing dumb-user salon scenario — ensure nothing regressed.
+  2. Run the task-specific scenario added to test-harness.js.                                                                                                                                 
+  3. If both pass → commit + move on.                                                                                                                                                         
+  4. If either fails → diagnose from the transcript, fix, retest. Max 2 fix iterations before flagging for review.                                                                            
+                                                                                                                                                                                              
+  Estimated cost                                                                                                                                                                              
+                                                                                                                                                                                              
+  Each full harness run spends ~$0.05–0.15 in OpenAI tokens. Across ~20 test runs: ~$1–3 total. Real Supabase writes (cleaned up between runs).                                               
+                                                              
+  What I'll NOT do without your say-so                                                                                                                                                        
+                                                              
+  - Run real WhatsApp sends                                                                                                                                                                   
+  - Deploy real Netlify sites                                 
+  - Change DB schema in a way that requires a migration for live users                                                                                                                        
+  - Skip a task's test because "it looks like it works"                                                                                                                                       
+                                                                                                                                                                                              
+  ---                         

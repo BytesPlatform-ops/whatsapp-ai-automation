@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node -e ' *)",
+      "Bash(node -e \"const w = require\\('./src/conversation/handlers/webDev'\\); console.log\\('OK', Object.keys\\(w\\)\\);\")",
+      "Bash(node -c src/llm/prompts.js)",
+      "Bash(node -c src/conversation/handlers/salesBot.js)",
+      "Bash(node -c src/conversation/handlers/webDev.js)"
+    ]
+  }
+}
