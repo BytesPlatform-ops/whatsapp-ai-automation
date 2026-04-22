@@ -2393,7 +2393,7 @@ async function generateWebsite(user) {
 
     // 1a. Ensure there's a Stripe payment link for the activation banner.
     // If the sales bot has already created one for this user, reuse it;
-    // otherwise create a default ($299 "Website Activation") link so the
+    // otherwise create a default ($199 "Website Activation") link so the
     // banner's "Activate Now" button always has somewhere to go.
     let paymentLinkUrl = null;
     try {
@@ -2411,7 +2411,7 @@ async function generateWebsite(user) {
         logger.info(`[WEBGEN] Reusing existing pending payment link for activation banner`);
       } else {
         const { createPaymentLink } = require('../../payments/stripe');
-        const defaultAmount = parseInt(process.env.DEFAULT_ACTIVATION_PRICE || '299', 10);
+        const defaultAmount = parseInt(process.env.DEFAULT_ACTIVATION_PRICE || '199', 10);
         const linkResult = await createPaymentLink({
           userId: user.id,
           phoneNumber: user.phone_number,
