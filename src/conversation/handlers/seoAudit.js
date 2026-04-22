@@ -159,10 +159,13 @@ async function handleCollectUrl(user, message) {
     let seoTopFix = '';
     try {
       const { generateResponse: extractTopFix } = require('../../llm/provider');
+      // 15s ceiling — it's extracting 2-6 words, not writing an essay. The
+      // default 90s timeout on a stalled call would block the sales pitch
+      // from firing for way too long.
       const rawFix = await extractTopFix(
         'You read SEO audit reports. Extract the single most impactful improvement opportunity from the report and name it in 2-6 words. No sentence, no punctuation, no quotes — just the issue name. Examples: "missing title tags", "slow page load", "thin homepage content", "no meta descriptions", "broken internal links".',
         [{ role: 'user', content: analysis.slice(0, 6000) }],
-        { userId: user.id, operation: 'seo_top_fix_extract' }
+        { userId: user.id, operation: 'seo_top_fix_extract', timeoutMs: 15_000 }
       );
       seoTopFix = String(rawFix || '').trim().replace(/^["']|["']$/g, '').slice(0, 60);
       logger.info(`[SEO] Top fix extracted: "${seoTopFix}"`);

@@ -76,10 +76,13 @@ async function analyzeWebsite(scrapedData, options = {}) {
   // narration so the PDF still renders if the LLM misbehaves.
   let narration = { verdict: '', topRecommendations: [], strengths: [], findings: {}, quickFixSummary: '' };
   try {
+    // 45s ceiling: the narration prompt produces ~6 short bullets + verdict,
+    // not a book. Default 90s masks stalls — we'd rather surface an error
+    // than silently wait a minute and a half for a dead LLM socket.
     const raw = await generateResponse(
       WEBSITE_ANALYSIS_STRUCTURED_PROMPT,
       [{ role: 'user', content: brief }],
-      { userId: options.userId, operation: 'seo_analysis_structured' }
+      { userId: options.userId, operation: 'seo_analysis_structured', timeoutMs: 45_000 }
     );
     const m = String(raw || '').match(/\{[\s\S]*\}/);
     if (m) {
