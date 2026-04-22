@@ -16,24 +16,22 @@ _Snapshot as of workflow-2 branch, commit `b1675dc`._
 | 5 | `98b167f` | Undo stack — "wait go back" pops one webdev step |
 | 6 | `b1675dc` | Localizer, per-user serial lock, message dedup, LLM-first intent classifiers for undo/keep, yes/skip, confirm/edit, show-summary, use-own-number, preview approval, real-estate currency detection |
 
-### 🟡 Implemented but NOT yet tested (uncommitted)
+### 🟡 In progress (uncommitted, pending re-implementation)
 
-**Phase 7 — Rapid-message buffering ([router.js](src/conversation/router.js))**
+**Phase 7 — Rapid-message buffering** (reverted from [router.js](src/conversation/router.js); to be rebuilt when you're ready)
 
-Hybrid approach:
+Designed approach (hybrid):
 - **Pre-processing debounce (1s):** when a message arrives and nothing is in flight, it's buffered and a 1s timer starts. More messages reset the timer. When 1s of silence passes, the whole batch fires as ONE merged turn.
 - **In-flight coalescing:** if messages arrive while a turn is already running, they're buffered and merged into the NEXT turn (drained after the current one finishes).
 - **Escape hatches:** non-text (images, audio, buttons) skip the buffer and chain on the lock in order. Slash commands (`/reset`, `/menu`) skip debouncing so exact-match still works.
 - **Cap:** 10 buffered messages per user.
 
-**How to test:**
+**Manual test scenarios once re-built:**
 1. Send three quick text messages within ~2 seconds: `bro` / `by the way` / `actually i meant X`. Expected: one merged reply ~1s after you stop typing, not three separate replies.
 2. Send a single message. Expected: ~1s delay, then a reply (debounce applies to the first message too).
 3. While the bot is clearly "typing" (the 4–8s reply delay), send another text. Expected: the bot's current reply lands, then a follow-up turn processes your second message merged with anything else you sent.
 4. Send a text, then an image before 1s elapses. Expected: the text flushes its own turn, then the image processes in order.
 5. Send `/reset` anytime. Expected: fires immediately, no debounce.
-
-If any of those behaves wrong, grab the transcript and the server logs around that timestamp.
 
 ---
 
@@ -89,18 +87,30 @@ Map to Task 13, 14, 15.
 
 ---
 
-## Questions for you before we continue
+## Open questions (with my recommendations — review when you have time)
 
-1. **Progress indicators (original Task 9)** — Phase 4 tried these and we rolled them back because they read as robotic. Is that dead, or should we revisit with a softer phrasing ("almost done" instead of "step 3 of 6")?
+Each item has the question, my recommendation, and the reasoning. If you disagree with any, flag it and we'll change course.
 
-2. **Priority order for what's left** — Bucket A items (Phase 8/9/10) are each short and visible to users. Bucket B (11/12) is meatier and the biggest UX unlock for multi-service customers. Bucket C (13/14/15) is more infrastructural. What order do you want to tackle them in?
+### 1. Progress indicators — **recommend: leave dead**
+Phase 4 tried "step 3 of 6" style indicators and we rolled them back because they read as robotic. WhatsApp is a casual medium; form-wizard phrasing feels off. We already imply progress softly in a few spots ("last thing — what contact info..."). Good enough.
 
-3. **Objection handler scope** — should it be a general-purpose "objection" intent that lives in `router.js`, or a sales-specific handler that only fires in `SALES_CHAT` / webdev collection states? The original plan says the latter; I'd mildly lean the other way since objections happen during the pricing step too (which is inside `DOMAIN_OFFER` / `SALES_CHAT` / `WEB_REVISIONS`).
+### 2. Priority order for remaining phases — **recommend: A → B → C**
+- **Bucket A** (objection handler, session recap, digit fallbacks) — small, user-visible, directly addresses things seen going wrong on WhatsApp. Ship first.
+- **Bucket B** (cross-flow carryover, multi-service queue) — biggest UX unlock for returning or multi-service customers, but touches three other flows. Ship second.
+- **Bucket C** (abuse detection, doc/location, return-visitor) — edge-case / infra; worth having but nobody's hit the absence of it yet. Ship last.
 
-4. **Abuse detection** — kept as a separate phase, or folded into Phase 8 (objection) since both are "non-happy-path" router interceptors?
+### 3. Objection handler scope — **recommend: sales-specific**
+Route through it only when state is `SALES_CHAT` or a webdev collection state. Lower blast radius. If we later see objections happening in chatbot / domain flows, we broaden. Start narrow, widen when we see a real miss.
 
-5. **Location reverse-geocoding (Phase 14)** — do you have a geocoding service in mind (Google Maps API, OpenStreetMap Nominatim, Mapbox), or should I propose one with the cheapest setup?
+### 4. Abuse detection placement — **recommend: keep as its own phase**
+Different code path (short-circuits router before any handler), different telemetry (admin log), different tone (firm refusal, not empathy). Folding it into the objection handler would muddy both.
 
-6. **Testing discipline going forward** — the original plan has a dumb-user test harness. We've been testing live on WhatsApp instead. Is that fine to continue, or do you want me to add harness scenarios for each remaining phase so we have regression coverage?
+### 5. Location reverse-geocoding service — **recommend: OpenStreetMap Nominatim**
+Free, no API key, MIT-compatible terms for low volume. Good enough to turn `lat/lng → "Karachi, Sindh, Pakistan"`. Swap to Google Maps later if we ever hit fair-use limits (unlikely at this volume).
 
-When you're back and ready, answer whichever of the above you've got views on — the rest we can decide as we go. Phase 7 testing comes first either way.
+### 6. Testing discipline going forward — **recommend: keep live WhatsApp testing**
+The original dumb-user harness caught easy bugs early; the bugs since Phase 6 (language mirroring, undo-during-edit, currency detection, duplicate greetings) are all things expensive to script into a harness and easier to catch on a real phone. Keep the harness around if it still runs, but don't block on expanding it per phase.
+
+---
+
+When you've read this, either say "all good" and we'll proceed in order (Phase 7 test → Phase 8 objection handler → onwards), or call out the ones you want to change.
