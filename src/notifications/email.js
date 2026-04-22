@@ -296,10 +296,16 @@ async function sendLeadNotification({ toEmail, businessName, visitor, sourcePage
       text,
     });
     logger.info(`[EMAIL] Lead notification sent to ${toEmail} (lead ${leadId || '?'})`);
-    return true;
+    return { ok: true };
   } catch (err) {
-    logger.error(`[EMAIL] Lead notification failed for ${toEmail}:`, err.response?.body || err.message);
-    return false;
+    // Surface the real SendGrid error — response.body carries the actual
+    // error message (e.g. "API key invalid", "sender not verified") that
+    // a plain err.message would hide behind a generic HTTP status.
+    const body = err.response?.body;
+    const detail = body?.errors?.[0]?.message || body?.message || err.message;
+    logger.error(`[EMAIL] Lead notification failed for ${toEmail}: ${detail}`);
+    if (body) logger.error('[EMAIL] Full SendGrid response body:', JSON.stringify(body));
+    return { ok: false, error: detail };
   }
 }
 

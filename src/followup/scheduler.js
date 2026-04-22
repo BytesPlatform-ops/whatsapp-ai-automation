@@ -18,6 +18,7 @@ const { sendTextMessage } = require('../messages/sender');
 const { runWithChannel, runWithContext } = require('../messages/channelContext');
 const { logMessage } = require('../db/conversations');
 const { updateUserMetadata } = require('../db/users');
+const { handleConfirmedPayment } = require('../payments/postPayment');
 const { logger } = require('../utils/logger');
 const { STATES } = require('../conversation/states');
 
@@ -459,202 +460,11 @@ async function runPaymentPolling() {
 
         if (!paidSession) continue;
 
-        // Update DB
-        await supabase.from('payments').update({
-          status: 'paid',
-          stripe_session_id: paidSession.id,
-          stripe_payment_intent_id: paidSession.payment_intent,
-          customer_email: paidSession.customer_details?.email || null,
-          customer_name: paidSession.customer_details?.name || null,
-          paid_at: new Date().toISOString(),
-        }).eq('id', payment.id);
-
-        // SOURCE OF TRUTH for where to send the confirmation: the user record, NOT the
-        // payment row. The payment.phone_number field can be stale (old test sessions,
-        // prior number, etc.), and in some cases the scheduler would end up sending the
-        // receipt to a different phone than the one currently having the conversation.
-        const { data: paidUserRecord } = await supabase
-          .from('users')
-          .select('phone_number, channel, metadata, via_phone_number_id')
-          .eq('id', payment.user_id)
-          .single();
-        const targetPhone = paidUserRecord?.phone_number || payment.phone_number;
-        const targetChannel = paidUserRecord?.channel || payment.channel || 'whatsapp';
-        const targetVia = paidUserRecord?.via_phone_number_id || null;
-        if (paidUserRecord?.phone_number && paidUserRecord.phone_number !== payment.phone_number) {
-          logger.warn(`[PAYMENT] Phone mismatch for payment ${payment.id}: payment row=${payment.phone_number}, user record=${paidUserRecord.phone_number}. Sending to user record.`);
-        }
-
-        // Send payment confirmation
-        const amountDisplay = `$${(payment.amount / 100).toLocaleString()}`;
-        const isWebsitePayment = /website|web/i.test(payment.service_type || '') || /website|web/i.test(payment.description || '');
-
-        if (isWebsitePayment) {
-          // Check if this is a domain payment (user already selected a domain)
-          const meta = paidUserRecord?.metadata || {};
-          const selectedDomain = meta.selectedDomain;
-          const { getLatestSite: getSite } = require('../db/sites');
-          const { updateSite } = require('../db/sites');
-
-          await updateUserMetadata(payment.user_id, {
-            paymentConfirmed: true,
-            lastPaymentAmount: payment.amount,
-            lastPaymentService: payment.service_type,
-            paidAt: new Date().toISOString(),
-          });
-
-          // Remove the activation banner — redeploy the site in 'paid' mode
-          // so visitors no longer see "Preview Mode" or hit locked contact
-          // forms. Fire-and-forget: never blocks the payment confirmation
-          // message flow below. If redeploy fails, admin will see the
-          // warning log and can retry manually.
-          try {
-            const siteForBanner = await getSite(payment.user_id);
-            if (siteForBanner?.id) {
-              const { redeployAsPaid } = require('../website-gen/redeployer');
-              redeployAsPaid(siteForBanner.id).catch((err) =>
-                logger.warn(`[PAYMENT] redeployAsPaid threw for site ${siteForBanner.id}: ${err.message}`)
-              );
-            }
-          } catch (err) {
-            logger.warn(`[PAYMENT] Could not trigger banner-removal redeploy: ${err.message}`);
-          }
-
-          if (selectedDomain && meta.domainPaymentPending) {
-            // Domain payment confirmed — start auto-purchase flow
-            await runWithContext({ channel: targetChannel, phoneNumberId: targetVia }, async () => {
-              await sendTextMessage(
-                targetPhone,
-                `Payment of *${amountDisplay}* received! 🎉\n\n` +
-                `Now setting up *${selectedDomain}* for your website — this usually takes a few minutes. I'll keep you updated!`
-              );
-            });
-            await logMessage(payment.user_id, `Payment confirmed: ${amountDisplay} — starting domain setup for ${selectedDomain}`, 'assistant');
-
-            // Auto-purchase domain
-            const site = await getSite(payment.user_id);
-            const netlifySubdomain = site?.netlify_subdomain || '';
-            const netlifySiteId = site?.netlify_site_id || '';
-
-            if (env.namecheap?.apiKey) {
-              try {
-                const { purchaseAndConfigureDomain } = require('../integrations/namecheap');
-                const { addCustomDomainToNetlify } = require('../website-gen/deployer');
-
-                // Progress update 1
-                await runWithContext({ channel: targetChannel, phoneNumberId: targetVia }, () =>
-                  sendTextMessage(targetPhone, `⏳ Registering *${selectedDomain}*...`)
-                );
-
-                const result = await purchaseAndConfigureDomain(selectedDomain, netlifySubdomain);
-
-                if (result.success) {
-                  // Add to Netlify
-                  if (netlifySiteId) {
-                    await runWithContext({ channel: targetChannel, phoneNumberId: targetVia }, () =>
-                      sendTextMessage(targetPhone, `⏳ Configuring your website on *${selectedDomain}*...`)
-                    );
-                    try { await addCustomDomainToNetlify(netlifySiteId, selectedDomain); } catch (e) {
-                      logger.error('[PAYMENT] Netlify domain add failed:', e.message);
-                    }
-                  }
-
-                  if (site) await updateSite(site.id, { custom_domain: selectedDomain, status: 'domain_setup_complete' });
-                  await updateUserMetadata(payment.user_id, {
-                    domainPaymentPending: false,
-                    domainStatus: 'purchased',
-                    domainPurchasedAt: new Date().toISOString(),
-                  });
-
-                  await runWithContext({ channel: targetChannel, phoneNumberId: targetVia }, () =>
-                    sendTextMessage(
-                      targetPhone,
-                      `✅ *${selectedDomain}* is registered and configured!\n\n` +
-                      `DNS is propagating now — your site will be live at *${selectedDomain}* within 5-60 minutes. ` +
-                      `HTTPS is set up automatically.\n\n` +
-                      `I'll send you a message once it's fully live! 🚀`
-                    )
-                  );
-                  await logMessage(payment.user_id, `Domain purchased and configured: ${selectedDomain}`, 'assistant');
-                } else {
-                  // Auto-purchase failed — fallback to manual
-                  if (site) await updateSite(site.id, { custom_domain: selectedDomain, status: 'domain_setup_pending' });
-                  await runWithContext({ channel: targetChannel, phoneNumberId: targetVia }, () =>
-                    sendTextMessage(
-                      targetPhone,
-                      `Domain registration for *${selectedDomain}* needs manual setup (${result.error}). Our team will handle it within 2 business days — we'll keep you posted!`
-                    )
-                  );
-                  await logMessage(payment.user_id, `Domain auto-purchase failed: ${result.error} — manual setup needed`, 'assistant');
-                }
-              } catch (err) {
-                logger.error('[PAYMENT] Domain auto-purchase error:', err.message);
-                if (site) await updateSite(site.id, { custom_domain: selectedDomain, status: 'domain_setup_pending' });
-                await runWithContext({ channel: targetChannel, phoneNumberId: targetVia }, () =>
-                  sendTextMessage(targetPhone, `Domain setup for *${selectedDomain}* is being handled by our team. We'll update you within 2 business days!`)
-                );
-              }
-            } else {
-              // No Namecheap API — manual flow
-              if (site) await updateSite(site.id, { custom_domain: selectedDomain, status: 'domain_setup_pending' });
-              await runWithContext({ channel: targetChannel, phoneNumberId: targetVia }, () =>
-                sendTextMessage(
-                  targetPhone,
-                  `Payment received! Our team will set up *${selectedDomain}* for your website within 2 business days. We'll send you the live link once it's ready!`
-                )
-              );
-            }
-          } else {
-            // Regular website payment (no domain selected)
-            await runWithContext({ channel: targetChannel, phoneNumberId: targetVia }, () => sendTextMessage(
-              targetPhone,
-              `Payment of *${amountDisplay}* received! Thank you for choosing Bytes Platform.\n\n` +
-                `*Package:* ${payment.description || payment.service_type}\n\n` +
-                `Your website is all set! Would you like to put it on your own custom domain?\n\n` +
-                `Just say *"yes"* and I'll help you find one, or *"no"* if you're good for now.`
-            ));
-            await logMessage(payment.user_id, `Payment confirmed: ${amountDisplay}`, 'assistant');
-            const { updateUserState } = require('../db/users');
-            await updateUserState(payment.user_id, 'DOMAIN_OFFER');
-          }
-        } else {
-          // Non-website payment — generic confirmation
-          await runWithContext({ channel: targetChannel, phoneNumberId: targetVia }, () => sendTextMessage(
-            targetPhone,
-            `Payment of *${amountDisplay}* received! Thank you for choosing Bytes Platform.\n\n` +
-              `*Package:* ${payment.description || payment.service_type}\n\n` +
-              `Our team will be in touch shortly to kick things off. If you have any questions in the meantime, just message here.`
-          ));
-          await logMessage(payment.user_id, `Payment confirmed: ${amountDisplay} for ${payment.service_type}`, 'assistant');
-
-          // Update user metadata
-          await updateUserMetadata(payment.user_id, {
-            paymentConfirmed: true,
-            lastPaymentAmount: payment.amount,
-            lastPaymentService: payment.service_type,
-          });
-        }
-
-        // Send email notification to team
-        try {
-          const { sendPaymentNotification } = require('../notifications/email');
-          const { getLatestSite } = require('../db/sites');
-          const site = await getLatestSite(payment.user_id);
-          await sendPaymentNotification({
-            userName: paidSession.customer_details?.name || targetPhone,
-            userPhone: targetPhone,
-            userEmail: paidSession.customer_details?.email || '',
-            amount: payment.amount / 100,
-            serviceType: payment.service_type,
-            description: payment.description,
-            sitePreviewUrl: site?.preview_url || '',
-            channel: targetChannel,
-          });
-        } catch (emailErr) {
-          logger.error('[PAYMENT] Email notification failed:', emailErr.message);
-        }
-
-        logger.info(`[PAYMENT] Confirmed payment from ${targetPhone}: ${amountDisplay} for ${payment.service_type}`);
+        // Hand off to the shared post-payment handler (same code path the
+        // Stripe webhook uses). Idempotent — if the webhook already fired
+        // for this same session and processed it, handleConfirmedPayment
+        // detects payment.status === 'paid' and short-circuits.
+        await handleConfirmedPayment(payment, paidSession);
       } catch (err) {
         logger.error(`[PAYMENT] Error checking payment ${payment.id}:`, err.message);
       }
@@ -680,7 +490,13 @@ function startFollowupScheduler(intervalMs = 30 * 60 * 1000) {
 
   const followupTimer = setInterval(runFollowupCycle, intervalMs);
   const reminderTimer = setInterval(runMeetingReminders, 5 * 60 * 1000);
-  const paymentTimer = setInterval(runPaymentPolling, 2 * 60 * 1000);
+  // Payment polling is now a FALLBACK — the primary path is the Stripe
+  // webhook (src/payments/stripeWebhook.js) which confirms payments in
+  // ~1-2 seconds. We still poll every 15 minutes to catch anything the
+  // webhook missed (Render briefly down during a deploy, Stripe
+  // temporary delivery failure). handleConfirmedPayment is idempotent,
+  // so running both is safe — whichever fires second is a no-op.
+  const paymentTimer = setInterval(runPaymentPolling, 15 * 60 * 1000);
 
   return { followupTimer, reminderTimer, paymentTimer };
 }

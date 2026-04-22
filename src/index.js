@@ -11,6 +11,7 @@ const { startFollowupScheduler } = require('./followup/scheduler');
 const chatbotApiRoutes = require('./chatbot/api');
 const chatbotPageRoutes = require('./chatbot/pages/routes');
 const leadRoutes = require('./leads/routes');
+const stripeWebhookRoutes = require('./payments/stripeWebhook');
 const { startChatbotScheduler } = require('./chatbot/jobs/scheduler');
 const { startInstagramTokenRefreshScheduler } = require('./jobs/instagramTokenRefresh');
 const { startUpsellScheduler } = require('./jobs/upsellScheduler');
@@ -42,6 +43,13 @@ app.use(
     legacyHeaders: false,
   })
 );
+
+// Stripe webhook — MUST be mounted BEFORE express.json() so the handler
+// receives the raw request bytes for signature verification. Stripe signs
+// the exact body it sent; even a whitespace-preserving round-trip through
+// JSON.parse + stringify breaks the signature. The router internally uses
+// express.raw() on its own path, so other routes keep getting JSON.
+app.use('/', stripeWebhookRoutes);
 
 // Parse JSON bodies — capture raw bytes for webhook signature verification
 app.use(

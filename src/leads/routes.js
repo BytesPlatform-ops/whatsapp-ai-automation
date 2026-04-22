@@ -127,7 +127,7 @@ router.post('/public/leads/:siteId', async (req, res) => {
         await markLeadDelivery(lead.id, 'no_recipient');
         return;
       }
-      const ok = await sendLeadNotification({
+      const result = await sendLeadNotification({
         toEmail: owner.ownerEmail,
         businessName: owner.businessName,
         visitor: { name, email, phone, message },
@@ -135,7 +135,12 @@ router.post('/public/leads/:siteId', async (req, res) => {
         previewUrl: owner.previewUrl,
         leadId: lead.id,
       });
-      await markLeadDelivery(lead.id, ok ? 'sent' : 'failed', ok ? null : 'sendgrid returned false');
+      // sendLeadNotification now returns { ok, error? }. If it returned a
+      // legacy boolean (old signature) treat truthy as success — belt-and-
+      // suspenders for any caller still around during the rolling deploy.
+      const ok = result === true || result?.ok === true;
+      const errMsg = result?.error || (ok ? null : 'sendgrid returned falsy');
+      await markLeadDelivery(lead.id, ok ? 'sent' : 'failed', ok ? null : errMsg);
     } catch (err) {
       logger.error(`[LEADS] Notification dispatch threw for lead ${lead.id}: ${err.message}`);
       await markLeadDelivery(lead.id, 'failed', err.message);

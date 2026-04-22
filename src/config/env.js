@@ -27,6 +27,8 @@ const optional = [
   'AGENT_PHONE_NUMBER',
   'CALENDLY_WEBHOOK_SIGNING_KEY',
   'STRIPE_SECRET_KEY',
+  'STRIPE_PUBLISHABLE_KEY',
+  'STRIPE_WEBHOOK_SECRET',
   'CHATBOT_BASE_URL',
   'META_PAGE_ACCESS_TOKEN',
   'META_APP_SECRET',
@@ -90,6 +92,11 @@ const env = {
   // Stripe
   stripe: {
     secretKey: process.env.STRIPE_SECRET_KEY || '',
+    publishableKey: process.env.STRIPE_PUBLISHABLE_KEY || '',
+    // Webhook signing secret — used to verify that incoming webhook requests
+    // genuinely came from Stripe. Different per mode (test vs live), so
+    // swapping modes requires rotating this value too.
+    webhookSecret: process.env.STRIPE_WEBHOOK_SECRET || '',
   },
   chatbot: {
     baseUrl: process.env.CHATBOT_BASE_URL || 'https://bytesplatform.com',
