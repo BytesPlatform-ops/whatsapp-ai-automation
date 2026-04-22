@@ -276,6 +276,52 @@ const STATE_QUESTION = {
   [STATES.LOGO_COLLECT_SYMBOL]: 'Any symbol idea for your logo? (e.g. "a bee" or skip)',
 };
 
+// Regex fast-path for unambiguous sales objections. Hits the common 80% of
+// "i don't want this / it's too much / let me think" phrasings without an
+// LLM call. Everything else falls through to the LLM check in
+// isSalesObjection below.
+const SALES_OBJECTION_RX = /\b(too expensive|too (much|pricey|costly)|can'?t afford|out of (my )?budget|over (my )?budget|not worth it|not sure (it'?s )?worth|don'?t think it'?s worth|let me think( about it)?|(i'?ll|i will) think about it|get back to (you|u)( later)?|circle back|maybe later|not (right )?now|not the right time|look (at|for) (other |another )?(alternatives?|options?)|look elsewhere|shop around|found (something|one) cheaper|cheaper (option|alternative)|(i'?ll|i will) (just )?use wix|(i'?ll|i will) (just )?use squarespace|chatgpt (can|could|will) (do|build)|just use (ai|chatgpt)|burn(ed|t)? by agencies|scammed before)\b/i;
+
+/**
+ * Cheap detector for sales-chat objections. Tries regex first (no LLM cost),
+ * falls back to a short LLM classifier for ambiguous cases. Designed to be
+ * fast — this runs before every sales-chat turn so latency matters.
+ *
+ * Returns true when the message is clearly a pushback on buying/committing
+ * (price, stalling, alternatives, trust). Returns false for questions,
+ * agreement, info-sharing, or anything that the sales bot should handle
+ * normally.
+ */
+async function isSalesObjection(text, userId) {
+  const t = String(text || '').trim();
+  if (!t || t.length < 4) return false;
+  if (SALES_OBJECTION_RX.test(t)) return true;
+
+  // Short messages without regex hit are almost never objections — skip the
+  // LLM call. This keeps latency low for the common "ok", "yes", "what
+  // about X?" replies that make up most of a sales chat.
+  if (t.length < 30) return false;
+
+  try {
+    const prompt = `Classify the user's message. Return ONLY JSON: {"isObjection": true|false}.
+
+An objection is pushback on buying or continuing — price concerns ("too expensive", "over my budget"), stalling ("let me think", "get back to you"), trust doubts ("not sure it's worth it"), competitor mentions ("i'll use wix", "chatgpt could do this"), or rejections ("not interested").
+
+NOT objections: asking a question, providing business info, agreeing, specifying preferences, small talk. When unsure, return false.`;
+    const raw = await generateResponse(
+      prompt,
+      [{ role: 'user', content: t.slice(0, 500) }],
+      { userId, operation: 'sales_objection_check', timeoutMs: 15_000 }
+    );
+    const m = String(raw || '').match(/\{[\s\S]*?\}/);
+    if (!m) return false;
+    const parsed = JSON.parse(m[0]);
+    return !!parsed.isObjection;
+  } catch {
+    return false; // on any failure, don't intercept — let the sales bot handle it
+  }
+}
+
 /**
  * Classify whether a free-text message is answering the current question
  * or doing something else (asking a question, wanting the menu, exiting).
@@ -734,6 +780,25 @@ async function _routeMessage(message) {
     // intent === 'answer' - fall through to normal handler
   }
   // ──────────────────────────────────────────────────────────────────────────
+
+  // ── Sales-chat objection interceptor ───────────────────────────────────────
+  // The sales bot has its own aggressive Stage 6 ("value-stack, drop a tier,
+  // re-close"), which trips users into bullet-point re-pitches after a simple
+  // "too expensive". Before the sales bot runs, check if the message is a
+  // clear objection — if so, route through the gentle objectionHandler
+  // instead and stay in SALES_CHAT. User's next message flows normally.
+  if (
+    user.state === STATES.SALES_CHAT &&
+    text &&
+    !message.buttonId &&
+    !message.listId &&
+    message.type === 'text' &&
+    (await isSalesObjection(text, user.id))
+  ) {
+    logger.info(`[SALES] Objection intercepted for ${from} — routing to gentle handler`);
+    await handleObjection(user, message, STATES.SALES_CHAT, 'sales conversation');
+    return;
+  }
 
   // Get handler for current state
   const handler = STATE_HANDLERS[user.state] || handleWelcome;

@@ -51,16 +51,22 @@ function quickDetect(text) {
  * translate into.
  */
 async function resolveLanguage(user, latestUserMessage) {
-  // Cached value wins.
   const cached = user?.metadata?.preferredLanguage;
-  if (cached) return cached;
 
-  // Heuristic first — free for English.
+  // Safety net: if the current message is clearly English (no non-Latin
+  // script, no Roman-Urdu/Spanish/etc. markers), ignore any non-English
+  // cache and reply in English for this turn. Protects against:
+  //   1. A one-off bad detection (e.g. a business name like "Noman
+  //      Plumbing" being mistaken for Urdu on an earlier turn).
+  //   2. Users who naturally code-switch back to English mid-conversation.
+  // We do NOT clear the cache — the user may switch back on the next turn.
   const quick = quickDetect(latestUserMessage);
   if (quick === true) {
-    // Don't persist "english" on first turn — user might switch later.
     return 'english';
   }
+
+  // Cached value wins after the safety check.
+  if (cached) return cached;
 
   // Non-English signal — ask the LLM to name the language so we can use
   // it in a translation prompt later. The script matters: "mujhe chahiye"
