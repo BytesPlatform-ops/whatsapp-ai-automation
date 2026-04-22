@@ -79,19 +79,35 @@ async function createPaymentLink({ userId, phoneNumber, amount, serviceType, pac
 
     logger.info(`[STRIPE] Payment link created: ${paymentLink.url} | Amount: $${amount} | Service: ${serviceType}`);
 
-    // Keep the site's activation banner in sync with whatever Stripe link
-    // the user sees in chat. Fire-and-forget — if redeploy fails, the
-    // chat link still works, banner will self-heal on next redeploy.
+    // A Pixie-routed URL that resolves to the Stripe link for pending
+    // payments but renders an "already paid" page once this payment row
+    // flips to status=paid. Used for anywhere the link will be clicked
+    // more than once (activation banner is the big case).
+    const publicBase = process.env.PUBLIC_API_BASE_URL || env.chatbot?.baseUrl || '';
+    const pixieUrl = publicBase
+      ? `${publicBase.replace(/\/+$/, '')}/pay/${payment.id}`
+      : paymentLink.url;
+
+    // Keep the site's activation banner in sync with whatever link the
+    // user sees in chat. Banner uses the pixieUrl so a re-click after
+    // payment shows "already paid" instead of a second Stripe checkout.
+    // Fire-and-forget — if redeploy fails, the chat link still works,
+    // banner will self-heal on next redeploy.
     try {
       const { updateSiteBannerLink } = require('../website-gen/redeployer');
-      updateSiteBannerLink(userId, paymentLink.url).catch((err) =>
+      updateSiteBannerLink(userId, pixieUrl).catch((err) =>
         logger.warn(`[STRIPE] Banner sync threw for user ${userId}: ${err.message}`)
       );
     } catch (err) {
       logger.warn(`[STRIPE] Could not dispatch banner sync: ${err.message}`);
     }
 
-    return { url: paymentLink.url, paymentId: payment.id, linkId: paymentLink.id };
+    return {
+      url: paymentLink.url,   // Raw Stripe URL — fine for one-shot WhatsApp messages
+      pixieUrl,               // Idempotent redirect URL — use this anywhere user can click more than once
+      paymentId: payment.id,
+      linkId: paymentLink.id,
+    };
   } catch (error) {
     logger.error('[STRIPE] Create payment link error:', error.message);
     throw error;

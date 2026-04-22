@@ -35,7 +35,10 @@ function renderActivationBanner(config = {}) {
   const prefill = `Hi! I want to activate my website${config.businessName ? ` (${config.businessName})` : ''}. Please send me the payment link.`;
   const fallbackUrl = `https://wa.me/${whatsappNumber}?text=${encodeURIComponent(prefill)}`;
   const actionUrl = config.paymentLinkUrl || fallbackUrl;
-  const isStripeLink = /stripe\.com|buy\.stripe|payments\.link/i.test(String(actionUrl || ''));
+  // Detects both direct Stripe URLs and the Pixie /pay/:id redirect.
+  // Both should render as "Activate Now" and open in the same tab so
+  // the checkout / already-paid status loads inline.
+  const isActivationLink = /stripe\.com|buy\.stripe|payments\.link|\/pay\//i.test(String(actionUrl || ''));
 
   // Styles use hard-coded colors (not template tokens) so the banner looks
   // identical across HVAC / Real Estate / Salon / Generic — it's an
@@ -192,8 +195,8 @@ function renderActivationBanner(config = {}) {
   </span>
   <span class="pixie-text"><strong>Preview Mode</strong>Activate this site to make it live${config.businessName ? ` for ${escapeHtml(config.businessName)}` : ''}.</span>
   <span class="pixie-text-mobile">Preview Mode</span>
-  <a class="pixie-cta" href="${escapeHtml(actionUrl)}"${isStripeLink ? '' : ' target="_blank" rel="noopener"'}>
-    ${isStripeLink ? 'Activate Now' : 'Activate →'}
+  <a class="pixie-cta" href="${escapeHtml(actionUrl)}"${isActivationLink ? '' : ' target="_blank" rel="noopener"'}>
+    ${isActivationLink ? 'Activate Now' : 'Activate →'}
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
       <path d="M5 12h14M13 5l7 7-7 7"/>
     </svg>

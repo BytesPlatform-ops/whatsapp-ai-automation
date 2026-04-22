@@ -12,6 +12,7 @@ const chatbotApiRoutes = require('./chatbot/api');
 const chatbotPageRoutes = require('./chatbot/pages/routes');
 const leadRoutes = require('./leads/routes');
 const stripeWebhookRoutes = require('./payments/stripeWebhook');
+const paymentRedirectRoutes = require('./payments/redirectRoute');
 const { startChatbotScheduler } = require('./chatbot/jobs/scheduler');
 const { startInstagramTokenRefreshScheduler } = require('./jobs/instagramTokenRefresh');
 const { startUpsellScheduler } = require('./jobs/upsellScheduler');
@@ -70,6 +71,10 @@ app.get('/health', (req, res) => {
 // Webhook routes
 app.use('/', webhookRoutes);
 app.use('/', calendlyRoutes);
+
+// Payment redirect — intercepts activation-banner clicks so paid users
+// see an "already paid" page instead of being asked to pay again.
+app.use('/', paymentRedirectRoutes);
 
 // Salon booking API — endpoints are public (called from static salon sites on Netlify).
 app.use('/', bookingRoutes);

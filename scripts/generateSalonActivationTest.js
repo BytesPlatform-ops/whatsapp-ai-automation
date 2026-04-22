@@ -87,7 +87,7 @@ async function run() {
   console.log(`       site_id = ${siteId}`);
 
   console.log('[3/6] Creating Stripe payment link ($' + WEBSITE_PRICE_USD + ')...');
-  const { url: paymentLinkUrl, paymentId, linkId } = await createPaymentLink({
+  const { url: stripeUrl, pixieUrl, paymentId, linkId } = await createPaymentLink({
     userId,
     phoneNumber: TEST_PHONE,
     amount: WEBSITE_PRICE_USD,
@@ -97,18 +97,20 @@ async function run() {
     customerEmail: OWNER_EMAIL,
     customerName: 'Test Owner',
   });
-  console.log(`       payment link: ${paymentLinkUrl}`);
+  console.log(`       stripe link:  ${stripeUrl}`);
+  console.log(`       pixie link:   ${pixieUrl}  (used by banner)`);
   console.log(`       payment row:  ${paymentId}  |  link id: ${linkId}`);
 
   console.log('[4/6] Building salon site content...');
   const siteConfig = await generateWebsiteContent(salonDemo.businessData, { templateId: 'salon', siteId });
 
   // Activation banner wiring — these fields are read by renderActivationBanner
-  // in website-gen/activationBanner.js. Without paymentLinkUrl the banner
-  // falls back to a wa.me deep-link, which is not what we want to test here.
+  // in website-gen/activationBanner.js. Using pixieUrl (not the raw Stripe
+  // URL) so clicking the banner after payment shows "already paid" instead
+  // of re-opening Stripe checkout.
   siteConfig.siteId = siteId;
   siteConfig.paymentStatus = 'preview';
-  siteConfig.paymentLinkUrl = paymentLinkUrl;
+  siteConfig.paymentLinkUrl = pixieUrl;
 
   // Make sure booking defaults are on the config for the template renderer
   siteConfig.bookingMode = 'native';
@@ -151,7 +153,8 @@ async function run() {
   console.log(' READY TO TEST');
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
   console.log(` Preview URL:      ${previewUrl}`);
-  console.log(` Payment link:     ${paymentLinkUrl}`);
+  console.log(` Banner link:      ${pixieUrl}  (shows "already paid" after payment)`);
+  console.log(` Stripe checkout:  ${stripeUrl}`);
   console.log(` Stripe test card: 4242 4242 4242 4242, any future date, any CVC`);
   console.log();
   console.log(' What to do:');
