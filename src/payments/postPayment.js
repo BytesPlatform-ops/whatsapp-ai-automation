@@ -40,7 +40,7 @@ async function handleConfirmedPayment(payment, paidSession) {
   //   callers (scheduler + webhook both firing for the same payment).
   const { data: freshPayment } = await supabase
     .from('payments')
-    .select('id, status, paid_at, user_id, phone_number, service_type, description, amount')
+    .select('id, status, paid_at, user_id, phone_number, service_type, description, amount, stripe_payment_link_id')
     .eq('id', payment.id)
     .maybeSingle();
   if (!freshPayment) return { ok: false, reason: 'payment vanished' };
@@ -62,6 +62,25 @@ async function handleConfirmedPayment(payment, paidSession) {
     customer_name: paidSession.customer_details?.name || null,
     paid_at: new Date().toISOString(),
   }).eq('id', p.id);
+
+  // Deactivate the Stripe payment link so the raw checkout URL (sitting in
+  // WhatsApp messages, screenshots, bookmarks) can't be paid a second time.
+  // The /pay/:id endpoint handles the friendly "already paid" UX for any
+  // click that comes through the banner; this is defense in depth for the
+  // raw Stripe URL path. Fire-and-forget — a failure here doesn't affect
+  // the rest of the flow.
+  if (freshPayment.stripe_payment_link_id && env.stripe?.secretKey) {
+    (async () => {
+      try {
+        const Stripe = require('stripe');
+        const s = new Stripe(env.stripe.secretKey);
+        await s.paymentLinks.update(freshPayment.stripe_payment_link_id, { active: false });
+        logger.info(`[PAY] Deactivated Stripe link ${freshPayment.stripe_payment_link_id} after successful payment ${p.id}`);
+      } catch (err) {
+        logger.warn(`[PAY] Could not deactivate Stripe link ${freshPayment.stripe_payment_link_id}: ${err.message}`);
+      }
+    })();
+  }
 
   // ── 2. Resolve user + target phone/channel from USER ROW (not payment row)
   //   payment.phone_number can be stale across bot re-enrollment.
