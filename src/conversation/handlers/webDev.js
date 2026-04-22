@@ -2030,6 +2030,40 @@ async function handleCollectContact(user, message) {
 // the edit-intent fast-path, the salon-flow loopback, and the sales bot's
 // website-demo trigger when everything is already known.
 /**
+ * Build the "*Services:*" line for both summary views. When the user
+ * supplied services, show them verbatim. When they skipped AND the
+ * industry resolves to a trade template (HVAC, plumbing, electrical,
+ * roofing, etc.), preview the trade's default list so "None" never
+ * appears in the summary — the generator will auto-seed those defaults
+ * at build time, so the preview is accurate. Non-trade industries that
+ * skipped get a truthful note about how the generic template handles it.
+ */
+function renderServicesLine(wd) {
+  if (Array.isArray(wd.services) && wd.services.length > 0) {
+    return `*Services:* ${wd.services.join(', ')}`;
+  }
+  try {
+    const { isHvac, resolveTrade } = require('../../website-gen/templates');
+    if (isHvac(wd.industry)) {
+      const trade = resolveTrade(wd.industry);
+      const { TRADE_COPY } = require('../../website-gen/templates/hvac/common');
+      const entry = TRADE_COPY[trade];
+      if (entry && Array.isArray(entry.defaultServices) && entry.defaultServices.length > 0) {
+        const titles = entry.defaultServices.map((s) => s.title);
+        const previewN = 5;
+        const preview = titles.slice(0, previewN).join(', ');
+        const remaining = titles.length - previewN;
+        const tail = remaining > 0 ? `, and ${remaining} more` : '';
+        return `*Services:* using our default ${entry.label.toLowerCase()} list (${preview}${tail})`;
+      }
+    }
+  } catch {
+    // Fall through to the generic note.
+  }
+  return `*Services:* None — we'll skip a dedicated services page`;
+}
+
+/**
  * Read-only peek at the current website-details summary — used when the
  * user asks "what are my current details?" mid-flow. Same content as
  * showConfirmSummary but without the "Reply *yes* to build it" trailing
@@ -2075,7 +2109,11 @@ async function showSummaryPeek(user) {
       const extraAreas = wd.serviceAreas.filter((a) => a && a.toLowerCase() !== (wd.primaryCity || '').toLowerCase());
       if (extraAreas.length) lines.push(`*Service Areas:* ${extraAreas.join(', ')}`);
     }
-    if (Array.isArray(wd.services) && wd.services.length) lines.push(`*Services:* ${wd.services.join(', ')}`);
+    // Always show the services line now — empty+trade shows the default
+    // preview, empty+generic says we'll skip the page. Hiding it used to
+    // leave the summary ambiguous about what services would actually
+    // appear on the generated site.
+    lines.push(renderServicesLine(wd));
   }
 
   if (wd.bookingMode === 'embed') lines.push(`*Booking:* External link (${wd.bookingUrl || 'set'})`);
@@ -2139,8 +2177,7 @@ async function showConfirmSummary(user, prefix = '') {
         lines.push(`*Service Areas:* ${wd.serviceAreas.join(', ')}`);
       }
     }
-    const servicesList = (wd.services || []).length > 0 ? wd.services.join(', ') : 'None (skipped)';
-    lines.push(`*Services:* ${servicesList}`);
+    lines.push(renderServicesLine(wd));
   }
 
   // Salon extras (booking mode + Instagram) so salon users see their setup.
