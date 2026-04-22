@@ -85,8 +85,11 @@ async function handleSalesBot(user, message) {
     }
   }
 
-  // Detect "not interested" and stop follow-ups (not a closed lead — just opted out of follow-ups)
-  const notInterested = /\b(not interested|no thanks|stop messaging|leave me alone|don'?t contact|don'?t message|unsubscribe|stop contacting|i'?m good|no need|pass|not for me)\b/i.test(text);
+  // Detect "not interested" and stop follow-ups (not a closed lead — just opted out of follow-ups).
+  // "not for me" was previously matched here but caused false positives when
+  // users were asking on behalf of someone else ("it's for a friend and not
+  // for me"). Removed — the remaining patterns still catch genuine opt-outs.
+  const notInterested = /\b(not interested|no thanks|stop messaging|leave me alone|don'?t contact|don'?t message|unsubscribe|stop contacting|i'?m good|no need|pass)\b/i.test(text);
   if (notInterested && !user.metadata?.followupOptOut) {
     await updateUserMetadata(user.id, { followupOptOut: true });
     await sendTextMessage(

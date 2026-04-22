@@ -17,6 +17,7 @@ const {
   UNDOABLE_STATES,
 } = require('./undoStack');
 const messageBuffer = require('./messageBuffer');
+const { handleObjection } = require('./handlers/objectionHandler');
 
 // ── Message dedup ─────────────────────────────────────────────────────────
 // WhatsApp can occasionally redeliver the same inbound message (network blip,
@@ -718,6 +719,16 @@ async function _routeMessage(message) {
       );
       await logMessage(user.id, `Reminded user: ${currentQuestion}`, 'assistant');
       return; // Stay in same state
+    }
+
+    if (intent === 'objection') {
+      // Phase 8: the user is pushing back on the process (price, doubt,
+      // stalling, competitor). The objection handler validates, shares
+      // light social proof if relevant, and offers a low-commitment next
+      // step — no re-sell, no fake urgency. User stays in the same state
+      // so their next message lands in the normal collection flow.
+      await handleObjection(user, message, user.state, STATE_QUESTION[user.state]);
+      return;
     }
 
     // intent === 'answer' - fall through to normal handler

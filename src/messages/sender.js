@@ -15,13 +15,13 @@ function getSender() {
 }
 
 async function sendTextMessage(to, text, options = {}) {
-  // The 4-8s "human typing" delay is great for AI replies, but useless for
+  // The 2-4s "human typing" delay is great for AI replies, but useless for
   // operator-sent messages from the admin dashboard — the operator clicks
   // Send and expects it to go out immediately. Pass `{ instant: true }` to
   // bypass the typing indicator + delay entirely.
   if (!options.instant) {
     try { await getSender().showTyping(to); } catch {}
-    const delay = 4000 + Math.floor(Math.random() * 4000);
+    const delay = 2000 + Math.floor(Math.random() * 2000);
     await new Promise(r => setTimeout(r, delay));
   }
   const result = await getSender().sendTextMessage(to, text);

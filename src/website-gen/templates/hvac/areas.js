@@ -1,10 +1,11 @@
-const { esc, telHref, icon, wrapHvacPage, getLocalBusinessSchema, TOKENS } = require('./common');
+const { esc, telHref, icon, wrapHvacPage, getLocalBusinessSchema, getTradeCopy, TOKENS } = require('./common');
 
 function slugify(s) {
   return String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 }
 
 function generateAreasPage(c) {
+  const tc = getTradeCopy(c);
   const phone = c.contactPhone || '';
   const tel = telHref(phone);
   const primary = c.primaryCity || '';
@@ -17,7 +18,7 @@ function generateAreasPage(c) {
       <div class="ctn">
         <p class="crumb"><a href="/">Home</a> &rsaquo; Service Areas</p>
         <h1 class="h1">Service Areas.</h1>
-        <p class="body-lg">${primary ? `Based in ${esc(primary)}, ` : ''}we serve homeowners across the region with same-day HVAC service, free quotes, and 24/7 emergency response.</p>
+        <p class="body-lg">${primary ? `Based in ${esc(primary)}, ` : ''}${tc.areasHeroBody}</p>
       </div>
     </section>`;
 
@@ -40,13 +41,13 @@ function generateAreasPage(c) {
     </section>` : '';
 
   const areaBlocks = areas.map((a) => {
-    const desc = descriptions[a] || descriptions[a.toLowerCase()] || `Our technicians cover ${a} with same-day service and 24/7 emergency response. Whether it&apos;s AC repair, heating installation, or a seasonal tune-up, we&apos;re a short drive from your door — fully licensed, fully insured, and backed by a satisfaction guarantee.`;
+    const desc = descriptions[a] || descriptions[a.toLowerCase()] || tc.areaDescFallback(a);
     return `
       <div id="${slugify(a)}" class="rv" style="background:#fff;border:1px solid ${TOKENS.border};border-radius:18px;padding:32px;display:grid;gap:24px;grid-template-columns:1fr;margin-bottom:20px">
         <div>
           <div class="flex items-center gap-12 mb-4" style="gap:12px">
             <span style="display:inline-flex;align-items:center;justify-content:center;width:44px;height:44px;border-radius:10px;background:${TOKENS.sectionAlt};color:${TOKENS.trust}">${icon('mapPin', 20)}</span>
-            <h2 class="ff-display" style="font-size:24px;font-weight:700;color:${TOKENS.heading}">HVAC Service in ${esc(a)}</h2>
+            <h2 class="ff-display" style="font-size:24px;font-weight:700;color:${TOKENS.heading}">${esc(tc.areaCardHeading)} ${esc(a)}</h2>
           </div>
           <p class="body">${esc(desc)}</p>
           <div class="flex flex-wrap gap-12 mt-6">
@@ -82,8 +83,8 @@ function generateAreasPage(c) {
   const body = hero + mapEmbed + pills + areasSection + ctaBanner;
 
   return wrapHvacPage(c, '/areas', body, {
-    title: `HVAC Service Areas${primary ? ` — ${primary} & Surrounding Cities` : ''} | ${c.businessName}`,
-    description: `${c.businessName} provides HVAC service across ${areas.length ? areas.slice(0, 5).join(', ') : primary || 'the region'}. Same-day response, 24/7 emergency, licensed & insured.`,
+    title: `${tc.label} Service Areas${primary ? ` — ${primary} & Surrounding Cities` : ''} | ${c.businessName}`,
+    description: `${c.businessName} provides ${tc.label.toLowerCase()} service across ${areas.length ? areas.slice(0, 5).join(', ') : primary || 'the region'}. Same-day response, 24/7 emergency, licensed & insured.`,
     schemas: [getLocalBusinessSchema(c)],
   });
 }

@@ -1,6 +1,7 @@
-const { esc, telHref, icon, wrapHvacPage, netlifyFormAttrs, netlifyHiddenFields, getLocalBusinessSchema, TOKENS } = require('./common');
+const { esc, telHref, icon, wrapHvacPage, netlifyFormAttrs, netlifyHiddenFields, getLocalBusinessSchema, getTradeCopy, TOKENS } = require('./common');
 
 function generateContactPage(c) {
+  const tc = getTradeCopy(c);
   const phone = c.contactPhone || '';
   const tel = telHref(phone);
   const email = c.contactEmail || '';
@@ -118,8 +119,8 @@ function generateContactPage(c) {
     </style>`;
 
   return wrapHvacPage(c, '/contact', body, {
-    title: `Contact ${c.businessName}${city ? ` — HVAC in ${city}` : ''}`,
-    description: `Request a free HVAC quote from ${c.businessName}${city ? ` in ${city}` : ''}. Same-day service, 1-hour callback, 24/7 emergencies.${phone ? ` Call ${phone}.` : ''}`,
+    title: `Contact ${c.businessName}${city ? ` — ${tc.contactTitleTail(city)}` : ''}`,
+    description: tc.contactMetaDesc(c.businessName, city, phone),
     schemas: [getLocalBusinessSchema(c)],
   });
 }

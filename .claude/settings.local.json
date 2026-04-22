@@ -5,7 +5,16 @@
       "Bash(node -e \"const w = require\\('./src/conversation/handlers/webDev'\\); console.log\\('OK', Object.keys\\(w\\)\\);\")",
       "Bash(node -c src/llm/prompts.js)",
       "Bash(node -c src/conversation/handlers/salesBot.js)",
-      "Bash(node -c src/conversation/handlers/webDev.js)"
+      "Bash(node -c src/conversation/handlers/webDev.js)",
+      "Bash(node -e \"require\\('./src/conversation/messageBuffer'\\); console.log\\('messageBuffer OK'\\);\")",
+      "Bash(node --check src/conversation/router.js)",
+      "Bash(git commit -m ' *)",
+      "Bash(node --check src/conversation/handlers/objectionHandler.js)",
+      "Bash(node --check src/llm/prompts.js)",
+      "Bash(node --check src/website-gen/templates/hvac/home.js)",
+      "Bash(node tmp_patch.js)",
+      "Bash(node --check src/website-gen/templates/hvac/about.js)",
+      "Bash(node --check src/website-gen/templates/hvac/areas.js)"
     ]
   }
 }

@@ -1,4 +1,4 @@
-const { esc, telHref, icon, wrapHvacPage, getLocalBusinessSchema, getServiceListSchema, TOKENS } = require('./common');
+const { esc, telHref, icon, wrapHvacPage, getLocalBusinessSchema, getServiceListSchema, getTradeCopy, TOKENS } = require('./common');
 
 function slugify(s) {
   return String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
@@ -12,6 +12,7 @@ function priceDisplay(priceFrom) {
 }
 
 function generateServicesPage(c) {
+  const tc = getTradeCopy(c);
   const phone = c.contactPhone || '';
   const tel = telHref(phone);
   const services = c.services || [];
@@ -20,8 +21,8 @@ function generateServicesPage(c) {
     <section class="page-hero">
       <div class="ctn">
         <p class="crumb"><a href="/">Home</a> &rsaquo; Services</p>
-        <h1 class="h1">Our HVAC Services.</h1>
-        <p class="body-lg">Everything from emergency repairs to full system installs &mdash; delivered by licensed, background-checked technicians.</p>
+        <h1 class="h1">${esc(tc.servicesH1)}</h1>
+        <p class="body-lg">${esc(tc.servicesSub)}</p>
       </div>
     </section>`;
 
@@ -92,9 +93,15 @@ function generateServicesPage(c) {
 
   const body = overview + zzSection + notSure;
 
+  // Meta description lists a handful of services so search snippets are
+  // specific. We pull from the effective services list (user-supplied or
+  // trade defaults) rather than hardcoding HVAC-specific examples.
+  const sampleTitles = (services || []).slice(0, 5).map((s) => s.title).filter(Boolean).join(', ');
+  const metaDesc = `Full list of ${tc.label} services from ${c.businessName}${c.primaryCity ? ` in ${c.primaryCity}` : ''}${sampleTitles ? `: ${sampleTitles}, and more.` : '.'}`;
+
   return wrapHvacPage(c, '/services', body, {
-    title: `HVAC Services${c.primaryCity ? ` in ${c.primaryCity}` : ''} | ${c.businessName}`,
-    description: `Full list of HVAC services from ${c.businessName}${c.primaryCity ? ` in ${c.primaryCity}` : ''}: AC repair, heating, heat pumps, duct cleaning, thermostats, and more.`,
+    title: `${tc.label} Services${c.primaryCity ? ` in ${c.primaryCity}` : ''} | ${c.businessName}`,
+    description: metaDesc,
     schemas: [getLocalBusinessSchema(c), getServiceListSchema(c)],
   });
 }

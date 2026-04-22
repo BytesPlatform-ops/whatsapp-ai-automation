@@ -242,10 +242,11 @@ Classify the user's message into ONE of these intents:
 - "question"  - The user is asking something clearly unrelated (about services, pricing, other topics)
 - "menu"  - The user wants to see the main menu, go back, or explore other services
 - "exit"  - The user wants to stop the current flow entirely
+- "objection"  - The user is pushing back on the PROCESS ITSELF — expressing doubt about value, price, trust, or stalling ("too expensive", "I'll just use Wix", "not sure this is worth it", "let me think about it"). This is NOT an answer to the current question; it's a concern that needs to be addressed before the flow can continue. Only use this when the pushback is clearly about buying/continuing, not when they're complaining about one specific ask.
 
-IMPORTANT: When in doubt, classify as "answer". Only classify as "question" if the message is clearly about a different topic. Messages like "figure it out", "you already know", "from the idea", "same as before", "idk you tell me" are ALL "answer" - they are responses to the current question.
+IMPORTANT: When in doubt, classify as "answer". Only classify as "question" if the message is clearly about a different topic. Messages like "figure it out", "you already know", "from the idea", "same as before", "idk you tell me" are ALL "answer" - they are responses to the current question. "Objection" is rare — only use it when the user is clearly rejecting value/price/trust, not just skipping or delegating a single field.
 
-Return ONLY valid JSON: {"intent": "answer"|"question"|"menu"|"exit"}
+Return ONLY valid JSON: {"intent": "answer"|"question"|"menu"|"exit"|"objection"}
 
 Examples:
 - Current question: "What is your business name?" / Message: "TechCorp" → {"intent": "answer"}
@@ -254,7 +255,11 @@ Examples:
 - Current question: "Send your website URL" / Message: "Actually forget it" → {"intent": "exit"}
 - Current question: "What industry are you in?" / Message: "figure it out from the idea" → {"intent": "answer"}
 - Current question: "What industry are you in?" / Message: "I can't figure out, you tell me" → {"intent": "answer"}
-- Current question: "What services do you offer?" / Message: "I already told you" → {"intent": "answer"}`;
+- Current question: "What services do you offer?" / Message: "I already told you" → {"intent": "answer"}
+- Current question: "What services do you offer?" / Message: "this is too expensive, i'll just use wix" → {"intent": "objection"}
+- Current question: "What industry are you in?" / Message: "not sure this is worth it tbh" → {"intent": "objection"}
+- Current question: "Please share your contact details" / Message: "let me think about it and get back to you" → {"intent": "objection"}
+- Current question: "What are your brand colors?" / Message: "idk what ChatGPT would just do this for free" → {"intent": "objection"}`;
 
 /**
  * Build the Bytes Platform sales bot system prompt.
@@ -641,7 +646,29 @@ Only use this when they're genuinely ready to move forward, NOT just because the
 // ═══════════════════════════════════════════════════════════════════════════
 // HVAC TEMPLATE CONTENT PROMPT
 // ═══════════════════════════════════════════════════════════════════════════
-const HVAC_CONTENT_PROMPT = `You are an elite copywriter for HVAC (heating, cooling, air quality) contractors. Based on the business information provided, generate conversion-focused website copy in the tone of a trusted local technician — direct, honest, no jargon, no upsell-ese. Homeowners reading this are either (a) in panic mode because their AC/furnace died, or (b) comparing contractors for a planned install. Your copy must serve both without sounding generic.
+// Trade-specific phrases threaded into the builder below. Keep this in
+// sync with TRADE_COPY in src/website-gen/templates/hvac/common.js — these
+// are the same two trades that share the HVAC template.
+const HVAC_TRADE_PHRASES = {
+  hvac: {
+    label: 'HVAC',
+    specialtyTail: '(heating, cooling, air quality) contractors',
+    panicExamples: 'their AC/furnace died',
+    heroImgExamples: "'hvac technician service', 'air conditioning repair', 'furnace installation technician'",
+    exampleTestimonialDetails: '"came at 11pm", "fixed it before the guests arrived", "told me I didn\'t need a new unit"',
+  },
+  plumbing: {
+    label: 'plumbing',
+    specialtyTail: '(leak repair, drain cleaning, water heater, pipe, sewer) contractors',
+    panicExamples: 'a pipe burst, the water heater died, or a drain backed up and flooded',
+    heroImgExamples: "'plumber service work', 'water heater installation', 'leak repair tools'",
+    exampleTestimonialDetails: '"came at 11pm to stop a burst pipe", "fixed the leak before the guests arrived", "told me the drain line did NOT need replacing"',
+  },
+};
+
+function buildHvacContentPrompt(trade = 'hvac') {
+  const t = HVAC_TRADE_PHRASES[trade] || HVAC_TRADE_PHRASES.hvac;
+  return `You are an elite copywriter for ${t.label.toUpperCase ? t.label : t.label} ${t.specialtyTail}. Based on the business information provided, generate conversion-focused website copy in the tone of a trusted local technician — direct, honest, no jargon, no upsell-ese. Homeowners reading this are either (a) in panic mode because ${t.panicExamples}, or (b) comparing contractors for a planned install. Your copy must serve both without sounding generic.
 
 Return ONLY valid JSON. No markdown code fences, no commentary. Use this exact shape:
 
@@ -675,18 +702,23 @@ Return ONLY valid JSON. No markdown code fences, no commentary. Use this exact s
   "areaDescriptions": {
     "<area name exactly as given>": "<55-80 words, unique per area. Mention local relevance (suburb/town-specific), same-day availability, and the drive/connection to the primary city. DO NOT repeat the same phrasing across areas.>"
   },
-  "heroImageQuery": "<2-4 words to query Unsplash. Examples: 'hvac technician service', 'air conditioning repair', 'furnace installation technician'. NOT 'house' or 'sky'>"
+  "heroImageQuery": "<2-4 words to query Unsplash. Examples: ${t.heroImgExamples}. NOT 'house' or 'sky'>"
 }
 
 RULES:
 - Return every area listed in the input with a UNIQUE description. Never reuse sentences across areas.
 - Match the EXACT service titles from the input — do not rename them.
-- Testimonials must feel human: specific details > generic praise. Include things like "came at 11pm", "fixed it before the guests arrived", "told me I didn't need a new unit".
+- Testimonials must feel human: specific details > generic praise. Include things like ${t.exampleTestimonialDetails}.
 - NO em dashes, NO en dashes — use regular hyphens or full sentences.
 - NO emoji.
 - If the business owner's first-person voice is useful (in aboutText), use it.
 - Write for an 8th-grade reading level. Short sentences. Active voice.
 - For services the user didn't specify, do NOT invent new ones.`;
+}
+
+// Back-compat export so existing callers that don't know about the builder
+// keep working. New callers should use buildHvacContentPrompt(trade).
+const HVAC_CONTENT_PROMPT = buildHvacContentPrompt('hvac');
 
 // ═══════════════════════════════════════════════════════════════════════════
 // REAL ESTATE TEMPLATE CONTENT PROMPT
@@ -767,6 +799,7 @@ module.exports = {
   WEBSITE_ANALYSIS_PROMPT,
   WEBSITE_CONTENT_PROMPT,
   HVAC_CONTENT_PROMPT,
+  buildHvacContentPrompt,
   REAL_ESTATE_CONTENT_PROMPT,
   REVISION_PARSER_PROMPT,
   INTENT_CLASSIFIER_PROMPT,

@@ -123,6 +123,95 @@ const DEFAULT_SERVICES = [
   { title: 'Maintenance Plans & Agreements', icon: 'calendarCheck', shortDescription: 'Seasonal tune-ups that prevent breakdowns before they cost you.', priceFrom: 'From $9/mo' },
 ];
 
+// Default 10 plumbing services — parallel to DEFAULT_SERVICES, used when a
+// plumbing-trade user skips the services step. Icon choices map to things
+// the template's icon set actually has (wrench, layers, shieldCheck, etc.);
+// plumbing-specific glyphs would require adding to the icon palette, which
+// isn't worth it for defaults.
+const PLUMBING_DEFAULT_SERVICES = [
+  { title: 'Leak Detection & Repair', icon: 'wrench', shortDescription: 'Find the leak, fix the leak, no demolition guesswork.', priceFrom: '89' },
+  { title: 'Drain Cleaning & Unclogging', icon: 'layers', shortDescription: 'Slow drains, backups, roots — cleared without damage to your pipes.', priceFrom: '99' },
+  { title: 'Water Heater Repair & Install', icon: 'flame', shortDescription: 'Tank or tankless, gas or electric. Hot water back today.', priceFrom: 'Free Quote' },
+  { title: 'Pipe Repair & Replacement', icon: 'zap', shortDescription: 'Burst pipe, pinhole leak, or full re-pipe — clean, code-compliant work.', priceFrom: 'Free Quote' },
+  { title: 'Sewer Line Services', icon: 'shieldCheck', shortDescription: 'Camera inspection, hydro-jetting, trenchless repair when possible.', priceFrom: 'Free Quote' },
+  { title: 'Toilet & Fixture Install', icon: 'checkCircle', shortDescription: 'Running toilets, leaky faucets, new fixtures — installed right the first time.', priceFrom: '129' },
+  { title: 'Sump Pump Services', icon: 'wind', shortDescription: 'Flood protection that actually runs when the rain comes.', priceFrom: '199' },
+  { title: 'Garbage Disposal Repair', icon: 'gauge', shortDescription: 'Jammed, humming, or dead — repaired or replaced same-day.', priceFrom: '119' },
+  { title: '24/7 Emergency Plumbing', icon: 'siren', shortDescription: 'Burst pipe, flooded bathroom, middle of the night — we answer.', priceFrom: 'Call Now' },
+  { title: 'Maintenance Plans & Agreements', icon: 'calendarCheck', shortDescription: 'Seasonal inspections that catch leaks before they flood a floor.', priceFrom: 'From $9/mo' },
+];
+
+// Per-trade copy. Used whenever a page needs a label that would otherwise
+// say "HVAC" in hardcoded English. Keep this the single source of truth
+// so adding a third trade later means touching one map, not eight files.
+const TRADE_COPY = {
+  hvac: {
+    label: 'HVAC',                                             // short noun used in eyebrows / headings
+    heroAccent: 'Heating & Air Conditioning',                  // colored span in home hero h1
+    heroSub: 'Fast, reliable HVAC repair, installation, and maintenance. Licensed, insured, and here when you need us most.',
+    servicesEyebrow: 'Our HVAC Services',
+    servicesH1: 'Our HVAC Services.',
+    servicesSub: 'Everything from emergency repairs to full system installs — delivered by licensed, background-checked technicians.',
+    areasHeroBody: 'we serve homeowners across the region with same-day HVAC service, free quotes, and 24/7 emergency response.',
+    areaCardHeading: 'HVAC Service in',                        // per-area card h2: "HVAC Service in Austin"
+    areaDescFallback: (area) => `Our technicians cover ${area} with same-day service and 24/7 emergency response. Whether it's AC repair, heating installation, or a seasonal tune-up, we're a short drive from your door — fully licensed, fully insured, and backed by a satisfaction guarantee.`,
+    aboutTaglineFallback: (city) => `The ${city || 'local'} HVAC team homeowners actually recommend by name.`,
+    contactTitleTail: (city) => city ? `HVAC in ${city}` : 'HVAC',
+    contactMetaDesc: (bn, city, phone) => `Request a free HVAC quote from ${bn}${city ? ` in ${city}` : ''}. Same-day service, 1-hour callback, 24/7 emergencies.${phone ? ` Call ${phone}.` : ''}`,
+    pageMetaTitleTail: (city) => `HVAC Services${city ? ` in ${city}` : ''}`,
+    pageMetaDescDefault: (bn, city, phone) => `${bn}: fast, reliable heating, cooling, and air quality services${city ? ` in ${city}` : ''}. ${phone ? `Call ${phone}.` : ''}`,
+    heroSeoDesc: (bn, city, phone) => `${bn}: trusted heating, cooling, and air quality services${city ? ` in ${city}` : ''}. 24/7 emergency. Licensed & insured.${phone ? ` Call ${phone}.` : ''}`,
+    defaultServices: DEFAULT_SERVICES,
+    // Used when the user provides no testimonials AND the LLM content
+    // generator didn't run (fallback-only render path).
+    fallbackTestimonials: (city) => [
+      { quote: 'Our AC went out in the middle of a heatwave. Technician was at our door in under two hours and had us cool again by lunch.', name: 'Mark Reynolds', role: `Homeowner${city ? ` · ${city}` : ''}` },
+      { quote: 'They replaced our entire heating system in a single day. Clean work, upfront pricing, and the new system is whisper-quiet.', name: 'Jennifer Park', role: `Homeowner${city ? ` · ${city}` : ''}` },
+      { quote: 'I’ve used three HVAC companies over the years. These guys are by far the most honest. They actually told me my unit did NOT need replacing.', name: 'David Chen', role: `Homeowner${city ? ` · ${city}` : ''}` },
+    ],
+    // About-page credentials block. NATE is HVAC-specific, so plumbers get
+    // a different third card.
+    licenseCardDesc: 'State-issued HVAC contractor license, renewed annually and publicly verifiable.',
+    skillCardTitle: 'NATE Certified',
+    skillCardDesc: 'North American Technician Excellence &mdash; the industry gold standard for HVAC skill.',
+    skillCardTag: 'NATE-certified',
+  },
+  plumbing: {
+    label: 'Plumbing',
+    heroAccent: 'Plumbing',
+    heroSub: 'Fast, reliable leak repair, drain cleaning, and water heater service. Licensed, insured, and here when you need us most.',
+    servicesEyebrow: 'Our Plumbing Services',
+    servicesH1: 'Our Plumbing Services.',
+    servicesSub: 'Everything from emergency leak fixes to full re-pipes — delivered by licensed, background-checked plumbers.',
+    areasHeroBody: 'we serve homeowners across the region with same-day plumbing service, free quotes, and 24/7 emergency response.',
+    areaCardHeading: 'Plumbing Service in',
+    areaDescFallback: (area) => `Our plumbers cover ${area} with same-day service and 24/7 emergency response. Whether it's a burst pipe, clogged drain, or water heater replacement, we're a short drive from your door — fully licensed, fully insured, and backed by a satisfaction guarantee.`,
+    aboutTaglineFallback: (city) => `The ${city || 'local'} plumbing team homeowners actually recommend by name.`,
+    contactTitleTail: (city) => city ? `Plumbing in ${city}` : 'Plumbing',
+    contactMetaDesc: (bn, city, phone) => `Request a free plumbing quote from ${bn}${city ? ` in ${city}` : ''}. Same-day service, 1-hour callback, 24/7 emergencies.${phone ? ` Call ${phone}.` : ''}`,
+    pageMetaTitleTail: (city) => `Plumbing Services${city ? ` in ${city}` : ''}`,
+    pageMetaDescDefault: (bn, city, phone) => `${bn}: fast, reliable plumbing services${city ? ` in ${city}` : ''}. ${phone ? `Call ${phone}.` : ''}`,
+    heroSeoDesc: (bn, city, phone) => `${bn}: trusted leak repair, drain cleaning, and water heater services${city ? ` in ${city}` : ''}. 24/7 emergency. Licensed & insured.${phone ? ` Call ${phone}.` : ''}`,
+    defaultServices: PLUMBING_DEFAULT_SERVICES,
+    fallbackTestimonials: (city) => [
+      { quote: 'Called them at 10pm about a pipe that burst under our sink. Tech was out within the hour and the leak was fixed by midnight. Saved our kitchen.', name: 'Mark Reynolds', role: `Homeowner${city ? ` · ${city}` : ''}` },
+      { quote: 'Replaced our 20-year-old water heater in a single day. Clean install, upfront pricing, and the new unit cut our gas bill noticeably.', name: 'Jennifer Park', role: `Homeowner${city ? ` · ${city}` : ''}` },
+      { quote: 'I’ve used three plumbers over the years. These guys are by far the most honest. They told me my drain line did NOT need replacing.', name: 'David Chen', role: `Homeowner${city ? ` · ${city}` : ''}` },
+    ],
+    licenseCardDesc: 'State-issued plumbing contractor license, renewed annually and publicly verifiable.',
+    skillCardTitle: 'Master Plumber On Staff',
+    skillCardDesc: 'Master-level certification &mdash; the top rank in the plumbing trade, signed off on every complex job.',
+    skillCardTag: 'Master-certified',
+  },
+};
+
+// Read the per-trade copy bundle from a template config. Defaults to HVAC
+// so existing sites (no `trade` field on config) behave exactly as before.
+function getTradeCopy(c) {
+  const trade = (c && c.trade) || 'hvac';
+  return TRADE_COPY[trade] || TRADE_COPY.hvac;
+}
+
 // ─── Styles ─────────────────────────────────────────────────────────────────
 
 function getHvacStyles() {
@@ -974,11 +1063,12 @@ function stripUndefined(obj) {
 // ─── Page wrapper ───────────────────────────────────────────────────────────
 
 function wrapHvacPage(c, cur, body, opts = {}) {
-  const business = esc(c.businessName || 'HVAC Services');
+  const tc = getTradeCopy(c);
+  const business = esc(c.businessName || `${tc.label} Services`);
   const city = esc(c.primaryCity || '');
   const phone = esc(c.contactPhone || '');
-  const title = esc(opts.title || `${c.businessName} — HVAC Services${c.primaryCity ? ` in ${c.primaryCity}` : ''}`);
-  const desc = esc(opts.description || `${c.businessName}: fast, reliable heating, cooling, and air quality services${c.primaryCity ? ` in ${c.primaryCity}` : ''}. ${phone ? `Call ${phone}.` : ''}`.trim());
+  const title = esc(opts.title || `${c.businessName} — ${tc.pageMetaTitleTail(c.primaryCity || '')}`);
+  const desc = esc(opts.description || tc.pageMetaDescDefault(c.businessName, c.primaryCity || '', c.contactPhone || '').trim());
   const schemas = (opts.schemas || [getLocalBusinessSchema(c)]).join('\n');
   return `<!DOCTYPE html><html lang="en"><head>
 <meta charset="UTF-8">
@@ -1022,6 +1112,9 @@ function svcIconTint(titleOrIcon) {
 module.exports = {
   TOKENS,
   DEFAULT_SERVICES,
+  PLUMBING_DEFAULT_SERVICES,
+  TRADE_COPY,
+  getTradeCopy,
   esc,
   telHref,
   icon,

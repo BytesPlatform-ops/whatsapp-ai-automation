@@ -145,8 +145,12 @@ function questionForState(state, websiteData) {
       return 'Which city are you based in, and which areas do you serve? Example: *Austin: Round Rock, Cedar Park, Pflugerville*.';
     }
     case STATES.WEB_COLLECT_SERVICES: {
-      const { isHvac } = require('../../website-gen/templates');
+      const { isHvac, resolveTrade } = require('../../website-gen/templates');
       if (isHvac(websiteData.industry)) {
+        const trade = resolveTrade(websiteData.industry);
+        if (trade === 'plumbing') {
+          return "Which plumbing services do you offer? List them separated by commas — or just skip to use our default list (leak repair, drain cleaning, water heater install, pipe repair, sewer services, and more).";
+        }
         return "Which HVAC services do you offer? List them separated by commas — or just skip to use our default list (AC repair, heating, heat pumps, duct cleaning, thermostats, and more).";
       }
       return "What services or products do you offer? List them separated by commas, or just skip this one.";
