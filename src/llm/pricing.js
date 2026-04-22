@@ -12,6 +12,9 @@ const RATES = {
   'claude-opus-4-20250514':     { input: 15.00, output: 75.00, cached: 1.50,  write: 18.75 },
 
   // OpenAI chat
+  'gpt-5':                      { input: 1.25,  output: 10.00, cached: 0.125, write: 1.25 },
+  'gpt-5-mini':                 { input: 0.25,  output: 2.00,  cached: 0.025, write: 0.25 },
+  'gpt-5-nano':                 { input: 0.05,  output: 0.40,  cached: 0.005, write: 0.05 },
   'gpt-4o-mini':                { input: 0.15,  output: 0.60,  cached: 0.075, write: 0.15 },
   'gpt-4o':                     { input: 2.50,  output: 10.00, cached: 1.25,  write: 2.50 },
   'gpt-4-turbo':                { input: 10.00, output: 30.00, cached: 10.00, write: 10.00 },

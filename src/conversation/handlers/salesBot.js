@@ -8,11 +8,45 @@ const { logger } = require('../../utils/logger');
 const { STATES } = require('../states');
 const { env } = require('../../config/env');
 const { saveLeadSummary } = require('../../db/leadSummaries');
+const { buildSummaryContext } = require('../summaryManager');
+const { hydrateWebsiteData } = require('../entityAccumulator');
+const { localize } = require('../../utils/localizer');
 
 /**
  * Extract and strip the [LEAD_BRIEF]...[/LEAD_BRIEF] block from the LLM response.
  * Returns { leadBrief: string|null, cleanText: string }
  */
+/**
+ * Build a compact "KNOWN FACTS" block for the sales prompt from whatever
+ * entity info we've accumulated into metadata. Injecting this into the
+ * system prompt lets the LLM skip re-asking for things the user already
+ * said — and trust that the wizard can start with these values pre-filled
+ * if they trigger the website demo.
+ */
+function buildKnownContext(user) {
+  const wd = user?.metadata?.websiteData || {};
+  const entries = [];
+  if (wd.businessName) entries.push(`- Business name: ${wd.businessName}`);
+  if (wd.industry) entries.push(`- Industry: ${wd.industry}`);
+  if (wd.primaryCity) entries.push(`- City: ${wd.primaryCity}`);
+  if (Array.isArray(wd.services) && wd.services.length) {
+    entries.push(`- Services: ${wd.services.slice(0, 5).join(', ')}`);
+  }
+  if (wd.contactEmail) entries.push(`- Email: ${wd.contactEmail}`);
+  if (wd.contactPhone) entries.push(`- Phone: ${wd.contactPhone}`);
+  if (wd.contactAddress) entries.push(`- Address: ${wd.contactAddress}`);
+
+  if (!entries.length) return '';
+
+  return `\n\n---\n\n## KNOWN FACTS ABOUT THIS CUSTOMER
+The user has already shared these details in-conversation. Do NOT re-ask for any of them. Treat them as authoritative for triggering flows:
+${entries.join('\n')}
+
+When emitting [TRIGGER_WEBSITE_DEMO], fill the structured tag from these facts so the wizard skips the corresponding steps.
+---
+`;
+}
+
 function extractLeadBrief(text) {
   const match = text.match(/\[LEAD_BRIEF\]([\s\S]*?)\[\/LEAD_BRIEF\]/i);
   if (!match) return { leadBrief: null, cleanText: text };
@@ -32,8 +66,30 @@ async function handleSalesBot(user, message) {
     return STATES.SALES_CHAT;
   }
 
-  // Detect "not interested" and stop follow-ups (not a closed lead — just opted out of follow-ups)
-  const notInterested = /\b(not interested|no thanks|stop messaging|leave me alone|don'?t contact|don'?t message|unsubscribe|stop contacting|i'?m good|no need|pass|not for me)\b/i.test(text);
+  // Un-stick: if websiteDemoTriggered was set in a previous turn but the
+  // demo never actually produced a preview (no site deployed), clear the
+  // flag so the next trigger attempt can fire. Without this, the LLM
+  // sometimes says "Here's your preview!" with no link — the user is
+  // trapped because the gate thinks the demo already ran.
+  if (user.metadata?.websiteDemoTriggered) {
+    try {
+      const { getLatestSite } = require('../../db/sites');
+      const latest = await getLatestSite(user.id);
+      if (!latest || !latest.preview_url) {
+        logger.info(`[SALES] websiteDemoTriggered=true but no preview_url for ${user.phone_number} — un-sticking the flag`);
+        await updateUserMetadata(user.id, { websiteDemoTriggered: false });
+        user.metadata = { ...(user.metadata || {}), websiteDemoTriggered: false };
+      }
+    } catch (err) {
+      logger.warn(`[SALES] Stuck-flag check failed: ${err.message}`);
+    }
+  }
+
+  // Detect "not interested" and stop follow-ups (not a closed lead — just opted out of follow-ups).
+  // "not for me" was previously matched here but caused false positives when
+  // users were asking on behalf of someone else ("it's for a friend and not
+  // for me"). Removed — the remaining patterns still catch genuine opt-outs.
+  const notInterested = /\b(not interested|no thanks|stop messaging|leave me alone|don'?t contact|don'?t message|unsubscribe|stop contacting|i'?m good|no need|pass)\b/i.test(text);
   if (notInterested && !user.metadata?.followupOptOut) {
     await updateUserMetadata(user.id, { followupOptOut: true });
     await sendTextMessage(
@@ -43,6 +99,22 @@ async function handleSalesBot(user, message) {
     await logMessage(user.id, 'User not interested — follow-ups stopped', 'assistant');
     saveLeadSummary(user, 'opted_out', 'User said not interested — follow-ups stopped').catch(() => {});
     return STATES.SALES_CHAT;
+  }
+
+  // Extract any website-relevant entities the user just dropped into sales
+  // chat (business name, industry, city, email, phone, address, services).
+  // Storing them here means the website-demo trigger can pre-fill the wizard
+  // without having to re-ask the user for things they already said, and the
+  // LLM itself gets told about them via buildKnownContext below so it stops
+  // asking "what's your business called?" when the user already said it.
+  try {
+    const { updatedUser, captured } = await hydrateWebsiteData(user, text);
+    if (captured.length) {
+      logger.info(`[SALES] Hydrated from sales-chat message: ${captured.join(', ')}`);
+      user = updatedUser;
+    }
+  } catch (err) {
+    logger.warn(`[SALES] Entity hydration failed: ${err.message}`);
   }
 
   // Get conversation history (last 40 messages for full context)
@@ -65,6 +137,8 @@ async function handleSalesBot(user, message) {
   const adSource = user.metadata?.adSource || 'generic';
 
   let systemPrompt = buildSalesPrompt(env.calendlyUrl, env.portfolio, adSource);
+  systemPrompt += buildSummaryContext(user);
+  systemPrompt += buildKnownContext(user);
 
   // If we just ran an SEO audit, inject the findings so the bot can pitch based on real data
   const seoAnalysis = user.metadata?.lastSeoAnalysis;
@@ -107,8 +181,49 @@ async function handleSalesBot(user, message) {
     });
   }
 
-  // Check for trigger tags before sending the response
-  let websiteDemoTrigger = cleanText.includes('[TRIGGER_WEBSITE_DEMO]');
+  // Check for trigger tags before sending the response.
+  // Website trigger supports three forms:
+  //   1. Bare:       [TRIGGER_WEBSITE_DEMO]
+  //   2. Plain name: [TRIGGER_WEBSITE_DEMO: BytesMobile]
+  //   3. Structured: [TRIGGER_WEBSITE_DEMO: name="X"; industry="Y"; services="A, B"]
+  // The structured form lets the wizard skip steps the LLM already heard
+  // answers for, so the user isn't asked again for things they already said.
+  const websiteDemoMatch = cleanText.match(/\[TRIGGER_WEBSITE_DEMO(?::\s*([^\]]*))?\]/i);
+  let websiteDemoTrigger = !!websiteDemoMatch;
+  let websiteDemoBusinessName = null;
+  let websiteDemoIndustry = null;
+  let websiteDemoServices = null;
+  if (websiteDemoMatch && websiteDemoMatch[1]) {
+    const payload = websiteDemoMatch[1].trim();
+    const isStructured = /[;=]/.test(payload);
+    const clean = (v) => {
+      const x = String(v || '').trim().replace(/^["']|["']$/g, '').trim();
+      return x && !/^unknown$/i.test(x) ? x : null;
+    };
+    if (isStructured) {
+      for (const pair of payload.split(/;\s*/)) {
+        const eq = pair.indexOf('=');
+        if (eq < 0) continue;
+        const key = pair.slice(0, eq).trim().toLowerCase();
+        const val = clean(pair.slice(eq + 1));
+        if (!val) continue;
+        if (key === 'name' || key === 'business') {
+          if (val.length <= 60) websiteDemoBusinessName = val;
+        } else if (key === 'industry' || key === 'niche') {
+          if (val.length <= 40) websiteDemoIndustry = val;
+        } else if (key === 'services' || key === 'service') {
+          websiteDemoServices = val
+            .split(/\s*,\s*|\s+(?:and|&)\s+/i)
+            .map((s) => s.trim())
+            .filter(Boolean);
+          if (!websiteDemoServices.length) websiteDemoServices = null;
+        }
+      }
+    } else {
+      const name = clean(payload);
+      if (name && name.length <= 60) websiteDemoBusinessName = name;
+    }
+  }
   let chatbotDemoTrigger = cleanText.includes('[TRIGGER_CHATBOT_DEMO]');
   let adGeneratorTrigger = cleanText.includes('[TRIGGER_AD_GENERATOR]');
   let logoMakerTrigger = cleanText.includes('[TRIGGER_LOGO_MAKER]');
@@ -169,6 +284,31 @@ async function handleSalesBot(user, message) {
   ) {
     websiteDemoTrigger = true;
     logger.info(`[SALES] Fallback: website demo trigger detected for ${user.phone_number}`);
+  }
+
+  // Hard-commit fallback: catches the case where the bot says it's building
+  // / about to build / has built a preview but forgets to emit the
+  // [TRIGGER_WEBSITE_DEMO] tag. Covers three commitment shapes:
+  //   1. Present-tense active: "Building a preview for X", "spinning up now"
+  //   2. Near-future commit:   "I'll build a preview", "let me spin one up"
+  //   3. Past-tense claim:     "here's your preview" (LLM hallucinating done)
+  // Without catching all three the user can stall silently while the LLM
+  // just narrates a site that was never actually generated.
+  const commitPatterns = [
+    /\b(building|creating|generating|spinning\s*up|preparing|prepping|setting\s*up|making|putting\s*together)\s.{0,50}\b(website|site|page|landing|preview)\b/i,
+    /\b(?:i'?ll|let\s*me|going\s*to|gonna|let'?s)\s+(?:build|create|make|spin\s*up|put\s*together|generate|set\s*up)\s.{0,50}\b(?:website|site|page|landing|preview)\b/i,
+    /\bhere(?:'?s|\s+is)\s+(?:your|the)\s+(?:\w+\s+){0,4}(?:preview|site|website|landing)\b/i,
+    /\b(?:preview|site|website)\s+is\s+(?:ready|built|done|live)\b/i,
+  ];
+  if (
+    !websiteDemoTrigger &&
+    !user.metadata?.websiteDemoTriggered &&
+    !chatbotDemoTrigger &&
+    !isChatbotContext &&
+    commitPatterns.some((re) => re.test(cleanText))
+  ) {
+    websiteDemoTrigger = true;
+    logger.info(`[SALES] Hard-commit fallback: LLM promised/claimed a preview without emitting trigger tag`);
   }
 
   // Ad generator fallback: detect ad intent in conversation and trigger when user agrees
@@ -263,7 +403,7 @@ async function handleSalesBot(user, message) {
 
   // Strip all trigger tags from the response
   let responseText = cleanText
-    .replace(/\[TRIGGER_WEBSITE_DEMO\]/g, '')
+    .replace(/\[TRIGGER_WEBSITE_DEMO(?::[^\]]*)?\]/gi, '')
     .replace(/\[TRIGGER_CHATBOT_DEMO\]/g, '')
     .replace(/\[TRIGGER_AD_GENERATOR\]/g, '')
     .replace(/\[TRIGGER_LOGO_MAKER\]/g, '')
@@ -444,13 +584,147 @@ async function handleSalesBot(user, message) {
     const site = await createSite(user.id, 'business-starter');
     await updateUserMetadata(user.id, { currentSiteId: site.id });
 
-    // Always ask — don't try to auto-extract. Prevents wrong names.
-    await sendTextMessage(
-      user.phone_number,
-      "Let's build it! What's your business name?"
+    // Resolve each field in priority order:
+    //   1. Structured trigger tag (LLM just extracted it from conversation).
+    //   2. metadata.websiteData.* (hydrated from prior sales-chat turns).
+    //   3. Other flow metadata (adData / logoData / chatbotData) for name only.
+    //   4. LLM rescue — pull the name out of recent conversation. Catches
+    //      the case where the user gave a short business name ("Noman ki
+    //      dukaan") that didn't trip hydrate's looksRich gate, AND the LLM
+    //      triggered the demo without filling the name in the tag.
+    // Heuristic message-scanning is gone — it used to pick arbitrary phrases
+    // like "do what you think is goo" as business names.
+    const wd = user.metadata?.websiteData || {};
+
+    let businessName =
+      websiteDemoBusinessName ||
+      wd.businessName ||
+      user.metadata?.adData?.businessName ||
+      user.metadata?.logoData?.businessName ||
+      user.metadata?.chatbotData?.businessName ||
+      null;
+
+    const industry = websiteDemoIndustry || wd.industry || null;
+
+    const services =
+      (websiteDemoServices && websiteDemoServices.length ? websiteDemoServices : null) ||
+      (Array.isArray(wd.services) && wd.services.length ? wd.services : null);
+
+    // Rescue: one cheap LLM call to pull the business name out of recent
+    // turns before giving up and re-asking. The user almost always said it
+    // earlier; we just couldn't cheaply regex it out.
+    if (!businessName) {
+      try {
+        const convo = messages
+          .slice(-10)
+          .map((m) => `${m.role}: ${m.content}`)
+          .join('\n');
+        const rescue = await generateResponse(
+          `Extract the business name the user mentioned in this short conversation. Return ONLY the business name as plain text — no quotes, no punctuation, no "the business name is". If the user has NOT mentioned a business name yet, return exactly: unknown.\n\n${convo}`,
+          [{ role: 'user', content: '[extract business name]' }],
+          { userId: user.id, operation: 'webdev_trigger_name_rescue' }
+        );
+        const clean = (rescue || '').trim().replace(/^["']|["']$/g, '');
+        if (clean && clean.length > 1 && clean.length < 60 && !/^unknown$/i.test(clean)) {
+          businessName = clean;
+          logger.info(`[SALES] Rescued business name from conversation: "${businessName}"`);
+        }
+      } catch (err) {
+        logger.warn(`[SALES] Business-name rescue failed: ${err.message}`);
+      }
+    }
+
+    if (!businessName) {
+      await sendTextMessage(
+        user.phone_number,
+        await localize("Let's build it! What's your business name?", user, text)
+      );
+      await logMessage(user.id, 'Starting website demo flow', 'assistant');
+      return STATES.WEB_COLLECT_NAME;
+    }
+
+    // Pre-seed every field we resolved so the wizard doesn't re-ask for
+    // things the LLM already heard.
+    const websiteData = { ...wd, businessName };
+    if (industry) websiteData.industry = industry;
+    if (services) websiteData.services = services;
+    await updateUserMetadata(user.id, { websiteData });
+    user.metadata = { ...(user.metadata || {}), websiteData };
+
+    const hasContact = !!(websiteData.contactEmail || websiteData.contactPhone || websiteData.contactAddress);
+
+    logger.info(
+      `[SALES] Website demo pre-seeded: name="${businessName}", industry="${industry || '(ask)'}", services=${
+        services ? `[${services.join(', ')}]` : '(ask)'
+      }, hasContact=${hasContact}`
     );
-    await logMessage(user.id, 'Starting website demo flow', 'assistant');
-    return STATES.WEB_COLLECT_NAME;
+
+    const {
+      isSalonIndustry,
+      startSalonFlow,
+      showConfirmSummary,
+      nextMissingWebDevState,
+      questionForState,
+    } = require('./webDev');
+
+    // Salon industry has its own sub-flow (booking tool / hours / prices /
+    // instagram) that isn't covered by nextMissingWebDevState's generic
+    // ladder. Route to startSalonFlow so those questions get asked.
+    if (industry && isSalonIndustry(industry)) {
+      await sendTextMessage(
+        user.phone_number,
+        await localize(
+          `Nice, let's get *${businessName}* set up. Just a couple more things to personalize your site.`,
+          user,
+          text
+        )
+      );
+      await logMessage(user.id, `Website demo → salon flow (name + industry pre-filled)`, 'assistant');
+      return startSalonFlow(user);
+    }
+
+    // Ask the wizard what field is actually missing next. This handles the
+    // per-industry nuances automatically — HVAC needs primaryCity + service
+    // areas, real-estate needs agent profile + listings, generic needs
+    // services + contact — all without salesBot having to know.
+    const nextState = nextMissingWebDevState(websiteData, user.metadata || {});
+
+    // Nothing left to collect → straight to the confirmation summary.
+    if (nextState === STATES.WEB_CONFIRM) {
+      await sendTextMessage(
+        user.phone_number,
+        await localize(
+          `Perfect, I've got everything I need for *${businessName}*. Pulling up the summary.`,
+          user,
+          text
+        )
+      );
+      await logMessage(user.id, `Website demo → confirm (all pre-filled from sales chat)`, 'assistant');
+      return showConfirmSummary(user);
+    }
+
+    // Build an ack that lists what we already captured so the user sees
+    // the question in context, then send the next question for the state
+    // the wizard wants us to land on.
+    const ackParts = [];
+    if (industry) ackParts.push(industry);
+    if (services && services.length) {
+      ackParts.push(`services: ${services.slice(0, 4).join(', ')}${services.length > 4 ? '…' : ''}`);
+    }
+    if (hasContact) ackParts.push('contact saved');
+    const contextLine = ackParts.length
+      ? `Building *${businessName}* (${ackParts.join(', ')}).`
+      : `Building it for *${businessName}*.`;
+
+    const question = questionForState(nextState, websiteData);
+    const outgoing = `${contextLine}\n\n${question}`;
+    await sendTextMessage(user.phone_number, await localize(outgoing, user, text));
+    await logMessage(
+      user.id,
+      `Website demo → ${nextState} (pre-filled: name${industry ? ', industry' : ''}${services ? ', services' : ''}${hasContact ? ', contact' : ''})`,
+      'assistant'
+    );
+    return nextState;
   }
 
   // Trigger ad generator flow

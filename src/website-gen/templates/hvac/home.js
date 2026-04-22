@@ -1,6 +1,7 @@
-const { esc, telHref, icon, iconFilled, googleGlyph, wrapHvacPage, getLocalBusinessSchema, getServiceListSchema, TOKENS } = require('./common');
+const { esc, telHref, icon, iconFilled, googleGlyph, wrapHvacPage, getLocalBusinessSchema, getServiceListSchema, getTradeCopy, TOKENS } = require('./common');
 
 function generateHomePage(c) {
+  const tc = getTradeCopy(c);
   const phone = c.contactPhone || '';
   const tel = telHref(phone);
   const city = c.primaryCity || '';
@@ -56,8 +57,8 @@ function generateHomePage(c) {
             <span class="chip chip-orange" style="margin-bottom:18px">
               ${iconFilled('star', 14, '#F97316')} Rated ${esc(rating)} &middot; ${esc(reviewCount)} Google Reviews
             </span>
-            <h1 class="h1 mb-4">${city ? `${esc(city)}'s Trusted` : 'Your Trusted'}<br><span style="color:${TOKENS.action}">Heating &amp; Air Conditioning</span> Experts.</h1>
-            <p class="body-lg mb-6" style="max-width:560px">${esc(c.heroSub || `Fast, reliable HVAC repair, installation, and maintenance. Licensed, insured, and here when you need us most.`)}</p>
+            <h1 class="h1 mb-4">${city ? `${esc(city)}'s Trusted` : 'Your Trusted'}<br><span style="color:${TOKENS.action}">${esc(tc.heroAccent)}</span> Experts.</h1>
+            <p class="body-lg mb-6" style="max-width:560px">${esc(c.heroSub || tc.heroSub)}</p>
             <div class="flex flex-wrap gap-12 mb-6">
               <a href="/contact" class="btn btn-orange btn-lg">Request Free Quote ${icon('arrowRight', 18, '#fff')}</a>
               ${phone ? `<a href="tel:${esc(tel)}" class="btn btn-outline btn-lg">${icon('phone', 18)} Call Now: ${esc(phone)}</a>` : ''}
@@ -96,7 +97,7 @@ function generateHomePage(c) {
     <section class="sect sect-soft">
       <div class="ctn">
         <div class="center mb-8 rv">
-          <span class="eyebrow" style="display:inline-block">Our HVAC Services</span>
+          <span class="eyebrow" style="display:inline-block">${esc(tc.servicesEyebrow)}</span>
           <h2 class="h2 mt-4">From emergency repairs to full installations.</h2>
           <span class="bar-accent"></span>
           <p class="body mt-6" style="max-width:620px;margin:24px auto 0">Everything you need to stay comfortable, year-round. One call, one trusted team.</p>
@@ -138,11 +139,12 @@ function generateHomePage(c) {
     </section>`;
 
   // ─── Testimonials — filled stars, quote mark, real Google G ─────────────
-  const tList = (c.testimonials && c.testimonials.length ? c.testimonials.slice(0, 3) : [
-    { quote: 'Our AC went out in the middle of a heatwave. Technician was at our door in under two hours and had us cool again by lunch.', name: 'Mark Reynolds', role: `Homeowner${city ? ` · ${city}` : ''}` },
-    { quote: 'They replaced our entire heating system in a single day. Clean work, upfront pricing, and the new system is whisper-quiet.', name: 'Jennifer Park', role: `Homeowner${city ? ` · ${city}` : ''}` },
-    { quote: 'I\u2019ve used three HVAC companies over the years. These guys are by far the most honest. They actually told me my unit did NOT need replacing.', name: 'David Chen', role: `Homeowner${city ? ` · ${city}` : ''}` },
-  ]).map((t, i) => ({ ...t, avatar: (t.name || 'U').trim().charAt(0).toUpperCase(), avatarVariant: `av-${(i % 3) + 1}` }));
+  // Fallback testimonial set is chosen per-trade (HVAC vs plumbing). See
+  // TRADE_COPY.fallbackTestimonials in ./common.js. User-supplied
+  // testimonials (from the LLM content prompt or manual input) still win.
+  const tList = (c.testimonials && c.testimonials.length ? c.testimonials.slice(0, 3) : tc.fallbackTestimonials(city))
+    .map((t, i) => ({ ...t, avatar: (t.name || 'U').trim().charAt(0).toUpperCase(), avatarVariant: `av-${(i % 3) + 1}` }));
+
 
   const testimonials = `
     <section class="sect sect-soft">
@@ -247,8 +249,8 @@ function generateHomePage(c) {
   const body = hero + servicesSection + whyChoose + testimonials + areasSection + ctaBanner;
 
   return wrapHvacPage(c, '/', body, {
-    title: `${c.businessName} \u2014 HVAC Services${city ? ` in ${city}` : ''}`,
-    description: `${c.businessName}: trusted heating, cooling, and air quality services${city ? ` in ${city}` : ''}. 24/7 emergency. Licensed & insured.${phone ? ` Call ${phone}.` : ''}`,
+    title: `${c.businessName} — ${tc.pageMetaTitleTail(city)}`,
+    description: tc.heroSeoDesc(c.businessName, city, phone),
     schemas: [getLocalBusinessSchema(c), getServiceListSchema(c)],
   });
 }

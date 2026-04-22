@@ -7,6 +7,65 @@ const { logger } = require('../utils/logger');
 const { generateResponse } = require('../llm/provider');
 const { INTENT_CLASSIFIER_PROMPT, GENERAL_CHAT_PROMPT } = require('../llm/prompts');
 const { transcribeAudio } = require('../llm/transcribe');
+const { maybeUpdateSummary } = require('./summaryManager');
+const { isDelegation } = require('../config/smartDefaults');
+const {
+  classifyUndoOrKeep,
+  pushStateHistory,
+  handleUndo,
+  clearUndoPending,
+  UNDOABLE_STATES,
+} = require('./undoStack');
+const messageBuffer = require('./messageBuffer');
+const { handleObjection } = require('./handlers/objectionHandler');
+
+// ── Message dedup ─────────────────────────────────────────────────────────
+// WhatsApp can occasionally redeliver the same inbound message (network blip,
+// ACK miss between Meta and our server). Without this, /reset could fire
+// twice in a row and the user sees duplicate greetings. LRU-capped so
+// memory stays bounded under load.
+const RECENT_MESSAGES = new Map(); // key = `${from}:${messageId}` → timestamp
+const DEDUP_WINDOW_MS = 60_000;
+const DEDUP_MAX_ENTRIES = 2000;
+
+function seenRecently(from, messageId) {
+  if (!messageId) return false; // can't dedup without an ID
+  const key = `${from}:${messageId}`;
+  const now = Date.now();
+  const last = RECENT_MESSAGES.get(key);
+  if (last && now - last < DEDUP_WINDOW_MS) return true;
+  RECENT_MESSAGES.set(key, now);
+  // Cheap eviction: if the map grew past the cap, drop the oldest 20% so
+  // occasional large bursts don't leak memory.
+  if (RECENT_MESSAGES.size > DEDUP_MAX_ENTRIES) {
+    const keys = Array.from(RECENT_MESSAGES.keys()).slice(0, Math.floor(DEDUP_MAX_ENTRIES * 0.2));
+    for (const k of keys) RECENT_MESSAGES.delete(k);
+  }
+  return false;
+}
+
+// ── Per-user serial processing ────────────────────────────────────────────
+// Two inbound webhooks for the same user can land in parallel (/reset
+// followed by the user's first real message, for example). Without a lock
+// they process concurrently, which causes weird races: /reset's DB cleanup
+// is slow, its greeting fires AFTER the next message's reply, and the user
+// sees "greeting → real reply → greeting" out of order.
+//
+// This is a Map<phoneNumber, Promise> that chains pending work. Each turn
+// awaits the previous turn's completion before running.
+const USER_LOCKS = new Map();
+
+function withUserLock(from, fn) {
+  const previous = USER_LOCKS.get(from) || Promise.resolve();
+  const current = previous.then(fn, fn); // run regardless of prior success/failure
+  USER_LOCKS.set(from, current);
+  // Clean up the map entry once this turn finishes, but ONLY if nothing newer
+  // has queued on top of us. Otherwise a later turn would lose its chain.
+  current.finally(() => {
+    if (USER_LOCKS.get(from) === current) USER_LOCKS.delete(from);
+  });
+  return current;
+}
 
 /**
  * Identify which product an ad is promoting based on the ad body text.
@@ -184,7 +243,7 @@ const STATE_QUESTION = {
   [STATES.WEB_COLLECT_NAME]: 'What is your business name?',
   [STATES.WEB_COLLECT_INDUSTRY]: 'What industry are you in?',
   [STATES.WEB_COLLECT_AREAS]: 'Which city are you based in, and which areas do you serve?',
-  [STATES.WEB_COLLECT_AGENT_PROFILE]: 'Tell me your brokerage, years in real estate, and any designations (or say skip).',
+  [STATES.WEB_COLLECT_AGENT_PROFILE]: 'Tell me your brokerage, years in real estate, and any designations (or just skip).',
   [STATES.WEB_COLLECT_LISTINGS_ASK]: 'Do you have any listings to showcase? (yes / skip)',
   [STATES.WEB_COLLECT_LISTINGS_DETAILS]: 'Send your listing details in natural language, or say done.',
   [STATES.WEB_COLLECT_LISTINGS_PHOTOS]: 'Send a listing photo, or say done / skip for stock photos.',
@@ -227,10 +286,10 @@ async function classifyIntent(state, text, userId) {
   if (!currentQuestion) return 'answer';
 
   // Fast-path — these are unambiguously answers, never menu/exit/question.
-  // The LLM classifier sometimes misfires on single-word replies (e.g. "skip"
-  // gets routed to "menu", which resets the user back to service selection
-  // mid-flow). Treat the obvious short replies as plain answers and skip the
-  // LLM call entirely.
+  // The LLM classifier sometimes misfires on short replies (e.g. "skip" or
+  // "lets just skip it" gets routed to "menu", which resets the user back to
+  // service selection mid-flow). Treat the obvious short replies as plain
+  // answers and skip the LLM call entirely.
   const t = String(text || '').trim().toLowerCase();
   if (!t) return 'answer';
   if (/^(skip|none|no|nope|nah|n\/?a|na|next|continue|done|same|ok|okay|yes|yeah|yep|ya|sure|y|n)$/.test(t)) return 'answer';
@@ -240,6 +299,13 @@ async function classifyIntent(state, text, userId) {
   if (/@/.test(t) && t.length < 100 && !/[?]/.test(t)) return 'answer';
   // Very short replies (< 4 chars) almost always answers, never menu requests
   if (t.length < 4) return 'answer';
+  // Short messages that clearly express skip / delegate / acceptance intent.
+  // Single source of truth is smartDefaults.isDelegation — covers "surprise
+  // me", "just add something random", "idk you pick", "i dont have it yet",
+  // etc. Without this short-circuit the LLM intent classifier sometimes
+  // misroutes them as "question" or "exit" and the user gets dumped out of
+  // their flow mid-step.
+  if (isDelegation(t)) return 'answer';
 
   try {
     const prompt = INTENT_CLASSIFIER_PROMPT.replace('{{CURRENT_QUESTION}}', currentQuestion);
@@ -257,19 +323,101 @@ async function classifyIntent(state, text, userId) {
 }
 
 /**
+ * Inner processor: acquires the per-user lock, pins channel context, runs
+ * _routeMessage with one retry if the first attempt threw before sending
+ * anything. Called via routeMessage directly for non-text / button / slash
+ * messages, and via the message buffer for debounced text batches.
+ */
+function _processTurn(message) {
+  const channel = message.channel || 'whatsapp';
+  return withUserLock(message.from || 'anon', () =>
+    // Pin the inbound phone_number_id into the async context so every
+    // sendTextMessage / sendInteractiveButtons / etc. inside this turn replies
+    // from the same business number the user messaged. The context also
+    // tracks a sendCount that gates the retry logic below.
+    runWithContext({ channel, phoneNumberId: message.phoneNumberId || null }, async () => {
+    const { getSendCount } = require('../messages/channelContext');
+
+    // First attempt.
+    try {
+      return await _routeMessage(message);
+    } catch (err) {
+      const alreadyReplied = getSendCount() > 0;
+      if (alreadyReplied) {
+        // The turn already delivered at least one reply to the user before
+        // throwing. Retrying would duplicate that reply — much worse than
+        // just logging and moving on. This is the common case when a post-
+        // reply step (metadata update, summary refresh, trigger dispatch)
+        // throws but the user got what they needed.
+        logger.warn(`[ROUTER] First attempt failed AFTER ${getSendCount()} reply(ies) for ${message.from}: ${err.message}. NOT retrying (would duplicate).`);
+        return;
+      }
+      logger.warn(`[ROUTER] First attempt failed for ${message.from} with no reply sent: ${err.message}. Retrying once.`);
+      await new Promise((r) => setTimeout(r, 600));
+    }
+
+    // Second attempt — only reached when the first attempt threw BEFORE
+    // sending anything. Transient timeouts / network blips fall into this
+    // bucket and usually succeed on retry.
+    try {
+      return await _routeMessage(message);
+    } catch (err) {
+      logger.error(`[ROUTER] Retry also failed for ${message.from}:`, {
+        message: err.message,
+        stack: err.stack?.split('\n').slice(0, 5).join('\n'),
+      });
+      // Only now, after two honest attempts, surface a user-visible nudge.
+      try {
+        await sendTextMessage(
+          message.from,
+          "Hmm, something glitched on my end. Try sending that again in a sec?"
+        );
+      } catch {
+        // If even the nudge fails, we're truly stuck — just log.
+      }
+    }
+    })
+  );
+}
+
+/**
  * Main message router. Called for every incoming message (WhatsApp, Messenger, Instagram).
+ *
+ * Dedup runs up front so redelivered messages never enter the buffer or the
+ * lock chain. Plain text goes through the 1s debounce buffer (Phase 7) so
+ * rapid bursts merge into one turn; everything else (media, button taps,
+ * slash commands) takes the direct path and flushes any pending text first
+ * to preserve arrival order.
  */
 async function routeMessage(message) {
-  const channel = message.channel || 'whatsapp';
-  // Pin the inbound phone_number_id into the async context so every
-  // sendTextMessage / sendInteractiveButtons / etc. inside this turn replies
-  // from the same business number the user messaged.
-  return runWithContext({ channel, phoneNumberId: message.phoneNumberId || null }, () => _routeMessage(message));
+  const from = message.from || 'anon';
+
+  // Dedup: WhatsApp occasionally redelivers the same inbound messageId.
+  // Checking here (before the buffer and lock) means a dup can never ride
+  // into a merged batch and accidentally re-trigger a reply.
+  if (seenRecently(from, message.messageId)) {
+    logger.warn(`[ROUTER] Duplicate delivery ignored: from=${from} messageId=${message.messageId}`);
+    return;
+  }
+
+  if (messageBuffer.isBufferable(message)) {
+    return messageBuffer.enqueue(message, _processTurn);
+  }
+
+  // Non-text / button / slash: drain any pending text for this user first
+  // so the user-visible order matches the send order (typed "hi" then
+  // tapped a button → "hi" gets a reply, then the button tap processes).
+  await messageBuffer.flushPendingWith(from, _processTurn);
+  return _processTurn(message);
 }
 
 async function _routeMessage(message) {
   const { from, text, messageId } = message;
   const channel = message.channel || 'whatsapp';
+
+  // Dedup already ran in routeMessage before the buffer / lock — don't
+  // re-check here. seenRecently is stateful and a second call for the same
+  // id would mis-flag this turn as a duplicate.
 
   // Track the message ID so typing indicators work for all outgoing messages
   setLastMessageId(from, messageId);
@@ -434,6 +582,94 @@ async function _routeMessage(message) {
     }
   }
 
+  // ── Undo / keep classifier ────────────────────────────────────────────────
+  // When the user is at an undo-able state, one LLM call decides if their
+  // reply means "go back", "keep the previous value", or neither. The LLM
+  // handles natural phrasings ("actually let's revisit that", "one step
+  // back", "nah, back up") without a brittle regex list. Long messages
+  // and non-text inputs short-circuit to skip the LLM call.
+  if (
+    text &&
+    !message.buttonId &&
+    !message.listId &&
+    message.type === 'text' &&
+    UNDOABLE_STATES.has(user.state)
+  ) {
+    const intent = await classifyUndoOrKeep(text, {
+      undoPending: user.metadata?.undoPendingState === user.state,
+      userId: user.id,
+    });
+    if (intent === 'undo') {
+      await handleUndo(user);
+      return;
+    }
+    if (intent === 'keep') {
+      await clearUndoPending(user);
+      try {
+      const webDev = require('./handlers/webDev');
+      const wd = user.metadata?.websiteData || {};
+
+      // Compute next state. Salon sub-flow has its own linear order; other
+      // states defer to nextMissingWebDevState.
+      let nextState;
+      if (user.state === STATES.SALON_BOOKING_TOOL) {
+        nextState = STATES.SALON_INSTAGRAM;
+      } else if (user.state === STATES.SALON_INSTAGRAM) {
+        // Embed mode skips hours/durations; native goes through them.
+        nextState = wd.bookingMode === 'embed'
+          ? null  // sentinel — finishSalonFlow handles rest
+          : STATES.SALON_HOURS;
+      } else if (user.state === STATES.SALON_HOURS) {
+        nextState = (wd.services && wd.services.length > 0)
+          ? STATES.SALON_SERVICE_DURATIONS
+          : null;
+      } else if (user.state === STATES.SALON_SERVICE_DURATIONS) {
+        nextState = null; // finishSalonFlow handles what's next
+      } else {
+        nextState = webDev.nextMissingWebDevState(wd, user.metadata || {});
+      }
+
+      // Null sentinel for salon → route through finishSalonFlow. It
+      // handles contact-already-collected vs needs-collection vs confirm.
+      if (nextState === null) {
+        // Inline minimal finishSalonFlow: show summary if contact known,
+        // else ask for contact. finishSalonFlow is not exported but we
+        // can mimic its decision.
+        const hasContact = !!(wd.contactEmail || wd.contactPhone || wd.contactAddress);
+        if (hasContact) {
+          await sendTextMessage(user.phone_number, 'Kept as is.');
+          await webDev.showConfirmSummary(user);
+        } else {
+          await sendTextMessage(
+            user.phone_number,
+            "Kept as is.\n\nLast thing — what contact info do you want on the site? Send your email, phone, and/or address."
+          );
+          await updateUserState(user.id, STATES.WEB_COLLECT_CONTACT);
+        }
+        await logMessage(user.id, `Undo: kept, advanced through salon flow`, 'assistant');
+        return;
+      }
+
+      if (nextState && nextState !== user.state) {
+        await updateUserState(user.id, nextState);
+        user.state = nextState;
+      }
+      if (nextState === STATES.WEB_CONFIRM) {
+        await webDev.showConfirmSummary(user);
+      } else {
+        const question = webDev.questionForState(nextState, wd);
+        await sendTextMessage(user.phone_number, `Kept as is. ${question}`);
+      }
+      await logMessage(user.id, `Undo: kept, advanced to ${nextState}`, 'assistant');
+      } catch (err) {
+        logger.error(`[UNDO] Keep-advance failed: ${err.message}`);
+        await sendTextMessage(user.phone_number, "Kept as is. What's next?");
+      }
+      return;
+    }
+    // intent === 'none' — fall through to normal routing
+  }
+
   // ── Intent interceptor ─────────────────────────────────────────────────────
   // For collection states with free-text (no button press), classify intent
   // before blindly passing the text to the handler.
@@ -460,15 +696,21 @@ async function _routeMessage(message) {
     }
 
     if (intent === 'question') {
-      // Answer their question, then bring them back to where they were
+      // Answer their question, then bring them back to where they were.
+      // If the LLM call fails, skip the aside and just re-prompt — better
+      // than stalling silently.
       const currentQuestion = STATE_QUESTION[user.state];
-      const aside = await generateResponse(
-        GENERAL_CHAT_PROMPT,
-        [{ role: 'user', content: text }],
-        { userId: user.id, operation: 'off_topic_aside' }
-      );
-      await sendTextMessage(user.phone_number, aside);
-      await logMessage(user.id, aside, 'assistant');
+      try {
+        const aside = await generateResponse(
+          GENERAL_CHAT_PROMPT,
+          [{ role: 'user', content: text }],
+          { userId: user.id, operation: 'off_topic_aside' }
+        );
+        await sendTextMessage(user.phone_number, aside);
+        await logMessage(user.id, aside, 'assistant');
+      } catch (err) {
+        logger.warn(`[ROUTER] Off-topic aside LLM call failed for ${from}: ${err.message}`);
+      }
 
       // Remind them of the current step
       await sendWithMenuButton(
@@ -477,6 +719,16 @@ async function _routeMessage(message) {
       );
       await logMessage(user.id, `Reminded user: ${currentQuestion}`, 'assistant');
       return; // Stay in same state
+    }
+
+    if (intent === 'objection') {
+      // Phase 8: the user is pushing back on the process (price, doubt,
+      // stalling, competitor). The objection handler validates, shares
+      // light social proof if relevant, and offers a low-commitment next
+      // step — no re-sell, no fake urgency. User stays in the same state
+      // so their next message lands in the normal collection flow.
+      await handleObjection(user, message, user.state, STATE_QUESTION[user.state]);
+      return;
     }
 
     // intent === 'answer' - fall through to normal handler
@@ -488,14 +740,28 @@ async function _routeMessage(message) {
 
   logger.debug(`Routing message for ${from}`, { state: user.state });
 
+  // Remember the state we were in BEFORE the handler runs, so the undo
+  // stack can push it once the handler tells us we're transitioning.
+  const stateBeforeHandler = user.state;
+
   // Execute the handler
   const newState = await handler(user, message);
 
   // If handler returned a new state, update it
   if (newState && newState !== user.state) {
+    // Push the OLD state onto the undo history so the user can walk back
+    // a step later. pushStateHistory filters to undo-able states only.
+    await pushStateHistory(user, stateBeforeHandler);
+    // Clear the undo-pending marker — once the user has answered a popped
+    // step, there's nothing pending anymore.
+    if (user.metadata?.undoPendingState) await clearUndoPending(user);
     await updateUserState(user.id, newState);
     logger.debug(`State transition for ${from}: ${user.state} → ${newState}`);
   }
+
+  // Refresh the rolling conversation summary if we've crossed the interval.
+  // Fire-and-forget — must not block the turn; the summary manager swallows errors.
+  maybeUpdateSummary(user).catch(() => {});
 }
 
 module.exports = { routeMessage };

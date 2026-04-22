@@ -1,5 +1,5 @@
 const { generateResponse } = require('../llm/provider');
-const { WEBSITE_CONTENT_PROMPT, HVAC_CONTENT_PROMPT, REAL_ESTATE_CONTENT_PROMPT } = require('../llm/prompts');
+const { WEBSITE_CONTENT_PROMPT, buildHvacContentPrompt, REAL_ESTATE_CONTENT_PROMPT } = require('../llm/prompts');
 const { logger } = require('../utils/logger');
 const { getHeroImage } = require('./heroImage');
 const { attachServiceImages } = require('./serviceImages');
@@ -7,7 +7,7 @@ const { attachHvacServiceImages } = require('./hvacServiceImages');
 const { attachRealEstateListingImages } = require('./realEstateListingImages');
 const { fetchNeighborhoodImages, fetchAgentPlaceholderImage } = require('./neighborhoodImages');
 const { inferTimezoneFromAddress } = require('./timezone');
-const { isHvac, isRealEstate } = require('./templates');
+const { isHvac, isRealEstate, resolveTrade } = require('./templates');
 
 // Luxury-biased hero queries, grouped by salon sub-type. One is picked at
 // random at generation time so two similar salons get different heroes.
@@ -109,13 +109,17 @@ async function generateWebsiteContent(businessData, extras = {}) {
   const hasServices = Array.isArray(services) && services.length > 0;
   const hvacMode = isHvac(industry);
   const realEstateMode = isRealEstate(industry);
-  // For HVAC, ensure we have a services list the LLM can write copy for —
-  // if the user didn't supply any, seed from the HVAC default list so the
-  // LLM generates rich descriptions that match the template's icon mapping.
+  // Plumbing shares the HVAC template; resolveTrade tells us which variant
+  // the user lands on so LLM copy and seeded defaults match the trade.
+  const trade = hvacMode ? resolveTrade(industry) : null;
+  // If the user didn't supply services, seed from the trade-appropriate
+  // default list so the LLM writes rich descriptions that match the
+  // template's icon mapping (HVAC defaults for HVAC, plumbing for plumbing).
   let hvacSeededServices = services;
   if (hvacMode && !hasServices) {
-    const { DEFAULT_SERVICES } = require('./templates/hvac/common');
-    hvacSeededServices = DEFAULT_SERVICES.map((s) => s.title);
+    const { DEFAULT_SERVICES, PLUMBING_DEFAULT_SERVICES } = require('./templates/hvac/common');
+    const defaults = trade === 'plumbing' ? PLUMBING_DEFAULT_SERVICES : DEFAULT_SERVICES;
+    hvacSeededServices = defaults.map((s) => s.title);
   }
   const effectiveServicesList = hvacMode ? hvacSeededServices : services;
   const effectiveHasServices = Array.isArray(effectiveServicesList) && effectiveServicesList.length > 0;
@@ -124,21 +128,22 @@ async function generateWebsiteContent(businessData, extras = {}) {
   let systemPrompt;
   let promptLabel;
   if (hvacMode) {
-    promptLabel = 'HVAC';
-    systemPrompt = HVAC_CONTENT_PROMPT;
+    const tradeLabelUpper = trade === 'plumbing' ? 'Plumbing' : 'HVAC';
+    promptLabel = tradeLabelUpper;
+    systemPrompt = buildHvacContentPrompt(trade);
     prompt = `
 Business Name: ${businessName}
-Industry: HVAC
+Industry: ${tradeLabelUpper}
 Primary City: ${primaryCity || 'unspecified'}
 Service Areas: ${Array.isArray(serviceAreas) && serviceAreas.length ? serviceAreas.join(', ') : (primaryCity || 'not provided')}
-Services: ${effectiveHasServices ? effectiveServicesList.join(', ') : 'general HVAC services'}
+Services: ${effectiveHasServices ? effectiveServicesList.join(', ') : `general ${tradeLabelUpper.toLowerCase()} services`}
 Years in Business: ${yearsExperience || 'unspecified'}
 License: ${licenseNumber || 'not provided'}
 ${contactEmail ? `Email: ${contactEmail}` : ''}
 ${contactPhone ? `Phone: ${contactPhone}` : ''}
 ${contactAddress ? `Address: ${contactAddress}` : ''}
 
-Generate HVAC website copy. Return ONLY valid JSON matching the schema in the system prompt.`;
+Generate ${tradeLabelUpper} website copy. Return ONLY valid JSON matching the schema in the system prompt.`;
   } else if (realEstateMode) {
     promptLabel = 'real-estate';
     systemPrompt = REAL_ESTATE_CONTENT_PROMPT;
@@ -263,7 +268,7 @@ Generate compelling website copy for this business. Return ONLY valid JSON.`;
     imageQuery = (generatedContent.heroImageQuery || '').trim();
     if (!imageQuery) {
       if (hvacMode) {
-        imageQuery = 'hvac technician service';
+        imageQuery = trade === 'plumbing' ? 'plumber service work' : 'hvac technician service';
       } else if (realEstateMode) {
         imageQuery = primaryCity ? `${primaryCity} skyline` : 'luxury home interior';
       } else {
@@ -457,7 +462,10 @@ Generate compelling website copy for this business. Return ONLY valid JSON.`;
     weeklyHours: weeklyHours || null,
     salonServices: enrichedSalonServices,
     timezone: resolvedTimezone,
-    // HVAC pass-through (harmless for non-HVAC templates).
+    // HVAC pass-through (harmless for non-HVAC templates). trade is
+    // 'hvac' | 'plumbing' | null — threaded down so ensureHvacDefaults
+    // inside the template skips re-running the regex.
+    trade: trade || null,
     primaryCity: primaryCity || null,
     serviceAreas: Array.isArray(serviceAreas) ? serviceAreas : (primaryCity ? [primaryCity] : []),
     yearsExperience: yearsExperience || null,

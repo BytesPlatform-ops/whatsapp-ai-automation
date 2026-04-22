@@ -1,9 +1,10 @@
 const { sendTextMessage, sendInteractiveButtons, sendWithMenuButton } = require('../../messages/sender');
-const { logMessage, getRecentMessages } = require('../../db/conversations');
+const { logMessage, getConversationHistory } = require('../../db/conversations');
 const { generateResponse } = require('../../llm/provider');
 const { INFORMATIVE_BOT_PROMPT } = require('../../llm/prompts');
 const { logger } = require('../../utils/logger');
 const { STATES } = require('../states');
+const { buildSummaryContext } = require('../summaryManager');
 
 /**
  * Informative / FAQ bot handler.
@@ -41,7 +42,7 @@ async function handleInformativeBot(user, message) {
 
   try {
     // Get recent conversation history for context
-    const history = await getRecentMessages(user.id, 20);
+    const history = await getConversationHistory(user.id, 20);
     const messages = history.map((m) => ({
       role: m.role,
       content: m.message_text,
@@ -60,7 +61,7 @@ async function handleInformativeBot(user, message) {
       // Knowledge base not set up - that's fine, continue without it
     }
 
-    const systemPrompt = INFORMATIVE_BOT_PROMPT + knowledgeContext;
+    const systemPrompt = INFORMATIVE_BOT_PROMPT + knowledgeContext + buildSummaryContext(user);
     const response = await generateResponse(systemPrompt, messages, {
       userId: user.id,
       operation: 'info_chat',

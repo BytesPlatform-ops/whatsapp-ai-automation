@@ -1,6 +1,7 @@
-const { esc, telHref, icon, iconFilled, wrapHvacPage, getLocalBusinessSchema, TOKENS } = require('./common');
+const { esc, telHref, icon, iconFilled, wrapHvacPage, getLocalBusinessSchema, getTradeCopy, TOKENS } = require('./common');
 
 function generateAboutPage(c) {
+  const tc = getTradeCopy(c);
   const phone = c.contactPhone || '';
   const tel = telHref(phone);
   const years = c.yearsExperience || '15';
@@ -18,7 +19,7 @@ function generateAboutPage(c) {
       <div class="ctn">
         <p class="crumb"><a href="/">Home</a> &rsaquo; About</p>
         <h1 class="h1">About ${esc(c.businessName)}.</h1>
-        <p class="body-lg">${esc(c.aboutTagline || `The ${city || 'local'} HVAC team homeowners actually recommend by name.`)}</p>
+        <p class="body-lg">${esc(c.aboutTagline || tc.aboutTaglineFallback(city))}</p>
         <div class="trust-row" style="display:inline-flex;margin-top:28px">
           <span class="t-item">${iconFilled('star', 16, '#F59E0B')} ${esc(rating)} rating (${esc(reviews)} reviews)</span>
           <span class="t-sep"></span>
@@ -110,9 +111,9 @@ function generateAboutPage(c) {
         </div>
         <div class="cred-grid">
           ${[
-            { label: 'Accreditation 01', title: 'Licensed Contractor', desc: 'State-issued HVAC contractor license, renewed annually and publicly verifiable.', tag: c.licenseNumber ? `License #${esc(c.licenseNumber)}` : 'State licensed' },
+            { label: 'Accreditation 01', title: 'Licensed Contractor', desc: tc.licenseCardDesc, tag: c.licenseNumber ? `License #${esc(c.licenseNumber)}` : 'State licensed' },
             { label: 'Accreditation 02', title: 'Fully Insured', desc: 'General liability coverage plus workers compensation on every job, every tech, every day.', tag: 'Up to $2M coverage' },
-            { label: 'Accreditation 03', title: 'NATE Certified', desc: 'North American Technician Excellence &mdash; the industry gold standard for HVAC skill.', tag: 'NATE-certified' },
+            { label: 'Accreditation 03', title: tc.skillCardTitle, desc: tc.skillCardDesc, tag: tc.skillCardTag },
             { label: 'Accreditation 04', title: 'Background Checked', desc: 'Every technician screened before hire and re-verified every year. No exceptions.', tag: 'Verified annually' },
           ].map((b) => `
             <div class="cred-card rv">
@@ -191,8 +192,8 @@ function generateAboutPage(c) {
   const body = hero + story + bigStats + teamBanner + credentials + values + guarantee + ctaBanner;
 
   return wrapHvacPage(c, '/about', body, {
-    title: `About ${c.businessName} | HVAC${city ? ` in ${city}` : ''}`,
-    description: `${c.businessName} &mdash; licensed, insured HVAC team${city ? ` in ${city}` : ''}. ${years}+ years, ${reviews}+ reviews, NATE-certified technicians.`,
+    title: `About ${c.businessName} | ${tc.label}${city ? ` in ${city}` : ''}`,
+    description: `${c.businessName} &mdash; licensed, insured ${tc.label.toLowerCase()} team${city ? ` in ${city}` : ''}. ${years}+ years, ${reviews}+ reviews, certified technicians.`,
     schemas: [getLocalBusinessSchema(c)],
   });
 }

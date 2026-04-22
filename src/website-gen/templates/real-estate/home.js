@@ -113,7 +113,7 @@ function generateHomePage(c) {
               <div class="listing-body">
                 <div class="listing-price-wrap">
                   <span class="listing-price-label">${l.price ? 'List Price' : 'Pricing'}</span>
-                  <div class="listing-price">${l.price ? esc(fmtMoney(l.price)) : 'Contact'}</div>
+                  <div class="listing-price">${l.price ? esc(fmtMoney(l.price, l.currency)) : 'Contact'}</div>
                 </div>
                 <div class="listing-address">${esc(l.address || '')}${l.neighborhood ? `<br><span class="muted">${esc(l.neighborhood)}</span>` : ''}</div>
                 <div class="listing-meta">

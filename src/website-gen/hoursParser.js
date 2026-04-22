@@ -1,5 +1,6 @@
 const { generateResponse } = require('../llm/provider');
 const { logger } = require('../utils/logger');
+const { isDelegation } = require('../config/smartDefaults');
 
 const DAYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
 
@@ -44,7 +45,9 @@ function validateHours(obj) {
  */
 async function parseWeeklyHours(text) {
   const input = String(text || '').trim();
-  if (!input || /^(skip|default|idk|dunno|not sure)$/i.test(input)) {
+  // Any delegation phrase (skip / default / whatever you think / you pick /
+  // idk / up to you / etc.) maps to the standard salon hours default.
+  if (isDelegation(input)) {
     return { hours: { ...DEFAULT_WEEKLY_HOURS }, usedDefault: true };
   }
 

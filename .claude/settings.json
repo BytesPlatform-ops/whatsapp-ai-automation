@@ -1,0 +1,40 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node -e ' *)",
+      "Bash(node -e \"const w = require\\('./src/conversation/handlers/webDev'\\); console.log\\('OK'\\);\")",
+      "Bash(node -c src/llm/provider.js)",
+      "Bash(node -c src/website-gen/deployer.js)",
+      "Bash(node -e \"const w = require\\('./src/conversation/handlers/webDev'\\); const p = require\\('./src/llm/provider'\\); const d = require\\('./src/website-gen/deployer'\\); console.log\\('OK'\\);\")",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(node -c src/conversation/entityAccumulator.js)",
+      "Bash(node -e \"require\\('./src/conversation/router'\\); console.log\\('router loads'\\);\")",
+      "Bash(node -e \"const s = require\\('./src/conversation/handlers/salesBot'\\); const p = require\\('./src/llm/prompts'\\); console.log\\('OK'\\);\")",
+      "Bash(node -e \"const r = require\\('./src/conversation/router'\\); console.log\\('full stack loads'\\);\")",
+      "Bash(node -c src/website-gen/templates/index.js)",
+      "Bash(node -c src/config/smartDefaults.js)",
+      "Bash(node -c src/website-gen/hoursParser.js)",
+      "Bash(node -e \"const s = require\\('./src/conversation/handlers/salesBot'\\); console.log\\('OK'\\);\")",
+      "Bash(node -c src/conversation/router.js)",
+      "Bash(node -c src/llm/openai.js)",
+      "Bash(node -c src/llm/pricing.js)",
+      "Bash(node -c src/conversation/undoStack.js)",
+      "Bash(timeout 60 node -e ' *)",
+      "Bash(node -c src/utils/localizer.js)",
+      "Bash(timeout 90 node -e ' *)",
+      "Bash(node -c src/messages/channelContext.js)",
+      "Bash(node -c src/messages/sender.js)",
+      "Bash(xargs grep *)",
+      "Bash(node -e \"const r = require\\('./src/conversation/router'\\); console.log\\('router loads with lock + dedup + retry:', typeof r.routeMessage\\);\")",
+      "Bash(node -c c:/Users/finti/Desktop/whatsapp/src/conversation/handlers/webDev.js)",
+      "Bash(node -c c:/Users/finti/Desktop/whatsapp/src/website-gen/templates/real-estate/common.js)",
+      "Bash(node -c c:/Users/finti/Desktop/whatsapp/src/website-gen/templates/real-estate/home.js)",
+      "Bash(node -c c:/Users/finti/Desktop/whatsapp/src/website-gen/templates/real-estate/listings.js)",
+      "Bash(node -c c:/Users/finti/Desktop/whatsapp/src/conversation/router.js)"
+    ],
+    "additionalDirectories": [
+      "\\tmp"
+    ]
+  }
+}

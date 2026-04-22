@@ -160,7 +160,7 @@ async function handleServiceSelection(user, message) {
       await sendWithMenuButton(
         user.phone_number,
         '❓ *FAQ & Support*\n\n' +
-          'Hi! I\'m Alex from the Bytes Platform support team. I can help you with:\n\n' +
+          'Hi! I\'m Pixie. I can help you with:\n\n' +
           '• Information about our services\n' +
           '• Pricing & timelines\n' +
           '• How our process works\n' +

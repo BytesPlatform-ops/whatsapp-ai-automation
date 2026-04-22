@@ -116,7 +116,7 @@ function generateListingsPage(c) {
     const photoHtml = hasImg
       ? `<img src="${esc(l.image.url)}" alt="${esc(l.address || 'Property')}" loading="lazy">`
       : `<div class="listing-photo-placeholder">${icon('home', 64, 'rgba(255,255,255,0.5)')}</div>`;
-    const priceStr = l.price ? esc(fmtMoney(l.price)) : 'Contact';
+    const priceStr = l.price ? esc(fmtMoney(l.price, l.currency)) : 'Contact';
     const metaItems = [
       l.beds ? `<span>${icon('bed', 18, TOKENS.gold)}<strong>${esc(String(l.beds))}</strong>bd</span>` : '',
       l.baths ? `<span>${icon('bath', 18, TOKENS.gold)}<strong>${esc(String(l.baths))}</strong>ba</span>` : '',

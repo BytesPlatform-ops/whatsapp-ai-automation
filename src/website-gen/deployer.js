@@ -18,6 +18,11 @@ const { renderActivationBanner } = require('./activationBanner');
 
 const NETLIFY_API = 'https://api.netlify.com/api/v1';
 
+// Default per-request timeout for Netlify API calls. Without it axios holds
+// the connection open indefinitely on a dead socket and the whole webdev
+// flow silently hangs in WEB_GENERATING state.
+const NETLIFY_TIMEOUT_MS = 60_000;
+
 // Route a siteConfig to the right template's page generator.
 function renderAllPagesForTemplate(siteConfig, watermark) {
   if (siteConfig.templateId === 'salon') {
@@ -36,13 +41,13 @@ async function deployToNetlify(siteConfig, existingSiteId = null, { watermark = 
     if (existingSiteId) {
       // Redeploy to existing site (same URL)
       siteId = existingSiteId;
-      const siteInfo = await axios.get(`${NETLIFY_API}/sites/${siteId}`, { headers });
+      const siteInfo = await axios.get(`${NETLIFY_API}/sites/${siteId}`, { headers, timeout: NETLIFY_TIMEOUT_MS });
       siteName = siteInfo.data.name;
       logger.info(`[NETLIFY] Redeploying to existing site: ${siteName} (${siteId})`);
     } else {
       // Create a new site
       logger.info('[NETLIFY] Creating new site...');
-      const siteResponse = await axios.post(`${NETLIFY_API}/sites`, { name: `preview-${Date.now()}` }, { headers });
+      const siteResponse = await axios.post(`${NETLIFY_API}/sites`, { name: `preview-${Date.now()}` }, { headers, timeout: NETLIFY_TIMEOUT_MS });
       siteId = siteResponse.data.id;
       siteName = siteResponse.data.name;
       logger.info(`[NETLIFY] Site created: ${siteName} (${siteId})`);
@@ -53,14 +58,14 @@ async function deployToNetlify(siteConfig, existingSiteId = null, { watermark = 
       fileDigests[fp] = crypto.createHash('sha1').update(content).digest('hex');
     }
     logger.info(`[NETLIFY] Creating deploy with ${Object.keys(files).length} file(s)...`);
-    const deployResponse = await axios.post(`${NETLIFY_API}/sites/${siteId}/deploys`, { files: fileDigests }, { headers });
+    const deployResponse = await axios.post(`${NETLIFY_API}/sites/${siteId}/deploys`, { files: fileDigests }, { headers, timeout: NETLIFY_TIMEOUT_MS });
     const deployId = deployResponse.data.id;
     const requiredFiles = deployResponse.data.required || [];
     for (const [fp, content] of Object.entries(files)) {
       const sha1 = crypto.createHash('sha1').update(content).digest('hex');
       if (requiredFiles.length === 0 || requiredFiles.includes(sha1)) {
         logger.info(`[NETLIFY] Uploading ${fp}...`);
-        await axios.put(`${NETLIFY_API}/deploys/${deployId}/files${fp}`, content, { headers: { Authorization: `Bearer ${env.netlify.token}`, 'Content-Type': 'application/octet-stream' } });
+        await axios.put(`${NETLIFY_API}/deploys/${deployId}/files${fp}`, content, { headers: { Authorization: `Bearer ${env.netlify.token}`, 'Content-Type': 'application/octet-stream' }, timeout: NETLIFY_TIMEOUT_MS });
       }
     }
     logger.info('[NETLIFY] Waiting for deploy to be ready...');
@@ -76,7 +81,7 @@ async function deployToNetlify(siteConfig, existingSiteId = null, { watermark = 
 async function waitForDeploy(deployId, headers) {
   for (let i = 0; i < 60; i++) {
     try {
-      const r = await axios.get(`${NETLIFY_API}/deploys/${deployId}`, { headers });
+      const r = await axios.get(`${NETLIFY_API}/deploys/${deployId}`, { headers, timeout: NETLIFY_TIMEOUT_MS });
       if (r.data.state === 'ready') return `https://${r.data.ssl_url || r.data.url}`.replace(/^https:\/\/https:\/\//, 'https://');
       if (r.data.state === 'error') throw new Error(`Deploy failed: ${r.data.error_message || 'Unknown'}`);
     } catch (e) { if (e.message?.includes('Deploy failed')) throw e; }
@@ -892,7 +897,7 @@ function heroTextPalette(primaryColor, override) {
 async function addCustomDomainToNetlify(netlifySiteId, domain) {
   const headers = { Authorization: `Bearer ${env.netlify.token}`, 'Content-Type': 'application/json' };
   try {
-    await axios.post(`${NETLIFY_API}/sites/${netlifySiteId}/domain_aliases`, { domain }, { headers });
+    await axios.post(`${NETLIFY_API}/sites/${netlifySiteId}/domain_aliases`, { domain }, { headers, timeout: NETLIFY_TIMEOUT_MS });
     logger.info(`[NETLIFY] Custom domain added: ${domain} -> site ${netlifySiteId}`);
     return true;
   } catch (error) {
