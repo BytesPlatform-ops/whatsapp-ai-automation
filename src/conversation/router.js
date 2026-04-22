@@ -516,6 +516,35 @@ async function _routeMessage(message) {
   // independent sessions.
   const user = await findOrCreateUser(from, channel, message.phoneNumberId || null);
 
+  // ── Session recap (Phase 9) ────────────────────────────────────────────
+  // If the user has been silent for more than 30 min, fire a short
+  // contextual "welcome back" before the handler runs. Done HERE (after
+  // findOrCreateUser, before logMessage) so the gap query inside
+  // maybeBuildRecap sees the PREVIOUS turn as "latest user message"
+  // instead of the one we're about to log.
+  //
+  // Skip on slash commands and button/list taps — /reset is a fresh-start
+  // intent and a button tap is typically mid-flow navigation; a recap in
+  // front of either feels off.
+  const recapText = (message.text || '').trim();
+  const isSlash = recapText.startsWith('/');
+  const isInteractive = !!(message.buttonId || message.listId);
+  if (message.type === 'text' && !isSlash && !isInteractive) {
+    try {
+      const { maybeBuildRecap } = require('./sessionRecap');
+      const recap = await maybeBuildRecap(user);
+      if (recap) {
+        logger.info(`[RECAP] Sending session recap to ${from}`);
+        await sendTextMessage(user.phone_number, recap);
+        await logMessage(user.id, recap, 'assistant');
+      }
+    } catch (err) {
+      // A failed recap should never block the actual reply. Log and move
+      // on — the user still gets the handler's response.
+      logger.warn(`[RECAP] Recap failed for ${from}: ${err.message}`);
+    }
+  }
+
   // Store ad referral data on first interaction (if present)
   if (message.referral && !user.metadata?.adSource) {
     const ref = message.referral;
