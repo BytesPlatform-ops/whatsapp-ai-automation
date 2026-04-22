@@ -438,13 +438,26 @@ async function runPaymentPolling() {
             continue;
           }
         } catch (linkErr) {
-          // If the link can't be retrieved (deleted, etc.), mark the row as
-          // superseded so we don't keep retrying forever.
-          logger.warn(`[PAYMENT] Could not retrieve link ${payment.stripe_payment_link_id}: ${linkErr.message} — marking superseded`);
-          await supabase
-            .from('payments')
-            .update({ status: 'superseded' })
-            .eq('id', payment.id);
+          // Only mark superseded when Stripe EXPLICITLY says the link is
+          // gone (resource_missing). Rate limits, transient 503s, or
+          // network blips during a deploy restart should not flip the
+          // payment to a terminal state — we'll retry next cycle. A prior
+          // version of this handler marked any error as superseded, which
+          // killed perfectly valid pending payments whenever Stripe or the
+          // network hiccupped.
+          const isGone =
+            linkErr?.statusCode === 404 ||
+            linkErr?.code === 'resource_missing' ||
+            linkErr?.raw?.code === 'resource_missing';
+          if (isGone) {
+            logger.warn(`[PAYMENT] Link ${payment.stripe_payment_link_id} gone at Stripe (${linkErr.message}) — marking row ${payment.id} superseded`);
+            await supabase
+              .from('payments')
+              .update({ status: 'superseded' })
+              .eq('id', payment.id);
+            continue;
+          }
+          logger.warn(`[PAYMENT] Transient error retrieving link ${payment.stripe_payment_link_id}: ${linkErr.message} — leaving pending, will retry`);
           continue;
         }
 
