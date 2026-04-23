@@ -3384,11 +3384,33 @@ async function runDomainSearchInline(user, baseName) {
   try {
     results = await checkDomainAvailability(baseName);
   } catch (err) {
-    logger.error(`[WEBDEV-DOMAIN] search failed: ${err.message}`);
+    logger.error(`[WEBDEV-DOMAIN] search failed: ${err.message} (code=${err.code || 'unknown'})`);
+
+    // DomainLookupUnavailable = registrar API is down or returned no prices.
+    // We REFUSE to quote a made-up price, so the only sane options are
+    // "use a domain you already own" or "skip for now". Route back to
+    // WEB_DOMAIN_CHOICE so both paths are available in a single prompt.
+    if (err.code === 'DOMAIN_LOOKUP_UNAVAILABLE') {
+      const { updateUserState } = require('../../db/users');
+      await updateUserState(user.id, STATES.WEB_DOMAIN_CHOICE);
+      await sendTextMessage(
+        user.phone_number,
+        await localize(
+          "Our domain registrar is temporarily unreachable so I can't pull live prices right now.\n\n" +
+            "I don't want to quote a price we can't honor — two options:\n\n" +
+            "• *own* — use a domain you already own (just needs DNS pointing after payment)\n" +
+            "• *skip* — launch on the free preview URL for now, add a domain anytime",
+          user
+        )
+      );
+      return STATES.WEB_DOMAIN_CHOICE;
+    }
+
+    // Generic failure (network blip) — let user retry with a different name.
     await sendTextMessage(
       user.phone_number,
       await localize(
-        "Had trouble reaching Namecheap. Want me to skip the domain and build anyway? Reply *skip*, or type a different name.",
+        "Couldn't reach the registrar right now. Try a different name, or reply *skip* / *own* to proceed without a new domain.",
         user
       )
     );
