@@ -60,7 +60,31 @@ async function resolveLanguage(user, latestUserMessage) {
   //      Plumbing" being mistaken for Urdu on an earlier turn).
   //   2. Users who naturally code-switch back to English mid-conversation.
   // We do NOT clear the cache — the user may switch back on the next turn.
-  const quick = quickDetect(latestUserMessage);
+  //
+  // If the caller didn't hand us a current message (happens for replies
+  // that aren't a direct response to user input — summaries, follow-ups,
+  // etc.), fall back to the most recent logged user message so the safety
+  // net still applies. Without this, a stale cache silently wins for
+  // every such reply even when the user has clearly switched to English.
+  let effectiveLatest = latestUserMessage;
+  if (!effectiveLatest && user?.id) {
+    try {
+      const { getConversationHistory } = require('../db/conversations');
+      const hist = await getConversationHistory(user.id, 5);
+      if (Array.isArray(hist)) {
+        for (let i = hist.length - 1; i >= 0; i--) {
+          if (hist[i].role === 'user' && hist[i].message_text) {
+            effectiveLatest = hist[i].message_text;
+            break;
+          }
+        }
+      }
+    } catch {
+      // DB hiccup — fall through with undefined; cache-check below handles it.
+    }
+  }
+
+  const quick = quickDetect(effectiveLatest);
   if (quick === true) {
     return 'english';
   }

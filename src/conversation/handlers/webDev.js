@@ -1911,11 +1911,13 @@ async function handleCollectContact(user, message) {
   }
 
   // If the input is a multi-field contact blob (2+ labeled fields like
-  // "address: X, email: Y, phone: Z"), skip the single-field edit detector
-  // entirely — otherwise the greedy tail regex inside detectFieldEdit picks
-  // the LAST colon in the message and misreads "+123456789056" as the
-  // address value.
-  const labelCount = (contactText.match(/\b(?:email|e-?mail|phone|tel|mobile|address|location|addr)\s*[:\-]/gi) || []).length;
+  // "address: X, email: Y, phone: Z" OR "email is X and phone is Y"), skip
+  // the single-field edit detector — otherwise the greedy tail regex
+  // inside detectFieldEdit picks the LAST "is|:" in the message and
+  // misreads "phone is 09876544567" as the email value. The regex below
+  // counts labels followed by ANY of (colon, hyphen, "is", "are") so
+  // prose-style multi-field input is caught too.
+  const labelCount = (contactText.match(/\b(?:email|e-?mail|phone|tel|mobile|address|location|addr)\s+(?:is|are)\b|\b(?:email|e-?mail|phone|tel|mobile|address|location|addr)\s*[:\-]/gi) || []).length;
 
   // Delegation path: the user doesn't want to provide contact info and is
   // saying so in a non-literal way ("surprise me", "just add something
@@ -2123,6 +2125,8 @@ async function showSummaryPeek(user) {
   if (wd.instagramHandle) lines.push(`*Instagram:* @${wd.instagramHandle}`);
   lines.push(`*Contact:* ${contactInfo}`);
 
+  // localize() handles the English-override safety net internally by
+  // fetching the latest user message when none is passed.
   const summary = lines.join('\n');
   await sendTextMessage(user.phone_number, await localize(summary, user));
   await logMessage(user.id, 'Showed summary peek (mid-flow)', 'assistant');
@@ -2204,6 +2208,10 @@ async function showConfirmSummary(user, prefix = '') {
   // SAME send as the summary. Earlier they were two sequential sends and
   // if the second one ever failed, the user saw "Here's the updated
   // summary:" with no summary under it — confusing and blocked progress.
+  // localize() auto-fetches the latest user message from history when no
+  // `latestUserMessage` is passed, so the English-override safety net
+  // fires and stale preferredLanguage caches can't translate the summary
+  // into the wrong language.
   const summary = lines.join('\n');
   const combined = prefix ? `${prefix.trim()}\n\n${summary}` : summary;
   const localized = await localize(combined, user);
