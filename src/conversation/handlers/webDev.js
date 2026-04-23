@@ -627,9 +627,29 @@ const INDUSTRY_COLORS = {
 };
 const DEFAULT_COLORS = { primaryColor: '#1E293B', secondaryColor: '#0F172A', accentColor: '#6366F1' };
 
+// Researched template palettes. When a template claims an industry (HVAC
+// claims plumbing + heating + cooling, Real Estate claims realty/broker
+// terms, Salon claims barber/spa/nail/etc.), we short-circuit the
+// keyword lookup and return the template's researched palette directly.
+// That way "Plumbing services" — which has no `plumbing` entry in the
+// old INDUSTRY_COLORS table — still lands on HVAC navy + orange instead
+// of the generic indigo default.
+const HVAC_PALETTE = { primaryColor: '#1E3A5F', secondaryColor: '#0F172A', accentColor: '#F97316' };
+const REAL_ESTATE_PALETTE = { primaryColor: '#1A2B45', secondaryColor: '#0F1B30', accentColor: '#C9A96E' };
+const SALON_PALETTE = { primaryColor: '#1F2937', secondaryColor: '#111827', accentColor: '#EC4899' };
+
 function getColorsForIndustry(industry) {
+  // Template-matched industries take precedence — they share a template
+  // and must share the template's researched palette (plumbing + HVAC
+  // use the same nav/CTA chrome, so they must use the same colours).
+  const { isHvac, isRealEstate } = require('../../website-gen/templates');
+  if (isHvac(industry)) return HVAC_PALETTE;
+  if (isRealEstate(industry)) return REAL_ESTATE_PALETTE;
+  if (isSalonIndustry(industry)) return SALON_PALETTE;
+
+  // Non-templated industries — keyword lookup, then partial match, then
+  // the generic default palette.
   const key = (industry || '').toLowerCase().replace(/[\s\-_\/]+/g, '_').trim();
-  // Try exact match first, then partial match
   if (INDUSTRY_COLORS[key]) return INDUSTRY_COLORS[key];
   const match = Object.keys(INDUSTRY_COLORS).find(k => key.includes(k) || k.includes(key));
   return match ? INDUSTRY_COLORS[match] : DEFAULT_COLORS;
