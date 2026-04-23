@@ -63,9 +63,7 @@ function generateServicesPage(c) {
 
     const hasImg = !!(s.image && s.image.url);
     const visualCol = hasImg
-      ? `<div class="zz-visual rv" style="background:url('${esc(s.image.url)}') center/cover no-repeat">
-           <div class="zz-visual-label">${icon('mapPin', 12, TOKENS.orange)} Photo by <a href="${esc(s.image.photographerUrl)}" target="_blank" rel="noopener" style="color:${TOKENS.body};margin-left:2px">${esc(s.image.photographer)}</a></div>
-         </div>`
+      ? `<div class="zz-visual rv" style="background:url('${esc(s.image.url)}') center/cover no-repeat"></div>`
       : `<div class="zz-visual rv">
            <div class="zz-ico">${icon('wrench', 120)}</div>
            <div class="zz-visual-label">Real project photos coming soon</div>

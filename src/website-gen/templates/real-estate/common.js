@@ -937,7 +937,6 @@ function getFooter(c) {
       <span>&copy; ${new Date().getFullYear()} ${esc(c.businessName)}. All rights reserved.</span>
       <span>REALTOR&reg; &middot; Equal Housing Opportunity</span>
     </div>
-    ${c.heroImage && c.heroImage.photographer ? `<div style="margin-top:14px;font-size:10.5px;color:rgba(250,247,242,.35);letter-spacing:.03em">Hero photo by <a href="${esc(c.heroImage.photographerUrl)}" target="_blank" rel="noopener" style="color:rgba(250,247,242,.5)">${esc(c.heroImage.photographer)}</a> on <a href="${esc(c.heroImage.unsplashUrl || 'https://unsplash.com')}" target="_blank" rel="noopener" style="color:rgba(250,247,242,.5)">Unsplash</a></div>` : ''}
   </div></footer>`;
 }
 

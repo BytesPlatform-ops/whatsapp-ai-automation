@@ -257,35 +257,8 @@ function getNav(c, cur) {
 }
 
 // ─── Footer ─────────────────────────────────────────────────────────────────
-// Consolidate Unsplash photographer credits from the hero image + per-service
-// images into a single small line in the footer. This keeps the Unsplash TOS
-// requirement satisfied ("provide attribution wherever the photo appears")
-// while removing the messy overlay labels from the images themselves.
-function collectUnsplashCredits(c) {
-  const all = [];
-  if (c.heroImage && c.heroImage.photographer) all.push(c.heroImage);
-  for (const s of (c.services || [])) {
-    if (s.image && s.image.photographer) all.push(s.image);
-  }
-  const seen = new Set();
-  const unique = [];
-  for (const img of all) {
-    if (!seen.has(img.photographer)) {
-      seen.add(img.photographer);
-      unique.push(img);
-    }
-  }
-  return unique;
-}
-
 function getFoot(c) {
   const pc=c.primaryColor||'#2563EB';
-  const credits = collectUnsplashCredits(c);
-  const creditsLine = credits.length > 0
-    ? `<p style="font-size:11px;opacity:0.35;margin-top:10px">Photography by ${credits.map((img, i) =>
-        `<a href="${esc(img.photographerUrl)}" target="_blank" rel="noopener" style="color:#999;text-decoration:none;border-bottom:1px dotted rgba(255,255,255,0.2)">${esc(img.photographer)}</a>${i < credits.length - 1 ? ' · ' : ''}`
-      ).join('')} on <a href="${esc(credits[0].unsplashUrl)}" target="_blank" rel="noopener" style="color:#999;text-decoration:none;border-bottom:1px dotted rgba(255,255,255,0.2)">Unsplash</a></p>`
-    : '';
   return `
 <footer style="background:#0a0a1a;color:#999;padding:80px 24px 40px"><div class="ctn">
   <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(200px,100%),1fr));gap:48px;margin-bottom:48px">
@@ -300,7 +273,7 @@ function getFoot(c) {
     </div></div>
   </div>
   <div style="border-top:1px solid rgba(255,255,255,0.08);padding-top:24px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:16px">
-    <div><p style="font-size:12px;opacity:0.4">Built with care. All rights reserved.</p>${creditsLine}</div>
+    <div><p style="font-size:12px;opacity:0.4">Built with care. All rights reserved.</p></div>
     <p style="font-size:12px;opacity:0.4">${esc(c.businessName)} &copy; ${new Date().getFullYear()}</p>
   </div>
 </div></footer>
@@ -437,7 +410,6 @@ function generateHomePage(c) {
         ? `<div style="position:absolute;inset:0;background:linear-gradient(135deg,${pc}d9 0%,${pc}99 40%,${ac}66 100%),linear-gradient(180deg,rgba(0,0,0,0.55) 0%,rgba(0,0,0,0.35) 40%,rgba(0,0,0,0.6) 100%);background-blend-mode:multiply"></div>`
         : `<div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(255,255,255,0.5) 0%,rgba(255,255,255,0.3) 50%,rgba(255,255,255,0.55) 100%)"></div>`)
     : `<div style="position:absolute;inset:0;background:linear-gradient(180deg,${palette.fg === '#fff' ? 'rgba(0,0,0,0.12)' : 'rgba(255,255,255,0.15)'} 0%,transparent 30%,transparent 70%,${palette.fg === '#fff' ? 'rgba(0,0,0,0.25)' : 'rgba(255,255,255,0.2)'} 100%)"></div>`;
-  // Per-image credits are consolidated into the footer (see collectUnsplashCredits).
   const heroCredit = '';
 
   const body = `

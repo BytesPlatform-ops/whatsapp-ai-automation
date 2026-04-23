@@ -15,10 +15,7 @@ function generateHomePage(c) {
 
   // ─── Hero ─────────────────────────────────────────────────────────────────
   const heroPhotoInner = hasHeroImg
-    ? `<div class="hero-photo" style="background:url('${esc(c.heroImage.url)}') center/cover no-repeat">
-         <span class="hero-photo-tip" title="Replace with your real team photo">${icon('star', 12, '#fff')} Demo photo</span>
-         ${c.heroImage.photographer ? `<span class="hero-photo-credit">Photo by <a href="${esc(c.heroImage.photographerUrl)}" target="_blank" rel="noopener">${esc(c.heroImage.photographer)}</a></span>` : ''}
-       </div>`
+    ? `<div class="hero-photo" style="background:url('${esc(c.heroImage.url)}') center/cover no-repeat"></div>`
     : `<div class="hero-photo">
          <div class="hero-photo-icon">${icon('wrench', 96, '#fff')}</div>
          <span class="hero-photo-tip">${icon('star', 12, '#fff')} Add your team photo</span>
