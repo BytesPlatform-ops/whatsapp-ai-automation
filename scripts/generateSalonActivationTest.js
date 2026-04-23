@@ -112,11 +112,14 @@ async function run() {
   siteConfig.paymentStatus = 'preview';
   siteConfig.paymentLinkUrl = pixieUrl;
 
-  // Make sure booking defaults are on the config for the template renderer
+  // Make sure booking defaults are on the config for the template renderer.
+  // NOTE: don't overwrite `salonServices` here — the generator already
+  // enriched each service with a Pexels image (via attachServiceImages),
+  // and reassigning the raw fixture would wipe those out, leaving every
+  // service card in the rendered site as a blank gradient tile.
   siteConfig.bookingMode = 'native';
   siteConfig.timezone = salonDemo.businessData.timezone || 'America/New_York';
   siteConfig.weeklyHours = salonDemo.businessData.weeklyHours;
-  siteConfig.salonServices = salonDemo.businessData.salonServices;
   siteConfig.contactEmail = OWNER_EMAIL; // emails fire to this address
   siteConfig.businessName = salonDemo.businessData.businessName;
 
