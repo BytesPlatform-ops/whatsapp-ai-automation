@@ -6,6 +6,7 @@ const { logger } = require('../../utils/logger');
 const { createClient } = require('../../chatbot/db/clients');
 const { generateUniqueSlug } = require('../../chatbot/services/slug-generator');
 const { env } = require('../../config/env');
+const { generateResponse } = require('../../llm/provider');
 
 // Base URL for demo/chat pages
 const BASE_URL = env.chatbot.baseUrl;
@@ -43,9 +44,24 @@ async function handleCollectName(user, message) {
     return STATES.CB_COLLECT_NAME;
   }
 
-  await updateUserMetadata(user.id, {
-    chatbotData: { businessName: text },
-  });
+  // Try to infer industry from the name. When the name contains a trade
+  // word ("Noman Plumbing" → "Plumbing"), skip the industry question.
+  const { inferIndustryFromBusinessName } = require('../entityAccumulator');
+  const inferredIndustry = await inferIndustryFromBusinessName(text, user.id);
+
+  const chatbotData = { businessName: text };
+  if (inferredIndustry) chatbotData.industry = inferredIndustry;
+  await updateUserMetadata(user.id, { chatbotData });
+
+  if (inferredIndustry) {
+    await sendWithMenuButton(
+      user.phone_number,
+      `Got it — *${text}* · _${inferredIndustry}_ 👍\n\n` +
+        "What are the top questions your customers usually ask? Send them one per message, then type *done* when you're finished."
+    );
+    await logMessage(user.id, `Chatbot flow: name="${text}", inferred industry="${inferredIndustry}"`, 'assistant');
+    return STATES.CB_COLLECT_FAQS;
+  }
 
   await sendWithMenuButton(
     user.phone_number,
@@ -76,7 +92,71 @@ async function handleCollectIndustry(user, message) {
   return STATES.CB_COLLECT_FAQS;
 }
 
-// Step 3: Collect FAQs (multi-message)
+/**
+ * Split a user-typed message into individual FAQ questions. Handles
+ * many input styles: comma-separated, newline-separated, numbered
+ * lists, "A and B and C", multiple question marks, prose like "they
+ * ask about X, Y, and Z". Returns the array of normalized questions.
+ *
+ * Cheap heuristic pre-filter skips the LLM on clearly-single inputs
+ * ("how much does it cost?") so the common case stays fast.
+ */
+async function splitFaqQuestions(text, userId) {
+  const raw = String(text || '').trim();
+  if (!raw) return [];
+
+  // Fast path: looks like a single question — no multi-question signals.
+  // "and" appearing 2+ times suggests a list ("they ask about X and Y and Z").
+  const questionMarkCount = (raw.match(/\?/g) || []).length;
+  const hasNewlines = /\n/.test(raw);
+  const hasNumberedList = /^\s*\d+[.)]\s/m.test(raw);
+  const hasSemicolon = /;/.test(raw);
+  const hasComma = /,/.test(raw);
+  const andCount = (raw.match(/\band\b/gi) || []).length;
+  const looksLikeList = hasComma || andCount >= 2;
+  const isShortAndSingle =
+    raw.length < 80 &&
+    questionMarkCount <= 1 &&
+    !hasNewlines &&
+    !hasNumberedList &&
+    !hasSemicolon &&
+    !looksLikeList;
+  if (isShortAndSingle) return [raw.replace(/\s+/g, ' ').trim()];
+
+  const prompt = `A small-business owner is setting up an AI chatbot. They were asked "What are the top questions your customers usually ask?" and sent this message, which may contain ONE question or MULTIPLE questions in any format (comma-separated, numbered list, newlines, "A and B", or prose like "they ask about X and Y").
+
+Extract each DISTINCT customer question. Normalize to a clear, customer-facing question form ending with "?". Drop filler ("they ask about", "like", "such as", "basically", "things like"). Keep topic-equivalent phrasings merged into one.
+
+User message:
+"""${raw.slice(0, 1000)}"""
+
+Return ONLY a JSON array of question strings, like:
+["How much does it cost?", "What are your hours?", "Do you accept credit cards?"]
+
+If the message contains no real customer question (e.g. greeting, meta comment), return [].`;
+
+  try {
+    const resp = await generateResponse(
+      prompt,
+      [{ role: 'user', content: 'Split the questions now.' }],
+      { userId, operation: 'faq_split', timeoutMs: 10_000 }
+    );
+    const m = String(resp || '').match(/\[[\s\S]*?\]/);
+    if (!m) return [raw];
+    const parsed = JSON.parse(m[0]);
+    if (!Array.isArray(parsed)) return [raw];
+    const cleaned = parsed
+      .filter((q) => typeof q === 'string')
+      .map((q) => q.trim())
+      .filter((q) => q.length >= 3 && q.length < 300);
+    return cleaned.length > 0 ? cleaned : [raw];
+  } catch (err) {
+    logger.warn(`[CB-FAQS] split failed, falling back to single: ${err.message}`);
+    return [raw];
+  }
+}
+
+// Step 3: Collect FAQs (multi-message or multi-question-per-message)
 async function handleCollectFaqs(user, message) {
   const text = (message.text || '').trim();
   if (!text) {
@@ -87,7 +167,12 @@ async function handleCollectFaqs(user, message) {
   const existing = user.metadata?.chatbotData || {};
   const faqs = existing.faqs || [];
 
-  if (text.toLowerCase() === 'done') {
+  // "Done" detection — exact word, common variants, or short phrase with
+  // "done" as the only content word.
+  const lower = text.toLowerCase().trim();
+  const isDone = /^(done|that'?s (it|all)|no more|thats all|nothing else|im done|i'?m done|no thanks|that is all|all done|finish|finished)$/i.test(lower);
+
+  if (isDone) {
     if (faqs.length === 0) {
       await sendWithMenuButton(user.phone_number, "Please share at least one common question your customers ask before typing *done*.");
       return STATES.CB_COLLECT_FAQS;
@@ -101,17 +186,30 @@ async function handleCollectFaqs(user, message) {
     return STATES.CB_COLLECT_SERVICES;
   }
 
-  // Add FAQ
-  faqs.push({ question: text, answer: '' });
+  // LLM-split: one message can carry 1 or many questions. Signal-gated so
+  // a clearly-single question skips the LLM call.
+  const questions = await splitFaqQuestions(text, user.id);
+  if (questions.length === 0) {
+    await sendWithMenuButton(user.phone_number, "Didn't catch a customer question there. Send one (or several), or type *done* to continue.");
+    return STATES.CB_COLLECT_FAQS;
+  }
+
+  for (const q of questions) {
+    faqs.push({ question: q, answer: '' });
+  }
   await updateUserMetadata(user.id, {
     chatbotData: { ...existing, faqs },
   });
 
   const count = faqs.length;
+  const ackLine = questions.length === 1
+    ? `Got it! (${count} so far)`
+    : `Added ${questions.length} questions — ${count} total.`;
   await sendTextMessage(
     user.phone_number,
-    `Got it! (${count} so far) Send another question, or type *done* to continue.`
+    `${ackLine} Send another, or type *done* to continue.`
   );
+  await logMessage(user.id, `Chatbot flow: +${questions.length} FAQs (total ${count})`, 'assistant');
   return STATES.CB_COLLECT_FAQS;
 }
 

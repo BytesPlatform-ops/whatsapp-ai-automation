@@ -343,6 +343,48 @@ function getSharedBusinessContext(user) {
   };
 }
 
+/**
+ * Infer an industry from a business name alone. Used by collection flows
+ * that just saved a name and want to skip the industry question when it's
+ * obvious from trade words in the name ("Hasnain Plumbing" → "Plumbing").
+ *
+ * Returns null when the name has no trade-word signal (e.g. "TechCorp",
+ * "Glow Studio") — caller should then ask the user for industry.
+ *
+ * Cheap regex pre-filter (same set as extractWebsiteFields' looksRich
+ * gate) avoids an LLM call for clearly-generic names. Strong signal
+ * names go to the LLM for accurate normalization.
+ */
+async function inferIndustryFromBusinessName(name, userId) {
+  const raw = String(name || '').trim();
+  if (!raw || raw.length < 3) return null;
+
+  const TRADE_IN_NAME_RX = /\b(plumb(?:ing|er)?|electric(?:al|ian)?|hvac|roof(?:ing|er)?|dental|dentist|salon|barber|spa|bakery|bakers?|restaurant|kitchen|diner|cafe|café|catering|law|legal|attorney|lawyer|cleaning|cleaners?|janitorial|landscap\w*|lawn\s*care|photograph\w*|videograph\w*|locksmith|pest\s*control|appliance\s*repair|garage\s*door|auto\s*repair|mechanic|realt\w*|real\s*estate|accounting|accountant|bookkeep\w*|marketing\s*(?:agency|firm)?|consult\w*|fitness|gym|tutor\w*|moving|movers|contractor|construction|coaching|clinic|studio\s*salon)\b/i;
+  if (!TRADE_IN_NAME_RX.test(raw)) return null;
+
+  const prompt = `A business is named "${raw}". Extract its industry as a clean 1-3 word label.
+
+Rules:
+- The name contains a trade word — that IS the industry. "Hasnain Plumbing" → "Plumbing". "Joe's Auto Repair" → "Auto Repair". "Bright Dental" → "Dental". "Maria's Thai Kitchen" → "Thai Restaurant". "Acme Bakery" → "Bakery". "SunCity Roofing" → "Roofing".
+- Normalize trailing words ("Services", "Inc", "LLC", person names) — those are not part of the industry label.
+- Return ONLY the industry label (1-3 words). No quotes, no explanation, no punctuation. If truly unclear, return the word "unknown".`;
+
+  try {
+    const response = await generateResponse(
+      prompt,
+      [{ role: 'user', content: raw }],
+      { userId, operation: 'industry_from_name', timeoutMs: 8_000 }
+    );
+    const cleaned = (response || '').trim().replace(/^["']|["'.!?]$/g, '').trim();
+    if (!cleaned || /^unknown$/i.test(cleaned)) return null;
+    if (cleaned.length > 40) return null;
+    return cleaned;
+  } catch (err) {
+    logger.warn(`[ENTITY-ACC] inferIndustryFromBusinessName failed: ${err.message}`);
+    return null;
+  }
+}
+
 module.exports = {
   extractWebsiteFields,
   mergeWebsiteFields,
@@ -350,4 +392,5 @@ module.exports = {
   extractIndustry,
   extractServices,
   getSharedBusinessContext,
+  inferIndustryFromBusinessName,
 };

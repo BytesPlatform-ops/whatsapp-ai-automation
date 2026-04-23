@@ -149,10 +149,40 @@ async function handleStart(user, message) {
   return STATES.LOGO_COLLECT_DESCRIPTION;
 }
 
+// Shared follow-up after business name saved: either skip to the
+// description ask when we could infer industry from the name, or
+// ask for industry normally. Keeps the three cases in
+// handleCollectBusiness from duplicating the industry ask.
+async function ackNameAndAdvance(user, nameUsed, inferredIndustry) {
+  if (inferredIndustry) {
+    await sendWithMenuButton(
+      user.phone_number,
+      `Great! *${nameUsed}* · _${inferredIndustry}_ 👍\n\n` +
+        `In one sentence, *what does your business do*?\n\n` +
+        'This helps me design a logo that visually fits your brand.\n\n' +
+        'Example: _"We deliver fresh organic meals to busy professionals"_'
+    );
+    await logMessage(user.id, `Logo flow: name="${nameUsed}", inferred industry="${inferredIndustry}"`, 'assistant');
+    return STATES.LOGO_COLLECT_DESCRIPTION;
+  }
+
+  await sendWithMenuButton(
+    user.phone_number,
+    `Great! *${nameUsed}* 👍\n\nWhat *industry* are you in?\n\n` +
+      'Examples:\n' +
+      '• Food & Beverage\n• Fashion & Apparel\n• Beauty & Skincare\n' +
+      '• Tech / Software\n• Real Estate\n• Fitness & Gym\n• Education\n\n' +
+      'Type your industry:'
+  );
+  await logMessage(user.id, `Business name: ${nameUsed}`, 'assistant');
+  return STATES.LOGO_COLLECT_INDUSTRY;
+}
+
 async function handleCollectBusiness(user, message) {
   const name = (message.text || '').trim();
   const logoData = getLogoData(user);
   const suggested = logoData.suggestedBusinessName;
+  const { inferIndustryFromBusinessName } = require('../entityAccumulator');
 
   // Case 1: We have a suggested business name from a previous flow
   if (suggested) {
@@ -160,32 +190,24 @@ async function handleCollectBusiness(user, message) {
 
     // 1a. User confirmed with "same/yes/sure/etc" → use the suggested name
     if (lower && (SAME_BRAND_WORDS.has(lower) || /\b(same|yes|continue|that\s*one|use\s*(it|that))\b/i.test(lower))) {
-      await saveLogoData(user, { businessName: suggested, suggestedBusinessName: null });
-      await sendWithMenuButton(
-        user.phone_number,
-        `Great! Designing new logos for *${suggested}* 👍\n\nWhat *industry* are you in?\n\n` +
-          'Examples:\n' +
-          '• Food & Beverage\n• Fashion & Apparel\n• Beauty & Skincare\n' +
-          '• Tech / Software\n• Real Estate\n• Fitness & Gym\n• Education\n\n' +
-          'Type your industry:'
-      );
-      await logMessage(user.id, `Business name confirmed (suggested): ${suggested}`, 'assistant');
-      return STATES.LOGO_COLLECT_INDUSTRY;
+      const inferred = await inferIndustryFromBusinessName(suggested, user.id);
+      await saveLogoData(user, {
+        businessName: suggested,
+        suggestedBusinessName: null,
+        ...(inferred ? { industry: inferred } : {}),
+      });
+      return ackNameAndAdvance(user, suggested, inferred);
     }
 
     // 1b. User typed a different business name → use that, clear suggestion
     if (name && name.length >= 2) {
-      await saveLogoData(user, { businessName: name, suggestedBusinessName: null });
-      await sendWithMenuButton(
-        user.phone_number,
-        `Got it — designing new logos for *${name}* 👍\n\nWhat *industry* are you in?\n\n` +
-          'Examples:\n' +
-          '• Food & Beverage\n• Fashion & Apparel\n• Beauty & Skincare\n' +
-          '• Tech / Software\n• Real Estate\n• Fitness & Gym\n• Education\n\n' +
-          'Type your industry:'
-      );
-      await logMessage(user.id, `Business name (overridden suggestion): ${name}`, 'assistant');
-      return STATES.LOGO_COLLECT_INDUSTRY;
+      const inferred = await inferIndustryFromBusinessName(name, user.id);
+      await saveLogoData(user, {
+        businessName: name,
+        suggestedBusinessName: null,
+        ...(inferred ? { industry: inferred } : {}),
+      });
+      return ackNameAndAdvance(user, name, inferred);
     }
 
     // 1c. Empty/too short → re-prompt
@@ -206,18 +228,12 @@ async function handleCollectBusiness(user, message) {
     return STATES.LOGO_COLLECT_BUSINESS;
   }
 
-  await saveLogoData(user, { businessName: name });
-
-  await sendWithMenuButton(
-    user.phone_number,
-    `Great! *${name}* 👍\n\nWhat *industry* are you in?\n\n` +
-      'Examples:\n' +
-      '• Food & Beverage\n• Fashion & Apparel\n• Beauty & Skincare\n' +
-      '• Tech / Software\n• Real Estate\n• Fitness & Gym\n• Education\n\n' +
-      'Type your industry:'
-  );
-  await logMessage(user.id, `Business name: ${name}`, 'assistant');
-  return STATES.LOGO_COLLECT_INDUSTRY;
+  const inferred = await inferIndustryFromBusinessName(name, user.id);
+  await saveLogoData(user, {
+    businessName: name,
+    ...(inferred ? { industry: inferred } : {}),
+  });
+  return ackNameAndAdvance(user, name, inferred);
 }
 
 async function handleCollectIndustry(user, message) {

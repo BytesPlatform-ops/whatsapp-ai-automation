@@ -2,6 +2,7 @@ const {
   sendTextMessage,
   sendInteractiveButtons,
   sendCTAButton,
+  sendWithMenuButton,
 } = require('../../messages/sender');
 const { logMessage, getConversationHistory } = require('../../db/conversations');
 const { updateUserMetadata, updateUserState } = require('../../db/users');
@@ -2128,8 +2129,11 @@ async function showSummaryPeek(user) {
   // localize() handles the English-override safety net internally by
   // fetching the latest user message when none is passed.
   const summary = lines.join('\n');
-  await sendTextMessage(user.phone_number, await localize(summary, user));
-  await logMessage(user.id, 'Showed summary peek (mid-flow)', 'assistant');
+  const localized = await localize(summary, user);
+  await sendTextMessage(user.phone_number, localized);
+  // Log the actual peek text so the admin conversation page shows what the
+  // user saw on WhatsApp, not a placeholder label.
+  await logMessage(user.id, localized, 'assistant');
 }
 
 async function showConfirmSummary(user, prefix = '') {
@@ -2216,7 +2220,9 @@ async function showConfirmSummary(user, prefix = '') {
   const combined = prefix ? `${prefix.trim()}\n\n${summary}` : summary;
   const localized = await localize(combined, user);
   await sendTextMessage(user.phone_number, localized);
-  await logMessage(user.id, 'Showing website confirmation summary', 'assistant');
+  // Log the ACTUAL summary text so the admin conversation page shows what
+  // the user saw on WhatsApp, not a placeholder label.
+  await logMessage(user.id, localized, 'assistant');
 
   return STATES.WEB_CONFIRM;
 }
@@ -2972,6 +2978,64 @@ async function handleRevisions(user, message) {
   return STATES.WEB_REVISIONS;
 }
 
+/**
+ * Cross-flow entry (Phase 11 / Phase 12). Start or RESUME the webdev flow,
+ * honoring any shared business context already accumulated (from a previous
+ * webdev attempt OR from the cross-flow pool populated by other flows).
+ *
+ * - Fresh user (no businessName): standard "what's your business name?" opener.
+ * - Returning user with partial webdev progress OR carryover from another
+ *   flow: acknowledge what we already have and jump to the first missing
+ *   step via nextMissingWebDevState — so a user who switched to logo/ads
+ *   and came back doesn't get re-asked for data they already provided.
+ *
+ * Called by serviceSelection.js (direct menu tap / flow-switch target) and
+ * serviceQueue.js (queue advance).
+ */
+async function startWebdevFlow(user) {
+  const { getSharedBusinessContext } = require('../entityAccumulator');
+  const shared = getSharedBusinessContext(user);
+
+  if (!shared.businessName) {
+    await sendWithMenuButton(
+      user.phone_number,
+      '🌐 *Website Development*\n\n' +
+        "I'll help you create a professional website! I just need a few details about your business.\n\n" +
+        "First, what's your *business name*?"
+    );
+    await logMessage(user.id, 'Starting website development flow', 'assistant');
+    return STATES.WEB_COLLECT_NAME;
+  }
+
+  // Resume — figure out the first missing field and ask that, acknowledging
+  // what we already have so the user knows we didn't forget.
+  const wd = user.metadata?.websiteData || {};
+  const nextState = nextMissingWebDevState(wd, user.metadata || {}) || STATES.WEB_CONFIRM;
+
+  if (nextState === STATES.WEB_CONFIRM) {
+    // Everything's already collected — jump to the confirm summary.
+    await logMessage(user.id, `Resuming webdev with full context, showing confirm`, 'assistant');
+    return showConfirmSummary(user);
+  }
+
+  const question = questionForState(nextState, wd);
+  const ctxLines = [];
+  if (shared.businessName) ctxLines.push(`*${shared.businessName}*`);
+  if (shared.industry) ctxLines.push(`_${shared.industry}_`);
+  const carriedNote = ctxLines.length ? `Picking up with ${ctxLines.join(' · ')}.\n\n` : '';
+
+  await sendWithMenuButton(
+    user.phone_number,
+    `🌐 *Website Development*\n\n${carriedNote}${question}`
+  );
+  await logMessage(
+    user.id,
+    `Resuming webdev at ${nextState} (name=${shared.businessName}, industry=${shared.industry || 'none'})`,
+    'assistant'
+  );
+  return nextState;
+}
+
 module.exports = {
   handleWebDev,
   handleGenerationFailed,
@@ -2981,5 +3045,6 @@ module.exports = {
   questionForState,
   isSalonIndustry,
   startSalonFlow,
+  startWebdevFlow,
   showConfirmSummary,
 };

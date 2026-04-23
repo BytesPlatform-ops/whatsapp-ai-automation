@@ -170,10 +170,40 @@ const CONFIRMATION_WORDS = new Set(['ok', 'okay', 'yes', 'no', 'sure', 'go', 'ne
 // Words that mean "use the previously suggested brand name"
 const SAME_BRAND_WORDS = new Set(['same', 'yes', 'yeah', 'yep', 'sure', 'ok', 'okay', 'continue', 'use it', 'that one', 'use that']);
 
+// Shared follow-up after business name is saved. Either skip to the
+// niche question when we could infer industry from the name, or ask
+// for industry normally.
+async function ackAdNameAndAdvance(user, nameUsed, inferredIndustry) {
+  if (inferredIndustry) {
+    await sendWithMenuButton(
+      user.phone_number,
+      `Great! *${nameUsed}* · _${inferredIndustry}_ 👍\n\n` +
+        `What *product or service* is this ad promoting?\n\n` +
+        'Be specific — the more detail, the better the ad!\n\n' +
+        'Examples:\n' +
+        '• Premium Basmati Rice\n• Wedding Photography Package\n• Online Excel Course\n• Handmade Leather Bags'
+    );
+    await logMessage(user.id, `Ad flow: name="${nameUsed}", inferred industry="${inferredIndustry}"`, 'assistant');
+    return STATES.AD_COLLECT_NICHE;
+  }
+
+  await sendWithMenuButton(
+    user.phone_number,
+    `Great! *${nameUsed}* 👍\n\nWhat *industry* are you in?\n\n` +
+      'Examples:\n' +
+      '• Food & Beverage\n• Fashion & Apparel\n• Beauty & Skincare\n' +
+      '• Tech / Software\n• Real Estate\n• Fitness & Gym\n• Education\n• Retail / E-commerce\n\n' +
+      'Type your industry:'
+  );
+  await logMessage(user.id, `Business name: ${nameUsed}`, 'assistant');
+  return STATES.AD_COLLECT_INDUSTRY;
+}
+
 async function handleCollectBusiness(user, message) {
   const name = (message.text || '').trim();
   const adData = getAdData(user);
   const suggested = adData.suggestedBusinessName;
+  const { inferIndustryFromBusinessName } = require('../entityAccumulator');
 
   // Case 1: We have a suggested business name from a previous flow
   if (suggested) {
@@ -181,32 +211,24 @@ async function handleCollectBusiness(user, message) {
 
     // 1a. User confirmed with "same/yes/sure/etc" → use the suggested name
     if (lower && (SAME_BRAND_WORDS.has(lower) || /\b(same|yes|continue|that\s*one|use\s*(it|that))\b/i.test(lower))) {
-      await saveAdData(user, { businessName: suggested, suggestedBusinessName: null });
-      await sendWithMenuButton(
-        user.phone_number,
-        `Great! Designing a new ad for *${suggested}* 👍\n\nWhat *industry* are you in?\n\n` +
-          'Examples:\n' +
-          '• Food & Beverage\n• Fashion & Apparel\n• Beauty & Skincare\n' +
-          '• Tech / Software\n• Real Estate\n• Fitness & Gym\n• Education\n• Retail / E-commerce\n\n' +
-          'Type your industry:'
-      );
-      await logMessage(user.id, `Business name confirmed (suggested): ${suggested}`, 'assistant');
-      return STATES.AD_COLLECT_INDUSTRY;
+      const inferred = await inferIndustryFromBusinessName(suggested, user.id);
+      await saveAdData(user, {
+        businessName: suggested,
+        suggestedBusinessName: null,
+        ...(inferred ? { industry: inferred } : {}),
+      });
+      return ackAdNameAndAdvance(user, suggested, inferred);
     }
 
     // 1b. User typed a different business name → use that, clear suggestion
     if (name && name.length >= 2) {
-      await saveAdData(user, { businessName: name, suggestedBusinessName: null });
-      await sendWithMenuButton(
-        user.phone_number,
-        `Got it — designing a new ad for *${name}* 👍\n\nWhat *industry* are you in?\n\n` +
-          'Examples:\n' +
-          '• Food & Beverage\n• Fashion & Apparel\n• Beauty & Skincare\n' +
-          '• Tech / Software\n• Real Estate\n• Fitness & Gym\n• Education\n• Retail / E-commerce\n\n' +
-          'Type your industry:'
-      );
-      await logMessage(user.id, `Business name (overridden suggestion): ${name}`, 'assistant');
-      return STATES.AD_COLLECT_INDUSTRY;
+      const inferred = await inferIndustryFromBusinessName(name, user.id);
+      await saveAdData(user, {
+        businessName: name,
+        suggestedBusinessName: null,
+        ...(inferred ? { industry: inferred } : {}),
+      });
+      return ackAdNameAndAdvance(user, name, inferred);
     }
 
     // 1c. Empty/too short → re-prompt
@@ -228,18 +250,12 @@ async function handleCollectBusiness(user, message) {
     return STATES.AD_COLLECT_BUSINESS;
   }
 
-  await saveAdData(user, { businessName: name });
-
-  await sendWithMenuButton(
-    user.phone_number,
-    `Great! *${name}* 👍\n\nWhat *industry* are you in?\n\n` +
-      'Examples:\n' +
-      '• Food & Beverage\n• Fashion & Apparel\n• Beauty & Skincare\n' +
-      '• Tech / Software\n• Real Estate\n• Fitness & Gym\n• Education\n• Retail / E-commerce\n\n' +
-      'Type your industry:'
-  );
-  await logMessage(user.id, `Business name: ${name}`, 'assistant');
-  return STATES.AD_COLLECT_INDUSTRY;
+  const inferred = await inferIndustryFromBusinessName(name, user.id);
+  await saveAdData(user, {
+    businessName: name,
+    ...(inferred ? { industry: inferred } : {}),
+  });
+  return ackAdNameAndAdvance(user, name, inferred);
 }
 
 async function handleCollectIndustry(user, message) {

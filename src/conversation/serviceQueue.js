@@ -189,34 +189,8 @@ async function startServiceById(user, svcId) {
       return startChatbotFlow(user);
     }
     case 'svc_webdev': {
-      // Webdev has no startWebdevFlow helper. Replicate service-selection's
-      // webdev case, but honor shared business context so a user who
-      // already gave a name doesn't get asked again.
-      const { getSharedBusinessContext } = require('./entityAccumulator');
-      const { sendWithMenuButton } = require('../messages/sender');
-      const { STATES } = require('./states');
-      const webDev = require('./handlers/webDev');
-      const shared = getSharedBusinessContext(user);
-
-      if (shared.businessName) {
-        const wd = user.metadata?.websiteData || {};
-        const nextState = webDev.nextMissingWebDevState(wd, user.metadata || {}) || STATES.WEB_CONFIRM;
-        const question = webDev.questionForState(nextState, wd);
-        await sendWithMenuButton(
-          user.phone_number,
-          `🌐 *Website Development*\n\nPicking up with *${shared.businessName}*.\n\n${question}`
-        );
-        await logMessage(user.id, `Started webdev with prefilled name=${shared.businessName}`, 'assistant');
-        return nextState;
-      }
-
-      await sendWithMenuButton(
-        user.phone_number,
-        '🌐 *Website Development*\n\n' +
-          "First, what's your *business name*?"
-      );
-      await logMessage(user.id, 'Starting website development flow (from queue)', 'assistant');
-      return STATES.WEB_COLLECT_NAME;
+      const { startWebdevFlow } = require('./handlers/webDev');
+      return startWebdevFlow(user);
     }
     default:
       logger.warn(`[QUEUE] Unknown service id ${svcId} — dropping from queue`);

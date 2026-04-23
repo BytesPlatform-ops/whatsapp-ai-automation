@@ -111,15 +111,14 @@ async function handleServiceSelection(user, message) {
       await logMessage(user.id, 'Asked for website URL for SEO audit', 'assistant');
       return STATES.SEO_COLLECT_URL;
 
-    case 'svc_webdev':
-      await sendWithMenuButton(
-        user.phone_number,
-        '🌐 *Website Development*\n\n' +
-          'I\'ll help you create a professional website! I just need a few details about your business.\n\n' +
-          'First, what\'s your *business name*?'
-      );
-      await logMessage(user.id, 'Starting website development flow', 'assistant');
-      return STATES.WEB_COLLECT_NAME;
+    case 'svc_webdev': {
+      // Honors cross-flow carryover: if webdev data already exists (from a
+      // prior partial attempt or from the shared pool populated by other
+      // flows), resume at the first missing step instead of re-asking for
+      // the business name.
+      const { startWebdevFlow } = require('./webDev');
+      return startWebdevFlow(user);
+    }
 
     case 'svc_ecommerce': {
       const pitch =

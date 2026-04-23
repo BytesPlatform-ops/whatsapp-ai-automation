@@ -228,7 +228,9 @@ async function showConfirmSummary(user) {
     `\n*Contact:* ${contactInfo}\n\n` +
     `Look right? Reply *yes* to build it, or tell me what to fix.`;
   await sendTextMessage(user.phone_number, summary);
-  await logMessage(user.id, 'Showing confirmation summary', 'assistant');
+  // Log the actual summary so admin conversation view shows what the
+  // user saw on WhatsApp, not a placeholder.
+  await logMessage(user.id, summary, 'assistant');
   return STATES.WEB_CONFIRM;
 }
 
