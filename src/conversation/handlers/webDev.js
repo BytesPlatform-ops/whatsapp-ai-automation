@@ -629,6 +629,68 @@ function getColorsForIndustry(industry) {
   return match ? INDUSTRY_COLORS[match] : DEFAULT_COLORS;
 }
 
+// Named-color lookup for the revision follow-up flow. Values are the same
+// deep saturated shades the revision parser prompt picks — kept in sync
+// so the fast-path and LLM-path land on similar colors for the same word.
+// Compound names (two words) are matched as whole phrases below.
+const NAMED_COLOR_HEX = {
+  blue: '#1D4ED8',
+  navy: '#1E3A8A',
+  'royal blue': '#1E40AF',
+  'dark blue': '#1E3A8A',
+  'sky blue': '#0EA5E9',
+  teal: '#0F766E',
+  cyan: '#0891B2',
+  turquoise: '#14B8A6',
+  green: '#059669',
+  'forest green': '#065F46',
+  'dark green': '#064E3B',
+  'olive': '#4D7C0F',
+  emerald: '#059669',
+  red: '#B91C1C',
+  crimson: '#991B1B',
+  maroon: '#7F1D1D',
+  burgundy: '#7F1D1D',
+  purple: '#6D28D9',
+  violet: '#5B21B6',
+  indigo: '#4338CA',
+  pink: '#EC4899',
+  'hot pink': '#DB2777',
+  magenta: '#C026D3',
+  orange: '#C2410C',
+  amber: '#D97706',
+  yellow: '#F59E0B',
+  gold: '#D97706',
+  brown: '#78350F',
+  black: '#0F172A',
+  charcoal: '#1F2937',
+  gray: '#4B5563',
+  grey: '#4B5563',
+  white: '#F8FAFC',
+};
+
+// Extract a hex color from a short user reply like "blue", "#1e40af",
+// "dark green". Returns the uppercase #RRGGBB or null if nothing
+// recognized. Used by the revision flow's awaitingColor follow-up path
+// so the bot doesn't need to re-ask on one-word answers.
+function resolveColorReply(text) {
+  const clean = String(text || '').trim().toLowerCase();
+  if (!clean) return null;
+  // Direct hex (with or without leading #)
+  const hex = clean.match(/^#?([0-9a-f]{6})\b/i);
+  if (hex) return `#${hex[1].toUpperCase()}`;
+  // Exact named match
+  if (NAMED_COLOR_HEX[clean]) return NAMED_COLOR_HEX[clean];
+  // Longest-matching phrase wins (e.g. "dark green" beats "green"). Sort
+  // by length descending so the two-word names get the first shot.
+  const sortedNames = Object.keys(NAMED_COLOR_HEX).sort((a, b) => b.length - a.length);
+  for (const name of sortedNames) {
+    const pattern = new RegExp(`\\b${name.replace(/\s+/g, '\\s+')}\\b`, 'i');
+    if (pattern.test(clean)) return NAMED_COLOR_HEX[name];
+  }
+  return null;
+}
+
 // A "salon-like" business gets the dedicated salon template with its booking flow.
 function isSalonIndustry(industry) {
   if (!industry) return false;
@@ -2220,83 +2282,132 @@ async function handleConfirm(user, message) {
   const addressChange = originalText.match(/(?:address|location|addr)\s*(?:to|:|should be|is)\s*(.+)/i);
   const contactChange = originalText.match(/contact\s*(?:to|:|should be|is)\s*(.+)/i);
 
-  const applyFieldEdit = async (field, value) => {
+  // Mutates wd in place for one field. Returns a short ack string like
+  // "business name → *MyCo*" or null if the value wasn't applicable. Shared
+  // by the single-edit and multi-edit paths below.
+  const mutateWdForField = (field, value) => {
     const v = String(value || '').trim();
     if (!v) return null;
     switch (field) {
       case 'businessName':
-      case 'name': {
+      case 'name':
         wd.businessName = v;
-        return applyAndReshow(`Business name updated to *${wd.businessName}*`);
-      }
-      case 'industry': {
+        return `business name → *${wd.businessName}*`;
+      case 'industry':
         wd.industry = v;
-        const needsSalonFlow =
-          isSalonIndustry(v) &&
-          !wd.bookingMode &&
-          (!Array.isArray(wd.salonServices) || wd.salonServices.length === 0);
-        if (needsSalonFlow) {
-          await updateUserMetadata(user.id, { websiteData: wd, salonFlowOrigin: 'CONFIRM' });
-          user.metadata = { ...(user.metadata || {}), websiteData: wd };
-          const txt = `Updated industry to *${v}* — a few quick salon-specific questions, then we'll build it.`;
-          await sendTextMessage(user.phone_number, await localize(txt, user, originalText));
-          return startSalonFlow(user);
-        }
-        return applyAndReshow(`Industry updated to *${wd.industry}*`);
-      }
-      case 'services': {
+        return `industry → *${wd.industry}*`;
+      case 'services':
         wd.services = v
           .split(/\s*,\s*|\s+(?:and|&|aur|y|et|und)\s+/i)
           .map((s) => s.trim())
           .filter(Boolean);
-        return applyAndReshow(`Services updated to *${wd.services.join(', ')}*`);
-      }
+        return `services → *${wd.services.join(', ')}*`;
       case 'areas':
-      case 'serviceAreas': {
+      case 'serviceAreas':
         wd.serviceAreas = v
           .split(/\s*,\s*|\s+(?:and|&|aur|y|et|und)\s+/i)
           .map((s) => s.trim())
           .filter(Boolean);
-        return applyAndReshow(`Service areas updated to *${wd.serviceAreas.join(', ')}*`);
-      }
+        return `service areas → *${wd.serviceAreas.join(', ')}*`;
       case 'email':
       case 'contactEmail': {
         const m = v.match(/[\w.-]+@[\w.-]+\.\w+/);
         wd.contactEmail = m ? m[0] : v;
-        return applyAndReshow(`Email updated to *${wd.contactEmail}*`);
+        return `email → *${wd.contactEmail}*`;
       }
       case 'phone':
-      case 'contactPhone': {
+      case 'contactPhone':
         wd.contactPhone = v;
-        return applyAndReshow(`Phone updated to *${wd.contactPhone}*`);
-      }
+        return `phone → *${wd.contactPhone}*`;
       case 'address':
-      case 'contactAddress': {
+      case 'contactAddress':
         wd.contactAddress = v;
-        return applyAndReshow(`Address updated to *${wd.contactAddress}*`);
-      }
+        return `address → *${wd.contactAddress}*`;
       case 'contact': {
         const parsed = parseContactFields(v);
-        if (parsed.contactEmail) wd.contactEmail = parsed.contactEmail;
-        if (parsed.contactPhone) wd.contactPhone = parsed.contactPhone;
-        if (parsed.contactAddress) wd.contactAddress = parsed.contactAddress;
-        return applyAndReshow('Contact info updated');
+        const applied = [];
+        if (parsed.contactEmail) { wd.contactEmail = parsed.contactEmail; applied.push(`email → *${wd.contactEmail}*`); }
+        if (parsed.contactPhone) { wd.contactPhone = parsed.contactPhone; applied.push(`phone → *${wd.contactPhone}*`); }
+        if (parsed.contactAddress) { wd.contactAddress = parsed.contactAddress; applied.push(`address → *${wd.contactAddress}*`); }
+        return applied.length ? applied.join('; ') : null;
       }
       default:
         return null;
     }
   };
 
-  // Dispatch order matters: areasChange MUST be checked before servicesChange
-  // so "Service areas: tariq road" routes to the areas field, not services.
-  if (areasChange) { const r = await applyFieldEdit('areas', areasChange[1]); if (r !== null) return r; }
-  if (nameChange) { const r = await applyFieldEdit('businessName', nameChange[1]); if (r !== null) return r; }
-  if (industryChange) { const r = await applyFieldEdit('industry', industryChange[1]); if (r !== null) return r; }
-  if (servicesChange) { const r = await applyFieldEdit('services', servicesChange[1]); if (r !== null) return r; }
-  if (emailChange) { const r = await applyFieldEdit('email', emailChange[1]); if (r !== null) return r; }
-  if (phoneChange) { const r = await applyFieldEdit('phone', phoneChange[1]); if (r !== null) return r; }
-  if (addressChange) { const r = await applyFieldEdit('address', addressChange[1]); if (r !== null) return r; }
-  if (contactChange) { const r = await applyFieldEdit('contact', contactChange[1]); if (r !== null) return r; }
+  // Apply a single field, save, and re-show the summary. Used by the LLM
+  // fallback path below (which only identifies one field at a time) and
+  // for the industry→salon-flow special case.
+  const applyFieldEdit = async (field, value) => {
+    // Industry changing to a salon-ish value kicks off the salon-specific
+    // wizard (services, hours, booking mode). Don't batch this with other
+    // fields — the flow jump would be jarring mid-edit.
+    if (field === 'industry') {
+      const v = String(value || '').trim();
+      if (!v) return null;
+      wd.industry = v;
+      const needsSalonFlow =
+        isSalonIndustry(v) &&
+        !wd.bookingMode &&
+        (!Array.isArray(wd.salonServices) || wd.salonServices.length === 0);
+      if (needsSalonFlow) {
+        await updateUserMetadata(user.id, { websiteData: wd, salonFlowOrigin: 'CONFIRM' });
+        user.metadata = { ...(user.metadata || {}), websiteData: wd };
+        const txt = `Updated industry to *${v}* — a few quick salon-specific questions, then we'll build it.`;
+        await sendTextMessage(user.phone_number, await localize(txt, user, originalText));
+        return startSalonFlow(user);
+      }
+      return applyAndReshow(`Industry updated to *${wd.industry}*`);
+    }
+    const label = mutateWdForField(field, value);
+    if (!label) return null;
+    return applyAndReshow(label.charAt(0).toUpperCase() + label.slice(1));
+  };
+
+  // Collect ALL regex matches on the user's message, then apply them as a
+  // batch. Previously each matcher `return`ed early on first hit, so a user
+  // who wrote "Business name: X\nServices: Y" only got the name changed —
+  // the services line was silently dropped. Dispatch order still matters
+  // for disambiguation (areas before services so "Service areas:" doesn't
+  // fall into the services matcher).
+  const matches = [];
+  if (areasChange) matches.push({ field: 'areas', value: areasChange[1] });
+  if (nameChange) matches.push({ field: 'businessName', value: nameChange[1] });
+  if (industryChange) matches.push({ field: 'industry', value: industryChange[1] });
+  if (servicesChange) matches.push({ field: 'services', value: servicesChange[1] });
+  if (emailChange) matches.push({ field: 'email', value: emailChange[1] });
+  if (phoneChange) matches.push({ field: 'phone', value: phoneChange[1] });
+  if (addressChange) matches.push({ field: 'address', value: addressChange[1] });
+  if (contactChange) matches.push({ field: 'contact', value: contactChange[1] });
+
+  // Industry-to-salon edge case (side-effect flow transition): only single-edit.
+  const singleIndustrySalon =
+    matches.length === 1 &&
+    matches[0].field === 'industry' &&
+    isSalonIndustry(matches[0].value) &&
+    !wd.bookingMode &&
+    (!Array.isArray(wd.salonServices) || wd.salonServices.length === 0);
+  if (singleIndustrySalon) {
+    const r = await applyFieldEdit(matches[0].field, matches[0].value);
+    if (r !== null) return r;
+  }
+
+  if (matches.length > 0) {
+    const labels = [];
+    for (const m of matches) {
+      const label = mutateWdForField(m.field, m.value);
+      if (label) labels.push(label);
+    }
+    if (labels.length > 0) {
+      const ackPrefix = labels.length === 1
+        ? `✅ ${labels[0].charAt(0).toUpperCase() + labels[0].slice(1)}. Here's the updated summary:`
+        : `✅ Updated ${labels.length} fields: ${labels.join('; ')}. Here's the updated summary:`;
+      await updateUserMetadata(user.id, { websiteData: wd });
+      user.metadata = { ...(user.metadata || {}), websiteData: wd };
+      return showConfirmSummary(user, ackPrefix);
+    }
+  }
 
   // Regex didn't match. Try the LLM — catches natural prose in any language:
   // "address ko Gulshan Iqbal kr do" (Urdu), "cambia el email a X" (Spanish),
@@ -2653,7 +2764,25 @@ async function handleRevisions(user, message) {
 
   // Handle revision requests via LLM
   if (buttonId === 'web_revise' || message.text) {
-    const revisionText = message.text || 'I want to make changes';
+    let revisionText = message.text || 'I want to make changes';
+
+    // Follow-up color answer: last turn we asked "which color?" and set
+    // awaitingColor=true. If the user replied with a short color-ish
+    // message ("blue", "#1E40AF", "navy", "dark green"), rewrite it into
+    // an explicit revision request so the LLM parser catches it as
+    // primaryColor. Without this the LLM sees "blue" in isolation and
+    // tends to return _unclear again — a frustrating loop.
+    if (user.metadata?.awaitingColor && message.text && message.text.trim().length <= 40) {
+      const colorHex = resolveColorReply(message.text);
+      if (colorHex) {
+        revisionText = `change the primary color to ${colorHex}`;
+        logger.info(`[WEBDEV-REVISE] awaitingColor resolved "${message.text.trim()}" → ${colorHex}`);
+      }
+      // Clear the flag whether we parsed a color or not — if they gave us
+      // a non-color reply ("nevermind", "actually change the headline"),
+      // fall through to the normal parser and let it handle the pivot.
+      await updateUserMetadata(user.id, { awaitingColor: false });
+    }
 
     // Only process free text if a website was actually generated
     if (!buttonId) {
@@ -2815,6 +2944,14 @@ async function handleRevisions(user, message) {
       }
 
       if (updates._unclear) {
+        // If the clarification question is specifically about colors, set a
+        // follow-up flag so the NEXT user reply — which will likely be a
+        // short answer like "blue" or "#1E40AF" — gets interpreted as a
+        // color change without the LLM needing any extra context.
+        const isColorQuestion = /colou?r/i.test(String(updates._message || ''));
+        if (isColorQuestion) {
+          await updateUserMetadata(user.id, { awaitingColor: true });
+        }
         await sendTextMessage(user.phone_number, updates._message);
         return STATES.WEB_REVISIONS;
       }
