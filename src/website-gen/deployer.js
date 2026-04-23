@@ -53,19 +53,61 @@ async function deployToNetlify(siteConfig, existingSiteId = null, { watermark = 
       logger.info(`[NETLIFY] Site created: ${siteName} (${siteId})`);
     }
 
+    // Compute SHA-1 on the exact bytes we're about to PUT. Doing this on
+    // the JS string (instead of an explicit UTF-8 buffer) let HTML with
+    // non-ASCII chars — smart quotes, em-dashes, the "→"/"✓" icons used
+    // in templates — drift between manifest-time and upload-time SHAs, and
+    // Netlify would reject the PUT with 422 "no records matched" because
+    // the bytes on the wire didn't hash to any expected value in the
+    // manifest. Pinning both sides to the same Buffer fixes the drift.
+    const fileBuffers = {};
     const fileDigests = {};
     for (const [fp, content] of Object.entries(files)) {
-      fileDigests[fp] = crypto.createHash('sha1').update(content).digest('hex');
+      const buf = Buffer.from(content, 'utf8');
+      fileBuffers[fp] = buf;
+      fileDigests[fp] = crypto.createHash('sha1').update(buf).digest('hex');
     }
     logger.info(`[NETLIFY] Creating deploy with ${Object.keys(files).length} file(s)...`);
-    const deployResponse = await axios.post(`${NETLIFY_API}/sites/${siteId}/deploys`, { files: fileDigests }, { headers, timeout: NETLIFY_TIMEOUT_MS });
+    const deployResponse = await axios.post(
+      `${NETLIFY_API}/sites/${siteId}/deploys`,
+      { files: fileDigests },
+      { headers, timeout: NETLIFY_TIMEOUT_MS }
+    );
     const deployId = deployResponse.data.id;
-    const requiredFiles = deployResponse.data.required || [];
-    for (const [fp, content] of Object.entries(files)) {
-      const sha1 = crypto.createHash('sha1').update(content).digest('hex');
-      if (requiredFiles.length === 0 || requiredFiles.includes(sha1)) {
-        logger.info(`[NETLIFY] Uploading ${fp}...`);
-        await axios.put(`${NETLIFY_API}/deploys/${deployId}/files${fp}`, content, { headers: { Authorization: `Bearer ${env.netlify.token}`, 'Content-Type': 'application/octet-stream' }, timeout: NETLIFY_TIMEOUT_MS });
+    const requiredShas = deployResponse.data.required || [];
+
+    // Only upload files whose SHA Netlify explicitly asked for. The
+    // previous code uploaded everything when required came back empty,
+    // which triggered 422s on redeploys where all files were already
+    // cached. An empty required list means "nothing to do" — the deploy
+    // is already assembled from cache, we just wait for it to finalize.
+    if (requiredShas.length === 0) {
+      logger.info(`[NETLIFY] All ${Object.keys(files).length} file(s) cached — no upload needed`);
+    } else {
+      const pathBySha = {};
+      for (const [fp, sha] of Object.entries(fileDigests)) pathBySha[sha] = fp;
+      for (const sha of requiredShas) {
+        const fp = pathBySha[sha];
+        if (!fp) {
+          logger.warn(`[NETLIFY] Required SHA ${sha.slice(0, 8)} has no matching file — skipping`);
+          continue;
+        }
+        logger.info(`[NETLIFY] Uploading ${fp} (sha ${sha.slice(0, 8)})...`);
+        try {
+          await axios.put(
+            `${NETLIFY_API}/deploys/${deployId}/files${fp}`,
+            fileBuffers[fp],
+            {
+              headers: { Authorization: `Bearer ${env.netlify.token}`, 'Content-Type': 'application/octet-stream' },
+              timeout: NETLIFY_TIMEOUT_MS,
+            }
+          );
+        } catch (putErr) {
+          const status = putErr.response?.status;
+          const body = JSON.stringify(putErr.response?.data || {});
+          logger.error(`[NETLIFY] PUT failed for ${fp} (sha ${sha.slice(0, 8)}): status=${status} body=${body}`);
+          throw putErr;
+        }
       }
     }
     logger.info('[NETLIFY] Waiting for deploy to be ready...');
