@@ -41,8 +41,10 @@ const optional = [
   'NAMECHEAP_API_KEY',
   'NAMECHEAP_CLIENT_IP',
   'NAMECHEAP_USE_SANDBOX',
-  'UNSPLASH_ACCESS_KEY',
 ];
+// Note: UNSPLASH_ACCESS_KEY / PEXELS_API_KEY are intentionally NOT required.
+// Image fetches degrade gracefully — sites render with gradient heroes when
+// no image source is configured.
 
 function validateEnv() {
   const missing = required.filter((key) => !process.env[key]);
@@ -127,9 +129,14 @@ const env = {
         : 'https://api.namecheap.com/xml.response';
     },
   },
-  // Unsplash (hero images for generated websites)
+  // Unsplash (hero images for generated websites — legacy, kept as fallback)
   unsplash: {
     accessKey: process.env.UNSPLASH_ACCESS_KEY || '',
+  },
+  // Pexels (primary image source for generated websites — no attribution
+  // required on customer-facing sites, 20k req/month free).
+  pexels: {
+    apiKey: process.env.PEXELS_API_KEY || '',
   },
   agentPhone: process.env.AGENT_PHONE_NUMBER || '',
   // Server

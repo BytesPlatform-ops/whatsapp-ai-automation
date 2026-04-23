@@ -294,7 +294,7 @@ Generate compelling website copy for this business. Return ONLY valid JSON.`;
     try {
       heroImage = await getHeroImage(imageQuery);
       if (!heroImage) {
-        logger.warn(`[WEBGEN] No hero image returned for "${imageQuery}" — check UNSPLASH_ACCESS_KEY or rate limits`);
+        logger.warn(`[WEBGEN] No hero image returned for "${imageQuery}" — check PEXELS_API_KEY or rate limits`);
       }
     } catch (err) {
       logger.warn(`[WEBGEN] Hero image fetch threw: ${err.message}`);

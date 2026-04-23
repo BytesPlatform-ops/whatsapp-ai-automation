@@ -1,16 +1,14 @@
-const axios = require('axios');
 const { env } = require('../config/env');
 const { logger } = require('../utils/logger');
+const { searchPhotos, mapPhotoToResult } = require('./pexelsClient');
 
-const UNSPLASH_API = 'https://api.unsplash.com';
-const UTM = 'utm_source=bytes_platform&utm_medium=referral';
 const CONCURRENCY = 4;
 const PER_FETCH_TIMEOUT_MS = 7000;
 
 // In-memory cache of query → image result (or null for confirmed misses).
-// Unsplash demo apps are capped at 50 req/hr, so caching across builds in the
-// same process prevents re-fetching the same salon services over and over.
-// Cleared naturally when the bot restarts; not shared across instances.
+// Keeps builds in the same process from re-hitting Pexels for the same
+// salon services over and over. Cleared naturally on restart; not shared
+// across instances.
 const CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
 const cache = new Map(); // query -> { at, value }
 
@@ -113,53 +111,33 @@ function roughCategory(name) {
   return 'Signature';
 }
 
-async function fetchOne(query, accessKey) {
+async function fetchOne(query) {
   const cached = cacheGet(query);
   if (cached !== undefined) return cached;
-  try {
-    const response = await axios.get(`${UNSPLASH_API}/search/photos`, {
-      // No orientation filter — many salon subjects (tools, close-ups) are mostly portrait/landscape and
-      // filtering to "squarish" was dropping valid results. The CSS crops into a 4/5 frame anyway.
-      params: { query, content_filter: 'high', per_page: 10, order_by: 'relevant' },
-      headers: { Authorization: `Client-ID ${accessKey}`, 'Accept-Version': 'v1' },
-      timeout: PER_FETCH_TIMEOUT_MS,
-    });
-    const results = response.data?.results || [];
-    if (results.length === 0) {
-      cacheSet(query, null);
-      return null;
-    }
-    // Pick from the top 3 so two sites with the same service don't get identical cards.
-    const pick = results[Math.floor(Math.random() * Math.min(3, results.length))];
-    if (!pick?.urls?.regular) return null;
 
-    if (pick.links?.download_location) {
-      axios
-        .get(pick.links.download_location, {
-          headers: { Authorization: `Client-ID ${accessKey}` },
-          timeout: 5000,
-        })
-        .catch(() => {});
-    }
-
-    const image = {
-      url: `${pick.urls.regular}&w=800&q=80&auto=format&fit=crop`,
-      photographer: pick.user?.name || 'Unsplash',
-      photographerUrl: `${(pick.user?.links?.html) || 'https://unsplash.com'}?${UTM}`,
-      unsplashUrl: `https://unsplash.com/?${UTM}`,
-    };
-    cacheSet(query, image);
-    return image;
-  } catch (err) {
-    const status = err.response?.status;
-    if (status === 403) {
-      // Hit the hourly rate limit — don't log every one, caller will see the low hit rate.
-      logger.warn(`[SERVICE-IMG] Rate limited on "${query}" (HTTP 403)`);
-    } else {
-      logger.warn(`[SERVICE-IMG] "${query}" failed: ${status || err.message}`);
-    }
+  // No orientation filter — many salon subjects (tools, close-ups) are
+  // mostly portrait/landscape and filtering to "squarish" was dropping
+  // valid results. The CSS crops into a 4/5 frame anyway.
+  const results = await searchPhotos(query, {
+    orientation: undefined,
+    perPage: 10,
+    timeout: PER_FETCH_TIMEOUT_MS,
+    logTag: 'SERVICE-IMG',
+  });
+  if (!results || results.length === 0) {
+    cacheSet(query, null);
     return null;
   }
+
+  // Pick from the top 3 so two sites with the same service don't look cloned.
+  const pick = results[Math.floor(Math.random() * Math.min(3, results.length))];
+  const image = mapPhotoToResult(pick, { width: 800, quality: 80 });
+  if (!image) {
+    cacheSet(query, null);
+    return null;
+  }
+  cacheSet(query, image);
+  return image;
 }
 
 async function runPool(items, limit, worker) {
@@ -190,9 +168,8 @@ async function runPool(items, limit, worker) {
  *      Unsplash. Covers ambiguous names like "Bleach" or "Cleanup".
  */
 async function attachServiceImages(services, options = {}) {
-  const accessKey = env.unsplash?.accessKey;
-  if (!accessKey) {
-    logger.warn('[SERVICE-IMG] UNSPLASH_ACCESS_KEY not set — service images will be skipped');
+  if (!env.pexels?.apiKey) {
+    logger.warn('[SERVICE-IMG] PEXELS_API_KEY not set — service images will be skipped');
     return services || [];
   }
   if (!Array.isArray(services) || services.length === 0) return services || [];
@@ -208,7 +185,7 @@ async function attachServiceImages(services, options = {}) {
     ? services.map((s) => sharpenGenericQuery(s.name, s.industry || fallbackIndustry))
     : services.map((s) => sharpenQuery(s.name));
   logger.info(`[SERVICE-IMG] Pass 1 (${mode}): fetching ${specific.length} queries: ${specific.join(' | ')}`);
-  const firstPass = await runPool(specific, CONCURRENCY, (q) => fetchOne(q, accessKey));
+  const firstPass = await runPool(specific, CONCURRENCY, (q) => fetchOne(q));
   const hits1 = firstPass.filter(Boolean).length;
 
   // Second pass for misses — broader category/industry fallback.
@@ -229,7 +206,7 @@ async function attachServiceImages(services, options = {}) {
     };
     const fallbackQueries = Array.from(new Set(missingIdx.map(fallbackFor)));
     logger.info(`[SERVICE-IMG] Pass 2: ${missingIdx.length} misses → fallback queries: ${fallbackQueries.join(' | ')}`);
-    const fallbackResults = await runPool(fallbackQueries, CONCURRENCY, (q) => fetchOne(q, accessKey));
+    const fallbackResults = await runPool(fallbackQueries, CONCURRENCY, (q) => fetchOne(q));
     const byQuery = Object.fromEntries(fallbackQueries.map((q, i) => [q, fallbackResults[i]]));
     for (const i of missingIdx) {
       const q = fallbackFor(i);
