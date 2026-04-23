@@ -475,6 +475,14 @@ async function activateTrial(user) {
       chatbotTrialEndsAt: trialEnd.toISOString(),
     });
 
+    // Phase 15: record completion so future sessions recognize the user.
+    try {
+      const { markProjectCompleted } = require('../returnVisitor');
+      await markProjectCompleted(user, { type: 'chatbot', businessName: chatbotData.businessName });
+    } catch (err) {
+      logger.warn(`[CHATBOT-FLOW] markProjectCompleted failed: ${err.message}`);
+    }
+
     // Phase 12: chatbot is now fully set up — advance the queue if there's
     // another service waiting. Otherwise drop to sales chat as before.
     const { maybeStartNextQueuedService } = require('../serviceQueue');

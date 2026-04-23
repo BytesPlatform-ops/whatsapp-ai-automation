@@ -568,6 +568,7 @@ async function _routeMessage(message) {
   const recapText = (message.text || '').trim();
   const isSlash = recapText.startsWith('/');
   const isInteractive = !!(message.buttonId || message.listId);
+  let recapFired = false;
   if (message.type === 'text' && !isSlash && !isInteractive) {
     try {
       const { maybeBuildRecap } = require('./sessionRecap');
@@ -576,11 +577,34 @@ async function _routeMessage(message) {
         logger.info(`[RECAP] Sending session recap to ${from}`);
         await sendTextMessage(user.phone_number, recap);
         await logMessage(user.id, recap, 'assistant');
+        recapFired = true;
       }
     } catch (err) {
       // A failed recap should never block the actual reply. Log and move
       // on — the user still gets the handler's response.
       logger.warn(`[RECAP] Recap failed for ${from}: ${err.message}`);
+    }
+  }
+
+  // ── Phase 15: return-visitor greeting ───────────────────────────────────
+  // If a user who previously completed a project (website, logo, ad,
+  // chatbot, SEO audit) comes back after a long gap and is in an idle
+  // state (not mid-collection), prepend a warm "welcome back" that
+  // references their business by name. Gated on !recapFired so the two
+  // mechanisms don't double-fire — recap handles users mid-flow with
+  // in-progress context; return-greet handles users whose prior work
+  // is complete.
+  if (message.type === 'text' && !isSlash && !isInteractive && !recapFired) {
+    try {
+      const { maybeBuildReturnGreeting } = require('./returnVisitor');
+      const greeting = await maybeBuildReturnGreeting(user);
+      if (greeting) {
+        logger.info(`[RETURN-GREET] Sending return-visitor greeting to ${from}`);
+        await sendTextMessage(user.phone_number, greeting);
+        await logMessage(user.id, greeting, 'assistant');
+      }
+    } catch (err) {
+      logger.warn(`[RETURN-GREET] Greeting failed for ${from}: ${err.message}`);
     }
   }
 
@@ -693,6 +717,11 @@ async function _routeMessage(message) {
       sessionRecapLastAt: null,
       // Phase 12: multi-service queue.
       serviceQueue: [],
+      // NOTE: lastBusinessName / lastCompletedProjectType / lastCompletedProjectAt
+      // are INTENTIONALLY NOT cleared here. Phase 15 uses them to personalize
+      // the return-visitor greeting across sessions — a /reset should wipe
+      // in-progress state, not the memory that the user has completed work
+      // with us before.
     });
     // Clear conversation history so the sales bot starts fresh
     const { clearHistory } = require('../db/conversations');

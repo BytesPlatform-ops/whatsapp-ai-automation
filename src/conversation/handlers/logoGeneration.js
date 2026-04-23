@@ -588,6 +588,14 @@ async function handleSelectIdea(user, message) {
   await sendImage(user.phone_number, publicUrl, caption);
   await logMessage(user.id, `Logo generated and sent: ${publicUrl}`, 'assistant');
 
+  // Phase 15: record completion so future sessions recognize the user.
+  try {
+    const { markProjectCompleted } = require('../returnVisitor');
+    await markProjectCompleted(user, { type: 'logo', businessName: logoData.businessName });
+  } catch (err) {
+    logger.warn(`[LOGO-GEN] markProjectCompleted failed: ${err.message}`);
+  }
+
   // Follow-up options
   await sendInteractiveButtons(
     user.phone_number,

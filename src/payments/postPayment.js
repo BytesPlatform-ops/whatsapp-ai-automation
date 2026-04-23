@@ -158,6 +158,21 @@ async function handleConfirmedPayment(payment, paidSession) {
             );
             await logMessage(p.user_id, `Domain purchased and configured: ${selectedDomain}`, 'assistant');
 
+            // Phase 15: record completion so future sessions can
+            // reference this project by business name.
+            try {
+              const wd = paidUserRecord?.metadata?.websiteData || {};
+              if (wd.businessName) {
+                await updateUserMetadata(p.user_id, {
+                  lastBusinessName: wd.businessName,
+                  lastCompletedProjectType: 'website',
+                  lastCompletedProjectAt: new Date().toISOString(),
+                });
+              }
+            } catch (err) {
+              logger.warn(`[PAY] Failed to mark return-greet fields: ${err.message}`);
+            }
+
             // Phase 12: if the user originally queued more services with
             // the website, advance to the next one instead of the
             // generic site-live upsell. The explicit queue wins over

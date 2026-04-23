@@ -181,6 +181,28 @@ async function handleCollectUrl(user, message) {
       seoAuditCompletedAt: new Date().toISOString(),
     });
 
+    // Phase 15: record completion so future sessions recognize the user.
+    // SEO flow doesn't collect a business name — derive one from the URL
+    // ("https://hasnain-plumbing.com" -> "hasnain-plumbing"). Only set
+    // return-greet fields when we don't already have a stronger
+    // completion marker from a webdev / logo / ad / chatbot flow.
+    try {
+      const md = user.metadata || {};
+      if (!md.lastBusinessName) {
+        const host = String(url || '').replace(/^https?:\/\//i, '').replace(/^www\./i, '').split('/')[0];
+        const derived = host ? host.split('.')[0].replace(/[-_]+/g, ' ').trim() : '';
+        if (derived) {
+          await updateUserMetadata(user.id, {
+            lastBusinessName: derived,
+            lastCompletedProjectType: 'seo',
+            lastCompletedProjectAt: new Date().toISOString(),
+          });
+        }
+      }
+    } catch (completionErr) {
+      logger.warn(`[SEO] markProjectCompleted failed: ${completionErr.message}`);
+    }
+
     // Feed a synthetic message to the sales bot so it pitches immediately
     // Use a message WITHOUT a URL to avoid the fallback SEO trigger catching it again
     const { handleSalesBot } = require('./salesBot');
