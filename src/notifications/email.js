@@ -9,7 +9,7 @@ if (env.sendgrid?.apiKey) {
 const NOTIFY_EMAIL = 'bytesuite@bytesplatform.com';
 const FROM = {
   email: env.sendgrid?.fromEmail || 'developer@bytesplatform.com',
-  name: env.sendgrid?.fromName || 'Bytes Platform',
+  name: env.sendgrid?.fromName || 'Pixie',
 };
 // Lead-notification emails use a Pixie-branded friendly name so owners
 // see "Pixie <developer@bytesplatform.com>" in their inbox instead of
@@ -96,7 +96,7 @@ async function sendUpsellEmail({ toEmail, userName, type }) {
         <p>Your website has been live for a week now — great start! The next step to getting more customers is setting up your <strong>Google Business Profile</strong>.</p>
         <p>This means when someone searches for your type of business nearby, you show up on Google Maps and in local search results.</p>
         <p>We can set this up for you — just reply to this email or message us on WhatsApp and we'll get it done.</p>
-        <p>— The Bytes Platform Team</p>
+        <p>—Pixie</p>
       `,
     },
     day30: {
@@ -107,7 +107,7 @@ async function sendUpsellEmail({ toEmail, userName, type }) {
         <p>Your website has been live for a month! Want to get more visitors from Google?</p>
         <p>Our <strong>SEO packages</strong> help your business rank higher in search results so customers find you first. We'll handle keyword research, on-page optimization, and monthly reporting.</p>
         <p>Reply to learn more about our SEO packages — they start from just $200.</p>
-        <p>— The Bytes Platform Team</p>
+        <p>—Pixie</p>
       `,
     },
     day60: {
@@ -118,7 +118,7 @@ async function sendUpsellEmail({ toEmail, userName, type }) {
         <p>Did you know you can add a <strong>WhatsApp chat button</strong> to your website? When visitors click it, they can message you directly — no forms, no waiting.</p>
         <p>It's one of the easiest ways to convert website visitors into customers. We can set it up for you quickly.</p>
         <p>Interested? Just reply and we'll get it done.</p>
-        <p>— The Bytes Platform Team</p>
+        <p>— Pixie</p>
       `,
     },
     day90: {
@@ -129,7 +129,7 @@ async function sendUpsellEmail({ toEmail, userName, type }) {
         <p>Your website has been working hard for 3 months! Want to give it a fresh look or add new features?</p>
         <p>We can update the design, add new sections, improve the layout, or add functionality like booking, reviews, or a gallery.</p>
         <p>Reply and we'll send you a free mockup of an updated design!</p>
-        <p>— The Bytes Platform Team</p>
+        <p>— Pixie</p>
       `,
     },
   };
