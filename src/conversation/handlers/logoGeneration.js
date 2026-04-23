@@ -86,22 +86,67 @@ async function handleLogoGeneration(user, message) {
 // ── Step handlers ─────────────────────────────────────────────────────────────
 
 async function handleStart(user, message) {
+  // Phase 11: pre-fill shared fields from whatever webdev flow already
+  // accumulated, then skip past the collection states whose fields are
+  // filled. Logo-specific fields (description, style, symbol,
+  // background, brandColors) always start fresh.
+  const { getSharedBusinessContext } = require('../entityAccumulator');
+  const shared = getSharedBusinessContext(user);
+
   await saveLogoData(user, {
-    businessName: null, industry: null, description: null, style: null,
+    businessName: shared.businessName || null,
+    industry: shared.industry || null,
+    description: null, style: null,
     brandColors: null, symbolIdea: null, background: null,
     ideas: null, selectedIdeaIndex: null,
+    suggestedBusinessName: null,
   });
 
+  const hasName = !!shared.businessName;
+  const hasIndustry = !!shared.industry;
+
+  const ctxLines = [];
+  if (hasName) ctxLines.push(`*${shared.businessName}*`);
+  if (hasIndustry) ctxLines.push(`_${shared.industry}_`);
+  const carriedNote = ctxLines.length ? `\n\nUsing what I have from earlier: ${ctxLines.join(' · ')}.\n` : '';
+
+  if (!hasName) {
+    await sendWithMenuButton(
+      user.phone_number,
+      '✨ *Logo Maker*\n\n' +
+        'I\'ll design 5 unique logo concepts for your brand — like having a top branding agency on call!\n\n' +
+        'Let\'s start with the basics.\n\n' +
+        'What is your *business name*?\n\n' +
+        '_(This will be the actual text on your logo, so spell it exactly as you want it to appear)_'
+    );
+    await logMessage(user.id, 'Started logo generation flow', 'assistant');
+    return STATES.LOGO_COLLECT_BUSINESS;
+  }
+
+  if (!hasIndustry) {
+    await sendWithMenuButton(
+      user.phone_number,
+      `✨ *Logo Maker*${carriedNote}\n` +
+        `What *industry* are you in?\n\n` +
+        'Examples:\n' +
+        '• Food & Beverage\n• Fashion & Apparel\n• Beauty & Skincare\n' +
+        '• Tech / Software\n• Real Estate\n• Fitness & Gym\n• Education\n• Retail / E-commerce\n\n' +
+        'Type your industry:'
+    );
+    await logMessage(user.id, `Started logo flow with prefilled name=${shared.businessName}`, 'assistant');
+    return STATES.LOGO_COLLECT_INDUSTRY;
+  }
+
+  // Name + industry both carried → jump to first logo-specific step.
   await sendWithMenuButton(
     user.phone_number,
-    '✨ *Logo Maker*\n\n' +
-      'I\'ll design 5 unique logo concepts for your brand — like having a top branding agency on call!\n\n' +
-      'Let\'s start with the basics.\n\n' +
-      'What is your *business name*?\n\n' +
-      '_(This will be the actual text on your logo, so spell it exactly as you want it to appear)_'
+    `✨ *Logo Maker*${carriedNote}\n` +
+      `In one sentence, *what does your business do*?\n\n` +
+      'This helps me design a logo that visually fits your brand.\n\n' +
+      'Example: _"We deliver fresh organic meals to busy professionals"_'
   );
-  await logMessage(user.id, 'Started logo generation flow', 'assistant');
-  return STATES.LOGO_COLLECT_BUSINESS;
+  await logMessage(user.id, `Started logo flow with prefilled name=${shared.businessName}, industry=${shared.industry}`, 'assistant');
+  return STATES.LOGO_COLLECT_DESCRIPTION;
 }
 
 async function handleCollectBusiness(user, message) {
@@ -605,4 +650,11 @@ async function handleResults(user, message) {
   return STATES.LOGO_RESULTS;
 }
 
-module.exports = { handleLogoGeneration };
+// Exported so serviceSelection.js can invoke it directly when the user
+// picks the "Logo Maker" menu option. Skips collection states whose
+// fields are already in the shared websiteData pool (Phase 11).
+async function startLogoFlow(user) {
+  return handleStart(user, null);
+}
+
+module.exports = { handleLogoGeneration, startLogoFlow };

@@ -205,12 +205,13 @@ async function extractIndustry(userReply, context = {}) {
 
   const prompt = `${businessLine}${historyLine}The user was asked "What industry are you in?" and replied: "${raw}"
 
-Extract the industry as a clean 1-3 word label (examples: "Tech", "Food & Beverage", "Real Estate", "HVAC", "Barbershop", "Trucking", "Photography").
+Extract the industry as a clean 1-3 word label (examples: "Tech", "Food & Beverage", "Real Estate", "HVAC", "Barbershop", "Trucking", "Photography", "Plumbing", "Electrician", "Roofing").
 
 Rules:
 - Normalize, don't echo. "we just rent trucks" → "Trucking". "i think its tech" → "Tech". "oh we do AI stuff" → "AI / Software".
-- If the user is delegating ("whatever", "you pick", "idk"), use the business name + conversation context to infer. If that's also not enough, return: unknown
-- If the reply isn't an industry at all (nonsense, "?", greeting), return: unknown
+- **Business-name inference is a FIRST-CLASS move, not a last resort.** When the user delegates ("whatever", "you pick", "idk", "i'm not sure", "select one for me", "relevant to my business name"), READ THE BUSINESS NAME you were given at the top and extract the industry directly from it. A business literally called "Hasnain Plumbing" has industry "Plumbing". "Joe's Auto Repair" → "Auto Repair". "Glow Studio Salon" → "Salon". "Acme Bakery" → "Bakery". "Bright Dental" → "Dental". If the business name contains a trade/industry word (plumbing, salon, bakery, electric, roofing, dental, law, realty, photography, etc.), that IS the industry — return it, do NOT return "unknown".
+- If the user is delegating AND the business name doesn't contain an industry word, use conversation context. Only if BOTH fail, return "unknown".
+- If the reply isn't an industry at all (nonsense, "?", greeting), return "unknown".
 
 Return ONLY the industry label or the single word "unknown". No quotes, no explanation, no punctuation.`;
 
@@ -293,10 +294,42 @@ Return ONLY a JSON array like ["Service 1", "Service 2"] or []. No commentary.`;
   }
 }
 
+/**
+ * Read the shared cross-flow business context. Single source of truth is
+ * `user.metadata.websiteData` — whatever the webdev flow accumulated is
+ * what the ad / logo / chatbot flows see when the user pivots into them.
+ *
+ * Every field is returned (null if missing) so callers can decide what
+ * they care about without repeating the same `metadata?.websiteData?.X`
+ * dance everywhere. Returns an empty-ish object for brand-new users.
+ *
+ * Callers should NOT write back to websiteData from secondary flows —
+ * websiteData is owned by the webdev flow. If the user types a different
+ * business name into the ad flow, that's local to adData; it doesn't
+ * poison the website data the next webdev turn will see.
+ */
+function getSharedBusinessContext(user) {
+  const wd = (user && user.metadata && user.metadata.websiteData) || {};
+  return {
+    businessName: wd.businessName || null,
+    industry: wd.industry || null,
+    primaryCity: wd.primaryCity || null,
+    serviceAreas: Array.isArray(wd.serviceAreas) ? wd.serviceAreas : [],
+    services: Array.isArray(wd.services) ? wd.services : [],
+    primaryColor: wd.primaryColor || null,
+    secondaryColor: wd.secondaryColor || null,
+    accentColor: wd.accentColor || null,
+    contactEmail: wd.contactEmail || null,
+    contactPhone: wd.contactPhone || null,
+    contactAddress: wd.contactAddress || null,
+  };
+}
+
 module.exports = {
   extractWebsiteFields,
   mergeWebsiteFields,
   hydrateWebsiteData,
   extractIndustry,
   extractServices,
+  getSharedBusinessContext,
 };

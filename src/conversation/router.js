@@ -648,6 +648,9 @@ async function _routeMessage(message) {
       followupSteps: [],
       lastSeoAnalysis: null,
       lastSeoUrl: null,
+      seoTopFix: null,
+      seoAuditCompletedAt: null,
+      currentAuditId: null,
       chatbotData: null,
       adData: null,
       logoData: null,
@@ -664,6 +667,30 @@ async function _routeMessage(message) {
       revisionCount: 0,
       bonusRevisionUsed: false,
       lastRevisionComplexity: null,
+      // Domain state — otherwise the sales bot sees a leftover
+      // selectedDomain and offers "umairbarber.com" to a fresh user.
+      selectedDomain: null,
+      domainStatus: null,
+      domainPaymentPending: false,
+      domainPurchasedAt: null,
+      // Rolling conversation summary (Phase 0) gets re-injected into every
+      // sales-bot prompt, so leaving it across /reset is the #1 way the
+      // previous session's context leaks into a "fresh" start. Clear it.
+      conversationSummary: null,
+      conversationSummaryAt: null,
+      // Humanize flags that gate per-user behavior across turns.
+      objectionTopics: [],
+      preferredLanguage: null,
+      postWebsiteUpsellSent: false,
+      postWebsiteUpsellKind: null,
+      postWebsiteUpsellAt: null,
+      undoPendingState: null,
+      stateHistory: [],
+      // Lead-temperature accounting.
+      userMessageCount: 0,
+      leadTemperature: 'COLD',
+      // Session-recap gate.
+      sessionRecapLastAt: null,
     });
     // Clear conversation history so the sales bot starts fresh
     const { clearHistory } = require('../db/conversations');
@@ -679,9 +706,15 @@ async function _routeMessage(message) {
   }
 
   // Check for menu command (text or button) - go back to service selection
+  // AND send the main menu directly. Falling through would land in
+  // handleServiceSelection's default "hmm, didn't catch that" branch
+  // because "/menu" isn't in matchServiceFromText's service-keyword list.
   if ((text && text.toLowerCase().trim() === '/menu') || message.buttonId === 'menu_main') {
     await updateUserState(user.id, STATES.SERVICE_SELECTION);
     user.state = STATES.SERVICE_SELECTION;
+    const { sendMainMenu } = require('./handlers/serviceSelection');
+    await sendMainMenu(user);
+    return;
   }
 
   // ── Salon owner commands (run before state routing) ───────────────────────
@@ -798,11 +831,24 @@ async function _routeMessage(message) {
     logger.debug(`Intent classified for ${from} in state ${user.state}: ${intent}`);
 
     if (intent === 'menu' || intent === 'exit') {
-      // Update state first, then show the service menu with a clean synthetic message
+      // Flow-switch or exit. Figure out which service the user wants to
+      // switch TO (handles negation like "forget the website, do chatbot"
+      // and plurals like "marketing ads" via LLM fallback when regex
+      // alone isn't reliable). If a target service is found, route them
+      // to its start handler directly. If not, show the main menu.
       await updateUserState(user.id, STATES.SERVICE_SELECTION);
       user.state = STATES.SERVICE_SELECTION;
-      // Use a synthetic message so handleServiceSelection shows the menu (default branch)
-      const newState = await handleServiceSelection(user, { ...message, text: '', buttonId: '', listId: '' });
+      const { pickServiceFromSwitch } = require('./handlers/serviceSelection');
+      const targetService = await pickServiceFromSwitch(text, user.id);
+      const newState = await handleServiceSelection(user, {
+        ...message,
+        // Pre-resolved service tells handleServiceSelection exactly which
+        // case to run. Falls back to matchServiceFromText → default if
+        // null (no service mentioned).
+        buttonId: targetService || '',
+        listId: '',
+        text: targetService ? '' : (message.text || ''),
+      });
       if (newState && newState !== user.state) {
         await updateUserState(user.id, newState);
       }

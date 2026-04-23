@@ -285,7 +285,7 @@ The bot is currently asking: "{{CURRENT_QUESTION}}"
 Classify the user's message into ONE of these intents:
 - "answer"  - The message is a genuine answer to the question being asked, OR the user is telling the bot to figure it out / use context / derive it from previous messages. Treat these as answers - the handler will deal with inferring the value.
 - "question"  - The user is asking something clearly unrelated (about services, pricing, other topics)
-- "menu"  - The user wants to see the main menu, go back, or explore other services
+- "menu"  - The user wants to see the main menu, go back, explore other services, OR switch to a different service entirely ("forget the website, do a logo instead", "scrap this, can you do ads?", "wait, can you also build a chatbot?"). Any message that names a DIFFERENT service than the one currently being collected is a flow-switch and should be "menu".
 - "exit"  - The user wants to stop the current flow entirely
 - "objection"  - The user is pushing back on the PROCESS ITSELF — expressing doubt about value, price, trust, or stalling ("too expensive", "I'll just use Wix", "not sure this is worth it", "let me think about it"). This is NOT an answer to the current question; it's a concern that needs to be addressed before the flow can continue. Only use this when the pushback is clearly about buying/continuing, not when they're complaining about one specific ask.
 
@@ -298,6 +298,10 @@ Examples:
 - Current question: "What is your business name?" / Message: "What services do you offer?" → {"intent": "question"}
 - Current question: "What industry are you in?" / Message: "No I want to see other options" → {"intent": "menu"}
 - Current question: "Send your website URL" / Message: "Actually forget it" → {"intent": "exit"}
+- Current question: "Please share your contact details" / Message: "forget the website, can you do ai chatbot for me?" → {"intent": "menu"}
+- Current question: "What industry are you in?" / Message: "actually scrap this, let's do a logo instead" → {"intent": "menu"}
+- Current question: "What are your brand colors?" / Message: "wait, can you do marketing ads too?" → {"intent": "menu"}
+- Current question: "What services do you offer?" / Message: "hold on, can you also build a chatbot?" → {"intent": "menu"}
 - Current question: "What industry are you in?" / Message: "figure it out from the idea" → {"intent": "answer"}
 - Current question: "What industry are you in?" / Message: "I can't figure out, you tell me" → {"intent": "answer"}
 - Current question: "What services do you offer?" / Message: "I already told you" → {"intent": "answer"}
@@ -307,7 +311,7 @@ Examples:
 - Current question: "What are your brand colors?" / Message: "idk what ChatGPT would just do this for free" → {"intent": "objection"}`;
 
 /**
- * Build the Bytes Platform sales bot system prompt.
+ * Build the Pixie sales bot system prompt.
  * @param {string} calendlyUrl - Booking link injected into the prompt
  * @param {object} portfolio - { website1, website2, ecommerce }
  * @param {string} [adSource] - 'web'|'seo'|'smm'|'ecommerce'|'generic'

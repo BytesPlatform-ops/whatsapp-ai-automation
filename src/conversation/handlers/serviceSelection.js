@@ -9,9 +9,47 @@ const { logMessage } = require('../../db/conversations');
 const { updateUserMetadata } = require('../../db/users');
 const { STATES, SERVICE_IDS } = require('../states');
 
+// Send the main menu (3 top-level buttons). Called from the /menu command
+// path in the router so the user sees a proper greeting instead of the
+// "hmm, didn't catch that" preface that the default case uses for truly
+// unrecognized input. Also reusable if any other handler wants to bounce
+// the user back to the menu cleanly.
+async function sendMainMenu(user) {
+  await sendInteractiveButtons(
+    user.phone_number,
+    "Here's what I can help with — pick one to get started:",
+    [
+      { id: 'svc_seo', title: '🔍 SEO Audit' },
+      { id: 'svc_webdev', title: '🌐 Website' },
+      { id: 'svc_more', title: '📋 More Services' },
+    ]
+  );
+  await logMessage(user.id, 'Showed main menu', 'assistant', 'interactive');
+  return STATES.SERVICE_SELECTION;
+}
+
+// Exploratory phrases that mean "show me more options" — "any other
+// services?", "what else do you have?", "show me everything". Checked
+// BEFORE matchServiceFromText so /what/ doesn't misroute these to the
+// FAQ handler.
+function looksExploratory(text) {
+  const t = String(text || '').toLowerCase();
+  return (
+    /\b(other|more|else|additional|full|all|whole|every|complete|rest|anything|available|offerings?|more services|more options)\b/i.test(t) ||
+    /\b(what else|what other|what services|whats available|what.s available|anything else|any other|show.*(all|list|everything))\b/i.test(t)
+  );
+}
+
 async function handleServiceSelection(user, message) {
   const buttonId = message.buttonId || message.listId || '';
   const text = (message.text || '').toLowerCase().trim();
+
+  // Early: exploratory phrases ("what other services?", "more options",
+  // "whats available") should go to the full list, NOT match /what/ below
+  // and land in the FAQ handler. Pre-empts matchServiceFromText.
+  if (!buttonId && text && looksExploratory(text)) {
+    return handleServiceSelection(user, { ...message, buttonId: 'svc_more', text: '' });
+  }
 
   // Handle "More Services" button - show full list
   if (buttonId === 'svc_more') {
@@ -114,48 +152,25 @@ async function handleServiceSelection(user, message) {
       await logMessage(user.id, 'Starting marketing flow', 'assistant');
       return STATES.MARKETING_COLLECT_DETAILS;
 
-    case 'svc_adgen':
-      // Clear any stale ad data from previous sessions so the new ad starts fresh
-      await updateUserMetadata(user.id, { adData: null });
-      await sendWithMenuButton(
-        user.phone_number,
-        '🎨 *Marketing Ad Generator*\n\n' +
-          'Create professional social media ad images for your brand — the same quality used by top digital agencies!\n\n' +
-          '✅ Instagram, Facebook & TikTok ready\n' +
-          '✅ Industry-specific creative direction\n' +
-          '✅ Your brand colors, logo & pricing included\n' +
-          '✅ Ready to post in 60 seconds\n\n' +
-          'Let\'s get started!'
-      );
-      await logMessage(user.id, 'Starting ad generation flow', 'assistant');
-      return STATES.AD_COLLECT_BUSINESS;
+    case 'svc_adgen': {
+      // Phase 11: cross-flow entry pre-fills businessName + industry from
+      // metadata.websiteData (set by the webdev flow) and jumps straight
+      // to the first missing state. Greeting + state transition both
+      // live in startAdFlow so the two paths (menu tap here vs sales-bot
+      // trigger) can never drift.
+      const { startAdFlow } = require('./adGeneration');
+      return startAdFlow(user);
+    }
 
-    case 'svc_logo':
-      // Clear any stale logo data from previous sessions so the new logo starts fresh
-      await updateUserMetadata(user.id, { logoData: null });
-      await sendWithMenuButton(
-        user.phone_number,
-        '✨ *Logo Maker*\n\n' +
-          'Get a professional brand logo designed for you — like having a top branding agency at your fingertips!\n\n' +
-          '✅ 5 unique logo concepts to choose from\n' +
-          '✅ Wordmark, symbol, combination & more\n' +
-          '✅ Industry-authentic style direction\n' +
-          '✅ Ready to use in 60 seconds\n\n' +
-          'Let\'s design your brand!'
-      );
-      await logMessage(user.id, 'Starting logo generation flow', 'assistant');
-      return STATES.LOGO_COLLECT_BUSINESS;
+    case 'svc_logo': {
+      const { startLogoFlow } = require('./logoGeneration');
+      return startLogoFlow(user);
+    }
 
-    case 'svc_chatbot':
-      await sendWithMenuButton(
-        user.phone_number,
-        '🤖 *AI Chatbot for Your Business*\n\n' +
-          'Our AI Chatbot gives your business a 24/7 virtual assistant that answers customer questions, captures leads, and never misses a message.\n\n' +
-          'Let me show you a live demo built specifically for YOUR business - it takes about 2 minutes!\n\n' +
-          'First, what\'s your *business name*?'
-      );
-      await logMessage(user.id, 'Starting AI chatbot demo flow', 'assistant');
-      return STATES.CB_COLLECT_NAME;
+    case 'svc_chatbot': {
+      const { startChatbotFlow } = require('./chatbotService');
+      return startChatbotFlow(user);
+    }
 
     case 'svc_info':
       await sendWithMenuButton(
@@ -180,22 +195,10 @@ async function handleServiceSelection(user, message) {
       return STATES.SALES_CHAT;
 
     default: {
-      // Didn't match any specific service. Figure out what kind of
-      // non-match we're looking at and tailor the response:
-      //   - Exploration question ("any other services?", "what else do
-      //     you have?") → jump straight to the full service list.
-      //   - Question-shaped input → soft acknowledgment before re-show.
-      //   - Everything else → plain re-show.
-      const looksExploratory =
-        /\b(other|more|else|additional|full|all|whole|every|complete|rest|anything|available|offerings?|more services|more options)\b/i.test(text) ||
-        /\b(what else|what other|what services|whats available|what.s available|anything else|any other|show.*(all|list|everything))\b/i.test(text);
-
-      if (looksExploratory) {
-        // User wants to see the full list. Route as if they tapped
-        // "More Services" — recurse into the handler with that buttonId.
-        return handleServiceSelection(user, { ...message, buttonId: 'svc_more', text: '' });
-      }
-
+      // Exploratory phrases already pre-empted at the top of the handler,
+      // so if we're here the user's input isn't asking for "more / other
+      // / else" services. Tailor the re-show based on whether the input
+      // looks like a question (so the preface reads right).
       const isQuestion =
         /\?$/.test(text) ||
         /^(what|whats|which|how|hows|when|whens|where|wheres|why|whys|does|do|can|could|should|would|is|are|will|who|whos|tell)\b/i.test(text);
@@ -228,7 +231,7 @@ function matchServiceFromText(text) {
   if (/\b(website|web ?dev|site|redesign)\b/i.test(text)) return 'svc_webdev';
   if (/\b(app|mobile|android|ios)\b/i.test(text)) return 'svc_appdev';
   if (/\b(market|advertis|social media|ppc|brand)\b/i.test(text)) return 'svc_marketing';
-  if (/\b(ad\s*gen|ads?\s*creat|ad\s*design|ad\s*image|ad\s*maker|create\s*ad|design\s*ad|marketing\s*ad)\b/i.test(text)) return 'svc_adgen';
+  if (/\b(ad\s*gen|ads?\s*creat|ad\s*design|ad\s*image|ad\s*maker|create\s*ads?|design\s*ads?|marketing\s*ads?)\b/i.test(text)) return 'svc_adgen';
   if (/\b(logo|brand\s*mark|wordmark|brand\s*design|design\s*logo|create\s*logo|make\s*logo|logo\s*maker)\b/i.test(text)) return 'svc_logo';
   if (/\b(chatbot|chat ?bot|ai assistant|virtual assistant|ai chat)\b/i.test(text)) return 'svc_chatbot';
   if (/\b(faq|support|info|question|help|how|what)\b/i.test(text)) return 'svc_info';
@@ -236,4 +239,70 @@ function matchServiceFromText(text) {
   return null;
 }
 
-module.exports = { handleServiceSelection };
+/**
+ * LLM-backed service picker for flow-switch messages. Use this when the
+ * intent classifier has already marked a message as `menu` or `exit`
+ * and we need to figure out WHICH service the user wants to switch to —
+ * especially cases where regex gets confused (negation: "forget the
+ * website, do chatbot"; plurals: "marketing ads"; filler words).
+ *
+ * Returns one of the svc_* ids, or null if the user just wants the menu
+ * without a specific target.
+ */
+async function pickServiceFromSwitch(text, userId) {
+  const raw = String(text || '').trim();
+  if (!raw) return null;
+
+  // Fast path: regex already handles the clear cases cleanly. Only fall
+  // through to LLM when regex found nothing OR the text contains words
+  // that often trip the regex (negation + another service word).
+  const regexHit = matchServiceFromText(raw);
+  const hasNegation = /\b(forget|skip|scrap|cancel|drop|leave|nvm|never\s*mind|instead)\b/i.test(raw);
+  if (regexHit && !hasNegation) return regexHit;
+
+  const { generateResponse } = require('../../llm/provider');
+  const { logger } = require('../../utils/logger');
+
+  const prompt = `The user is switching between services mid-flow. Pick which service they want to DO NEXT from this exact list. Return ONLY JSON: {"service": "<id>"|null}.
+
+Services:
+- svc_seo: free SEO audit of a website
+- svc_webdev: build a new website
+- svc_ecommerce: online store (ByteScart)
+- svc_appdev: mobile / web app development
+- svc_marketing: digital marketing / SEO package / strategy
+- svc_adgen: generate marketing AD IMAGES for social media
+- svc_logo: make a brand logo
+- svc_chatbot: AI chatbot for a business
+- svc_info: FAQ / info / support
+- svc_general: talk to sales
+
+Rules:
+- If the user says "forget/skip/cancel X, do Y", pick Y — ignore what they're leaving behind.
+- Match plurals and synonyms: "marketing ads" → svc_adgen, "chat bot" → svc_chatbot, "website" → svc_webdev.
+- If they just want to go back to the menu with no specific target, return {"service": null}.
+- If nothing in the message maps to a service, return {"service": null}.
+
+User message: "${raw.replace(/"/g, '\\"').slice(0, 300)}"`;
+
+  try {
+    const resp = await generateResponse(
+      prompt,
+      [{ role: 'user', content: 'Pick the service now.' }],
+      { userId, operation: 'service_switch_pick', timeoutMs: 10_000 }
+    );
+    const m = String(resp || '').match(/\{[\s\S]*?\}/);
+    if (!m) return null;
+    const parsed = JSON.parse(m[0]);
+    const svc = parsed?.service;
+    if (typeof svc !== 'string') return null;
+    // Only accept known service ids
+    const known = new Set(['svc_seo', 'svc_webdev', 'svc_ecommerce', 'svc_appdev', 'svc_marketing', 'svc_adgen', 'svc_logo', 'svc_chatbot', 'svc_info', 'svc_general']);
+    return known.has(svc) ? svc : null;
+  } catch (err) {
+    logger.warn(`[SERVICE-PICK] LLM call failed: ${err.message}`);
+    return null;
+  }
+}
+
+module.exports = { handleServiceSelection, sendMainMenu, matchServiceFromText, pickServiceFromSwitch };

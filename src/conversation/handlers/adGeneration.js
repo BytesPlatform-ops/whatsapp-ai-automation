@@ -93,23 +93,74 @@ async function handleAdGeneration(user, message) {
 // ── Step handlers ─────────────────────────────────────────────────────────────
 
 /**
- * Entry point — clear any previous adData and ask for business name
+ * Entry point — clear any previous adData, pre-fill from the shared
+ * cross-flow pool (set by the webdev flow), and route to the first
+ * state that still needs input. When businessName + industry are
+ * carried from websiteData, we skip both questions and jump straight
+ * to AD_COLLECT_NICHE.
  */
 async function handleStart(user, message) {
+  const { getSharedBusinessContext } = require('../entityAccumulator');
+  const shared = getSharedBusinessContext(user);
+
+  // Reset ad-specific fields; pre-fill the shared ones.
   await saveAdData(user, {
-    businessName: null, industry: null, niche: null, productType: null,
-    slogan: null, pricing: null, brandColors: null, imageBase64: null, ideas: null, selectedIdeaIndex: null,
+    businessName: shared.businessName || null,
+    industry: shared.industry || null,
+    // Ad-specific — always start fresh.
+    niche: null, productType: null, slogan: null, pricing: null,
+    brandColors: null, imageBase64: null, ideas: null, selectedIdeaIndex: null,
+    suggestedBusinessName: null,
   });
 
+  const hasName = !!shared.businessName;
+  const hasIndustry = !!shared.industry;
+
+  // Craft an intro that acknowledges what carried over from webdev so
+  // the user isn't confused by the skipped questions.
+  const ctxLines = [];
+  if (hasName) ctxLines.push(`*${shared.businessName}*`);
+  if (hasIndustry) ctxLines.push(`_${shared.industry}_`);
+  const carriedNote = ctxLines.length ? `\n\nUsing what I have from earlier: ${ctxLines.join(' · ')}.\n` : '';
+
+  // Decide the first state that still needs input.
+  if (!hasName) {
+    await sendWithMenuButton(
+      user.phone_number,
+      '🎨 *Marketing Ad Generator*\n\n' +
+        'I\'ll create a professional marketing ad image for your brand — the same quality used by top digital agencies!\n\n' +
+        'Let\'s start with the basics.\n\n' +
+        'What is your *business name*?'
+    );
+    await logMessage(user.id, 'Started ad generation flow', 'assistant');
+    return STATES.AD_COLLECT_BUSINESS;
+  }
+
+  if (!hasIndustry) {
+    await sendWithMenuButton(
+      user.phone_number,
+      `🎨 *Marketing Ad Generator*${carriedNote}\n` +
+        `What *industry* are you in?\n\n` +
+        'Examples:\n' +
+        '• Food & Beverage\n• Fashion & Apparel\n• Beauty & Skincare\n' +
+        '• Tech / Software\n• Real Estate\n• Fitness & Gym\n• Education\n• Retail / E-commerce\n\n' +
+        'Type your industry:'
+    );
+    await logMessage(user.id, `Started ad generation with prefilled name=${shared.businessName}`, 'assistant');
+    return STATES.AD_COLLECT_INDUSTRY;
+  }
+
+  // Name + industry both carried. Skip to the first ad-specific ask.
   await sendWithMenuButton(
     user.phone_number,
-    '🎨 *Marketing Ad Generator*\n\n' +
-      'I\'ll create a professional marketing ad image for your brand — the same quality used by top digital agencies!\n\n' +
-      'Let\'s start with the basics.\n\n' +
-      'What is your *business name*?'
+    `🎨 *Marketing Ad Generator*${carriedNote}\n` +
+      `What *product or service* is this ad promoting?\n\n` +
+      'Be specific — the more detail, the better the ad!\n\n' +
+      'Examples:\n' +
+      '• Premium Basmati Rice\n• Wedding Photography Package\n• Online Excel Course\n• Handmade Leather Bags'
   );
-  await logMessage(user.id, 'Started ad generation flow', 'assistant');
-  return STATES.AD_COLLECT_BUSINESS;
+  await logMessage(user.id, `Started ad generation with prefilled name=${shared.businessName}, industry=${shared.industry}`, 'assistant');
+  return STATES.AD_COLLECT_NICHE;
 }
 
 // Words that look like user confirmations, not real brand names
@@ -624,4 +675,11 @@ async function handleRestartFlow(user, message) {
   return handleStart(user, message);
 }
 
-module.exports = { handleAdGeneration };
+// Exported so serviceSelection.js can invoke it directly when the user
+// picks the "Marketing Ads" menu option. Skips collection states whose
+// fields are already in the shared websiteData pool (Phase 11).
+async function startAdFlow(user) {
+  return handleStart(user, null);
+}
+
+module.exports = { handleAdGeneration, startAdFlow };

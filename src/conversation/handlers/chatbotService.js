@@ -378,4 +378,78 @@ async function activateTrial(user) {
   }
 }
 
-module.exports = { handleChatbotService };
+/**
+ * Cross-flow entry (Phase 11). Pre-fills businessName, industry, and
+ * services from the shared websiteData pool (populated by the webdev
+ * flow) and jumps straight to the first collection state that still
+ * needs input. When everything shared is already known, skips straight
+ * to the chatbot-specific FAQ ask.
+ *
+ * Called from serviceSelection.js on the svc_chatbot branch so the user
+ * doesn't re-type name/industry/services they already gave to webdev.
+ */
+async function startChatbotFlow(user) {
+  const { getSharedBusinessContext } = require('../entityAccumulator');
+  const shared = getSharedBusinessContext(user);
+
+  // Pre-fill chatbotData with the shared fields. Keep existing FAQs /
+  // hours / location untouched — those are chatbot-specific and the
+  // user may have partially filled them on a previous pass.
+  const existing = user.metadata?.chatbotData || {};
+  const seeded = { ...existing };
+  if (shared.businessName && !seeded.businessName) seeded.businessName = shared.businessName;
+  if (shared.industry && !seeded.industry) seeded.industry = shared.industry;
+  if (Array.isArray(shared.services) && shared.services.length > 0 && (!seeded.services || !seeded.services.length)) {
+    // Store the services list as a single string so it renders naturally
+    // in the chatbot config — handleCollectServices stores free text.
+    seeded.services = shared.services.join(', ');
+  }
+  await updateUserMetadata(user.id, { chatbotData: seeded });
+  user.metadata = { ...(user.metadata || {}), chatbotData: seeded };
+
+  const hasName = !!seeded.businessName;
+  const hasIndustry = !!seeded.industry;
+  const hasServices = !!seeded.services;
+
+  const ctxLines = [];
+  if (hasName) ctxLines.push(`*${seeded.businessName}*`);
+  if (hasIndustry) ctxLines.push(`_${seeded.industry}_`);
+  const carriedNote = ctxLines.length ? `\n\nUsing what I have from earlier: ${ctxLines.join(' · ')}.` : '';
+
+  if (!hasName) {
+    await sendWithMenuButton(
+      user.phone_number,
+      '🤖 *AI Chatbot for Your Business*\n\n' +
+        "Let's build you a 24/7 AI assistant that answers customer questions and captures leads.\n\n" +
+        "First, what's your *business name*?"
+    );
+    await logMessage(user.id, 'Started chatbot flow', 'assistant');
+    return STATES.CB_COLLECT_NAME;
+  }
+
+  if (!hasIndustry) {
+    await sendWithMenuButton(
+      user.phone_number,
+      `🤖 *AI Chatbot for Your Business*${carriedNote}\n\n` +
+        `What *industry* is your business in? (e.g. restaurant, dental clinic, salon, real estate, gym)`
+    );
+    await logMessage(user.id, `Started chatbot flow with prefilled name=${seeded.businessName}`, 'assistant');
+    return STATES.CB_COLLECT_INDUSTRY;
+  }
+
+  // Name + industry present. Even with services pre-filled, FAQs are
+  // chatbot-specific and always need to be collected — so jump to
+  // FAQs regardless of services state.
+  const servicesNote = hasServices
+    ? ` I've got your service list too, so we can skip that.`
+    : '';
+  await sendWithMenuButton(
+    user.phone_number,
+    `🤖 *AI Chatbot for Your Business*${carriedNote}${servicesNote}\n\n` +
+      "What are the top questions your customers usually ask? Send them one per message, then type *done* when you're finished."
+  );
+  await logMessage(user.id, `Started chatbot flow with prefilled name=${seeded.businessName}, industry=${seeded.industry}, services=${hasServices}`, 'assistant');
+  return STATES.CB_COLLECT_FAQS;
+}
+
+module.exports = { handleChatbotService, startChatbotFlow };
