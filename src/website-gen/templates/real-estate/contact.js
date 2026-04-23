@@ -1,10 +1,11 @@
 const {
   esc, telHref, icon,
   wrapRealEstatePage, netlifyFormAttrs, netlifyHiddenFields,
-  getRealEstateAgentSchema, TOKENS,
+  getRealEstateAgentSchema, buildTokens,
 } = require('./common');
 
 function generateContactPage(c) {
+  const TOKENS = buildTokens(c);
   const phone = c.contactPhone || '';
   const tel = telHref(phone);
   const email = c.contactEmail || '';
@@ -145,6 +146,7 @@ function generateContactPage(c) {
 }
 
 function generateThankYouPage(c) {
+  const TOKENS = buildTokens(c);
   const phone = c.contactPhone || '';
   const tel = telHref(phone);
   const body = `
@@ -168,6 +170,7 @@ function generateThankYouPage(c) {
 }
 
 function generateThankYouCmaPage(c) {
+  const TOKENS = buildTokens(c);
   const phone = c.contactPhone || '';
   const tel = telHref(phone);
   const body = `

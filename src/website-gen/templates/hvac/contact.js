@@ -1,7 +1,8 @@
-const { esc, telHref, icon, wrapHvacPage, netlifyFormAttrs, netlifyHiddenFields, getLocalBusinessSchema, getTradeCopy, TOKENS } = require('./common');
+const { esc, telHref, icon, wrapHvacPage, netlifyFormAttrs, netlifyHiddenFields, getLocalBusinessSchema, getTradeCopy, buildTokens } = require('./common');
 
 function generateContactPage(c) {
   const tc = getTradeCopy(c);
+  const TOKENS = buildTokens(c);
   const phone = c.contactPhone || '';
   const tel = telHref(phone);
   const email = c.contactEmail || '';
@@ -128,6 +129,7 @@ function generateContactPage(c) {
 function generateThankYouPage(c) {
   const phone = c.contactPhone || '';
   const tel = telHref(phone);
+  const TOKENS = buildTokens(c);
   const body = `
     <section class="sect" style="min-height:60vh;display:flex;align-items:center">
       <div class="ctn center" style="max-width:640px">

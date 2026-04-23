@@ -1,7 +1,8 @@
-const { esc, telHref, icon, iconFilled, googleGlyph, wrapHvacPage, getLocalBusinessSchema, getServiceListSchema, getTradeCopy, TOKENS } = require('./common');
+const { esc, telHref, icon, iconFilled, googleGlyph, wrapHvacPage, getLocalBusinessSchema, getServiceListSchema, getTradeCopy, buildTokens } = require('./common');
 
 function generateHomePage(c) {
   const tc = getTradeCopy(c);
+  const TOKENS = buildTokens(c);
   const phone = c.contactPhone || '';
   const tel = telHref(phone);
   const city = c.primaryCity || '';
@@ -52,7 +53,7 @@ function generateHomePage(c) {
         <div class="hero-grid">
           <div class="rv">
             <span class="chip chip-orange" style="margin-bottom:18px">
-              ${iconFilled('star', 14, '#F97316')} Rated ${esc(rating)} &middot; ${esc(reviewCount)} Google Reviews
+              ${iconFilled('star', 14, TOKENS.orange)} Rated ${esc(rating)} &middot; ${esc(reviewCount)} Google Reviews
             </span>
             <h1 class="h1 mb-4">${city ? `${esc(city)}'s Trusted` : 'Your Trusted'}<br><span style="color:${TOKENS.action}">${esc(tc.heroAccent)}</span> Experts.</h1>
             <p class="body-lg mb-6" style="max-width:560px">${esc(c.heroSub || tc.heroSub)}</p>

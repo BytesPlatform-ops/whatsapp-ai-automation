@@ -53,6 +53,15 @@ function fmtMoney(n, currency = 'USD') {
 }
 
 // ─── Design tokens ──────────────────────────────────────────────────────────
+// TOKENS holds the default editorial real-estate palette (deep navy +
+// champagne gold). buildTokens(c) merges user overrides on top so
+// revisions like "change colors to emerald" actually recolor the rendered
+// CSS — without this the template was emitting hardcoded navy regardless
+// of what site_data.primaryColor was set to.
+//
+// Status-badge colours (For Sale / Just Listed / Pending / Sold) stay
+// hardcoded — they're not brand chrome, they're a UX signal on listings
+// that users shouldn't accidentally recolor.
 
 const TOKENS = {
   navy: '#1A2B45',
@@ -72,6 +81,24 @@ const TOKENS = {
   badgePending: '#B8975C',
   badgeSold: '#1A2B45',
 };
+
+function buildTokens(c = {}) {
+  const primary = c.primaryColor || TOKENS.navy;
+  const secondary = c.secondaryColor || TOKENS.navyHover;
+  const accent = c.accentColor || TOKENS.gold;
+  return {
+    ...TOKENS,
+    navy: primary,
+    navyHover: secondary,
+    charcoal: primary,
+    heading: primary,
+    gold: accent,
+    // goldHover: stays at default so hover has visible contrast; most
+    // user overrides look fine against the default hover shade.
+    badgeSold: primary,     // status badge mirrors the brand navy
+    badgeJustListed: accent, // "just listed" badge reuses brand accent
+  };
+}
 
 // ─── Inline icons (minimal — used sparingly per editorial style) ────────────
 
@@ -168,8 +195,8 @@ const DEFAULT_LISTINGS = [
 
 // ─── Styles ─────────────────────────────────────────────────────────────────
 
-function getRealEstateStyles(heroPal) {
-  const t = TOKENS;
+function getRealEstateStyles(heroPal, c = {}) {
+  const t = buildTokens(c);
   // When the hero palette resolves to dark text (bright Unsplash image), flip
   // the title/subhead colours and lighten the left-weighted overlay so the
   // photo shows through. Otherwise keep the existing white-on-navy look.
@@ -942,9 +969,10 @@ function getFooter(c) {
 
 function getFAB(c) {
   // Schedule FAB — calendar icon, gold, mobile only
+  const t = buildTokens(c);
   const url = c.calendlyUrl || '/contact';
   const isExternal = /^https?:/.test(url);
-  return `<a class="fab" href="${esc(url)}"${isExternal ? ' target="_blank" rel="noopener"' : ''} aria-label="Schedule a call">${icon('calendar', 22, TOKENS.navy)}</a>`;
+  return `<a class="fab" href="${esc(url)}"${isExternal ? ' target="_blank" rel="noopener"' : ''} aria-label="Schedule a call">${icon('calendar', 22, t.navy)}</a>`;
 }
 
 // ─── Form attrs / hidden fields ─────────────────────────────────────────────
@@ -1020,11 +1048,11 @@ function wrapRealEstatePage(c, cur, body, opts = {}) {
 <meta property="og:title" content="${title}">
 <meta property="og:description" content="${desc}">
 <meta property="og:type" content="website">
-<meta name="theme-color" content="${TOKENS.navy}">
+<meta name="theme-color" content="${buildTokens(c).navy}">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,500;1,600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<style>${getRealEstateStyles(opts.heroPal)}</style>
+<style>${getRealEstateStyles(opts.heroPal, c)}</style>
 ${schemas}
 </head>
 <body>
@@ -1039,6 +1067,7 @@ ${getRealEstateScript()}
 
 module.exports = {
   TOKENS,
+  buildTokens,
   DEFAULT_DESIGNATIONS,
   DEFAULT_LISTINGS,
   esc,

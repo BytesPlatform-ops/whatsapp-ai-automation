@@ -1,9 +1,10 @@
 const {
   esc, telHref, icon, agentHeadshot,
-  wrapRealEstatePage, getRealEstateAgentSchema, TOKENS, DEFAULT_DESIGNATIONS,
+  wrapRealEstatePage, getRealEstateAgentSchema, buildTokens, DEFAULT_DESIGNATIONS,
 } = require('./common');
 
 function generateAboutPage(c) {
+  const TOKENS = buildTokens(c);
   const phone = c.contactPhone || '';
   const tel = telHref(phone);
   const city = c.primaryCity || '';

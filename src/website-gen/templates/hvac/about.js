@@ -1,7 +1,8 @@
-const { esc, telHref, icon, iconFilled, wrapHvacPage, getLocalBusinessSchema, getTradeCopy, TOKENS } = require('./common');
+const { esc, telHref, icon, iconFilled, wrapHvacPage, getLocalBusinessSchema, getTradeCopy, buildTokens } = require('./common');
 
 function generateAboutPage(c) {
   const tc = getTradeCopy(c);
+  const TOKENS = buildTokens(c);
   const phone = c.contactPhone || '';
   const tel = telHref(phone);
   const years = c.yearsExperience || '15';

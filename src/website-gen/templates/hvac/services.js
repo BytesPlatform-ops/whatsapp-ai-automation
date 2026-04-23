@@ -1,4 +1,4 @@
-const { esc, telHref, icon, wrapHvacPage, getLocalBusinessSchema, getServiceListSchema, getTradeCopy, TOKENS } = require('./common');
+const { esc, telHref, icon, wrapHvacPage, getLocalBusinessSchema, getServiceListSchema, getTradeCopy, buildTokens } = require('./common');
 
 function slugify(s) {
   return String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
@@ -13,6 +13,7 @@ function priceDisplay(priceFrom) {
 
 function generateServicesPage(c) {
   const tc = getTradeCopy(c);
+  const TOKENS = buildTokens(c);
   const phone = c.contactPhone || '';
   const tel = telHref(phone);
   const services = c.services || [];
