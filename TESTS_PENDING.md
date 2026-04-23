@@ -4,6 +4,41 @@ Every item below needs verification on real WhatsApp before shipping. Tests are 
 
 ---
 
+## Phase 14 — Document + location handling (commit pending)
+
+WhatsApp users can drop location pins and upload documents. Before this phase those messages fell through to text-only state handlers that produced *"sorry, didn't catch that"* replies. Now both are intercepted in the router and handled cleanly.
+
+### Location pins
+
+Reverse-geocoded via OpenStreetMap Nominatim (free, no API key). When the user is mid-webdev at a city/address step, the pin auto-seeds `primaryCity` + `contactAddress` in websiteData.
+
+- [ ] **Location during `WEB_COLLECT_AREAS`** — drop a pin in Austin → bot saves `primaryCity='Austin'` + `contactAddress='..., Austin, Texas'`, replies *"Got your location based in *Austin*. Saved the address for your site too."* Next turn, flow advances to the next missing state (services).
+- [ ] **Location during `WEB_COLLECT_CONTACT`** — drop a pin while the bot is asking for contact info → auto-seeds address, acks, advances. No need to retype anything.
+- [ ] **Location during `SALES_CHAT` (no seeding)** — drop a pin mid-sales conversation → plain ack *"Got your location: *Austin, Texas*. Let me know if you'd like me to use this for anything specific."* No field seeding.
+- [ ] **Non-overwriting** — user already typed `primaryCity='Karachi'`, then drops a pin in Austin → city NOT overwritten. Pin still acknowledged.
+- [ ] **Geocoding failure** — simulate Nominatim unreachable (break the URL in geocoder.js) or use invalid coords → graceful fallback: *"Got your location (30.2672, -97.7431). I'll save the coordinates..."*. No crash.
+- [ ] **International location** — drop a pin in Karachi / Manhattan / London → correct city + country surfaced (e.g. *"Karachi, Sindh"*, *"New York, New York"*, *"London, England"*).
+
+Log lines: `[LOCATION] Seeded city+address for +phone at state WEB_COLLECT_AREAS` or `[LOCATION] Acked for +phone: Austin, Texas`.
+
+### Documents
+
+Captured to `user.metadata.documents[]` and acknowledged. No auto-parse — admin reviews manually via the dashboard.
+
+- [ ] **PDF upload** — send a PDF document → bot replies *"Thanks — got *myfile.pdf*. I'll pass this to the team for review..."*. Admin conversation page shows the inbound log *"[Document uploaded: myfile.pdf (application/pdf)]"*.
+- [ ] **Document with caption** — send a doc with caption *"my business plan"* → caption is stored on `metadata.documents[-1].caption` and appears in the conversation log.
+- [ ] **Metadata accumulates** — send three docs in one session → `metadata.documents` array has three entries, ordered by `receivedAt`. Use admin dashboard SQL/query to verify.
+- [ ] **Document mid-flow** — send a PDF while in `WEB_COLLECT_CONTACT` → bot acknowledges the doc but DOES NOT advance the webdev flow. Next turn continues from where the user was.
+
+Log line: `[DOC] Received myfile.pdf (application/pdf) from +phone`.
+
+### Edge cases
+
+- [ ] **Location during `humanTakeover`** — user in takeover drops a pin → Phase 14 intercept is gated on `!humanTakeover`, so the pin falls through to the existing takeover gate and is logged silently (no bot reply, no geocoder call). Same behavior for documents.
+- [ ] **Corrupt location payload** — location message with non-numeric lat/lng → handler returns `{handled: false}`, falls through to state handler.
+
+---
+
 ## Phase 13 — Abuse detection (commit pending)
 
 LLM classifier runs early in the router, before recap / greeting / handler dispatch. Eight categories: `hate`, `threats`, `phishing`, `hacking`, `illegal`, `nsfw_declined`, `gray_area`, `clean`. Hard categories trigger decline + bot silence (humanTakeover=true) + admin email. NSFW-legal gets polite decline only. Gray-area pivots to meeting booking.

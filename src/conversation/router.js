@@ -593,6 +593,36 @@ async function _routeMessage(message) {
     }
   }
 
+  // ── Document + location intercepts (Phase 14) ──────────────────────────
+  // Before state dispatch, catch non-text inbounds that handlers can't
+  // process. Location pins get reverse-geocoded and (when the user is
+  // mid-webdev) can seed primaryCity / contactAddress automatically.
+  // Documents are captured to metadata and acknowledged — admin handles
+  // content review manually.
+  //
+  // Silenced users (humanTakeover) are NOT handled here — their messages
+  // pass through to the takeover gate below and are logged without a
+  // bot reply, same as text messages.
+  const silencedForMedia = !!user.metadata?.humanTakeover;
+  if (!silencedForMedia && message.type === 'location') {
+    try {
+      const { handleLocation } = require('./handlers/locationHandler');
+      const result = await handleLocation(user, message);
+      if (result?.handled) return;
+    } catch (err) {
+      logger.error(`[LOCATION] Handler failed for ${from}: ${err.message}`);
+    }
+  }
+  if (!silencedForMedia && message.type === 'document') {
+    try {
+      const { handleDocument } = require('./handlers/locationHandler');
+      const result = await handleDocument(user, message);
+      if (result?.handled) return;
+    } catch (err) {
+      logger.error(`[DOC] Handler failed for ${from}: ${err.message}`);
+    }
+  }
+
   // ── Session recap (Phase 9) ────────────────────────────────────────────
   // If the user has been silent for more than 30 min, fire a short
   // contextual "welcome back" before the handler runs. Done HERE (after
