@@ -210,6 +210,12 @@ First, classify the message intent:
 For APPROVAL, return: {"_approved": true}
 For UNCLEAR, return: {"_unclear": true, "_message": "Could you clarify what you'd like to change? Or if you're happy with the site, just say 'approve'."}
 
+## UNDERSPECIFIED COLOR CHANGE
+If the user clearly wants to change a color but does NOT name a target color (e.g. "change the color", "I don't like the colors", "different color please", "koi aur color", "color badlo", "I want to change the color of my website"), DO NOT guess — return UNCLEAR with a friendly prompt asking which color:
+{"_unclear": true, "_message": "Sure — which color would you like? You can say a name (like *blue*, *navy*, *forest green*, *warm red*) or a hex code (like *#1E40AF*)."}
+
+Only return a REVISION with primaryColor when the user names or clearly implies a specific target color.
+
 For IMAGE_SWAP, return: {"_imageQuery": "<short visual description, 2-6 words>"}
 Extract the visual subject the user wants the new image to show and put it in _imageQuery. Keep it concrete and photographable (nouns + adjectives, no noise words like "nice", "professional", "modern" unless genuinely descriptive). If the user just says "change the image" / "different hero" with NO description of what it should show, return {"_imageQuery": ""} and the system will ask them what they want.
 

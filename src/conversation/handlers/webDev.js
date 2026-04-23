@@ -2205,9 +2205,16 @@ async function handleConfirm(user, message) {
   // If nothing matches, fall through to the LLM classifier below for natural
   // prose in any language — "address ko Gulshan Iqbal kr do" / "cambia el
   // email a foo@bar.com" / "change name please to MyCo".
+  //
+  // Areas MUST be matched before services, because "Service areas: tariq"
+  // otherwise fell into the services regex (the `are` in `areas` matched
+  // the `are` alternation) and dumped the area list into services.
+  const areasChange = originalText.match(/(?:service\s+)?areas?\s*(?:to|:|should be|are|change)\s*(.+)/i);
+  // Services regex now requires a word boundary + non-"area" lookahead so
+  // "Service areas" stops being mis-parsed as "Service" + "are" + "as...".
+  const servicesChange = originalText.match(/\bservices?\b(?!\s+areas?)\s*(?:to|:|should be|are|change)\s*(.+)/i);
   const nameChange = originalText.match(/(?:business\s*)?name\s*(?:to|:|should be|is)\s*(.+)/i);
   const industryChange = originalText.match(/industry\s*(?:to|:|should be|is)\s*(.+)/i);
-  const servicesChange = originalText.match(/services?\s*(?:to|:|should be|are|change)\s*(.+)/i);
   const emailChange = originalText.match(/e-?mail\s*(?:to|:|should be|is)\s*(.+)/i);
   const phoneChange = originalText.match(/(?:phone|tel|mobile|number)\s*(?:to|:|should be|is)\s*(.+)/i);
   const addressChange = originalText.match(/(?:address|location|addr)\s*(?:to|:|should be|is)\s*(.+)/i);
@@ -2244,6 +2251,14 @@ async function handleConfirm(user, message) {
           .filter(Boolean);
         return applyAndReshow(`Services updated to *${wd.services.join(', ')}*`);
       }
+      case 'areas':
+      case 'serviceAreas': {
+        wd.serviceAreas = v
+          .split(/\s*,\s*|\s+(?:and|&|aur|y|et|und)\s+/i)
+          .map((s) => s.trim())
+          .filter(Boolean);
+        return applyAndReshow(`Service areas updated to *${wd.serviceAreas.join(', ')}*`);
+      }
       case 'email':
       case 'contactEmail': {
         const m = v.match(/[\w.-]+@[\w.-]+\.\w+/);
@@ -2272,6 +2287,9 @@ async function handleConfirm(user, message) {
     }
   };
 
+  // Dispatch order matters: areasChange MUST be checked before servicesChange
+  // so "Service areas: tariq road" routes to the areas field, not services.
+  if (areasChange) { const r = await applyFieldEdit('areas', areasChange[1]); if (r !== null) return r; }
   if (nameChange) { const r = await applyFieldEdit('businessName', nameChange[1]); if (r !== null) return r; }
   if (industryChange) { const r = await applyFieldEdit('industry', industryChange[1]); if (r !== null) return r; }
   if (servicesChange) { const r = await applyFieldEdit('services', servicesChange[1]); if (r !== null) return r; }
@@ -2286,12 +2304,14 @@ async function handleConfirm(user, message) {
   try {
     const prompt = `The user is reviewing a website-setup summary and may want to change ONE specific field. Identify which field (if any) and the exact new value they provided.
 
-Fields: businessName, industry, services, email, phone, address, contact
+Fields: businessName, industry, services, areas, email, phone, address, contact
 
 Rules:
 - Extract only if the user is clearly asking to change/update/set a field.
 - Understand any language: English, Roman Urdu, Urdu, Hindi, Spanish, Arabic, etc.
 - Preserve emails / phone numbers / URLs / addresses exactly as written.
+- Distinguish "services" (what the business DOES — e.g. plumbing, haircuts) from "areas" (where it operates — neighborhoods or cities). "Service areas" = areas, NOT services.
+- For areas with multiple items, keep the whole comma/and-separated list as the value.
 - If the user is NOT asking to change a field (e.g. they're saying "yes", "looks good", "cancel", a question, or something unrelated), return {"field": null}.
 
 User said: "${originalText}"
@@ -2300,6 +2320,8 @@ Return JSON ONLY. Examples:
 {"field": "address", "value": "Gulshan Iqbal, Karachi"}
 {"field": "businessName", "value": "MyCo"}
 {"field": "email", "value": "test@example.com"}
+{"field": "services", "value": "Web design, SEO, Branding"}
+{"field": "areas", "value": "Tariq Road, PECHS"}
 {"field": null}`;
 
     const response = await generateResponse(
