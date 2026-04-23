@@ -634,6 +634,11 @@ async function handleResults(user, message) {
   }
 
   if (btnId === 'back_menu') {
+    // Phase 12: advance a pending service queue before falling back to welcome.
+    const { maybeStartNextQueuedService } = require('../serviceQueue');
+    const nextState = await maybeStartNextQueuedService(user);
+    if (nextState) return nextState;
+
     const { handleWelcome } = require('./welcome');
     return handleWelcome(user, message);
   }

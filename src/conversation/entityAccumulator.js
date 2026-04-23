@@ -46,11 +46,18 @@ async function extractWebsiteFields(text, known = {}, user = null) {
 
   // Decide if it's worth running the LLM extractor. Skip on short replies
   // that almost certainly only answer the current question.
+  //
+  // Exception: short inputs that contain a trade-word ("Hasnain Plumbing",
+  // "Bright Dental") carry enough signal that the LLM can usefully pull
+  // both businessName AND industry in one shot. Without this, the flow
+  // would ask "what industry?" for a name that obviously implies it.
+  const TRADE_IN_NAME_RX = /\b(plumb(?:ing|er)?|electric(?:al|ian)?|hvac|roof(?:ing|er)?|dental|dentist|salon|barber|spa|bakery|bakers?|restaurant|kitchen|diner|cafe|café|catering|law|legal|attorney|lawyer|cleaning|cleaners?|janitorial|landscap\w*|lawn\s*care|photograph\w*|videograph\w*|locksmith|pest\s*control|appliance\s*repair|garage\s*door|auto\s*repair|mechanic|realt\w*|real\s*estate|accounting|accountant|bookkeep\w*|marketing\s*(?:agency|firm)?|consult\w*|fitness|gym|tutor\w*|moving|movers|hvac|contractor|construction|coaching)\b/i;
   const looksRich =
     raw.length >= 18 ||
     /[,;]/.test(raw) ||
     /\b(in|at|serving|near)\s+[A-Z]/.test(raw) ||
-    /[\n]/.test(raw);
+    /[\n]/.test(raw) ||
+    TRADE_IN_NAME_RX.test(raw);
   if (!looksRich) return out;
 
   // LLM extraction — focused, JSON-only, told to omit unknown fields.
@@ -71,7 +78,18 @@ ${missing.map((f) => `- ${f}`).join('\n')}
 
 Field rules:
 - businessName: the trade name of the business (NOT the user's personal name unless explicitly stated as the business name).
-- industry: 1-3 word niche label, e.g. "HVAC", "Salon", "Restaurant", "Real estate".
+- industry: 1-3 word niche label, e.g. "HVAC", "Salon", "Restaurant", "Real estate". **Business-name inference is REQUIRED, not optional**: if the already-known businessName or the message contains a clear trade word, extract that as the industry. This is explicit signal from the user — a business literally named "X Plumbing" has industry "Plumbing". Concrete mappings:
+    • "Hasnain Plumbing" → "Plumbing"
+    • "Bright Dental" → "Dental"
+    • "Joe's Auto Repair" → "Auto Repair"
+    • "Maria's Thai Kitchen" → "Thai Restaurant"
+    • "Acme Bakery" → "Bakery"
+    • "Glow Studio Salon" → "Salon"
+    • "Smith & Smith Law" → "Legal"
+    • "SunCity Roofing" → "Roofing"
+    • "Pure Clean Cleaners" → "Cleaning Services"
+    • "FastFix Locksmith" → "Locksmith"
+  If the businessName is GENERIC ("TechCorp", "Glow Studio", "BlueBird Ventures") with no trade word, leave industry unset.
 - primaryCity: the city the business is based in.
 - serviceAreas: array of cities/neighborhoods they serve. May overlap with primaryCity.
 - services: array of services or products offered.

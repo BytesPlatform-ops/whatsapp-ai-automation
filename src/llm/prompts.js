@@ -285,7 +285,7 @@ The bot is currently asking: "{{CURRENT_QUESTION}}"
 Classify the user's message into ONE of these intents:
 - "answer"  - The message is a genuine answer to the question being asked, OR the user is telling the bot to figure it out / use context / derive it from previous messages. Treat these as answers - the handler will deal with inferring the value.
 - "question"  - The user is asking something clearly unrelated (about services, pricing, other topics)
-- "menu"  - The user wants to see the main menu, go back, explore other services, OR switch to a different service entirely ("forget the website, do a logo instead", "scrap this, can you do ads?", "wait, can you also build a chatbot?"). Any message that names a DIFFERENT service than the one currently being collected is a flow-switch and should be "menu".
+- "menu"  - Pick this when EITHER (A) the user is flow-switching to a different Pixie service ("forget the website, do a logo instead", "scrap this, can you do ads?", "wait, can you also build a chatbot?"), OR (B) the user is explicitly asking to SKIP the current step / advance to the next queued item ("nevermind, skip this, lets go with the next one", "forget this, do the rest", "skip this, whats next", "move on to the next one"). Case (A) requires a clear VERB OF INTENT ("do", "build", "make", "create", "switch", "forget", "scrap") directed at a different service. Case (B) requires an explicit skip/next phrase ("skip this", "nevermind skip", "forget this + rest/next/others", "move on", "next one", "continue with the next"). Merely containing a trade word (plumbing, dental, bakery, salon, etc.) as part of an ANSWER is NOT a flow-switch — business names, industries, and service descriptions routinely include those words. "Hasnain Plumbing" when asked for a business name is an ANSWER, not a menu request.
 - "exit"  - The user wants to stop the current flow entirely
 - "objection"  - The user is pushing back on the PROCESS ITSELF — expressing doubt about value, price, trust, or stalling ("too expensive", "I'll just use Wix", "not sure this is worth it", "let me think about it"). This is NOT an answer to the current question; it's a concern that needs to be addressed before the flow can continue. Only use this when the pushback is clearly about buying/continuing, not when they're complaining about one specific ask.
 
@@ -295,6 +295,11 @@ Return ONLY valid JSON: {"intent": "answer"|"question"|"menu"|"exit"|"objection"
 
 Examples:
 - Current question: "What is your business name?" / Message: "TechCorp" → {"intent": "answer"}
+- Current question: "What is your business name?" / Message: "Hasnain Plumbing" → {"intent": "answer"}
+- Current question: "What is your business name?" / Message: "Maria's Thai Kitchen" → {"intent": "answer"}
+- Current question: "What is your business name?" / Message: "Bright Dental" → {"intent": "answer"}
+- Current question: "What industry are you in?" / Message: "Plumbing" → {"intent": "answer"}
+- Current question: "What industry are you in?" / Message: "salon / spa" → {"intent": "answer"}
 - Current question: "What is your business name?" / Message: "What services do you offer?" → {"intent": "question"}
 - Current question: "What industry are you in?" / Message: "No I want to see other options" → {"intent": "menu"}
 - Current question: "Send your website URL" / Message: "Actually forget it" → {"intent": "exit"}
@@ -302,6 +307,10 @@ Examples:
 - Current question: "What industry are you in?" / Message: "actually scrap this, let's do a logo instead" → {"intent": "menu"}
 - Current question: "What are your brand colors?" / Message: "wait, can you do marketing ads too?" → {"intent": "menu"}
 - Current question: "What services do you offer?" / Message: "hold on, can you also build a chatbot?" → {"intent": "menu"}
+- Current question: "What contact info do you want on the site?" / Message: "nevermind, skip this, lets go with the next one" → {"intent": "menu"}
+- Current question: "What contact info do you want on the site?" / Message: "forget this, do the rest" → {"intent": "menu"}
+- Current question: "What are your brand colors?" / Message: "skip this, whats next" → {"intent": "menu"}
+- Current question: "What industry are you in?" / Message: "move on to the next" → {"intent": "menu"}
 - Current question: "What industry are you in?" / Message: "figure it out from the idea" → {"intent": "answer"}
 - Current question: "What industry are you in?" / Message: "I can't figure out, you tell me" → {"intent": "answer"}
 - Current question: "What services do you offer?" / Message: "I already told you" → {"intent": "answer"}

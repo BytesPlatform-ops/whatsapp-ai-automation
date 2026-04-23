@@ -30,6 +30,7 @@ const { logger } = require('../../utils/logger');
 const { generateAdIdeas, expandIdeaToPrompt } = require('../../adGeneration/ideation');
 const { generateAdImage } = require('../../adGeneration/imageGen');
 const { uploadAdImage } = require('../../adGeneration/imageUploader');
+const { generateResponse } = require('../../llm/provider');
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -262,6 +263,59 @@ async function handleCollectIndustry(user, message) {
   return STATES.AD_COLLECT_NICHE;
 }
 
+// Trade words where the industry alone tells us it's a service — no point
+// asking "physical / service / digital" when the user already said plumbing.
+const SERVICE_INDUSTRY_RX = /\b(plumb(?:ing|er)?|electric(?:al|ian)?|hvac|roof(?:ing|er)?|pest\s*control|cleaning|cleaner|janitorial|locksmith|landscap\w*|lawn\s*care|tree\s*service|water\s*damage|restoration|handyman|carpent\w*|paint(?:er|ing)|appliance\s*repair|garage\s*door|contractor|construction|photograph\w*|videograph\w*|salon|barber\w*|spa|dental|dentist|medical|clinic|legal|lawyer|attorney|law\s*firm|accountant|accounting|bookkeep\w*|consult\w*|agency|marketing|realt\w*|real\s*estate|tutor\w*|coach\w*|therap\w*|fitness|gym|personal\s*trainer|auto\s*repair|mechanic|car\s*wash|detailing|moving|movers|delivery|catering|event\s*planning|wedding\s*planner|staffing|recruit\w*|pet\s*(?:care|grooming)|veterinary|childcare|daycare|driving\s*school|cleaning\s*services?|hair\s*salon)\b/i;
+
+const DIGITAL_INDUSTRY_RX = /\b(saas|software\s*(?:company|startup)?|mobile\s*app|web\s*app|online\s*course|e-?learning|digital\s*product)\b/i;
+
+const NICHE_SERVICE_RX = /\b(services?|consultation|repair|installation?|package\s*deal|packages?\s*(?:deal|offer)|subscription\s*service|booking|appointment|treatment|session|lesson|class|coaching|consulting|maintenance|inspection|audit|cleaning)\b/i;
+const NICHE_DIGITAL_RX = /\b(course|e-?book|mobile\s*app|web\s*app|template|plugin|extension|saas)\b/i;
+
+/**
+ * Try to infer the product type (physical / service / digital) from the
+ * industry and niche text, so we can skip the 3-button question when the
+ * answer is already obvious. Returns null when truly ambiguous — caller
+ * falls back to asking the user.
+ */
+async function inferProductType(niche, industry, userId) {
+  const n = String(niche || '').toLowerCase();
+  const i = String(industry || '').toLowerCase();
+
+  // Fast path: industry alone is enough for service trades / digital industries.
+  if (SERVICE_INDUSTRY_RX.test(i)) return 'service';
+  if (DIGITAL_INDUSTRY_RX.test(i)) return 'digital';
+  // Fast path: niche clearly signals digital or service.
+  if (NICHE_DIGITAL_RX.test(n)) return 'digital';
+  if (NICHE_SERVICE_RX.test(n)) return 'service';
+
+  // LLM fallback for the genuinely ambiguous cases.
+  try {
+    const prompt = `An advertiser gave us their industry and what they're advertising. Classify the offering as "physical", "service", or "digital".
+
+Industry: "${industry || 'unknown'}"
+Advertising: "${niche}"
+
+Rules:
+- "physical" = tangible goods (clothing, food items, jewelry, bags, furniture, produce).
+- "service" = work performed for the customer (repairs, consultations, cleaning, legal work, salon treatments, packages/deals bundling services, coaching, events).
+- "digital" = downloadable or online-only products (courses, ebooks, software, apps, SaaS subscriptions).
+- If truly unclear, return "unknown".
+
+Return ONLY one word: physical, service, digital, or unknown.`;
+    const resp = await generateResponse(prompt, [{ role: 'user', content: niche }], {
+      userId,
+      operation: 'ad_type_infer',
+    });
+    const cleaned = (resp || '').trim().toLowerCase().replace(/[^a-z]/g, '');
+    if (cleaned === 'physical' || cleaned === 'service' || cleaned === 'digital') return cleaned;
+    return null;
+  } catch (err) {
+    logger.warn(`[AD-GEN] inferProductType failed: ${err.message}`);
+    return null;
+  }
+}
+
 async function handleCollectNiche(user, message) {
   const niche = (message.text || '').trim();
   if (!niche || niche.length < 3) {
@@ -270,6 +324,23 @@ async function handleCollectNiche(user, message) {
   }
 
   await saveAdData(user, { niche });
+
+  const adData = getAdData(user);
+  const inferred = await inferProductType(niche, adData.industry, user.id);
+
+  if (inferred) {
+    await saveAdData(user, { productType: inferred });
+    await sendWithMenuButton(
+      user.phone_number,
+      `"${niche}" — got it!\n\n` +
+        '✍️ *Brand Slogan / Tagline*\n\n' +
+        'Type your slogan to display on the ad:\n\n' +
+        'Examples: _"Fresh From Farm"_ or _"Style Redefined"_\n\n' +
+        'Or type *skip* to continue without one:'
+    );
+    await logMessage(user.id, `Niche: ${niche} · Inferred type: ${inferred}`, 'assistant');
+    return STATES.AD_COLLECT_SLOGAN;
+  }
 
   await sendInteractiveButtons(
     user.phone_number,
@@ -632,7 +703,9 @@ async function handleResults(user, message) {
   }
 
   if (btnId === 'ad_generate_another') {
-    // Restart the whole flow with cleared data (same user, fresh input)
+    // Restart the whole flow with cleared data (same user, fresh input).
+    // Note: intentionally does NOT advance the service queue — user is
+    // explicitly asking for another ad, not done with ads.
     return handleStart(user, message);
   }
 
@@ -654,6 +727,12 @@ async function handleResults(user, message) {
   }
 
   if (btnId === 'back_menu') {
+    // Phase 12: if there's a queued service waiting, advance to it
+    // before falling back to the generic welcome.
+    const { maybeStartNextQueuedService } = require('../serviceQueue');
+    const nextState = await maybeStartNextQueuedService(user);
+    if (nextState) return nextState;
+
     const { handleWelcome } = require('./welcome');
     return handleWelcome(user, message);
   }

@@ -691,6 +691,8 @@ async function _routeMessage(message) {
       leadTemperature: 'COLD',
       // Session-recap gate.
       sessionRecapLastAt: null,
+      // Phase 12: multi-service queue.
+      serviceQueue: [],
     });
     // Clear conversation history so the sales bot starts fresh
     const { clearHistory } = require('../db/conversations');
@@ -712,6 +714,10 @@ async function _routeMessage(message) {
   if ((text && text.toLowerCase().trim() === '/menu') || message.buttonId === 'menu_main') {
     await updateUserState(user.id, STATES.SERVICE_SELECTION);
     user.state = STATES.SERVICE_SELECTION;
+    // Phase 12: explicit menu request cancels any pending queue — user is
+    // re-choosing, not continuing the original plan.
+    const { clearServiceQueue } = require('./serviceQueue');
+    await clearServiceQueue(user);
     const { sendMainMenu } = require('./handlers/serviceSelection');
     await sendMainMenu(user);
     return;
@@ -726,6 +732,39 @@ async function _routeMessage(message) {
       if (handled) return;
     } catch (err) {
       logger.error('Salon owner command interceptor failed:', err);
+    }
+  }
+
+  // ── Phase 12: multi-service queue pre-interceptor ─────────────────────────
+  // When the user is NOT mid-collection (sales chat, service selection,
+  // or informative chat) and their message names 2+ queueable services
+  // in one breath, build the queue and kick off the first flow. For
+  // collection states the intent classifier below picks it up via the
+  // "menu" branch, so we scope this early check to the idle states only.
+  if (
+    text &&
+    !message.buttonId &&
+    !message.listId &&
+    message.type === 'text' &&
+    (user.state === STATES.SALES_CHAT ||
+      user.state === STATES.SERVICE_SELECTION ||
+      user.state === STATES.INFORMATIVE_CHAT)
+  ) {
+    try {
+      const { detectServiceQueue, startServiceQueue } = require('./serviceQueue');
+      const plural = await detectServiceQueue(message.text || '', user.id);
+      if (plural.length >= 2) {
+        await updateUserState(user.id, STATES.SERVICE_SELECTION);
+        user.state = STATES.SERVICE_SELECTION;
+        const newState = await startServiceQueue(user, plural);
+        if (newState && newState !== user.state) {
+          await updateUserState(user.id, newState);
+        }
+        return;
+      }
+    } catch (err) {
+      logger.error('[QUEUE] Plural pre-interceptor failed:', err);
+      // Fall through to normal routing — never let a queue bug block a reply.
     }
   }
 
@@ -838,8 +877,69 @@ async function _routeMessage(message) {
       // to its start handler directly. If not, show the main menu.
       await updateUserState(user.id, STATES.SERVICE_SELECTION);
       user.state = STATES.SERVICE_SELECTION;
+
+      // Phase 12: if the switch names 2+ queueable services ("forget
+      // this, do a website AND a logo AND some ads"), build the queue
+      // and kick off the first flow here. Overwrites any prior queue.
+      const {
+        detectServiceQueue,
+        startServiceQueue,
+        maybeStartNextQueuedService,
+        dropQueuedService,
+        hasQueue,
+      } = require('./serviceQueue');
+      const plural = await detectServiceQueue(message.text || text || '', user.id);
+      if (plural.length >= 2) {
+        const newState = await startServiceQueue(user, plural);
+        if (newState && newState !== user.state) {
+          await updateUserState(user.id, newState);
+        }
+        return;
+      }
+
       const { pickServiceFromSwitch } = require('./handlers/serviceSelection');
       const targetService = await pickServiceFromSwitch(text, user.id);
+
+      // Phase 12: user has a pending queue AND their switch has no specific
+      // target ("forget this, lets do the rest" / "next" / "skip this").
+      // Advance the queue instead of falling into the generic menu.
+      //
+      // Gate on EXPLICIT skip phrasing. The intent classifier occasionally
+      // labels an ambiguous answer as "menu" (e.g. "Hasnain Plumbing" in a
+      // name-collection state); without this gate, we'd silently advance
+      // the queue and eat the user's real answer.
+      const skipPhrasingRx = /\b(rest|next|continue|skip|forget\s+(?:this|it|that)|forget\s+the|drop\s+(?:this|it|that)|scrap\s+(?:this|it|that)|cancel\s+(?:this|it|that)|pass|move\s+on|keep\s+going|proceed|whatever|on\s+to\s+the\s+next|remaining|others?)\b/i;
+      const hasSkipPhrasing = skipPhrasingRx.test(message.text || text || '');
+      if (!targetService && hasQueue(user) && hasSkipPhrasing) {
+        try {
+          const newState = await maybeStartNextQueuedService(user, 'skipped');
+          if (newState) {
+            await updateUserState(user.id, newState);
+            return;
+          }
+        } catch (err) {
+          // Surface the error instead of leaving the user with only the
+          // "skipping ahead" message. Send a recovery nudge so the user
+          // isn't stuck; the queue has already advanced (next item was
+          // popped), so the message reflects current state.
+          logger.error(`[QUEUE] Advance failed after skip: ${err.message}`, { stack: err.stack?.split('\n').slice(0, 5).join('\n') });
+          try {
+            await sendTextMessage(
+              user.phone_number,
+              "hmm, something glitched while starting the next one. try sending *menu* and we can pick it back up."
+            );
+          } catch { /* last-resort nudge also failed — nothing more to do */ }
+          return;
+        }
+      }
+
+      // Phase 12: user jumped to a specific service that's ALREADY queued.
+      // Drop it (and anything before it) from the queue so we don't run
+      // the same flow twice when it completes.
+      if (targetService && hasQueue(user)) {
+        await dropQueuedService(user, targetService);
+      }
+
       const newState = await handleServiceSelection(user, {
         ...message,
         // Pre-resolved service tells handleServiceSelection exactly which

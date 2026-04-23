@@ -312,6 +312,13 @@ async function handleFollowUp(user, message) {
     user.phone_number,
     "No worries! The demo link stays active if you want to share it around. Just message us whenever you're ready to start your free trial!"
   );
+
+  // Phase 12: user passed on the trial but the chatbot demo pass is
+  // done — advance to the next queued service if there is one.
+  const { maybeStartNextQueuedService } = require('../serviceQueue');
+  const nextState = await maybeStartNextQueuedService(user);
+  if (nextState) return nextState;
+
   return STATES.SALES_CHAT;
 }
 
@@ -369,6 +376,12 @@ async function activateTrial(user) {
       chatbotSlug: slug,
       chatbotTrialEndsAt: trialEnd.toISOString(),
     });
+
+    // Phase 12: chatbot is now fully set up — advance the queue if there's
+    // another service waiting. Otherwise drop to sales chat as before.
+    const { maybeStartNextQueuedService } = require('../serviceQueue');
+    const nextState = await maybeStartNextQueuedService(user);
+    if (nextState) return nextState;
 
     return STATES.SALES_CHAT;
   } catch (error) {

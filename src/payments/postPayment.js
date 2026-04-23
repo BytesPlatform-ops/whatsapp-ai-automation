@@ -157,16 +157,47 @@ async function handleConfirmedPayment(payment, paidSession) {
               )
             );
             await logMessage(p.user_id, `Domain purchased and configured: ${selectedDomain}`, 'assistant');
-            // Phase 16 (in-bot cross-sell): pitch the most useful next
-            // service the user hasn't touched. Site is fully paid +
-            // configured here, so the moment is right. Idempotent.
-            await maybeSendSiteLiveUpsell({
-              userId: p.user_id,
-              phone: targetPhone,
-              channel: targetChannel,
-              via: targetVia,
-              metadata: paidUserRecord?.metadata,
-            });
+
+            // Phase 12: if the user originally queued more services with
+            // the website, advance to the next one instead of the
+            // generic site-live upsell. The explicit queue wins over
+            // the guess-based upsell.
+            const queuedServices = Array.isArray(paidUserRecord?.metadata?.serviceQueue)
+              ? paidUserRecord.metadata.serviceQueue
+              : [];
+            if (queuedServices.length > 0) {
+              const { maybeStartNextQueuedService } = require('../conversation/serviceQueue');
+              const { updateUserState } = require('../db/users');
+              const queueUser = {
+                id: p.user_id,
+                phone_number: targetPhone,
+                channel: targetChannel,
+                via_phone_number_id: targetVia,
+                metadata: paidUserRecord.metadata,
+              };
+              try {
+                const newState = await runWithContext(
+                  { channel: targetChannel, phoneNumberId: targetVia },
+                  () => maybeStartNextQueuedService(queueUser)
+                );
+                if (newState) {
+                  await updateUserState(p.user_id, newState);
+                }
+              } catch (err) {
+                logger.error(`[PAY] Queue advance after site-live failed: ${err.message}`);
+              }
+            } else {
+              // Phase 16 (in-bot cross-sell): pitch the most useful next
+              // service the user hasn't touched. Site is fully paid +
+              // configured here, so the moment is right. Idempotent.
+              await maybeSendSiteLiveUpsell({
+                userId: p.user_id,
+                phone: targetPhone,
+                channel: targetChannel,
+                via: targetVia,
+                metadata: paidUserRecord?.metadata,
+              });
+            }
           } else {
             if (site) await updateSite(site.id, { custom_domain: selectedDomain, status: 'domain_setup_pending' });
             await runWithContext({ channel: targetChannel, phoneNumberId: targetVia }, () =>

@@ -44,6 +44,21 @@ async function handleServiceSelection(user, message) {
   const buttonId = message.buttonId || message.listId || '';
   const text = (message.text || '').toLowerCase().trim();
 
+  // Phase 12: multi-service intent. "I need a website, logo and some ads"
+  // → queue all three, start the first. Must run BEFORE looksExploratory /
+  // matchServiceFromText so phrasings like "website AND logo" don't get
+  // collapsed to a single regex hit. LLM-backed detector — won't fire on
+  // single-service messages or on false positives like "my friend has a
+  // website and a logo already".
+  if (!buttonId && text) {
+    const { detectServiceQueue, startServiceQueue } = require('../serviceQueue');
+    const queue = await detectServiceQueue(message.text || '', user.id);
+    if (queue.length >= 2) {
+      const newState = await startServiceQueue(user, queue);
+      return newState || STATES.SERVICE_SELECTION;
+    }
+  }
+
   // Early: exploratory phrases ("what other services?", "more options",
   // "whats available") should go to the full list, NOT match /what/ below
   // and land in the FAQ handler. Pre-empts matchServiceFromText.
