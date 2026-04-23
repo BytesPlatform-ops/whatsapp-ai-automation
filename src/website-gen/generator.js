@@ -456,6 +456,12 @@ Generate compelling website copy for this business. Return ONLY valid JSON.`;
     // Stripe charge. paymentLinkUrl is the Stripe URL the banner points to.
     paymentStatus: extras.paymentStatus || 'preview',
     paymentLinkUrl: extras.paymentLinkUrl || null,
+    // Combined website+domain price shown on the activation banner. When a
+    // 22h discount has been applied, originalAmount stays at the pre-discount
+    // total and discountPct > 0 so the banner renders strikethrough + badge.
+    activationAmount: extras.activationAmount || null,
+    originalAmount: extras.originalAmount || null,
+    discountPct: extras.discountPct || 0,
     bookingMode: bookingMode || null,
     bookingUrl: bookingUrl || null,
     instagramHandle: instagramHandle || null,

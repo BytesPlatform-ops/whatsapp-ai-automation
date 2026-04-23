@@ -1,8 +1,12 @@
 /**
  * Site Cleanup Job
  *
- * Unpaid preview sites get deleted from Netlify 22 hours after they were
+ * Unpaid preview sites get deleted from Netlify 23 hours after they were
  * generated, then archived in Supabase. Paid sites are skipped.
+ *
+ * Timing pairs with the follow-up scheduler: the 22h discount job offers
+ * 20% off the website, then this cleanup kills the preview 1 hour later
+ * if still unpaid. That 1-hour gap is the urgency window.
  *
  * "Paid" is checked at the site level (site_data.paymentStatus === 'paid')
  * not at the user level. Each generated_sites row tracks its own payment
@@ -30,7 +34,7 @@ const { env } = require('../config/env');
 const { logger } = require('../utils/logger');
 
 const NETLIFY_API = 'https://api.netlify.com/api/v1';
-const DELETE_AFTER_HOURS = 22;
+const DELETE_AFTER_HOURS = 23;
 const RECENT_PAYMENT_WINDOW_MS = 10 * 60 * 1000;
 
 async function runSiteCleanup() {

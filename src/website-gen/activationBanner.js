@@ -24,6 +24,9 @@ function escapeHtml(str) {
  *   - paymentStatus: 'preview' | 'paid'  (falsy → 'preview')
  *   - paymentLinkUrl: string             (Stripe link or fallback WhatsApp link)
  *   - businessName: string               (shown in the "chat to activate" fallback)
+ *   - activationAmount: number           (total in USD — website + domain combined)
+ *   - originalAmount: number             (pre-discount total — for strikethrough)
+ *   - discountPct: number                (0 or 20 — when 20h discount has been applied)
  */
 function renderActivationBanner(config = {}) {
   if (config.paymentStatus === 'paid') return '';
@@ -39,6 +42,21 @@ function renderActivationBanner(config = {}) {
   // Both should render as "Activate Now" and open in the same tab so
   // the checkout / already-paid status loads inline.
   const isActivationLink = /stripe\.com|buy\.stripe|payments\.link|\/pay\//i.test(String(actionUrl || ''));
+
+  // Price display — combined website+domain. If a 22h discount has been
+  // applied, show strikethrough on the original with the new total beside it.
+  const amount = Number(config.activationAmount) || 0;
+  const origAmount = Number(config.originalAmount) || amount;
+  const discountPct = Number(config.discountPct) || 0;
+  const hasDiscount = discountPct > 0 && origAmount > amount;
+  const priceLabel = amount > 0
+    ? (hasDiscount
+        ? `<span class="pixie-price-strike">$${origAmount}</span><span class="pixie-price-now">$${amount}</span><span class="pixie-discount-badge">${discountPct}% off</span>`
+        : `<span class="pixie-price-now">$${amount}</span>`)
+    : '';
+  const ctaLabel = isActivationLink
+    ? (amount > 0 ? `Activate — $${amount}` : 'Activate Now')
+    : 'Activate →';
 
   // Styles use hard-coded colors (not template tokens) so the banner looks
   // identical across HVAC / Real Estate / Salon / Generic — it's an
@@ -110,6 +128,28 @@ function renderActivationBanner(config = {}) {
     transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
     white-space: nowrap;
     box-shadow: 0 6px 20px -6px rgba(37,211,102,0.6);
+  }
+  #pixie-activation-banner .pixie-price-strike {
+    text-decoration: line-through;
+    opacity: 0.55;
+    margin-right: 8px;
+    color: #94A3B8;
+    font-weight: 500;
+  }
+  #pixie-activation-banner .pixie-price-now {
+    color: #fff;
+    font-weight: 700;
+  }
+  #pixie-activation-banner .pixie-discount-badge {
+    margin-left: 8px;
+    background: #F97316;
+    color: #fff;
+    padding: 2px 7px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
   }
   #pixie-activation-banner .pixie-cta:hover {
     background: #1EBE5D;
@@ -193,10 +233,10 @@ function renderActivationBanner(config = {}) {
       <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
     </svg>
   </span>
-  <span class="pixie-text"><strong>Preview Mode</strong>Activate this site to make it live${config.businessName ? ` for ${escapeHtml(config.businessName)}` : ''}.</span>
-  <span class="pixie-text-mobile">Preview Mode</span>
+  <span class="pixie-text"><strong>Preview Mode</strong>Activate this site to make it live${config.businessName ? ` for ${escapeHtml(config.businessName)}` : ''}.${priceLabel ? ` ${priceLabel}` : ''}</span>
+  <span class="pixie-text-mobile">${priceLabel || 'Preview Mode'}</span>
   <a class="pixie-cta" href="${escapeHtml(actionUrl)}"${isActivationLink ? '' : ' target="_blank" rel="noopener"'}>
-    ${isActivationLink ? 'Activate Now' : 'Activate →'}
+    ${ctaLabel}
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
       <path d="M5 12h14M13 5l7 7-7 7"/>
     </svg>

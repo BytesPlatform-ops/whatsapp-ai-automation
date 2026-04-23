@@ -1,16 +1,16 @@
 /**
  * Follow-Up Scheduler
  *
- * Periodically checks for stale sales conversations and sends
- * personality-appropriate follow-up messages per the v2 sales playbook.
+ * Website/domain flow uses a single nudge at 22h: apply a 20% discount to
+ * the website price (domain cost is fixed by Namecheap and can't be cut),
+ * deactivate the old Stripe link, issue a new one, and redeploy the site
+ * banner so the strikethrough pricing shows. Preview site self-destructs
+ * at 23h via siteCleanup — the 1-hour gap between discount and expiry is
+ * the close window.
  *
- * Timing ladder:
- *   2 hours  → gentle check-in
- *   24 hours → offer examples
- *   72 hours → final outreach
- *   7 days   → share recent project
- *
- * Each step is sent at most once (tracked in user metadata).
+ * Split payments are NOT offered — kept out intentionally because (a) at
+ * $199 the ticket is already low enough that splitting is friction not
+ * value, and (b) the discount alone is a cleaner single-decision pitch.
  */
 
 const { supabase } = require('../config/database');
@@ -22,12 +22,13 @@ const { handleConfirmedPayment } = require('../payments/postPayment');
 const { logger } = require('../utils/logger');
 const { STATES } = require('../conversation/states');
 
-// Follow-up ladder keyed by step name → hours since last message (capped at 24h window)
+// Single-step ladder: at 22h unpaid, apply 20% discount to website portion.
 const FOLLOWUP_LADDER = [
-  { step: 'followup_2h', afterHours: 2 },
-  { step: 'followup_12h', afterHours: 12 },
-  { step: 'followup_23h', afterHours: 23 },
+  { step: 'followup_22h_discount', afterHours: 22 },
 ];
+
+// 20% off the website portion — domain price is fixed by Namecheap.
+const WEBSITE_DISCOUNT_PCT = 20;
 
 // SEO-audit leads get their own ladder. The existing website ladder pitches a
 // $100 payment / domain — wrong message for someone who only ran an audit.
@@ -38,29 +39,15 @@ const SEO_FOLLOWUP_LADDER = [
   { step: 'seo_followup_24h', afterHours: 24 },
 ];
 
-// Messages per step × personality mode
-const FOLLOWUP_MESSAGES = {
-  followup_2h: {
-    COOL: "hey! just checking — did you get a chance to look at the payment link? your site is ready to go live whenever you are 🔥",
-    PROFESSIONAL: "Just checking in — did you have any questions about getting your website live? Happy to help.",
-    UNSURE: "hey! just wanted to check — everything good? your website is ready to go live whenever you want 😊",
-    NEGOTIATOR: "payment link still open. your site is ready. let me know.",
-    DEFAULT: "Hey! Just checking in — did you get a chance to look at the payment link? Your site is ready to go live!",
-  },
-  followup_12h: {
-    COOL: "yo your preview site is still up — $100 gets it live on your own domain, everything included. or i can split it if that helps 🤙",
-    PROFESSIONAL: "Your website preview is still available. It's $100 total including your custom domain. We can also split the payment if that works better.",
-    UNSURE: "hey! your website is still saved — just $100 to get it live with your own domain, everything included. we can split the payment too! 😊",
-    NEGOTIATOR: "site's still up. $100 total, domain included. can split if needed. want the link?",
-    DEFAULT: "Your preview site is still up — $100 gets it live on your own domain, everything included!",
-  },
-  followup_23h: {
-    COOL: "last call — i can do $80 total instead of $100. domain still included. want me to send a new link? 👀",
-    PROFESSIONAL: "Final follow-up — I can offer $80 total (normally $100), domain included. Shall I send a new payment link?",
-    UNSURE: "hey! last message from me — got approval to do $80 total (normally $100), domain included. want the link? 😊",
-    NEGOTIATOR: "last offer — $80 total. domain included. can't go lower. link?",
-    DEFAULT: "Last chance — $80 total instead of $100, domain included. Want a new payment link?",
-  },
+// Discount follow-up copy per personality. One step only — no ladder, no
+// split payment offers. Amount placeholders (${newTotal}, ${originalTotal})
+// get filled in at send time once we compute the per-user discount.
+const DISCOUNT_MESSAGES = {
+  COOL: "preview expires in 1 hour — i got 20% off the website for you. new total: *$${newTotal}* (was *$${originalTotal}*). link 👇",
+  PROFESSIONAL: "Your preview expires in 1 hour. I can offer 20% off the website: *$${newTotal}* (from *$${originalTotal}*). New link below.",
+  UNSURE: "hey! your preview expires in 1 hour — got approved to do 20% off the website. new total is *$${newTotal}* (was *$${originalTotal}*) 😊",
+  NEGOTIATOR: "preview dies in 1h. 20% off website. new total *$${newTotal}*. link below.",
+  DEFAULT: "Heads up — your preview expires in 1 hour. Taking 20% off the website: *$${newTotal}* (was *$${originalTotal}*). New link below.",
 };
 
 /**
@@ -122,13 +109,129 @@ function renderSeoFollowupMessage(personalityMode, topFix, url) {
 }
 
 /**
- * Pick the right message variant for this user's detected personality.
+ * Render the 22h discount message for a personality. Substitutes
+ * ${newTotal} and ${originalTotal} placeholders at call time.
  */
-function pickMessage(step, personalityMode) {
-  const variants = FOLLOWUP_MESSAGES[step];
-  if (!variants) return null;
+function renderDiscountMessage(personalityMode, newTotal, originalTotal) {
   const mode = (personalityMode || '').toUpperCase();
-  return variants[mode] || variants.DEFAULT;
+  const template = DISCOUNT_MESSAGES[mode] || DISCOUNT_MESSAGES.DEFAULT;
+  return template
+    .replace(/\$\{newTotal\}/g, String(newTotal))
+    .replace(/\$\{originalTotal\}/g, String(originalTotal));
+}
+
+/**
+ * Apply the 22h website-only discount for a user. Returns the new link
+ * URL + amounts, or null if no pending website payment exists or the
+ * discount was already applied.
+ *
+ * Steps:
+ *   1. Fetch latest pending website payment
+ *   2. Skip if discount_applied=true OR not a website service
+ *   3. Compute newWebsiteAmount = floor(websiteAmount * 0.8)
+ *      (domain amount stays verbatim — Namecheap bills us the full price)
+ *   4. createPaymentLink with the new total
+ *      — cancelPendingPaymentsForUser in stripe.js auto-deactivates the old link
+ *   5. Mark the old payment row discount_applied=true (on top of superseded)
+ *      so we never re-discount even if the row stays around
+ *   6. Update the preview site's activation banner with new pricing
+ *      (strikethrough the original)
+ */
+async function applyWebsiteDiscount(user) {
+  const { data: pending } = await supabase
+    .from('payments')
+    .select('id, website_amount, domain_amount, original_amount, amount, selected_domain, discount_applied, service_type, stripe_payment_link_id')
+    .eq('user_id', user.id)
+    .eq('status', 'pending')
+    .eq('service_type', 'website')
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (!pending) {
+    logger.info(`[DISCOUNT] No pending website payment for user ${user.id} — skipping`);
+    return null;
+  }
+  if (pending.discount_applied) {
+    logger.info(`[DISCOUNT] Already discounted for payment ${pending.id} — skipping`);
+    return null;
+  }
+
+  // Amounts in cents in the DB. website_amount can be null on very old rows
+  // — fall back to full amount with zero domain.
+  const websiteCents = pending.website_amount != null ? pending.website_amount : pending.amount;
+  const domainCents = pending.domain_amount || 0;
+  const originalCents = pending.original_amount || pending.amount;
+
+  const newWebsiteCents = Math.floor(websiteCents * (100 - WEBSITE_DISCOUNT_PCT) / 100);
+  const newTotalCents = newWebsiteCents + domainCents;
+  const newWebsite = Math.round(newWebsiteCents / 100);
+  const newDomain = Math.round(domainCents / 100);
+  const newTotal = Math.round(newTotalCents / 100);
+  const originalTotal = Math.round(originalCents / 100);
+
+  const selectedDomain = pending.selected_domain || null;
+  const description = selectedDomain && newDomain > 0
+    ? `Website activation + domain ${selectedDomain} — 20% off website`
+    : `Website activation — 20% off`;
+
+  let newLinkUrl = null;
+  let newPaymentId = null;
+  try {
+    const { createPaymentLink } = require('../payments/stripe');
+    const linkResult = await createPaymentLink({
+      userId: user.id,
+      phoneNumber: user.phone_number,
+      amount: newTotal,
+      serviceType: 'website',
+      packageTier: 'activation-discount',
+      description,
+      customerName: user.name || '',
+      websiteAmount: newWebsite,
+      domainAmount: newDomain,
+      selectedDomain,
+      originalAmount: originalTotal,
+    });
+    newLinkUrl = linkResult?.pixieUrl || linkResult?.url || null;
+    newPaymentId = linkResult?.paymentId || null;
+  } catch (err) {
+    logger.error(`[DISCOUNT] Failed to create discounted payment link for ${user.phone_number}: ${err.message}`);
+    return null;
+  }
+
+  // Flag the fresh row as discounted so if the scheduler ever pulls it again
+  // we don't re-cut. (The prior pending row is now status=superseded via
+  // cancelPendingPaymentsForUser — no need to touch it further.)
+  if (newPaymentId) {
+    await supabase
+      .from('payments')
+      .update({ discount_applied: true, discount_pct: WEBSITE_DISCOUNT_PCT })
+      .eq('id', newPaymentId);
+  }
+
+  // Redeploy the preview site with the discounted banner (strikethrough +
+  // 20% off badge). Fire-and-forget — the chat message already has the new
+  // link, so a redeploy failure doesn't block the sale.
+  try {
+    const { updateSiteBannerPricing } = require('../website-gen/redeployer');
+    updateSiteBannerPricing(user.id, {
+      paymentLinkUrl: newLinkUrl,
+      activationAmount: newTotal,
+      originalAmount: originalTotal,
+      discountPct: WEBSITE_DISCOUNT_PCT,
+    }).catch((err) =>
+      logger.warn(`[DISCOUNT] Banner pricing redeploy failed for user ${user.id}: ${err.message}`)
+    );
+  } catch (err) {
+    logger.warn(`[DISCOUNT] Could not dispatch banner pricing update: ${err.message}`);
+  }
+
+  logger.info(
+    `[DISCOUNT] Applied to ${user.phone_number}: $${originalTotal} → $${newTotal} ` +
+      `(website $${Math.round(websiteCents / 100)} → $${newWebsite}, domain $${newDomain} unchanged)`
+  );
+
+  return { newLinkUrl, newTotal, originalTotal };
 }
 
 /**
@@ -198,11 +301,11 @@ async function processUserFollowup(user) {
 
   if (msgErr || !lastMsg) return;
 
-  // SEO-audit branch: a user who ran an audit but didn't cross over into the
-  // website/domain purchase flow gets the SEO ladder, not the website one.
-  // We use `selectedDomain` as the signal that they've moved to the website
-  // track — once they pick a domain the normal website ladder takes over.
-  const isSeoLead = metadata.seoAuditTriggered && !metadata.selectedDomain;
+  // SEO-audit branch: a user who ran an audit but never entered the website
+  // flow (no domain choice yet, no pending website payment) gets the SEO
+  // ladder. `domainChoice` is set as soon as they answer the WEB_DOMAIN_CHOICE
+  // prompt — even "skip" counts as having crossed into the website track.
+  const isSeoLead = metadata.seoAuditTriggered && !metadata.domainChoice;
   if (isSeoLead) {
     const seoCompleted = metadata.seoFollowupSteps || [];
     if (seoCompleted.length >= SEO_FOLLOWUP_LADDER.length) return;
@@ -235,53 +338,52 @@ async function processUserFollowup(user) {
   const nextStep = getNextFollowup(lastMsg.created_at, completedSteps, leadTemp);
   if (!nextStep) return;
 
-  // Detect personality from lead brief or metadata
-  const personality = metadata.leadBrief
-    ? extractPersonalityFromBrief(metadata.leadBrief)
-    : (metadata.personalityMode || 'DEFAULT');
+  // Only website leads (they have a selectedDomain or a pending website
+  // payment) get the 22h discount. Anyone else in SALES_CHAT with no
+  // website context has nothing to discount — skip them cleanly.
+  if (nextStep.step === 'followup_22h_discount') {
+    const discount = await applyWebsiteDiscount(user);
+    if (!discount) {
+      // Mark complete anyway so we don't retry every cycle forever.
+      await updateUserMetadata(user.id, {
+        followupSteps: [...completedSteps, nextStep.step],
+      });
+      return;
+    }
 
-  const message = pickMessage(nextStep.step, personality);
-  if (!message) return;
+    const personality = metadata.leadBrief
+      ? extractPersonalityFromBrief(metadata.leadBrief)
+      : (metadata.personalityMode || 'DEFAULT');
 
-  logger.info(`Followup: sending ${nextStep.step} to ${user.phone_number} (mode: ${personality}, temp: ${leadTemp})`);
+    const message = renderDiscountMessage(personality, discount.newTotal, discount.originalTotal);
 
-  await sendTextMessage(user.phone_number, message);
-  await logMessage(user.id, message, 'assistant');
+    logger.info(`Followup: sending 22h discount to ${user.phone_number} (mode: ${personality}, new: $${discount.newTotal})`);
 
-  // For the 23h step, also send a discounted payment link
-  if (nextStep.step === 'followup_23h' && !metadata.paymentConfirmed) {
+    await sendTextMessage(user.phone_number, message);
+    await logMessage(user.id, message, 'assistant');
+
+    // Send the new Stripe link as its own message (CTA button for mobile).
     try {
-      const { createPaymentLink } = require('../payments/stripe');
       const { sendCTAButton } = require('../messages/sender');
-      const { env: appEnv } = require('../config/env');
-      // $50 upfront (discounted from $60) — domain included
-      const discountUpfront = metadata.selectedDomain ? 50 : 80;
-      const description = metadata.selectedDomain
-        ? `Website + domain (${metadata.selectedDomain}) — discount`
-        : 'Website — limited time discount';
-      if (appEnv.stripe.secretKey) {
-        const result = await createPaymentLink({
-          userId: user.id,
-          phoneNumber: user.phone_number,
-          amount: discountUpfront,
-          serviceType: 'website',
-          packageTier: 'discount',
-          description,
-          customerName: user.name || '',
-        });
-        await sendCTAButton(user.phone_number, `Tap below to pay $${discountUpfront}`, `💳 Pay $${discountUpfront}`, result.url);
-        await logMessage(user.id, `Discount payment link sent: $${discountUpfront}`, 'assistant');
-        logger.info(`[FOLLOWUP] $${discountUpfront} discount payment link sent to ${user.phone_number}`);
+      if (discount.newLinkUrl) {
+        await sendCTAButton(
+          user.phone_number,
+          `Tap below to pay $${discount.newTotal}`,
+          `💳 Pay $${discount.newTotal}`,
+          discount.newLinkUrl
+        );
+        await logMessage(user.id, `Discount payment link sent: $${discount.newTotal}`, 'assistant');
       }
     } catch (err) {
-      logger.error(`[FOLLOWUP] Failed to send $80 payment link:`, err.message);
+      logger.error(`[DISCOUNT] Failed to send CTA button: ${err.message}`);
     }
-  }
 
-  // Mark this step as completed
-  await updateUserMetadata(user.id, {
-    followupSteps: [...completedSteps, nextStep.step],
-  });
+    await updateUserMetadata(user.id, {
+      followupSteps: [...completedSteps, nextStep.step],
+      discountAppliedAt: new Date().toISOString(),
+    });
+    return;
+  }
 }
 
 /**

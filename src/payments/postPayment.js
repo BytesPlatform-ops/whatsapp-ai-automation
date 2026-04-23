@@ -207,17 +207,19 @@ async function handleConfirmedPayment(payment, paidSession) {
         );
       }
     } else {
-      // Regular website payment (no domain selected) — offer domain next
+      // Regular website payment with no domain selected (user chose "skip"
+      // during WEB_DOMAIN_CHOICE). Just confirm — do NOT re-offer a domain.
+      // In the new flow, domain selection is always resolved pre-preview,
+      // so asking again here would be redundant and dilute the close.
       await runWithContext({ channel: targetChannel, phoneNumberId: targetVia }, () => sendTextMessage(
         targetPhone,
-        `Payment of *${amountDisplay}* received! Thank you for choosing Bytes Platform.\n\n` +
+        `Payment of *${amountDisplay}* received! 🎉\n\n` +
           `*Package:* ${p.description || p.service_type}\n\n` +
-          `Your website is all set! Would you like to put it on your own custom domain?\n\n` +
-          `Just say *"yes"* and I'll help you find one, or *"no"* if you're good for now.`
+          `Your site is fully yours — watermark gone, contact form live. I'm here if you need anything.`
       ));
-      await logMessage(p.user_id, `Payment confirmed: ${amountDisplay}`, 'assistant');
+      await logMessage(p.user_id, `Payment confirmed: ${amountDisplay} (no domain)`, 'assistant');
       const { updateUserState } = require('../db/users');
-      await updateUserState(p.user_id, 'DOMAIN_OFFER');
+      await updateUserState(p.user_id, 'SALES_CHAT');
     }
   } else {
     // Non-website payment

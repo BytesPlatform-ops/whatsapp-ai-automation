@@ -16,11 +16,30 @@ function getStripe() {
  * Create a Stripe Payment Link for a specific service/package.
  * Returns the payment link URL and stores the payment record in DB.
  */
-async function createPaymentLink({ userId, phoneNumber, amount, serviceType, packageTier, description, customerEmail, customerName }) {
+async function createPaymentLink({
+  userId,
+  phoneNumber,
+  amount,
+  serviceType,
+  packageTier,
+  description,
+  customerEmail,
+  customerName,
+  // New optional fields for the website+domain combined flow. When present,
+  // the DB payment row stores the split so the 22h discount job can apply
+  // 20% to website only (domain price is fixed by Namecheap).
+  websiteAmount,
+  domainAmount,
+  selectedDomain,
+  originalAmount,
+}) {
   const s = getStripe();
   if (!s) throw new Error('Stripe is not configured');
 
   const amountCents = Math.round(amount * 100);
+  const websiteAmountCents = websiteAmount != null ? Math.round(websiteAmount * 100) : amountCents;
+  const domainAmountCents = domainAmount != null ? Math.round(domainAmount * 100) : 0;
+  const originalAmountCents = originalAmount != null ? Math.round(originalAmount * 100) : amountCents;
   const productName = `${description || `${serviceType} - ${packageTier}`}`;
 
   // Deactivate any prior pending payment links for this user so stale links
@@ -75,6 +94,10 @@ async function createPaymentLink({ userId, phoneNumber, amount, serviceType, pac
       customerEmail,
       customerName,
       metadata: { stripe_price_id: price.id },
+      websiteAmount: websiteAmountCents,
+      domainAmount: domainAmountCents,
+      originalAmount: originalAmountCents,
+      selectedDomain: selectedDomain || null,
     });
 
     logger.info(`[STRIPE] Payment link created: ${paymentLink.url} | Amount: $${amount} | Service: ${serviceType}`);

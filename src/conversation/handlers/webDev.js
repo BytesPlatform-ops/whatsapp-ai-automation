@@ -293,6 +293,12 @@ async function handleWebDev(user, message) {
       return handleCollectContact(user, message);
     case STATES.WEB_CONFIRM:
       return handleConfirm(user, message);
+    case STATES.WEB_DOMAIN_CHOICE:
+      return handleDomainChoice(user, message);
+    case STATES.WEB_DOMAIN_OWN_INPUT:
+      return handleDomainOwnInput(user, message);
+    case STATES.WEB_DOMAIN_SEARCH:
+      return handleDomainSearch(user, message);
     case STATES.WEB_GENERATING:
       return handleGenerating(user, message);
     case STATES.WEB_PREVIEW:
@@ -2264,16 +2270,10 @@ async function handleConfirm(user, message) {
   const confirmIntent = await classifyConfirmIntent(originalText, user.id);
 
   if (confirmIntent === 'confirm') {
-    await sendTextMessage(
-      user.phone_number,
-      await localize(
-        'Alright, give me about 30-60 seconds to build your site...',
-        user,
-        originalText
-      )
-    );
-    await logMessage(user.id, 'Confirmed, generating website', 'assistant');
-    return generateWebsite(user);
+    // Before building, ask about domain. Combined Stripe link needs the
+    // domain price locked in so the activation banner matches the chat link.
+    await logMessage(user.id, 'Confirmed, asking about domain before build', 'assistant');
+    return askDomainChoice(user);
   }
 
   // User wants to change something — use originalText to preserve capitalization
@@ -2553,51 +2553,63 @@ async function generateWebsite(user) {
     const siteId = freshUser.metadata?.currentSiteId;
     logger.info(`[WEBGEN] Step 2/5: Generating website content via LLM for "${websiteData.businessName}" (template=${templateId})`);
 
-    // 1a. Ensure there's a Stripe payment link for the activation banner.
-    // If the sales bot has already created one for this user, reuse it;
-    // otherwise create a default ($199 "Website Activation") link so the
-    // banner's "Activate Now" button always has somewhere to go.
+    // 1a. Create the activation Stripe link for this build. Website+domain
+    // combined flow: the link amount = website price + domain price, and the
+    // same URL is surfaced both on the preview banner and in chat. The
+    // domain price was locked in during the WEB_DOMAIN_CHOICE step (stored
+    // in user.metadata). A prior pending link (if any) gets auto-superseded
+    // by createPaymentLink so the new combined link is the only one live.
+    const websitePrice = parseInt(process.env.DEFAULT_ACTIVATION_PRICE || '199', 10);
+    const domainPrice = parseInt(freshUser.metadata?.domainPrice || 0, 10);
+    const selectedDomain = freshUser.metadata?.selectedDomain || null;
+    const activationTotal = websitePrice + domainPrice;
+
     let paymentLinkUrl = null;
     try {
-      const { supabase } = require('../../config/database');
-      const { data: existingPayment } = await supabase
-        .from('payments')
-        .select('payment_link_url, amount, status')
-        .eq('user_id', user.id)
-        .eq('status', 'pending')
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      if (existingPayment?.payment_link_url) {
-        paymentLinkUrl = existingPayment.payment_link_url;
-        logger.info(`[WEBGEN] Reusing existing pending payment link for activation banner`);
-      } else {
-        const { createPaymentLink } = require('../../payments/stripe');
-        const defaultAmount = parseInt(process.env.DEFAULT_ACTIVATION_PRICE || '199', 10);
-        const linkResult = await createPaymentLink({
-          userId: user.id,
-          phoneNumber: user.phone_number,
-          amount: defaultAmount,
-          serviceType: 'website',
-          packageTier: 'activation',
-          description: `Website activation — ${websiteData.businessName || 'site'}`,
-          customerEmail: user.metadata?.email || websiteData.contactEmail || null,
-          customerName: websiteData.businessName || null,
-        });
-        paymentLinkUrl = linkResult?.url || null;
-        logger.info(`[WEBGEN] Created default activation payment link: $${defaultAmount}`);
-      }
+      const { createPaymentLink } = require('../../payments/stripe');
+
+      const description = selectedDomain && domainPrice > 0
+        ? `Website activation + domain ${selectedDomain} — ${websiteData.businessName || 'site'}`
+        : selectedDomain
+          ? `Website activation (DNS for ${selectedDomain}) — ${websiteData.businessName || 'site'}`
+          : `Website activation — ${websiteData.businessName || 'site'}`;
+
+      const linkResult = await createPaymentLink({
+        userId: user.id,
+        phoneNumber: user.phone_number,
+        amount: activationTotal,
+        serviceType: 'website',
+        packageTier: 'activation',
+        description,
+        customerEmail: user.metadata?.email || websiteData.contactEmail || null,
+        customerName: websiteData.businessName || null,
+        websiteAmount: websitePrice,
+        domainAmount: domainPrice,
+        selectedDomain,
+        originalAmount: activationTotal,
+      });
+      paymentLinkUrl = linkResult?.pixieUrl || linkResult?.url || null;
+      logger.info(
+        `[WEBGEN] Activation link created: $${activationTotal} ` +
+          `(website $${websitePrice} + domain $${domainPrice} for ${selectedDomain || 'no domain'})`
+      );
     } catch (err) {
       // Non-fatal — banner will fall back to a WhatsApp CTA if no link
       logger.warn(`[WEBGEN] Activation payment link setup failed: ${err.message}`);
     }
 
+    // Banner shows the same dollar figure the chat CTA charges. At initial
+    // build there's no discount yet — originalAmount matches activationAmount
+    // and discountPct is 0 until the 22h discount job fires.
     const siteConfig = await generateWebsiteContent(websiteData, {
       templateId,
       siteId,
       userId: user.id,
       paymentStatus: 'preview',
       paymentLinkUrl,
+      activationAmount: activationTotal,
+      originalAmount: activationTotal,
+      discountPct: 0,
     });
     logger.info(`[WEBGEN] Content generated:`, {
       headline: siteConfig.headline,
@@ -2650,13 +2662,24 @@ async function generateWebsite(user) {
 
     // Send the Stripe activation link as its own message so the user sees
     // the EXACT same URL in chat that the "Activate Now" button on the
-    // site points to. One tap either way — same outcome.
+    // site points to. One tap either way — same outcome. The total includes
+    // the domain price if one was selected, so the chat CTA and the banner
+    // always match.
     if (paymentLinkUrl) {
+      const priceLine = domainPrice > 0 && selectedDomain
+        ? `*$${activationTotal}* — $${websitePrice} website + $${domainPrice} for *${selectedDomain}*.`
+        : selectedDomain
+          ? `*$${activationTotal}* — I'll point *${selectedDomain}* at your new site right after payment.`
+          : `*$${activationTotal}*.`;
       await sendTextMessage(
         user.phone_number,
-        `🔒 *Preview mode.* To make it live and unlock the contact form:\n\n👉 ${paymentLinkUrl}\n\nSame link as the *Activate Now* button on your site. Pay either way — the banner disappears once payment clears.`
+        `🔒 *Preview mode.* ${priceLine}\n\nActivate to make it live and unlock the contact form:\n\n👉 ${paymentLinkUrl}\n\nSame link as the *Activate Now* button on your site.`
       );
-      await logMessage(user.id, `Activation link sent: ${paymentLinkUrl}`, 'assistant');
+      await logMessage(
+        user.id,
+        `Activation link sent: $${activationTotal} (${selectedDomain || 'no domain'}) ${paymentLinkUrl}`,
+        'assistant'
+      );
     }
 
     await logMessage(user.id, `Website deployed: ${previewUrl}`, 'assistant');
@@ -3110,6 +3133,324 @@ async function handleRevisions(user, message) {
   }
 
   return STATES.WEB_REVISIONS;
+}
+
+// ─── DOMAIN CHOICE (pre-build) ─────────────────────────────────────
+// After WEB_CONFIRM approval, we ask about the domain BEFORE building the
+// site. The domain price gets folded into the activation Stripe link so
+// the preview banner and the chat CTA are always in sync.
+//
+// Three branches:
+//   "new" / "yes"  → Namecheap search → user picks one → generate
+//   "own" / "have" → collect their existing domain   → generate
+//   "skip" / "no"  → skip, no domain                 → generate
+
+const { checkDomainAvailability } = require('../../website-gen/domainChecker');
+
+async function askDomainChoice(user) {
+  const { updateUserState } = require('../../db/users');
+  await updateUserState(user.id, STATES.WEB_DOMAIN_CHOICE);
+
+  const businessName = user.metadata?.websiteData?.businessName || '';
+  const sanitized = businessName.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const example = sanitized && sanitized.length >= 2 ? `${sanitized}.com` : 'yourbusiness.com';
+
+  await sendTextMessage(
+    user.phone_number,
+    await localize(
+      `Before I build — what do you want to do about a domain?\n\n` +
+        `• *new* — I'll find one for you (e.g. ${example})\n` +
+        `• *own* — you already have a domain\n` +
+        `• *skip* — just host it on a free preview URL for now`,
+      user
+    )
+  );
+  await logMessage(user.id, 'Asking domain choice (new/own/skip)', 'assistant');
+  return STATES.WEB_DOMAIN_CHOICE;
+}
+
+async function handleDomainChoice(user, message) {
+  const raw = (message.text || '').trim();
+  const text = raw.toLowerCase();
+
+  // Skip path — no domain.
+  if (/^(skip|no|nope|nah|later|pass|not now|maybe later)$/i.test(text)) {
+    await updateUserMetadata(user.id, {
+      domainChoice: 'skip',
+      selectedDomain: null,
+      domainPrice: 0,
+    });
+    await sendTextMessage(
+      user.phone_number,
+      await localize("No problem — going straight to building.", user, raw)
+    );
+    await logMessage(user.id, 'Domain choice: skip', 'assistant');
+    return generateWebsite(user);
+  }
+
+  // "I already own one" path.
+  if (/^(own|have|mine|my|i\s*(?:have|own))\b/i.test(text)) {
+    await updateUserMetadata(user.id, { domainChoice: 'own' });
+    const { updateUserState } = require('../../db/users');
+    await updateUserState(user.id, STATES.WEB_DOMAIN_OWN_INPUT);
+    await sendTextMessage(
+      user.phone_number,
+      await localize("Great — what's your domain? (e.g. glowstudio.com)", user, raw)
+    );
+    return STATES.WEB_DOMAIN_OWN_INPUT;
+  }
+
+  // "Find one" path.
+  if (/^(new|yes|yeah|yep|sure|ok|okay|find|search|look|help)\b/i.test(text)) {
+    const businessName = user.metadata?.websiteData?.businessName || '';
+    const sanitized = businessName.toLowerCase().replace(/[^a-z0-9]/g, '');
+    await updateUserMetadata(user.id, { domainChoice: 'need' });
+
+    if (sanitized && sanitized.length >= 2) {
+      return runDomainSearchInline(user, sanitized);
+    }
+    const { updateUserState } = require('../../db/users');
+    await updateUserState(user.id, STATES.WEB_DOMAIN_SEARCH);
+    await sendTextMessage(
+      user.phone_number,
+      await localize("What name should I search for? (e.g. mybusiness)", user, raw)
+    );
+    return STATES.WEB_DOMAIN_SEARCH;
+  }
+
+  // Full domain typed — treat as "own".
+  const fullMatch = raw.match(/([a-z0-9-]+\.[a-z]{2,}(?:\.[a-z]{2,})?)/i);
+  if (fullMatch) {
+    return saveOwnDomain(user, fullMatch[1].toLowerCase());
+  }
+
+  // Plausible single-word name with no spaces → treat as search term.
+  const cleaned = text.replace(/[^a-z0-9-]/g, '');
+  if (!/\s/.test(raw) && cleaned.length >= 2 && cleaned.length <= 30) {
+    await updateUserMetadata(user.id, { domainChoice: 'need' });
+    return runDomainSearchInline(user, cleaned);
+  }
+
+  // Fallback — reprompt.
+  await sendTextMessage(
+    user.phone_number,
+    await localize(
+      "Just reply *new*, *own*, or *skip* — or type the domain you want.",
+      user,
+      raw
+    )
+  );
+  return STATES.WEB_DOMAIN_CHOICE;
+}
+
+async function handleDomainOwnInput(user, message) {
+  const raw = (message.text || '').trim();
+  const text = raw.toLowerCase();
+
+  // Exit — user changed their mind.
+  if (/^(skip|cancel|back|never\s*mind|nvm|forget\s*it)$/i.test(text)) {
+    await updateUserMetadata(user.id, {
+      domainChoice: 'skip',
+      selectedDomain: null,
+      domainPrice: 0,
+    });
+    await sendTextMessage(
+      user.phone_number,
+      await localize("All good — skipping the domain and building now.", user, raw)
+    );
+    return generateWebsite(user);
+  }
+
+  // Validate domain format.
+  const match = raw.match(/([a-z0-9][a-z0-9-]*\.[a-z]{2,}(?:\.[a-z]{2,})?)/i);
+  if (match) {
+    return saveOwnDomain(user, match[1].toLowerCase());
+  }
+
+  await sendTextMessage(
+    user.phone_number,
+    await localize(
+      "Doesn't look like a domain. Try something like *glowstudio.com* — or reply *skip*.",
+      user,
+      raw
+    )
+  );
+  return STATES.WEB_DOMAIN_OWN_INPUT;
+}
+
+async function saveOwnDomain(user, domain) {
+  await updateUserMetadata(user.id, {
+    domainChoice: 'own',
+    selectedDomain: domain,
+    domainPrice: 0, // Already owned — no registration charge.
+  });
+  await sendTextMessage(
+    user.phone_number,
+    await localize(
+      `Got it — *${domain}*. After payment I'll send DNS instructions so you can point it at your new site. Building now...`,
+      user
+    )
+  );
+  await logMessage(user.id, `Domain choice: own (${domain})`, 'assistant');
+  return generateWebsite(user);
+}
+
+async function handleDomainSearch(user, message) {
+  const raw = (message.text || '').trim();
+  const text = raw.toLowerCase();
+
+  // Exit phrases — bail out of domain flow, build with no domain.
+  if (/\b(skip|nah|nope|forget\s*it|never\s*mind|nvm|not\s*now|cancel|stop|exit|back|no\s*thanks?)\b/i.test(text) &&
+      !/[\w-]+\.[a-z]{2,}/i.test(raw)) {
+    await updateUserMetadata(user.id, {
+      domainChoice: 'skip',
+      selectedDomain: null,
+      domainPrice: 0,
+    });
+    await sendTextMessage(
+      user.phone_number,
+      await localize("No problem — skipping domain and building now.", user, raw)
+    );
+    return generateWebsite(user);
+  }
+
+  const domainOptions = user.metadata?.domainOptions || [];
+
+  // Pick by number.
+  const numMatch = text.match(/^(\d+)$/);
+  if (numMatch && domainOptions.length > 0) {
+    const idx = parseInt(numMatch[1], 10) - 1;
+    if (idx >= 0 && idx < domainOptions.length &&
+        domainOptions[idx].available && !domainOptions[idx].premium) {
+      return selectDomainInline(user, domainOptions[idx]);
+    }
+    await sendTextMessage(
+      user.phone_number,
+      await localize("That one's not available. Try another number or a new name.", user, raw)
+    );
+    return STATES.WEB_DOMAIN_SEARCH;
+  }
+
+  // Pick by ordinal word.
+  const ordinalMap = { first: 0, '1st': 0, second: 1, '2nd': 1, third: 2, '3rd': 2, fourth: 3, '4th': 3, fifth: 4, '5th': 4 };
+  const ordMatch = text.match(/\b(first|1st|second|2nd|third|3rd|fourth|4th|fifth|5th)\b/);
+  if (ordMatch && domainOptions.length > 0) {
+    const idx = ordinalMap[ordMatch[1]];
+    if (idx !== undefined && idx < domainOptions.length &&
+        domainOptions[idx].available && !domainOptions[idx].premium) {
+      return selectDomainInline(user, domainOptions[idx]);
+    }
+  }
+
+  // Full domain typed (e.g. "mybiz.com").
+  const fullMatch = raw.match(/([a-z0-9-]+\.[a-z]{2,})/i);
+  if (fullMatch) {
+    const typedDomain = fullMatch[1].toLowerCase();
+    const fromOptions = domainOptions.find(d => d.domain.toLowerCase() === typedDomain);
+    if (fromOptions && fromOptions.available && !fromOptions.premium) {
+      return selectDomainInline(user, fromOptions);
+    }
+    // Not in current options — run a fresh search.
+    const base = typedDomain.split('.')[0];
+    return runDomainSearchInline(user, base);
+  }
+
+  // New base name for search.
+  const cleaned = text.replace(/[^a-z0-9-]/g, '');
+  if (cleaned.length >= 2 && cleaned.length <= 30 && !/\s/.test(raw)) {
+    return runDomainSearchInline(user, cleaned);
+  }
+
+  await sendTextMessage(
+    user.phone_number,
+    await localize(
+      "Reply with the *number* of a domain above, or type a new name to search again.",
+      user,
+      raw
+    )
+  );
+  return STATES.WEB_DOMAIN_SEARCH;
+}
+
+async function runDomainSearchInline(user, baseName) {
+  const { updateUserState } = require('../../db/users');
+  await updateUserState(user.id, STATES.WEB_DOMAIN_SEARCH);
+  await sendTextMessage(
+    user.phone_number,
+    await localize(`Checking domain availability for *${baseName}*...`, user)
+  );
+
+  let results = [];
+  try {
+    results = await checkDomainAvailability(baseName);
+  } catch (err) {
+    logger.error(`[WEBDEV-DOMAIN] search failed: ${err.message}`);
+    await sendTextMessage(
+      user.phone_number,
+      await localize(
+        "Had trouble reaching Namecheap. Want me to skip the domain and build anyway? Reply *skip*, or type a different name.",
+        user
+      )
+    );
+    return STATES.WEB_DOMAIN_SEARCH;
+  }
+
+  const available = results.filter(r => r.available && !r.premium);
+
+  if (available.length === 0) {
+    await sendTextMessage(
+      user.phone_number,
+      await localize(
+        `No domains available with *${baseName}*. Try a different name, or reply *skip* to build without one.`,
+        user
+      )
+    );
+    await updateUserMetadata(user.id, { domainOptions: results, domainSearchName: baseName });
+    return STATES.WEB_DOMAIN_SEARCH;
+  }
+
+  let msg = '*Available domains:*\n\n';
+  results.forEach((r, i) => {
+    const price = r.price ? ` — $${r.price}/yr` : '';
+    if (r.premium) msg += `${i + 1}. ⚠️ ${r.domain} — Premium${price} (skipped)\n`;
+    else if (r.available) msg += `${i + 1}. ✅ ${r.domain}${price}\n`;
+    else msg += `${i + 1}. ❌ ${r.domain} — taken\n`;
+  });
+  msg += '\nReply with a *number* to pick one, a different name to search again, or *skip*.';
+
+  await sendTextMessage(user.phone_number, await localize(msg, user));
+  await updateUserMetadata(user.id, {
+    domainOptions: results,
+    domainSearchName: baseName,
+  });
+  await logMessage(
+    user.id,
+    `Domain search: ${available.map(r => r.domain).join(', ')} available`,
+    'assistant'
+  );
+  return STATES.WEB_DOMAIN_SEARCH;
+}
+
+async function selectDomainInline(user, option) {
+  const price = option.price ? parseFloat(option.price) : 0;
+  await updateUserMetadata(user.id, {
+    domainChoice: 'need',
+    selectedDomain: option.domain.toLowerCase(),
+    domainPrice: Math.ceil(price), // whole USD — Namecheap returns 12.88 etc.
+  });
+  await sendTextMessage(
+    user.phone_number,
+    await localize(
+      `Locked in *${option.domain}* — $${Math.ceil(price)}/yr. Building your site now…`,
+      user
+    )
+  );
+  await logMessage(
+    user.id,
+    `Domain selected: ${option.domain} ($${Math.ceil(price)}/yr)`,
+    'assistant'
+  );
+  return generateWebsite(user);
 }
 
 module.exports = {

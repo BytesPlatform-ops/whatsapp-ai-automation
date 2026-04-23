@@ -1,6 +1,6 @@
 # Pixie — Everything Your Business Needs, Built Over a WhatsApp Chat
 
-**Brand:** Bytes Platform
+**Brand:** Pixie
 **Product persona:** Pixie
 **Tagline:** *Your website, built by a WhatsApp chat.*
 **Live at:** [pixiebot.co](https://pixiebot.co) · [bytesplatform.com](https://bytesplatform.com) · [bytescart.ai](https://bytescart.ai)
