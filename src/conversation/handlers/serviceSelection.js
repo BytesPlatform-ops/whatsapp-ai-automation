@@ -3,6 +3,7 @@ const {
   sendInteractiveButtons,
   sendInteractiveList,
   sendWithMenuButton,
+  sendCTAButton,
 } = require('../../messages/sender');
 const { logMessage } = require('../../db/conversations');
 const { updateUserMetadata } = require('../../db/users');
@@ -178,11 +179,34 @@ async function handleServiceSelection(user, message) {
       await logMessage(user.id, 'Entering sales chat', 'assistant');
       return STATES.SALES_CHAT;
 
-    default:
-      // Didn't match any service - show the buttons again
+    default: {
+      // Didn't match any specific service. Figure out what kind of
+      // non-match we're looking at and tailor the response:
+      //   - Exploration question ("any other services?", "what else do
+      //     you have?") → jump straight to the full service list.
+      //   - Question-shaped input → soft acknowledgment before re-show.
+      //   - Everything else → plain re-show.
+      const looksExploratory =
+        /\b(other|more|else|additional|full|all|whole|every|complete|rest|anything|available|offerings?|more services|more options)\b/i.test(text) ||
+        /\b(what else|what other|what services|whats available|what.s available|anything else|any other|show.*(all|list|everything))\b/i.test(text);
+
+      if (looksExploratory) {
+        // User wants to see the full list. Route as if they tapped
+        // "More Services" — recurse into the handler with that buttonId.
+        return handleServiceSelection(user, { ...message, buttonId: 'svc_more', text: '' });
+      }
+
+      const isQuestion =
+        /\?$/.test(text) ||
+        /^(what|whats|which|how|hows|when|whens|where|wheres|why|whys|does|do|can|could|should|would|is|are|will|who|whos|tell)\b/i.test(text);
+
+      const preface = isQuestion
+        ? "good question — I’ll show the main options; tap 📋 More Services for the full list."
+        : "hmm, didn’t catch that. Here are our main services:";
+
       await sendInteractiveButtons(
         user.phone_number,
-        'Please select one of our services to get started:',
+        preface,
         [
           { id: 'svc_seo', title: '🔍 SEO Audit' },
           { id: 'svc_webdev', title: '🌐 Website' },
@@ -191,6 +215,7 @@ async function handleServiceSelection(user, message) {
       );
       await logMessage(user.id, 'Re-showing service selection', 'assistant', 'interactive');
       return STATES.SERVICE_SELECTION;
+    }
   }
 }
 

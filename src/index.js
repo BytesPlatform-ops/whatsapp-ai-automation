@@ -23,6 +23,18 @@ const path = require('path');
 // Validate environment variables
 validateEnv();
 
+// Handler smoke check — catches missing-import and parse-error bugs in any
+// conversation handler BEFORE we bind the port and accept traffic. Fails
+// loudly with exit(1) so a broken deploy never gets marked healthy.
+const { runHandlerSmokeCheck } = require('./boot/handlerSmokeCheck');
+const smokeResult = runHandlerSmokeCheck();
+if (!smokeResult.ok) {
+  logger.error('Handler smoke check FAILED — refusing to start:');
+  for (const err of smokeResult.errors) logger.error(`  ${err}`);
+  process.exit(1);
+}
+logger.info('Handler smoke check passed');
+
 const app = express();
 
 // Trust the first proxy (ngrok / reverse proxy) so rate-limiter reads the real IP

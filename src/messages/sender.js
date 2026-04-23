@@ -8,6 +8,7 @@
 const { getCurrentChannel, noteSendSucceeded } = require('./channelContext');
 const whatsappSender = require('./whatsappSender');
 const messengerSender = require('./messengerSender');
+const { rememberInteractive, maybeAppendHint } = require('./interactiveReplyMatcher');
 
 function getSender() {
   const channel = getCurrentChannel();
@@ -30,14 +31,27 @@ async function sendTextMessage(to, text, options = {}) {
 }
 
 async function sendInteractiveButtons(to, bodyText, buttons, headerText = null) {
-  const result = await getSender().sendInteractiveButtons(to, bodyText, buttons, headerText);
+  // Phase 10: append a "Or type 1, 2, 3" hint and remember this button set
+  // so the next inbound text reply can be matched back to a button — lets
+  // users who prefer typing (or whose client doesn't render buttons as
+  // interactive) still pick an option without the bot fumbling.
+  const bodyWithHint = maybeAppendHint(bodyText, buttons);
+  const result = await getSender().sendInteractiveButtons(to, bodyWithHint, buttons, headerText);
   noteSendSucceeded();
+  try { rememberInteractive(to, buttons, 'buttons'); } catch {}
   return result;
 }
 
 async function sendInteractiveList(to, bodyText, buttonText, sections, headerText = null) {
-  const result = await getSender().sendInteractiveList(to, bodyText, buttonText, sections, headerText);
+  // Flatten all rows across sections into one id/title list so the matcher
+  // can treat a list the same way as buttons for the "type a number" path.
+  const flatRows = Array.isArray(sections)
+    ? sections.flatMap((s) => Array.isArray(s?.rows) ? s.rows : [])
+    : [];
+  const bodyWithHint = maybeAppendHint(bodyText, flatRows);
+  const result = await getSender().sendInteractiveList(to, bodyWithHint, buttonText, sections, headerText);
   noteSendSucceeded();
+  try { rememberInteractive(to, flatRows, 'list'); } catch {}
   return result;
 }
 

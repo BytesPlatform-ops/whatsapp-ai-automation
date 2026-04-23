@@ -516,6 +516,45 @@ async function _routeMessage(message) {
   // independent sessions.
   const user = await findOrCreateUser(from, channel, message.phoneNumberId || null);
 
+  // ── Interactive reply matcher (Phase 10) ───────────────────────────────
+  // If the last bot message to this user had buttons/list and this inbound
+  // is plain text that looks like a pick ("2", "second one", "website",
+  // etc.), convert it into a real buttonId so downstream handlers treat
+  // it as a tap. Users on desktop, older clients, or who just prefer
+  // typing never have to phrase things exactly right. Runs BEFORE the
+  // recap check so a matched pick suppresses the recap.
+  const rawText = (message.text || '').trim();
+  const alreadyTapped = !!(message.buttonId || message.listId);
+  if (message.type === 'text' && rawText && !alreadyTapped && !rawText.startsWith('/')) {
+    try {
+      const { matchReply } = require('../messages/interactiveReplyMatcher');
+      const result = await matchReply(user.phone_number, rawText, { userId: user.id });
+      if (result && result.kind === 'match') {
+        logger.info(`[INTERACTIVE] Matched "${rawText}" → buttonId=${result.item.id} (title="${result.item.title}") for ${from}`);
+        message.buttonId = result.item.id;
+        // Replace the visible text with the button's title so conversation
+        // logs and any LLM context downstream read naturally ("SEO Audit"
+        // instead of "2"). Original digit is still recoverable from logs.
+        message.text = result.item.title;
+      } else if (result && result.kind === 'out_of_range') {
+        // User typed a digit that doesn't correspond to any button. Give
+        // a concrete nudge rather than silently re-showing the menu.
+        // Pending stays alive so their next valid digit still matches.
+        logger.info(`[INTERACTIVE] Out-of-range digit "${rawText}" for ${from} (total=${result.total})`);
+        const nudge = `that was only ${result.total} option${result.total === 1 ? '' : 's'} — pick 1-${result.total} or tap one of the buttons above.`;
+        await sendTextMessage(user.phone_number, nudge);
+        await logMessage(user.id, nudge, 'assistant');
+        // Stop this turn here. The buttons are still visible in the
+        // chat and the user can retry; no need to run the state handler
+        // (which would re-show the whole menu).
+        return;
+      }
+      // kind 'off_topic' and 'nopending' fall through to normal handling.
+    } catch (err) {
+      logger.warn(`[INTERACTIVE] Matcher threw for ${from}: ${err.message}`);
+    }
+  }
+
   // ── Session recap (Phase 9) ────────────────────────────────────────────
   // If the user has been silent for more than 30 min, fire a short
   // contextual "welcome back" before the handler runs. Done HERE (after
