@@ -321,6 +321,58 @@ function escape(s) {
     .replace(/'/g, '&#39;');
 }
 
+/**
+ * Notify admin that an abusive / flagged message was received (Phase 13).
+ * Covers hate, threats, phishing, hacking, illegal. The conversation
+ * has been paused via humanTakeover — admin needs to review and
+ * decide whether to reply manually or leave the user silenced.
+ */
+async function sendAbuseNotification({ userPhone, userName, category, messageText, channel, userId }) {
+  const safeMsg = escape(String(messageText || '').slice(0, 1000));
+  const categoryLabels = {
+    hate: 'Hate speech / slurs',
+    threats: 'Threats of violence',
+    phishing: 'Phishing / impersonation request',
+    hacking: 'Unauthorized hacking request',
+    illegal: 'Illegal activity',
+  };
+  const label = categoryLabels[category] || category;
+
+  return sendEmail({
+    to: NOTIFY_EMAIL,
+    subject: `⚠️ Flagged message (${label}) from ${userName || userPhone}`,
+    html: `
+      <div style="font-family:-apple-system,BlinkMacSystemFont,sans-serif;max-width:620px;margin:0 auto;padding:24px;color:#111827">
+        <div style="background:#fef2f2;border-left:4px solid #dc2626;padding:14px 18px;border-radius:4px;margin-bottom:20px">
+          <div style="font-size:12px;font-weight:700;color:#991b1b;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:6px">PIXIE · ABUSE ALERT</div>
+          <div style="font-size:17px;font-weight:700;color:#7f1d1d">${escape(label)}</div>
+        </div>
+        <p style="margin:0 0 14px;color:#374151">The bot declined this message and paused itself on this conversation (human takeover = on). Review the content below and decide whether to resume manually or leave the user silenced.</p>
+        <table style="border-collapse:collapse;margin:8px 0 20px;width:100%">
+          <tr><td style="padding:6px 10px;font-weight:bold;background:#f9fafb;width:120px">User</td><td style="padding:6px 10px">${escape(userName || 'N/A')}</td></tr>
+          <tr><td style="padding:6px 10px;font-weight:bold;background:#f9fafb">Phone</td><td style="padding:6px 10px">${escape(userPhone || 'N/A')}</td></tr>
+          <tr><td style="padding:6px 10px;font-weight:bold;background:#f9fafb">Channel</td><td style="padding:6px 10px">${escape(channel || 'whatsapp')}</td></tr>
+          <tr><td style="padding:6px 10px;font-weight:bold;background:#f9fafb">Category</td><td style="padding:6px 10px;color:#b91c1c;font-weight:bold">${escape(category)}</td></tr>
+          <tr><td style="padding:6px 10px;font-weight:bold;background:#f9fafb">User ID</td><td style="padding:6px 10px;font-family:monospace;font-size:12px">${escape(userId || 'N/A')}</td></tr>
+        </table>
+        <div style="margin:10px 0 6px;font-size:11px;font-weight:700;color:#6b7280;letter-spacing:1.5px;text-transform:uppercase">Message content</div>
+        <div style="background:#f8fafc;border:1px solid #e5e7eb;border-radius:6px;padding:14px;font-size:14px;color:#1f2937;white-space:pre-wrap">${safeMsg}</div>
+        <p style="margin:24px 0 0;font-size:13px;color:#6b7280">Use the admin dashboard to review the conversation or toggle takeover off if you want the bot to resume replying.</p>
+      </div>
+    `,
+    text:
+      `PIXIE ABUSE ALERT\n` +
+      `${label}\n\n` +
+      `User: ${userName || 'N/A'}\n` +
+      `Phone: ${userPhone || 'N/A'}\n` +
+      `Channel: ${channel || 'whatsapp'}\n` +
+      `Category: ${category}\n` +
+      `User ID: ${userId || 'N/A'}\n\n` +
+      `Message:\n${String(messageText || '').slice(0, 1000)}\n\n` +
+      `The bot declined and paused itself (humanTakeover=on). Review in the admin dashboard.`,
+  });
+}
+
 module.exports = {
   sendEmail,
   sendPaymentNotification,
@@ -328,4 +380,5 @@ module.exports = {
   sendUpsellEmail,
   sendMeetingLinkToLead,
   sendLeadNotification,
+  sendAbuseNotification,
 };

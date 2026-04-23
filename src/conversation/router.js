@@ -555,6 +555,44 @@ async function _routeMessage(message) {
     }
   }
 
+  // ── Abuse detection (Phase 13) ─────────────────────────────────────────
+  // Before ANY greeting / recap / handler dispatch runs, classify the
+  // inbound message. Hard categories (hate / threats / phishing /
+  // hacking / illegal) get a firm decline, bot-silence via
+  // humanTakeover, and an admin email. NSFW-legal (adult / cannabis /
+  // gambling) gets a polite decline only. Gray-area intents (MLM,
+  // crypto, diet-pill dropshipping) pivot to the meeting-booking flow.
+  //
+  // Gated to skip cheaply for: button taps, slash commands, empty
+  // text, and users already in humanTakeover — no need to burn an
+  // LLM call on messages that won't produce a bot reply anyway.
+  {
+    const abuseText = (message.text || '').trim();
+    const isAbuseSlash = abuseText.startsWith('/');
+    const isAbuseInteractive = !!(message.buttonId || message.listId);
+    const alreadySilenced = !!user.metadata?.humanTakeover;
+    if (
+      message.type === 'text' &&
+      abuseText &&
+      !isAbuseSlash &&
+      !isAbuseInteractive &&
+      !alreadySilenced
+    ) {
+      try {
+        const { classifyAbuse } = require('./abuseDetector');
+        const { handleAbuseCategory } = require('./abuseHandler');
+        const category = await classifyAbuse(abuseText, user.id);
+        if (category && category !== 'clean') {
+          const result = await handleAbuseCategory(user, message, category);
+          if (result?.handled) return;
+        }
+      } catch (err) {
+        // Never let an abuse-detector bug block a legitimate message.
+        logger.warn(`[ABUSE] Detection pipeline failed for ${from}: ${err.message}`);
+      }
+    }
+  }
+
   // ── Session recap (Phase 9) ────────────────────────────────────────────
   // If the user has been silent for more than 30 min, fire a short
   // contextual "welcome back" before the handler runs. Done HERE (after
