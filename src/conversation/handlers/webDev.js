@@ -629,64 +629,93 @@ function getColorsForIndustry(industry) {
   return match ? INDUSTRY_COLORS[match] : DEFAULT_COLORS;
 }
 
-// Named-color lookup for the revision follow-up flow. Values are the same
-// deep saturated shades the revision parser prompt picks — kept in sync
-// so the fast-path and LLM-path land on similar colors for the same word.
-// Compound names (two words) are matched as whole phrases below.
-const NAMED_COLOR_HEX = {
-  blue: '#1D4ED8',
-  navy: '#1E3A8A',
-  'royal blue': '#1E40AF',
-  'dark blue': '#1E3A8A',
-  'sky blue': '#0EA5E9',
-  teal: '#0F766E',
-  cyan: '#0891B2',
-  turquoise: '#14B8A6',
-  green: '#059669',
-  'forest green': '#065F46',
-  'dark green': '#064E3B',
-  'olive': '#4D7C0F',
-  emerald: '#059669',
-  red: '#B91C1C',
-  crimson: '#991B1B',
-  maroon: '#7F1D1D',
-  burgundy: '#7F1D1D',
-  purple: '#6D28D9',
-  violet: '#5B21B6',
-  indigo: '#4338CA',
-  pink: '#EC4899',
-  'hot pink': '#DB2777',
-  magenta: '#C026D3',
-  orange: '#C2410C',
-  amber: '#D97706',
-  yellow: '#F59E0B',
-  gold: '#D97706',
-  brown: '#78350F',
-  black: '#0F172A',
-  charcoal: '#1F2937',
-  gray: '#4B5563',
-  grey: '#4B5563',
-  white: '#F8FAFC',
+// Named-color lookup for the revision follow-up flow. Each named color
+// maps to a full three-color palette — primary (dominant hue), secondary
+// (deeper companion for footers / dark sections), and accent (brighter
+// counterpoint for CTAs / highlights). Palettes are designer-picked so
+// a user who just says "blue" gets a coherent site, not a primary-only
+// swap that clashes with the leftover accent from the previous palette.
+//
+// heroTextOverride: 'dark' is set on very light palettes so hero text
+// (white by default) flips to near-black for readability.
+const NAMED_COLOR_PALETTES = {
+  blue:         { primary: '#1E3A8A', secondary: '#0F172A', accent: '#3B82F6' },
+  navy:         { primary: '#0F172A', secondary: '#020617', accent: '#38BDF8' },
+  'royal blue': { primary: '#1E40AF', secondary: '#1E3A8A', accent: '#60A5FA' },
+  'dark blue':  { primary: '#1E3A8A', secondary: '#172554', accent: '#60A5FA' },
+  'sky blue':   { primary: '#0EA5E9', secondary: '#0369A1', accent: '#7DD3FC' },
+  teal:         { primary: '#0F766E', secondary: '#134E4A', accent: '#2DD4BF' },
+  cyan:         { primary: '#0891B2', secondary: '#164E63', accent: '#67E8F9' },
+  turquoise:    { primary: '#14B8A6', secondary: '#0F766E', accent: '#99F6E4' },
+  green:        { primary: '#059669', secondary: '#064E3B', accent: '#10B981' },
+  'forest green': { primary: '#064E3B', secondary: '#022C22', accent: '#34D399' },
+  'dark green': { primary: '#14532D', secondary: '#052E16', accent: '#22C55E' },
+  olive:        { primary: '#4D7C0F', secondary: '#365314', accent: '#84CC16' },
+  emerald:      { primary: '#059669', secondary: '#064E3B', accent: '#6EE7B7' },
+  red:          { primary: '#B91C1C', secondary: '#7F1D1D', accent: '#EF4444' },
+  crimson:      { primary: '#991B1B', secondary: '#450A0A', accent: '#DC2626' },
+  maroon:       { primary: '#7F1D1D', secondary: '#450A0A', accent: '#DC2626' },
+  burgundy:     { primary: '#7F1D1D', secondary: '#450A0A', accent: '#B91C1C' },
+  purple:       { primary: '#6D28D9', secondary: '#4C1D95', accent: '#A78BFA' },
+  violet:       { primary: '#5B21B6', secondary: '#3B0764', accent: '#8B5CF6' },
+  indigo:       { primary: '#4338CA', secondary: '#312E81', accent: '#818CF8' },
+  pink:         { primary: '#DB2777', secondary: '#831843', accent: '#F472B6' },
+  'hot pink':   { primary: '#DB2777', secondary: '#9D174D', accent: '#EC4899' },
+  magenta:      { primary: '#C026D3', secondary: '#86198F', accent: '#E879F9' },
+  orange:       { primary: '#C2410C', secondary: '#7C2D12', accent: '#FB923C' },
+  amber:        { primary: '#D97706', secondary: '#92400E', accent: '#FBBF24' },
+  yellow:       { primary: '#CA8A04', secondary: '#854D0E', accent: '#FACC15' },
+  gold:         { primary: '#A16207', secondary: '#713F12', accent: '#EAB308' },
+  brown:        { primary: '#78350F', secondary: '#451A03', accent: '#F97316' },
+  black:        { primary: '#0F172A', secondary: '#020617', accent: '#64748B' },
+  charcoal:     { primary: '#1F2937', secondary: '#111827', accent: '#6B7280' },
+  gray:         { primary: '#4B5563', secondary: '#1F2937', accent: '#9CA3AF' },
+  grey:         { primary: '#4B5563', secondary: '#1F2937', accent: '#9CA3AF' },
+  white:        { primary: '#F8FAFC', secondary: '#E2E8F0', accent: '#64748B', heroTextOverride: 'dark' },
+  mint:         { primary: '#A7F3D0', secondary: '#6EE7B7', accent: '#059669', heroTextOverride: 'dark' },
+  pastel:       { primary: '#FBCFE8', secondary: '#F472B6', accent: '#831843', heroTextOverride: 'dark' },
 };
 
-// Extract a hex color from a short user reply like "blue", "#1e40af",
-// "dark green". Returns the uppercase #RRGGBB or null if nothing
-// recognized. Used by the revision flow's awaitingColor follow-up path
-// so the bot doesn't need to re-ask on one-word answers.
+// Derive a reasonable palette from a raw hex. Darken for secondary
+// (multiply RGB by 0.55), lighten for accent (mix 60% of original with
+// 40% white). Good enough to avoid a clashing leftover accent when the
+// user gives us something arbitrary.
+function derivePaletteFromHex(hex) {
+  const h = hex.replace('#', '');
+  const r = parseInt(h.slice(0, 2), 16);
+  const g = parseInt(h.slice(2, 4), 16);
+  const b = parseInt(h.slice(4, 6), 16);
+  const darken = (v) => Math.max(0, Math.round(v * 0.55));
+  const lighten = (v) => Math.min(255, Math.round(v * 0.6 + 255 * 0.4));
+  const toHex = (r2, g2, b2) =>
+    '#' + [r2, g2, b2].map((n) => n.toString(16).padStart(2, '0').toUpperCase()).join('');
+  // Luminance proxy so we can hint hero text flip for light primaries
+  // (the revision parser uses 0.55 as the pastel threshold; mirroring it).
+  const lum = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+  return {
+    primary: toHex(r, g, b),
+    secondary: toHex(darken(r), darken(g), darken(b)),
+    accent: toHex(lighten(r), lighten(g), lighten(b)),
+    ...(lum > 0.55 ? { heroTextOverride: 'dark' } : {}),
+  };
+}
+
+// Resolve a short user color reply ("blue", "navy", "#1e40af", "forest
+// green") into a full three-color palette. Returns null if nothing
+// recognized so the caller can fall back to LLM parsing.
 function resolveColorReply(text) {
   const clean = String(text || '').trim().toLowerCase();
   if (!clean) return null;
-  // Direct hex (with or without leading #)
-  const hex = clean.match(/^#?([0-9a-f]{6})\b/i);
-  if (hex) return `#${hex[1].toUpperCase()}`;
-  // Exact named match
-  if (NAMED_COLOR_HEX[clean]) return NAMED_COLOR_HEX[clean];
-  // Longest-matching phrase wins (e.g. "dark green" beats "green"). Sort
-  // by length descending so the two-word names get the first shot.
-  const sortedNames = Object.keys(NAMED_COLOR_HEX).sort((a, b) => b.length - a.length);
+  // Direct hex (with or without leading #) → derived palette.
+  const hexMatch = clean.match(/^#?([0-9a-f]{6})\b/i);
+  if (hexMatch) return derivePaletteFromHex(`#${hexMatch[1].toUpperCase()}`);
+  // Exact named match.
+  if (NAMED_COLOR_PALETTES[clean]) return NAMED_COLOR_PALETTES[clean];
+  // Longest-matching phrase wins ("dark green" beats "green").
+  const sortedNames = Object.keys(NAMED_COLOR_PALETTES).sort((a, b) => b.length - a.length);
   for (const name of sortedNames) {
     const pattern = new RegExp(`\\b${name.replace(/\s+/g, '\\s+')}\\b`, 'i');
-    if (pattern.test(clean)) return NAMED_COLOR_HEX[name];
+    if (pattern.test(clean)) return NAMED_COLOR_PALETTES[name];
   }
   return null;
 }
@@ -2768,15 +2797,25 @@ async function handleRevisions(user, message) {
 
     // Follow-up color answer: last turn we asked "which color?" and set
     // awaitingColor=true. If the user replied with a short color-ish
-    // message ("blue", "#1E40AF", "navy", "dark green"), rewrite it into
-    // an explicit revision request so the LLM parser catches it as
-    // primaryColor. Without this the LLM sees "blue" in isolation and
-    // tends to return _unclear again — a frustrating loop.
+    // message ("blue", "#1E40AF", "navy", "dark green"), rewrite it
+    // into an explicit FULL-PALETTE revision request so the LLM parser
+    // catches all three of primaryColor/secondaryColor/accentColor at
+    // once. A single-color primary swap leaves the old accent behind,
+    // which clashes with the new palette; shipping a coherent designer
+    // palette keeps the site professional even after recolors.
     if (user.metadata?.awaitingColor && message.text && message.text.trim().length <= 40) {
-      const colorHex = resolveColorReply(message.text);
-      if (colorHex) {
-        revisionText = `change the primary color to ${colorHex}`;
-        logger.info(`[WEBDEV-REVISE] awaitingColor resolved "${message.text.trim()}" → ${colorHex}`);
+      const palette = resolveColorReply(message.text);
+      if (palette) {
+        const parts = [
+          `change primaryColor to ${palette.primary}`,
+          `secondaryColor to ${palette.secondary}`,
+          `accentColor to ${palette.accent}`,
+        ];
+        if (palette.heroTextOverride) {
+          parts.push(`and set heroTextOverride to ${palette.heroTextOverride}`);
+        }
+        revisionText = parts.join(', ');
+        logger.info(`[WEBDEV-REVISE] awaitingColor resolved "${message.text.trim()}" → palette ${JSON.stringify(palette)}`);
       }
       // Clear the flag whether we parsed a color or not — if they gave us
       // a non-color reply ("nevermind", "actually change the headline"),
