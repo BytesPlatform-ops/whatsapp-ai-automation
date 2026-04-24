@@ -75,6 +75,7 @@ async function generateWebsiteContent(businessData, extras = {}) {
     contactPhone,
     contactAddress,
     logo,
+    logoUrl,
     // Salon-specific — pass-through to the salon template.
     bookingMode,
     bookingUrl,
@@ -446,6 +447,11 @@ Generate compelling website copy for this business. Return ONLY valid JSON.`;
     contactPhone: contactPhone || '',
     contactAddress: contactAddress || '',
     logo: logo || null,
+    // logoUrl — public URL of the user's uploaded logo (after background
+    // removal via src/website-gen/logoProcessor.js). Templates render this
+    // in the nav; c.logo is kept as a legacy field for any pre-existing
+    // paths that may still write to it.
+    logoUrl: logoUrl || null,
     heroImage,
     ...generatedContent,
     // Template selector + salon pass-through (harmless for non-salon templates).

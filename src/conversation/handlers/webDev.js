@@ -2702,7 +2702,7 @@ async function generateWebsite(user) {
     logger.info(`[WEBGEN] User data loaded:`, {
       businessName: websiteData.businessName,
       industry: websiteData.industry,
-      hasLogo: !!websiteData.logo,
+      hasLogo: !!(websiteData.logoUrl || websiteData.logo),
       hasContact: !!(websiteData.contactEmail || websiteData.contactPhone),
     });
 
