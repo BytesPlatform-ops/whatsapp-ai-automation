@@ -2914,10 +2914,12 @@ async function generateWebsite(user) {
     // domain price was locked in during the WEB_DOMAIN_CHOICE step (stored
     // in user.metadata). A prior pending link (if any) gets auto-superseded
     // by createPaymentLink so the new combined link is the only one live.
-    const websitePrice = parseInt(process.env.DEFAULT_ACTIVATION_PRICE || '199', 10);
-    const domainPrice = parseInt(freshUser.metadata?.domainPrice || 0, 10);
+    const websitePrice = parseFloat(process.env.DEFAULT_ACTIVATION_PRICE || '199');
+    // Exact NameSilo price — preserve cents. parseFloat keeps $17.29 as 17.29
+    // instead of truncating to 17.
+    const domainPrice = parseFloat(freshUser.metadata?.domainPrice || 0);
     const selectedDomain = freshUser.metadata?.selectedDomain || null;
-    const activationTotal = websitePrice + domainPrice;
+    const activationTotal = +(websitePrice + domainPrice).toFixed(2);
 
     // Both the banner on the preview site and the chat message point to
     // the same raw Stripe checkout URL — customers consistently see a
@@ -3033,11 +3035,14 @@ async function generateWebsite(user) {
     // the domain price if one was selected, so the chat CTA and the banner
     // always match.
     if (chatPaymentUrl) {
+      // Format prices with 2 decimals when they have cents, plain integer
+      // when whole-dollar (so $199 doesn't render as $199.00).
+      const fmt = (n) => (Number.isInteger(n) ? `$${n}` : `$${Number(n).toFixed(2)}`);
       const priceLine = domainPrice > 0 && selectedDomain
-        ? `*$${activationTotal}* — $${websitePrice} website + $${domainPrice} for *${selectedDomain}*.`
+        ? `*${fmt(activationTotal)}* — ${fmt(websitePrice)} website + ${fmt(domainPrice)} for *${selectedDomain}*.`
         : selectedDomain
-          ? `*$${activationTotal}* — I'll point *${selectedDomain}* at your new site right after payment.`
-          : `*$${activationTotal}*.`;
+          ? `*${fmt(activationTotal)}* — I'll point *${selectedDomain}* at your new site right after payment.`
+          : `*${fmt(activationTotal)}*.`;
       await sendTextMessage(
         user.phone_number,
         `🔒 *Preview mode.* ${priceLine}\n\nActivate to make it live and unlock the contact form:\n\n👉 ${chatPaymentUrl}\n\nSame checkout as the *Activate Now* button on your site.`
@@ -4229,22 +4234,26 @@ async function runSpecificDomainLookup(user, domain) {
 }
 
 async function selectDomainInline(user, option) {
+  // Store the exact registrar price — no rounding. We charge the customer
+  // the same dollars-and-cents we'll be billed by NameSilo at registration,
+  // so margins stay clean (no over/under-charge).
   const price = option.price ? parseFloat(option.price) : 0;
   await updateUserMetadata(user.id, {
     domainChoice: 'need',
     selectedDomain: option.domain.toLowerCase(),
-    domainPrice: Math.ceil(price), // whole USD — Namecheap returns 12.88 etc.
+    domainPrice: price,
   });
+  const priceLabel = price > 0 ? `$${price.toFixed(2)}` : 'free';
   await sendTextMessage(
     user.phone_number,
     await localize(
-      `Locked in *${option.domain}* — $${Math.ceil(price)}/yr. Building your site now…`,
+      `Locked in *${option.domain}* — ${priceLabel}/yr. Building your site now…`,
       user
     )
   );
   await logMessage(
     user.id,
-    `Domain selected: ${option.domain} ($${Math.ceil(price)}/yr)`,
+    `Domain selected: ${option.domain} (${priceLabel}/yr)`,
     'assistant'
   );
   return generateWebsite(user);
