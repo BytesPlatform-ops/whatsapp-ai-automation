@@ -17,17 +17,31 @@ function getSender() {
 }
 
 /**
+ * Pull the platform message id out of a send-result. Both WhatsApp and
+ * Messenger return it but in different shapes:
+ *   - WhatsApp Cloud API: { messages: [{ id: 'wamid.xxx' }] }
+ *   - Messenger / Instagram: { recipient_id, message_id }
+ * We persist it on the outbound conversations row so a future inbound
+ * reply (which carries `context.id` / `reply_to.mid`) can be resolved
+ * back to the bot message it points at.
+ */
+function extractPlatformMessageId(result) {
+  if (!result) return null;
+  return result?.messages?.[0]?.id || result?.message_id || null;
+}
+
+/**
  * Auto-log an outbound bot message against the current turn's user.
  * No-op when there's no userId in context (background jobs, admin-
  * initiated sends that already log manually). Errors are swallowed
  * so a DB hiccup never fails a send.
  */
-async function autoLogOutbound(text, messageType = 'text') {
+async function autoLogOutbound(text, messageType = 'text', platformMessageId = null) {
   const userId = getUserId();
   if (!userId || !text) return;
   try {
     const { logMessage } = require('../db/conversations');
-    await logMessage(userId, text, 'assistant', messageType);
+    await logMessage(userId, text, 'assistant', messageType, platformMessageId);
   } catch (err) {
     logger.debug(`[SENDER] Auto-log failed: ${err.message}`);
   }
@@ -45,7 +59,7 @@ async function sendTextMessage(to, text, options = {}) {
   }
   const result = await getSender().sendTextMessage(to, text);
   noteSendSucceeded();
-  autoLogOutbound(text).catch(() => {});
+  autoLogOutbound(text, 'text', extractPlatformMessageId(result)).catch(() => {});
   return result;
 }
 
@@ -58,7 +72,7 @@ async function sendInteractiveButtons(to, bodyText, buttons, headerText = null) 
   const result = await getSender().sendInteractiveButtons(to, bodyWithHint, buttons, headerText);
   noteSendSucceeded();
   const btnLabels = (buttons || []).map((b) => b?.title || b?.text || '').filter(Boolean).join(' | ');
-  autoLogOutbound(btnLabels ? `${bodyWithHint}\n[Buttons: ${btnLabels}]` : bodyWithHint).catch(() => {});
+  autoLogOutbound(btnLabels ? `${bodyWithHint}\n[Buttons: ${btnLabels}]` : bodyWithHint, 'text', extractPlatformMessageId(result)).catch(() => {});
   try { rememberInteractive(to, buttons, 'buttons'); } catch {}
   return result;
 }
@@ -73,7 +87,7 @@ async function sendInteractiveList(to, bodyText, buttonText, sections, headerTex
   const result = await getSender().sendInteractiveList(to, bodyWithHint, buttonText, sections, headerText);
   noteSendSucceeded();
   const rowLabels = flatRows.map((r) => r?.title || '').filter(Boolean).join(' | ');
-  autoLogOutbound(rowLabels ? `${bodyWithHint}\n[List: ${rowLabels}]` : bodyWithHint).catch(() => {});
+  autoLogOutbound(rowLabels ? `${bodyWithHint}\n[List: ${rowLabels}]` : bodyWithHint, 'text', extractPlatformMessageId(result)).catch(() => {});
   try { rememberInteractive(to, flatRows, 'list'); } catch {}
   return result;
 }
@@ -81,35 +95,35 @@ async function sendInteractiveList(to, bodyText, buttonText, sections, headerTex
 async function sendWithMenuButton(to, text, extraButtons = []) {
   const result = await getSender().sendWithMenuButton(to, text, extraButtons);
   noteSendSucceeded();
-  autoLogOutbound(text).catch(() => {});
+  autoLogOutbound(text, 'text', extractPlatformMessageId(result)).catch(() => {});
   return result;
 }
 
 async function sendCTAButton(to, bodyText, buttonText, url, headerText = null) {
   const result = await getSender().sendCTAButton(to, bodyText, buttonText, url, headerText);
   noteSendSucceeded();
-  autoLogOutbound(`${bodyText}\n[CTA: ${buttonText} → ${url}]`).catch(() => {});
+  autoLogOutbound(`${bodyText}\n[CTA: ${buttonText} → ${url}]`, 'text', extractPlatformMessageId(result)).catch(() => {});
   return result;
 }
 
 async function sendDocument(to, documentUrl, caption = '', filename = 'report.pdf') {
   const result = await getSender().sendDocument(to, documentUrl, caption, filename);
   noteSendSucceeded();
-  autoLogOutbound(`[Document: ${filename}]${caption ? ` — ${caption}` : ''}`, 'document').catch(() => {});
+  autoLogOutbound(`[Document: ${filename}]${caption ? ` — ${caption}` : ''}`, 'document', extractPlatformMessageId(result)).catch(() => {});
   return result;
 }
 
 async function sendDocumentBuffer(to, buffer, caption = '', filename = 'report.pdf', mimeType = 'application/pdf') {
   const result = await getSender().sendDocumentBuffer(to, buffer, caption, filename, mimeType);
   noteSendSucceeded();
-  autoLogOutbound(`[Document: ${filename}]${caption ? ` — ${caption}` : ''}`, 'document').catch(() => {});
+  autoLogOutbound(`[Document: ${filename}]${caption ? ` — ${caption}` : ''}`, 'document', extractPlatformMessageId(result)).catch(() => {});
   return result;
 }
 
 async function sendImage(to, imageUrl, caption = '') {
   const result = await getSender().sendImage(to, imageUrl, caption);
   noteSendSucceeded();
-  autoLogOutbound(`[Image sent]${caption ? ` — ${caption}` : ''}`, 'image').catch(() => {});
+  autoLogOutbound(`[Image sent]${caption ? ` — ${caption}` : ''}`, 'image', extractPlatformMessageId(result)).catch(() => {});
   return result;
 }
 

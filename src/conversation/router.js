@@ -589,6 +589,34 @@ async function _routeMessage(message) {
   // because handlers used to have to call logMessage manually after each send.
   setUserId(user.id);
 
+  // ── Quoted-reply resolution ────────────────────────────────────────────
+  // If the user used WhatsApp/Messenger's "Reply" affordance, parser sets
+  // message.replyTo = { id }. Look up that id in our conversations table
+  // and inline the quoted text into message.text — surrounded by a marker
+  // so the LLM (and downstream classifiers) see exactly what the user is
+  // pointing at. Without this the bot only gets the standalone reply
+  // ("yes that one", "change it to 4pm") and has no anchor.
+  if (message.replyTo?.id) {
+    try {
+      const { findMessageByPlatformId } = require('../db/conversations');
+      const quoted = await findMessageByPlatformId(user.id, message.replyTo.id);
+      if (quoted?.message_text) {
+        const speaker = quoted.role === 'assistant' ? 'bot' : 'user';
+        const snippet = String(quoted.message_text).slice(0, 400);
+        const original = message.text || '';
+        message.quoted = { text: quoted.message_text, role: quoted.role };
+        message.text = `[Replying to ${speaker}'s earlier message: "${snippet}"]\n${original}`;
+        logger.info('[REPLY-CTX] Resolved quoted message', {
+          userId: user.id,
+          quotedRole: quoted.role,
+          quotedSnippet: snippet.slice(0, 80),
+        });
+      }
+    } catch (err) {
+      logger.debug(`[REPLY-CTX] Lookup failed: ${err.message}`);
+    }
+  }
+
   // ── Feedback button intercepts ─────────────────────────────────────────
   // Must run BEFORE abuse detection and normal intent routing — these are
   // user responses to prompts WE sent; they're not abuse, not flow-switch

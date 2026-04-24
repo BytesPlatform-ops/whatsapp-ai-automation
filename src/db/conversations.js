@@ -55,6 +55,33 @@ async function getConversationHistory(userId, limit = 20, options = {}) {
   }, 'getConversationHistory');
 }
 
+/**
+ * Look up a previously-logged message by its platform message id (the
+ * WhatsApp/Messenger `wamid` / `mid`). Used by the router to resolve a
+ * quoted-reply context: the inbound webhook tells us "the user replied to
+ * <id>", and we fetch the original text + role so handlers/LLM can see
+ * what the user is referring back to.
+ *
+ * Scoped to userId so a stranger forwarding someone else's message id
+ * can't surface that other conversation. Returns null if not found.
+ */
+async function findMessageByPlatformId(userId, platformMessageId) {
+  if (!userId || !platformMessageId) return null;
+  return await withRetry(async () => {
+    const { data, error } = await supabase
+      .from('conversations')
+      .select('message_text, role, message_type, created_at')
+      .eq('user_id', userId)
+      .eq('whatsapp_message_id', platformMessageId.slice(0, 100))
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    throwIfNetworkError(error);
+    if (error) throw new Error(`Failed to find quoted message: ${error.message}`);
+    return data || null;
+  }, 'findMessageByPlatformId');
+}
+
 async function clearHistory(userId) {
   await withRetry(async () => {
     const { error } = await supabase
@@ -66,4 +93,4 @@ async function clearHistory(userId) {
   }, 'clearHistory');
 }
 
-module.exports = { logMessage, getConversationHistory, clearHistory };
+module.exports = { logMessage, getConversationHistory, clearHistory, findMessageByPlatformId };

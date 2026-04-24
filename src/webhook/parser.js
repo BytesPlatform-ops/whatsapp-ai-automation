@@ -40,6 +40,16 @@ function parseWebhookPayload(body) {
       channel: 'whatsapp',
     };
 
+    // Extract quoted-reply metadata. WhatsApp sets `message.context` whenever
+    // the user used the "Reply" affordance — id points at the message being
+    // replied to. Without this the bot only sees the new text and can't tell
+    // the user is referring back to something specific (a quote, a button
+    // option, a question we asked three turns ago). The router resolves the
+    // id against the conversations table to recover the quoted text.
+    if (message.context?.id) {
+      parsed.replyTo = { id: message.context.id };
+    }
+
     // Extract ad referral data (Click-to-WhatsApp ads)
     const referral = message.referral || value.messages?.[0]?.referral;
     if (referral) {

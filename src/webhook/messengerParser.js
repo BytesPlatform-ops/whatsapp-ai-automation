@@ -83,6 +83,13 @@ function parseMessengerPayload(body) {
       channel,
     };
 
+    // Extract quoted-reply metadata. Messenger/Instagram set
+    // `message.reply_to.mid` when the user replied to a specific message.
+    // Router uses this to look up the quoted text in the conversations table.
+    if (messaging.message?.reply_to?.mid) {
+      parsed.replyTo = { id: messaging.message.reply_to.mid };
+    }
+
     // Extract ad referral data (Click-to-Messenger/Instagram ads)
     const referral = messaging.referral || messaging.postback?.referral;
     if (referral) {
