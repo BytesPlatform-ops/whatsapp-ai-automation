@@ -580,6 +580,33 @@ async function _routeMessage(message) {
   // independent sessions.
   const user = await findOrCreateUser(from, channel, message.phoneNumberId || null);
 
+  // ── Feedback button intercepts ─────────────────────────────────────────
+  // Must run BEFORE abuse detection and normal intent routing — these are
+  // user responses to prompts WE sent; they're not abuse, not flow-switch
+  // intent, and they shouldn't be classified by other interceptors.
+  try {
+    const {
+      handleFeedbackButton,
+      handlePendingComment,
+      handleHandoffButton,
+    } = require('../feedback/feedback');
+
+    // Post-delivery rating buttons (🔥/👍/🤔)
+    const fb = await handleFeedbackButton(user, message);
+    if (fb?.handled) return;
+
+    // Human-handoff offer buttons (Get a human / Keep trying)
+    const ho = await handleHandoffButton(user, message);
+    if (ho?.handled) return;
+
+    // Free-text reply to "what happened?" after the user tapped
+    // Had issues on a previous delivery prompt.
+    const pc = await handlePendingComment(user, message);
+    if (pc?.handled) return;
+  } catch (err) {
+    logger.warn(`[FEEDBACK] Router hook failed: ${err.message}`);
+  }
+
   // ── Interactive reply matcher (Phase 10) ───────────────────────────────
   // If the last bot message to this user had buttons/list and this inbound
   // is plain text that looks like a pick ("2", "second one", "website",
@@ -824,6 +851,19 @@ async function _routeMessage(message) {
 
   // Check for reset command
   if (text && text.toLowerCase().trim() === '/reset') {
+    // Feedback: rapid-reset detector — if the user issued /reset
+    // within the RAPID_RESET_WINDOW_MS of their previous one, log an
+    // implicit friction row with the conversation excerpt. Has to
+    // happen BEFORE the metadata clear below, since the clear wipes
+    // lastResetAt. We re-write lastResetAt after the clear.
+    let rapidResetTimestamp = null;
+    try {
+      const { recordResetAndMaybeFlag } = require('../feedback/feedback');
+      rapidResetTimestamp = await recordResetAndMaybeFlag(user);
+    } catch (err) {
+      logger.warn(`[FEEDBACK] recordResetAndMaybeFlag failed: ${err.message}`);
+    }
+
     await updateUserState(user.id, STATES.SALES_CHAT);
     // Clear trigger flags so flows can be re-triggered
     const { updateUserMetadata } = require('../db/users');
@@ -915,11 +955,35 @@ async function _routeMessage(message) {
       // in-progress state, not the memory that the user has completed work
       // with us before.
     });
-    // Clear conversation history so the sales bot starts fresh
-    const { clearHistory } = require('../db/conversations');
-    await clearHistory(user.id);
     user.state = STATES.SALES_CHAT;
-    logger.info(`User ${from} reset conversation, metadata, and history`);
+    logger.info(`User ${from} reset conversation state + metadata (history preserved for admin)`);
+
+    // /reset now keeps past conversation rows in the DB so the admin
+    // dashboard can see what led up to the reset (helps diagnose why
+    // a user chose to restart). The bot, however, treats everything
+    // before this moment as invisible — every LLM-facing caller of
+    // getConversationHistory passes `afterTimestamp: user.metadata
+    // .lastResetAt` so the sales bot / sub-handlers / summarizer only
+    // see messages from the fresh session.
+    //
+    // A system-role sentinel row gives the admin chat view a visible
+    // divider at the /reset moment.
+    const resetAt = new Date(rapidResetTimestamp || Date.now()).toISOString();
+    try {
+      await logMessage(user.id, '━━━ session restarted (/reset) ━━━', 'system');
+    } catch (err) {
+      logger.warn(`[RESET] Failed to write sentinel row: ${err.message}`);
+    }
+
+    // Persist lastResetAt so (a) LLM-facing history queries filter
+    // past this point, and (b) the next /reset can detect rapid-
+    // succession. Has to happen AFTER the metadata clear above.
+    try {
+      await updateUserMetadata(user.id, { lastResetAt: resetAt });
+      user.metadata = { ...(user.metadata || {}), lastResetAt: resetAt };
+    } catch (err) {
+      logger.warn(`[RESET] Failed to persist lastResetAt: ${err.message}`);
+    }
 
     // Send a deterministic Pixie greeting so /reset never produces a
     // greeting-less response. Stopping here also saves an LLM call.
@@ -1075,6 +1139,78 @@ async function _routeMessage(message) {
       return;
     }
     // intent === 'none' — fall through to normal routing
+  }
+
+  // ── Feedback: implicit friction detectors ──────────────────────────────
+  // Text-only, post-findOrCreateUser, before state routing. Each
+  // detector runs cheap regex/counter checks; on hit, writes an
+  // implicit feedback row and (for escalating signals) offers a human
+  // handoff. Does NOT short-circuit message processing — just logs
+  // signal and continues, so the user still gets the handler's reply.
+  if (
+    text &&
+    !message.buttonId &&
+    !message.listId &&
+    message.type === 'text'
+  ) {
+    try {
+      const {
+        maybeLogFrustration,
+        bumpCorrectionLoop,
+        detectHelpEscape,
+        offerHumanHandoff,
+        isTester,
+        CORRECTION_LOOP_THRESHOLD,
+        TRIGGER,
+      } = require('../feedback/feedback');
+
+      if (!isTester(user)) {
+        // Frustrated phrasing (silent log, no user-facing action)
+        await maybeLogFrustration(user, text);
+
+        // Help-escape (explicit "talk to a human") — offer handoff.
+        // Pairs with humanTakeover toggle per user's design decision.
+        if (detectHelpEscape(text)) {
+          await offerHumanHandoff(user, TRIGGER.HELP_ESCAPE);
+          return; // handoff prompt replaces the normal turn
+        }
+
+        // Correction-loop counter — only meaningful in collection states
+        // where the user is answering a specific question.
+        if (COLLECTION_STATES.has(user.state)) {
+          const count = await bumpCorrectionLoop(user, text);
+          if (count >= CORRECTION_LOOP_THRESHOLD) {
+            // Log the event + offer handoff. Reset the counter so we
+            // don't keep re-offering on every subsequent message.
+            const { logFeedback, SOURCE } = require('../feedback/feedback');
+            const { getConversationHistory } = require('../db/conversations');
+            let excerpt = [];
+            try {
+              const hist = await getConversationHistory(user.id, 8);
+              excerpt = (hist || []).map((m) => ({
+                role: m.role,
+                text: String(m.content || m.message_text || '').slice(0, 200),
+              }));
+            } catch { /* best-effort excerpt */ }
+            await logFeedback({
+              user,
+              source: SOURCE.IMPLICIT,
+              triggerType: TRIGGER.CORRECTION_LOOP,
+              flow: 'general',
+              rating: 'issues',
+              comment: `${count} consecutive corrections in state ${user.state}`,
+              excerpt,
+              state: user.state,
+            });
+            await updateUserMetadata(user.id, { correctionLoopCount: 0 });
+            await offerHumanHandoff(user, TRIGGER.CORRECTION_LOOP);
+            return;
+          }
+        }
+      }
+    } catch (err) {
+      logger.warn(`[FEEDBACK] Implicit detector hook failed: ${err.message}`);
+    }
   }
 
   // ── Intent interceptor ─────────────────────────────────────────────────────

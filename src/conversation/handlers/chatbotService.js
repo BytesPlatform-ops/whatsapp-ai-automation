@@ -487,6 +487,14 @@ async function activateTrial(user) {
       logger.warn(`[CHATBOT-FLOW] markProjectCompleted failed: ${err.message}`);
     }
 
+    // Feedback: schedule the post-delivery prompt.
+    try {
+      const { scheduleDeliveryPrompt } = require('../../feedback/feedback');
+      await scheduleDeliveryPrompt(user, 'chatbot');
+    } catch (err) {
+      logger.warn(`[CHATBOT-FLOW] scheduleDeliveryPrompt failed: ${err.message}`);
+    }
+
     // Phase 12: chatbot is now fully set up — advance the queue if there's
     // another service waiting. Otherwise drop to sales chat as before.
     const { maybeStartNextQueuedService } = require('../serviceQueue');

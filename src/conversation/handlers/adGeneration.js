@@ -690,6 +690,14 @@ async function handleSelectIdea(user, message) {
     logger.warn(`[AD-GEN] markProjectCompleted failed: ${err.message}`);
   }
 
+  // Feedback: schedule the post-delivery prompt.
+  try {
+    const { scheduleDeliveryPrompt } = require('../../feedback/feedback');
+    await scheduleDeliveryPrompt(user, 'ad');
+  } catch (err) {
+    logger.warn(`[AD-GEN] scheduleDeliveryPrompt failed: ${err.message}`);
+  }
+
   // Follow-up options
   await sendInteractiveButtons(
     user.phone_number,

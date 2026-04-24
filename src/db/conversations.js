@@ -19,14 +19,33 @@ async function logMessage(userId, messageText, role, messageType = 'text', waMes
   }, 'logMessage');
 }
 
-async function getConversationHistory(userId, limit = 20) {
+async function getConversationHistory(userId, limit = 20, options = {}) {
   return await withRetry(async () => {
     // Order by seq (monotonic bigserial) so simultaneous same-millisecond
     // inserts keep their true order. See migration 015.
-    const { data, error } = await supabase
+    let q = supabase
       .from('conversations')
       .select('message_text, role, created_at')
-      .eq('user_id', userId)
+      .eq('user_id', userId);
+
+    // /reset now keeps the underlying rows for admin diagnostics but
+    // LLM-facing callers pass options.afterTimestamp = metadata.lastResetAt
+    // so the bot sees a truly fresh slate. Omit the option (or pass
+    // null) to get everything — that's what admin views use.
+    if (options.afterTimestamp) {
+      q = q.gte('created_at', options.afterTimestamp);
+    }
+
+    // System-role rows are non-user-visible markers (/reset sentinel,
+    // friction annotations written by the router) and must never reach
+    // an LLM as conversational context. Callers asking for LLM context
+    // pass includeSystem=false (default); admin views that want to see
+    // the markers pass includeSystem=true explicitly.
+    if (options.includeSystem === false || options.includeSystem === undefined) {
+      q = q.neq('role', 'system');
+    }
+
+    const { data, error } = await q
       .order('seq', { ascending: false })
       .order('created_at', { ascending: false })
       .limit(limit);

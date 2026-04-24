@@ -55,7 +55,12 @@ Output only the two sections with their headers. No preamble, no trailing commen
  */
 async function maybeUpdateSummary(user) {
   try {
-    const history = await getConversationHistory(user.id, 200);
+    // Only summarize messages from the current (post-reset) session.
+    // Pre-reset context stays in the DB for admin but the rolling
+    // summary that feeds the sales prompt starts fresh after /reset.
+    const history = await getConversationHistory(user.id, 200, {
+      afterTimestamp: user.metadata?.lastResetAt || null,
+    });
     const totalMessages = history.length;
     const lastSummaryCount = user.metadata?.lastSummaryMessageCount || 0;
     const newSinceLast = totalMessages - lastSummaryCount;

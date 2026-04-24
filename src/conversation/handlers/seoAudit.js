@@ -205,6 +205,14 @@ async function handleCollectUrl(user, message) {
       logger.warn(`[SEO] markProjectCompleted failed: ${completionErr.message}`);
     }
 
+    // Feedback: schedule the post-delivery prompt.
+    try {
+      const { scheduleDeliveryPrompt } = require('../../feedback/feedback');
+      await scheduleDeliveryPrompt(user, 'seo');
+    } catch (feedbackErr) {
+      logger.warn(`[SEO] scheduleDeliveryPrompt failed: ${feedbackErr.message}`);
+    }
+
     // Feed a synthetic message to the sales bot so it pitches immediately
     // Use a message WITHOUT a URL to avoid the fallback SEO trigger catching it again
     const { handleSalesBot } = require('./salesBot');

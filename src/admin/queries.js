@@ -192,6 +192,17 @@ async function getLeads() {
     // it here lets the dashboard render a small pill so operators can tell
     // apart two sessions of the same phone (one per line).
     via_phone_number_id: u.via_phone_number_id || null,
+    // Tester flag — set via env TESTER_PHONES. Rendered as a small gray
+    // pill in the admin conversations list so operators don't mistake a
+    // dev test session for a real user.
+    is_tester: (() => {
+      try {
+        const { isTester } = require('../feedback/feedback');
+        return isTester({ phone_number: u.phone_number });
+      } catch {
+        return false;
+      }
+    })(),
     };
   });
 }
@@ -238,6 +249,77 @@ async function getConversation(userId) {
     user: userResult.data,
     messages,
     window,
+  };
+}
+
+/**
+ * Get feedback rows with filters. Returns both a list (cards) and
+ * summary metrics the admin page renders as cards at the top.
+ */
+async function getFeedback(filters = {}) {
+  const {
+    source = 'all',
+    rating = 'all',
+    flow = 'all',
+    resolved = 'all',
+    limit = 200,
+  } = filters;
+
+  let q = supabase
+    .from('feedback')
+    .select('*')
+    .order('created_at', { ascending: false })
+    .limit(limit);
+  if (source !== 'all') q = q.eq('source', source);
+  if (rating !== 'all') q = q.eq('rating', rating);
+  if (flow !== 'all') q = q.eq('flow', flow);
+  if (resolved === 'open') q = q.eq('resolved', false);
+  if (resolved === 'resolved') q = q.eq('resolved', true);
+
+  const { data: rows, error } = await q;
+  if (error) throw error;
+
+  // Join user names + channels for display. One round-trip.
+  const userIds = [...new Set((rows || []).map((r) => r.user_id).filter(Boolean))];
+  let userMap = {};
+  if (userIds.length > 0) {
+    const { data: users } = await supabase
+      .from('users')
+      .select('id, name, channel, phone_number')
+      .in('id', userIds);
+    (users || []).forEach((u) => {
+      userMap[u.id] = { name: u.name, channel: u.channel, phone_number: u.phone_number };
+    });
+  }
+
+  // Summary metrics across ALL rows (not filtered) so the top cards
+  // stay stable as the user filters.
+  const { data: allRows } = await supabase
+    .from('feedback')
+    .select('source, rating, resolved, flow, created_at');
+  const summary = {
+    total: (allRows || []).length,
+    open: (allRows || []).filter((r) => !r.resolved).length,
+    loved: (allRows || []).filter((r) => r.rating === 'loved').length,
+    good: (allRows || []).filter((r) => r.rating === 'good').length,
+    issues: (allRows || []).filter((r) => r.rating === 'issues').length,
+    implicit: (allRows || []).filter((r) => r.source === 'implicit').length,
+    explicit: (allRows || []).filter((r) => r.source === 'explicit').length,
+    byFlow: {},
+  };
+  (allRows || []).forEach((r) => {
+    const f = r.flow || 'general';
+    summary.byFlow[f] = (summary.byFlow[f] || 0) + 1;
+  });
+
+  return {
+    filters,
+    summary,
+    rows: (rows || []).map((r) => ({
+      ...r,
+      user_name: userMap[r.user_id]?.name || null,
+      user_channel: userMap[r.user_id]?.channel || 'whatsapp',
+    })),
   };
 }
 
@@ -903,6 +985,7 @@ module.exports = {
   getOverviewMetrics,
   getLeads,
   getConversation,
+  getFeedback,
   getDropoffs,
   getSites,
   getAudits,

@@ -276,6 +276,53 @@ router.post('/api/conversations/:userId/takeover', async (req, res) => {
   }
 });
 
+// Feedback list + summary + per-row resolve action. Filters:
+//   ?source=explicit|implicit|all
+//   ?rating=loved|good|issues|all
+//   ?flow=website|logo|ad|chatbot|seo|general|all
+//   ?resolved=open|resolved|all  (default: all)
+//   ?limit=N  (default 200, max 500)
+router.get('/api/feedback', async (req, res) => {
+  try {
+    const filters = {
+      source: req.query.source || 'all',
+      rating: req.query.rating || 'all',
+      flow: req.query.flow || 'all',
+      resolved: req.query.resolved || 'all',
+      limit: Math.min(parseInt(req.query.limit, 10) || 200, 500),
+    };
+    const data = await queries.getFeedback(filters);
+    res.json(data);
+  } catch (err) {
+    logger.error('[ADMIN] Feedback list error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/api/feedback/:id/resolve', async (req, res) => {
+  try {
+    const { resolved, notes } = req.body;
+    const { supabase } = require('../config/database');
+    const patch = {
+      resolved: !!resolved,
+      resolution_notes: notes || null,
+      updated_at: new Date().toISOString(),
+    };
+    if (resolved) {
+      patch.resolved_at = new Date().toISOString();
+    } else {
+      patch.resolved_at = null;
+    }
+    const { error } = await supabase.from('feedback').update(patch).eq('id', req.params.id);
+    if (error) throw new Error(error.message);
+    logger.info(`[ADMIN] Feedback ${req.params.id} marked ${resolved ? 'resolved' : 'reopened'}`);
+    res.json({ success: true });
+  } catch (err) {
+    logger.error('[ADMIN] Feedback resolve error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.get('/api/dropoffs', async (req, res) => {
   try {
     const data = await queries.getDropoffs();

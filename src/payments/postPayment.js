@@ -173,6 +173,25 @@ async function handleConfirmedPayment(payment, paidSession) {
               logger.warn(`[PAY] Failed to mark return-greet fields: ${err.message}`);
             }
 
+            // Feedback: schedule the post-delivery prompt 30s after
+            // the go-live message. Skipped for testers + when more
+            // services are queued.
+            try {
+              const { scheduleDeliveryPrompt } = require('../feedback/feedback');
+              await scheduleDeliveryPrompt(
+                {
+                  id: p.user_id,
+                  phone_number: targetPhone,
+                  channel: targetChannel,
+                  via_phone_number_id: targetVia,
+                  metadata: paidUserRecord?.metadata || {},
+                },
+                'website'
+              );
+            } catch (err) {
+              logger.warn(`[PAY] scheduleDeliveryPrompt failed: ${err.message}`);
+            }
+
             // Phase 12: if the user originally queued more services with
             // the website, advance to the next one instead of the
             // generic site-live upsell. The explicit queue wins over

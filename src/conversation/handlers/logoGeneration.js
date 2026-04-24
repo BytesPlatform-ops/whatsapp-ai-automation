@@ -601,6 +601,14 @@ async function handleSelectIdea(user, message) {
     logger.warn(`[LOGO-GEN] markProjectCompleted failed: ${err.message}`);
   }
 
+  // Feedback: schedule the post-delivery prompt.
+  try {
+    const { scheduleDeliveryPrompt } = require('../../feedback/feedback');
+    await scheduleDeliveryPrompt(user, 'logo');
+  } catch (err) {
+    logger.warn(`[LOGO-GEN] scheduleDeliveryPrompt failed: ${err.message}`);
+  }
+
   // Follow-up options
   await sendInteractiveButtons(
     user.phone_number,

@@ -70,7 +70,9 @@ async function resolveLanguage(user, latestUserMessage) {
   if (!effectiveLatest && user?.id) {
     try {
       const { getConversationHistory } = require('../db/conversations');
-      const hist = await getConversationHistory(user.id, 5);
+      const hist = await getConversationHistory(user.id, 5, {
+        afterTimestamp: user?.metadata?.lastResetAt || null,
+      });
       if (Array.isArray(hist)) {
         for (let i = hist.length - 1; i >= 0; i--) {
           if (hist[i].role === 'user' && hist[i].message_text) {

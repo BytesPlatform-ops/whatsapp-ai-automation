@@ -117,8 +117,12 @@ async function handleSalesBot(user, message) {
     logger.warn(`[SALES] Entity hydration failed: ${err.message}`);
   }
 
-  // Get conversation history (last 40 messages for full context)
-  const history = await getConversationHistory(user.id, 40);
+  // Get conversation history (last 40 messages for full context).
+  // Pass afterTimestamp so /reset gives a clean slate — pre-reset
+  // messages stay in the DB for admin but are invisible to the LLM.
+  const history = await getConversationHistory(user.id, 40, {
+    afterTimestamp: user.metadata?.lastResetAt || null,
+  });
 
   // First message ever - let the LLM generate the greeting so it matches
   // the user's language and tone from their very first message.
