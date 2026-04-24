@@ -1,6 +1,6 @@
 const {
   esc, telHref, slugify, fmtMoney, icon,
-  wrapRealEstatePage, getRealEstateAgentSchema, TOKENS,
+  wrapRealEstatePage, getRealEstateAgentSchema, buildTokens,
 } = require('./common');
 
 // Deterministic per-area YoY % if LLM didn't supply one.
@@ -13,6 +13,7 @@ function fallbackYoY(area, baseline = 3.2) {
 }
 
 function generateNeighborhoodsPage(c) {
+  const TOKENS = buildTokens(c);
   const phone = c.contactPhone || '';
   const tel = telHref(phone);
   const city = c.primaryCity || '';

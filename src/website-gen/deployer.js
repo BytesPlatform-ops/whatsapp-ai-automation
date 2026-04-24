@@ -53,19 +53,61 @@ async function deployToNetlify(siteConfig, existingSiteId = null, { watermark = 
       logger.info(`[NETLIFY] Site created: ${siteName} (${siteId})`);
     }
 
+    // Compute SHA-1 on the exact bytes we're about to PUT. Doing this on
+    // the JS string (instead of an explicit UTF-8 buffer) let HTML with
+    // non-ASCII chars — smart quotes, em-dashes, the "→"/"✓" icons used
+    // in templates — drift between manifest-time and upload-time SHAs, and
+    // Netlify would reject the PUT with 422 "no records matched" because
+    // the bytes on the wire didn't hash to any expected value in the
+    // manifest. Pinning both sides to the same Buffer fixes the drift.
+    const fileBuffers = {};
     const fileDigests = {};
     for (const [fp, content] of Object.entries(files)) {
-      fileDigests[fp] = crypto.createHash('sha1').update(content).digest('hex');
+      const buf = Buffer.from(content, 'utf8');
+      fileBuffers[fp] = buf;
+      fileDigests[fp] = crypto.createHash('sha1').update(buf).digest('hex');
     }
     logger.info(`[NETLIFY] Creating deploy with ${Object.keys(files).length} file(s)...`);
-    const deployResponse = await axios.post(`${NETLIFY_API}/sites/${siteId}/deploys`, { files: fileDigests }, { headers, timeout: NETLIFY_TIMEOUT_MS });
+    const deployResponse = await axios.post(
+      `${NETLIFY_API}/sites/${siteId}/deploys`,
+      { files: fileDigests },
+      { headers, timeout: NETLIFY_TIMEOUT_MS }
+    );
     const deployId = deployResponse.data.id;
-    const requiredFiles = deployResponse.data.required || [];
-    for (const [fp, content] of Object.entries(files)) {
-      const sha1 = crypto.createHash('sha1').update(content).digest('hex');
-      if (requiredFiles.length === 0 || requiredFiles.includes(sha1)) {
-        logger.info(`[NETLIFY] Uploading ${fp}...`);
-        await axios.put(`${NETLIFY_API}/deploys/${deployId}/files${fp}`, content, { headers: { Authorization: `Bearer ${env.netlify.token}`, 'Content-Type': 'application/octet-stream' }, timeout: NETLIFY_TIMEOUT_MS });
+    const requiredShas = deployResponse.data.required || [];
+
+    // Only upload files whose SHA Netlify explicitly asked for. The
+    // previous code uploaded everything when required came back empty,
+    // which triggered 422s on redeploys where all files were already
+    // cached. An empty required list means "nothing to do" — the deploy
+    // is already assembled from cache, we just wait for it to finalize.
+    if (requiredShas.length === 0) {
+      logger.info(`[NETLIFY] All ${Object.keys(files).length} file(s) cached — no upload needed`);
+    } else {
+      const pathBySha = {};
+      for (const [fp, sha] of Object.entries(fileDigests)) pathBySha[sha] = fp;
+      for (const sha of requiredShas) {
+        const fp = pathBySha[sha];
+        if (!fp) {
+          logger.warn(`[NETLIFY] Required SHA ${sha.slice(0, 8)} has no matching file — skipping`);
+          continue;
+        }
+        logger.info(`[NETLIFY] Uploading ${fp} (sha ${sha.slice(0, 8)})...`);
+        try {
+          await axios.put(
+            `${NETLIFY_API}/deploys/${deployId}/files${fp}`,
+            fileBuffers[fp],
+            {
+              headers: { Authorization: `Bearer ${env.netlify.token}`, 'Content-Type': 'application/octet-stream' },
+              timeout: NETLIFY_TIMEOUT_MS,
+            }
+          );
+        } catch (putErr) {
+          const status = putErr.response?.status;
+          const body = JSON.stringify(putErr.response?.data || {});
+          logger.error(`[NETLIFY] PUT failed for ${fp} (sha ${sha.slice(0, 8)}): status=${status} body=${body}`);
+          throw putErr;
+        }
       }
     }
     logger.info('[NETLIFY] Waiting for deploy to be ready...');
@@ -249,7 +291,7 @@ function getNav(c, cur) {
 <div class="scroll-bar"></div>
 <div class="cursor-glow"></div>
 <nav class="nav${isDark?' nav-dark':''}"><div class="nav-i">
-  <a href="/" class="nav-b">${esc(c.businessName)}</a>
+  <a href="/" class="nav-b">${c.logoUrl ? `<img src="${esc(c.logoUrl)}" alt="${esc(c.businessName || '')}" style="height:32px;width:auto;display:inline-block;vertical-align:middle;object-fit:contain;margin-right:8px">` : ''}${esc(c.businessName)}</a>
   <div class="nav-ls">${pages.map(p=>`<a href="${p.h}" class="nav-l${p.h===cur?' font-semibold':''}">${p.n}</a>`).join('')}<a href="/contact" class="btn-p" style="padding:10px 24px;font-size:14px">Get Started</a></div>
   <div class="mt" aria-label="Menu"><span></span><span></span><span></span></div>
 </div></nav>
@@ -257,35 +299,8 @@ function getNav(c, cur) {
 }
 
 // ─── Footer ─────────────────────────────────────────────────────────────────
-// Consolidate Unsplash photographer credits from the hero image + per-service
-// images into a single small line in the footer. This keeps the Unsplash TOS
-// requirement satisfied ("provide attribution wherever the photo appears")
-// while removing the messy overlay labels from the images themselves.
-function collectUnsplashCredits(c) {
-  const all = [];
-  if (c.heroImage && c.heroImage.photographer) all.push(c.heroImage);
-  for (const s of (c.services || [])) {
-    if (s.image && s.image.photographer) all.push(s.image);
-  }
-  const seen = new Set();
-  const unique = [];
-  for (const img of all) {
-    if (!seen.has(img.photographer)) {
-      seen.add(img.photographer);
-      unique.push(img);
-    }
-  }
-  return unique;
-}
-
 function getFoot(c) {
   const pc=c.primaryColor||'#2563EB';
-  const credits = collectUnsplashCredits(c);
-  const creditsLine = credits.length > 0
-    ? `<p style="font-size:11px;opacity:0.35;margin-top:10px">Photography by ${credits.map((img, i) =>
-        `<a href="${esc(img.photographerUrl)}" target="_blank" rel="noopener" style="color:#999;text-decoration:none;border-bottom:1px dotted rgba(255,255,255,0.2)">${esc(img.photographer)}</a>${i < credits.length - 1 ? ' · ' : ''}`
-      ).join('')} on <a href="${esc(credits[0].unsplashUrl)}" target="_blank" rel="noopener" style="color:#999;text-decoration:none;border-bottom:1px dotted rgba(255,255,255,0.2)">Unsplash</a></p>`
-    : '';
   return `
 <footer style="background:#0a0a1a;color:#999;padding:80px 24px 40px"><div class="ctn">
   <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(200px,100%),1fr));gap:48px;margin-bottom:48px">
@@ -300,7 +315,7 @@ function getFoot(c) {
     </div></div>
   </div>
   <div style="border-top:1px solid rgba(255,255,255,0.08);padding-top:24px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:16px">
-    <div><p style="font-size:12px;opacity:0.4">Built with care. All rights reserved.</p>${creditsLine}</div>
+    <div><p style="font-size:12px;opacity:0.4">Built with care. All rights reserved.</p></div>
     <p style="font-size:12px;opacity:0.4">${esc(c.businessName)} &copy; ${new Date().getFullYear()}</p>
   </div>
 </div></footer>
@@ -437,7 +452,6 @@ function generateHomePage(c) {
         ? `<div style="position:absolute;inset:0;background:linear-gradient(135deg,${pc}d9 0%,${pc}99 40%,${ac}66 100%),linear-gradient(180deg,rgba(0,0,0,0.55) 0%,rgba(0,0,0,0.35) 40%,rgba(0,0,0,0.6) 100%);background-blend-mode:multiply"></div>`
         : `<div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(255,255,255,0.5) 0%,rgba(255,255,255,0.3) 50%,rgba(255,255,255,0.55) 100%)"></div>`)
     : `<div style="position:absolute;inset:0;background:linear-gradient(180deg,${palette.fg === '#fff' ? 'rgba(0,0,0,0.12)' : 'rgba(255,255,255,0.15)'} 0%,transparent 30%,transparent 70%,${palette.fg === '#fff' ? 'rgba(0,0,0,0.25)' : 'rgba(255,255,255,0.2)'} 100%)"></div>`;
-  // Per-image credits are consolidated into the footer (see collectUnsplashCredits).
   const heroCredit = '';
 
   const body = `

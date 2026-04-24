@@ -230,10 +230,10 @@ function ThankYouContent() {
             transition={{ duration: 0.6, delay: 0.55 }}
             className="mt-8 text-center font-display text-display-xl text-balance text-white sm:mt-10"
           >
-            You&apos;re on{' '}
+            Thank{' '}
             <span className="relative inline-block">
               <span className="relative z-10 bg-gradient-to-br from-wa-green to-wa-teal bg-clip-text text-transparent">
-                Pixie.
+                you!
               </span>
               <span
                 aria-hidden

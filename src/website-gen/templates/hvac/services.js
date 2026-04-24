@@ -1,4 +1,4 @@
-const { esc, telHref, icon, wrapHvacPage, getLocalBusinessSchema, getServiceListSchema, getTradeCopy, TOKENS } = require('./common');
+const { esc, telHref, icon, wrapHvacPage, getLocalBusinessSchema, getServiceListSchema, getTradeCopy, buildTokens } = require('./common');
 
 function slugify(s) {
   return String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
@@ -13,6 +13,7 @@ function priceDisplay(priceFrom) {
 
 function generateServicesPage(c) {
   const tc = getTradeCopy(c);
+  const TOKENS = buildTokens(c);
   const phone = c.contactPhone || '';
   const tel = telHref(phone);
   const services = c.services || [];
@@ -63,9 +64,7 @@ function generateServicesPage(c) {
 
     const hasImg = !!(s.image && s.image.url);
     const visualCol = hasImg
-      ? `<div class="zz-visual rv" style="background:url('${esc(s.image.url)}') center/cover no-repeat">
-           <div class="zz-visual-label">${icon('mapPin', 12, TOKENS.orange)} Photo by <a href="${esc(s.image.photographerUrl)}" target="_blank" rel="noopener" style="color:${TOKENS.body};margin-left:2px">${esc(s.image.photographer)}</a></div>
-         </div>`
+      ? `<div class="zz-visual rv" style="background:url('${esc(s.image.url)}') center/cover no-repeat"></div>`
       : `<div class="zz-visual rv">
            <div class="zz-ico">${icon('wrench', 120)}</div>
            <div class="zz-visual-label">Real project photos coming soon</div>

@@ -96,4 +96,46 @@ async function updateSiteBannerLink(userId, newUrl) {
   return redeployWithOverrides(site.id, { paymentLinkUrl: newUrl, paymentStatus: 'preview' });
 }
 
-module.exports = { redeployAsPaid, redeployAsPreview, updateSiteBannerLink };
+/**
+ * Update banner pricing for a user's latest site — used when the 22h
+ * discount job applies 20% off. Writes new activationAmount + originalAmount
+ * + discountPct into the stored siteConfig so the banner renders the
+ * strikethrough price and discount badge. Also swaps paymentLinkUrl to
+ * the new Stripe link.
+ *
+ * Fire-and-forget. No-op on already-paid sites.
+ */
+async function updateSiteBannerPricing(userId, pricing = {}) {
+  if (!userId) return { ok: false, reason: 'missing userId' };
+  const { data: site, error } = await supabase
+    .from('generated_sites')
+    .select('id, site_data')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error || !site) return { ok: false, reason: 'no site' };
+  const current = site.site_data || {};
+  if (current.paymentStatus === 'paid') {
+    logger.info(`[REDEPLOY] Skipping banner pricing update for site ${site.id} — already paid`);
+    return { ok: true, reason: 'already paid' };
+  }
+  const overrides = { paymentStatus: 'preview' };
+  if (pricing.paymentLinkUrl) overrides.paymentLinkUrl = pricing.paymentLinkUrl;
+  if (pricing.activationAmount != null) overrides.activationAmount = pricing.activationAmount;
+  if (pricing.originalAmount != null) overrides.originalAmount = pricing.originalAmount;
+  if (pricing.discountPct != null) overrides.discountPct = pricing.discountPct;
+  logger.info(
+    `[REDEPLOY] Updating site ${site.id} banner pricing: ` +
+      `$${pricing.activationAmount ?? '?'} ` +
+      `(was $${pricing.originalAmount ?? '?'}, ${pricing.discountPct ?? 0}% off)`
+  );
+  return redeployWithOverrides(site.id, overrides);
+}
+
+module.exports = {
+  redeployAsPaid,
+  redeployAsPreview,
+  updateSiteBannerLink,
+  updateSiteBannerPricing,
+};

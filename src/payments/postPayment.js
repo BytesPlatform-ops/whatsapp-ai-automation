@@ -40,7 +40,7 @@ async function handleConfirmedPayment(payment, paidSession) {
   //   callers (scheduler + webhook both firing for the same payment).
   const { data: freshPayment } = await supabase
     .from('payments')
-    .select('id, status, paid_at, user_id, phone_number, service_type, description, amount')
+    .select('id, status, paid_at, user_id, phone_number, service_type, description, amount, stripe_payment_link_id')
     .eq('id', payment.id)
     .maybeSingle();
   if (!freshPayment) return { ok: false, reason: 'payment vanished' };
@@ -62,6 +62,25 @@ async function handleConfirmedPayment(payment, paidSession) {
     customer_name: paidSession.customer_details?.name || null,
     paid_at: new Date().toISOString(),
   }).eq('id', p.id);
+
+  // Deactivate the Stripe payment link so the raw checkout URL (sitting in
+  // WhatsApp messages, screenshots, bookmarks) can't be paid a second time.
+  // The /pay/:id endpoint handles the friendly "already paid" UX for any
+  // click that comes through the banner; this is defense in depth for the
+  // raw Stripe URL path. Fire-and-forget — a failure here doesn't affect
+  // the rest of the flow.
+  if (freshPayment.stripe_payment_link_id && env.stripe?.secretKey) {
+    (async () => {
+      try {
+        const Stripe = require('stripe');
+        const s = new Stripe(env.stripe.secretKey);
+        await s.paymentLinks.update(freshPayment.stripe_payment_link_id, { active: false });
+        logger.info(`[PAY] Deactivated Stripe link ${freshPayment.stripe_payment_link_id} after successful payment ${p.id}`);
+      } catch (err) {
+        logger.warn(`[PAY] Could not deactivate Stripe link ${freshPayment.stripe_payment_link_id}: ${err.message}`);
+      }
+    })();
+  }
 
   // ── 2. Resolve user + target phone/channel from USER ROW (not payment row)
   //   payment.phone_number can be stale across bot re-enrollment.
@@ -122,15 +141,27 @@ async function handleConfirmedPayment(payment, paidSession) {
       const netlifySubdomain = site?.netlify_subdomain || '';
       const netlifySiteId = site?.netlify_site_id || '';
 
-      if (env.namecheap?.apiKey) {
+      // Pick the active registrar: NameSilo primary (no IP whitelist),
+      // Namecheap legacy fallback. postPayment only needs the one that's
+      // configured via env — the purchaseAndConfigureDomain signatures
+      // are identical across both integrations.
+      const hasNameSilo = !!process.env.NAMESILO_API_KEY;
+      const hasNamecheap = !!env.namecheap?.apiKey;
+      const registrarAvailable = hasNameSilo || hasNamecheap;
+
+      if (registrarAvailable) {
         try {
-          const { purchaseAndConfigureDomain } = require('../integrations/namecheap');
+          const registrarName = hasNameSilo ? 'namesilo' : 'namecheap';
+          const { purchaseAndConfigureDomain } = require(
+            hasNameSilo ? '../integrations/namesilo' : '../integrations/namecheap'
+          );
           const { addCustomDomainToNetlify } = require('../website-gen/deployer');
 
           await runWithContext({ channel: targetChannel, phoneNumberId: targetVia }, () =>
             sendTextMessage(targetPhone, `⏳ Registering *${selectedDomain}*...`)
           );
 
+          logger.info(`[PAY] Using registrar=${registrarName} for ${selectedDomain}`);
           const result = await purchaseAndConfigureDomain(selectedDomain, netlifySubdomain);
           if (result.success) {
             if (netlifySiteId) {
@@ -263,17 +294,19 @@ async function handleConfirmedPayment(payment, paidSession) {
         );
       }
     } else {
-      // Regular website payment (no domain selected) — offer domain next
+      // Regular website payment with no domain selected (user chose "skip"
+      // during WEB_DOMAIN_CHOICE). Just confirm — do NOT re-offer a domain.
+      // In the new flow, domain selection is always resolved pre-preview,
+      // so asking again here would be redundant and dilute the close.
       await runWithContext({ channel: targetChannel, phoneNumberId: targetVia }, () => sendTextMessage(
         targetPhone,
-        `Payment of *${amountDisplay}* received! Thank you for choosing Pixie.\n\n` +
+        `Payment of *${amountDisplay}* received! 🎉\n\n` +
           `*Package:* ${p.description || p.service_type}\n\n` +
-          `Your website is all set! Would you like to put it on your own custom domain?\n\n` +
-          `Just say *"yes"* and I'll help you find one, or *"no"* if you're good for now.`
+          `Your site is fully yours — watermark gone, contact form live. I'm here if you need anything.`
       ));
-      await logMessage(p.user_id, `Payment confirmed: ${amountDisplay}`, 'assistant');
+      await logMessage(p.user_id, `Payment confirmed: ${amountDisplay} (no domain)`, 'assistant');
       const { updateUserState } = require('../db/users');
-      await updateUserState(p.user_id, 'DOMAIN_OFFER');
+      await updateUserState(p.user_id, 'SALES_CHAT');
     }
   } else {
     // Non-website payment

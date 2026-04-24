@@ -1,6 +1,6 @@
 const {
   esc, telHref, slugify, fmtMoney, icon,
-  wrapRealEstatePage, getRealEstateAgentSchema, TOKENS, DEFAULT_LISTINGS,
+  wrapRealEstatePage, getRealEstateAgentSchema, buildTokens, DEFAULT_LISTINGS,
 } = require('./common');
 
 function statusClass(status) {
@@ -16,6 +16,7 @@ function statusSlug(status) {
 }
 
 function generateListingsPage(c) {
+  const TOKENS = buildTokens(c);
   const phone = c.contactPhone || '';
   const tel = telHref(phone);
   const city = c.primaryCity || '';

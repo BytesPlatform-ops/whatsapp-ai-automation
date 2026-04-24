@@ -56,18 +56,47 @@ async function ncRequest(command, params = {}) {
 
   logger.debug(`[NAMECHEAP] ${command}`, { params: Object.keys(params) });
 
-  const response = await axios.get(url, { timeout: 30000 });
-  const parsed = await parseStringPromise(response.data, { explicitArray: false });
+  let response;
+  try {
+    response = await axios.get(url, { timeout: 30000 });
+  } catch (err) {
+    // Network-level failure (timeout, DNS, connection reset). Worth its own
+    // log line because the previous "Unknown error" message was a black hole.
+    const detail = err.response
+      ? `HTTP ${err.response.status}: ${(err.response.data || '').toString().slice(0, 200)}`
+      : err.message || err.code || 'network error';
+    logger.error(`[NAMECHEAP] HTTP call failed for ${command}: ${detail}`);
+    throw new Error(`Namecheap HTTP: ${detail}`);
+  }
+
+  let parsed;
+  try {
+    parsed = await parseStringPromise(response.data, { explicitArray: false });
+  } catch (parseErr) {
+    logger.error(`[NAMECHEAP] XML parse failed for ${command}: ${parseErr.message}`);
+    throw new Error(`Namecheap: malformed response`);
+  }
 
   const apiResponse = parsed.ApiResponse;
   if (!apiResponse) throw new Error('Invalid Namecheap API response');
 
   if (apiResponse.$.Status === 'ERROR') {
-    const errors = apiResponse.Errors?.Error;
-    const errorMsg = Array.isArray(errors)
-      ? errors.map(e => e._ || e).join('; ')
-      : (errors?._ || errors || 'Unknown error');
-    logger.error(`[NAMECHEAP] API error for ${command}:`, errorMsg);
+    // Namecheap nests errors in several shapes depending on the failure class.
+    // Flatten all of them so the log shows exactly why the call died —
+    // most common cause is "Invalid request IP" when the server's outbound
+    // IP isn't whitelisted in the Namecheap dashboard.
+    const errs = apiResponse.Errors?.Error;
+    const errorList = Array.isArray(errs) ? errs : errs != null ? [errs] : [];
+    const errorMsg = errorList.length
+      ? errorList
+          .map((e) => {
+            const text = typeof e === 'string' ? e : e._ || JSON.stringify(e);
+            const code = e?.$?.Number ? ` [#${e.$.Number}]` : '';
+            return `${text}${code}`;
+          })
+          .join('; ')
+      : `Unknown Namecheap error (raw: ${JSON.stringify(apiResponse.Errors || {}).slice(0, 200)})`;
+    logger.error(`[NAMECHEAP] API error for ${command}: ${errorMsg}`);
     throw new Error(`Namecheap: ${errorMsg}`);
   }
 

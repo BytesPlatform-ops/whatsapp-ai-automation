@@ -7,8 +7,12 @@ const { logger } = require('../../utils/logger');
 const { env } = require('../../config/env');
 const { STATES } = require('../states');
 
-const SITE_COST = 100;  // Flat website price, domain billed separately on top
-const UPFRONT_PERCENT = 0.5; // 50% upfront
+// Legacy handler — only reached by in-flight users in DOMAIN_OFFER /
+// DOMAIN_SEARCH states. New flow routes domain selection BEFORE preview
+// generation via the WEB_DOMAIN_* states in webDev.js, with a single
+// combined Stripe link. SITE_COST is read from env so it matches the
+// current activation default ($199) instead of a stale hardcoded value.
+const SITE_COST = parseInt(process.env.DEFAULT_ACTIVATION_PRICE || '199', 10);
 
 async function handleCustomDomain(user, message) {
   switch (user.state) {
@@ -253,16 +257,14 @@ async function processDomainSelection(user, domain) {
     ? `The total is *$${fullAmount}* — $${SITE_COST} for the website plus $${domainCharge} for the *.${tld}* domain registration.`
     : `The total is *$${fullAmount}* for the website (domain registration billed separately once confirmed).`;
 
-  // Split option: customer pays $50 + full domain cost upfront, $50 after delivery.
-  const splitUpfront = 50 + domainCharge;
-  const splitLater = 50;
-
+  // No split payments — the activation price is low enough that splitting
+  // adds friction instead of value. Customers who push back get the 22h
+  // discount instead (handled by the follow-up scheduler).
   await sendTextMessage(
     user.phone_number,
     `Great choice — *${domain}*!\n\n` +
     `${totalLine}\n\n` +
-    `Once you pay, I'll register your domain, set everything up, and your site will be live at *${domain}* — usually within the hour.\n\n` +
-    `_If you'd prefer to split the payment, I can do $${splitUpfront} now and $${splitLater} after delivery._`
+    `Once you pay, I'll register your domain, set everything up, and your site will be live at *${domain}* — usually within the hour.`
   );
 
   // Create and send payment link for full amount

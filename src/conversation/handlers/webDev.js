@@ -65,6 +65,10 @@ function nextMissingWebDevState(websiteData, fullMetadata = {}) {
   const hasPrimaryContact = !!websiteData.contactPhone || !!websiteData.contactEmail;
   const contactStepDone = hasPrimaryContact || fullMetadata.contactSkipped === true;
   if (!contactStepDone) return STATES.WEB_COLLECT_CONTACT;
+  // Optional logo collection — skipped if the user already sent one or
+  // explicitly opted out (logoSkipped=true). Flagged via metadata not
+  // websiteData so stale sessions don't loop back.
+  if (!websiteData.logoUrl && !websiteData.logoSkipped) return STATES.WEB_COLLECT_LOGO;
   return STATES.WEB_CONFIRM;
 }
 
@@ -303,9 +307,10 @@ async function handleWebDev(user, message) {
     case STATES.WEB_COLLECT_LISTINGS_PHOTOS:
       return handleCollectListingsPhotos(user, message);
     case STATES.WEB_COLLECT_COLORS:
-    case STATES.WEB_COLLECT_LOGO:
-      // Legacy: skip straight to contact if stuck in old states
+      // Legacy: skip straight to contact if stuck in this old state
       return STATES.WEB_COLLECT_CONTACT;
+    case STATES.WEB_COLLECT_LOGO:
+      return handleCollectLogo(user, message);
     case STATES.SALON_BOOKING_TOOL:
       return handleSalonBookingTool(user, message);
     case STATES.SALON_INSTAGRAM:
@@ -318,6 +323,12 @@ async function handleWebDev(user, message) {
       return handleCollectContact(user, message);
     case STATES.WEB_CONFIRM:
       return handleConfirm(user, message);
+    case STATES.WEB_DOMAIN_CHOICE:
+      return handleDomainChoice(user, message);
+    case STATES.WEB_DOMAIN_OWN_INPUT:
+      return handleDomainOwnInput(user, message);
+    case STATES.WEB_DOMAIN_SEARCH:
+      return handleDomainSearch(user, message);
     case STATES.WEB_GENERATING:
       return handleGenerating(user, message);
     case STATES.WEB_PREVIEW:
@@ -646,12 +657,123 @@ const INDUSTRY_COLORS = {
 };
 const DEFAULT_COLORS = { primaryColor: '#1E293B', secondaryColor: '#0F172A', accentColor: '#6366F1' };
 
+// Researched template palettes. When a template claims an industry (HVAC
+// claims plumbing + heating + cooling, Real Estate claims realty/broker
+// terms, Salon claims barber/spa/nail/etc.), we short-circuit the
+// keyword lookup and return the template's researched palette directly.
+// That way "Plumbing services" — which has no `plumbing` entry in the
+// old INDUSTRY_COLORS table — still lands on HVAC navy + orange instead
+// of the generic indigo default.
+const HVAC_PALETTE = { primaryColor: '#1E3A5F', secondaryColor: '#0F172A', accentColor: '#F97316' };
+const REAL_ESTATE_PALETTE = { primaryColor: '#1A2B45', secondaryColor: '#0F1B30', accentColor: '#C9A96E' };
+const SALON_PALETTE = { primaryColor: '#1F2937', secondaryColor: '#111827', accentColor: '#EC4899' };
+
 function getColorsForIndustry(industry) {
+  // Template-matched industries take precedence — they share a template
+  // and must share the template's researched palette (plumbing + HVAC
+  // use the same nav/CTA chrome, so they must use the same colours).
+  const { isHvac, isRealEstate } = require('../../website-gen/templates');
+  if (isHvac(industry)) return HVAC_PALETTE;
+  if (isRealEstate(industry)) return REAL_ESTATE_PALETTE;
+  if (isSalonIndustry(industry)) return SALON_PALETTE;
+
+  // Non-templated industries — keyword lookup, then partial match, then
+  // the generic default palette.
   const key = (industry || '').toLowerCase().replace(/[\s\-_\/]+/g, '_').trim();
-  // Try exact match first, then partial match
   if (INDUSTRY_COLORS[key]) return INDUSTRY_COLORS[key];
   const match = Object.keys(INDUSTRY_COLORS).find(k => key.includes(k) || k.includes(key));
   return match ? INDUSTRY_COLORS[match] : DEFAULT_COLORS;
+}
+
+// Named-color lookup for the revision follow-up flow. Each named color
+// maps to a full three-color palette — primary (dominant hue), secondary
+// (deeper companion for footers / dark sections), and accent (brighter
+// counterpoint for CTAs / highlights). Palettes are designer-picked so
+// a user who just says "blue" gets a coherent site, not a primary-only
+// swap that clashes with the leftover accent from the previous palette.
+//
+// heroTextOverride: 'dark' is set on very light palettes so hero text
+// (white by default) flips to near-black for readability.
+const NAMED_COLOR_PALETTES = {
+  blue:         { primary: '#1E3A8A', secondary: '#0F172A', accent: '#3B82F6' },
+  navy:         { primary: '#0F172A', secondary: '#020617', accent: '#38BDF8' },
+  'royal blue': { primary: '#1E40AF', secondary: '#1E3A8A', accent: '#60A5FA' },
+  'dark blue':  { primary: '#1E3A8A', secondary: '#172554', accent: '#60A5FA' },
+  'sky blue':   { primary: '#0EA5E9', secondary: '#0369A1', accent: '#7DD3FC' },
+  teal:         { primary: '#0F766E', secondary: '#134E4A', accent: '#2DD4BF' },
+  cyan:         { primary: '#0891B2', secondary: '#164E63', accent: '#67E8F9' },
+  turquoise:    { primary: '#14B8A6', secondary: '#0F766E', accent: '#99F6E4' },
+  green:        { primary: '#059669', secondary: '#064E3B', accent: '#10B981' },
+  'forest green': { primary: '#064E3B', secondary: '#022C22', accent: '#34D399' },
+  'dark green': { primary: '#14532D', secondary: '#052E16', accent: '#22C55E' },
+  olive:        { primary: '#4D7C0F', secondary: '#365314', accent: '#84CC16' },
+  emerald:      { primary: '#059669', secondary: '#064E3B', accent: '#6EE7B7' },
+  red:          { primary: '#B91C1C', secondary: '#7F1D1D', accent: '#EF4444' },
+  crimson:      { primary: '#991B1B', secondary: '#450A0A', accent: '#DC2626' },
+  maroon:       { primary: '#7F1D1D', secondary: '#450A0A', accent: '#DC2626' },
+  burgundy:     { primary: '#7F1D1D', secondary: '#450A0A', accent: '#B91C1C' },
+  purple:       { primary: '#6D28D9', secondary: '#4C1D95', accent: '#A78BFA' },
+  violet:       { primary: '#5B21B6', secondary: '#3B0764', accent: '#8B5CF6' },
+  indigo:       { primary: '#4338CA', secondary: '#312E81', accent: '#818CF8' },
+  pink:         { primary: '#DB2777', secondary: '#831843', accent: '#F472B6' },
+  'hot pink':   { primary: '#DB2777', secondary: '#9D174D', accent: '#EC4899' },
+  magenta:      { primary: '#C026D3', secondary: '#86198F', accent: '#E879F9' },
+  orange:       { primary: '#C2410C', secondary: '#7C2D12', accent: '#FB923C' },
+  amber:        { primary: '#D97706', secondary: '#92400E', accent: '#FBBF24' },
+  yellow:       { primary: '#CA8A04', secondary: '#854D0E', accent: '#FACC15' },
+  gold:         { primary: '#A16207', secondary: '#713F12', accent: '#EAB308' },
+  brown:        { primary: '#78350F', secondary: '#451A03', accent: '#F97316' },
+  black:        { primary: '#0F172A', secondary: '#020617', accent: '#64748B' },
+  charcoal:     { primary: '#1F2937', secondary: '#111827', accent: '#6B7280' },
+  gray:         { primary: '#4B5563', secondary: '#1F2937', accent: '#9CA3AF' },
+  grey:         { primary: '#4B5563', secondary: '#1F2937', accent: '#9CA3AF' },
+  white:        { primary: '#F8FAFC', secondary: '#E2E8F0', accent: '#64748B', heroTextOverride: 'dark' },
+  mint:         { primary: '#A7F3D0', secondary: '#6EE7B7', accent: '#059669', heroTextOverride: 'dark' },
+  pastel:       { primary: '#FBCFE8', secondary: '#F472B6', accent: '#831843', heroTextOverride: 'dark' },
+};
+
+// Derive a reasonable palette from a raw hex. Darken for secondary
+// (multiply RGB by 0.55), lighten for accent (mix 60% of original with
+// 40% white). Good enough to avoid a clashing leftover accent when the
+// user gives us something arbitrary.
+function derivePaletteFromHex(hex) {
+  const h = hex.replace('#', '');
+  const r = parseInt(h.slice(0, 2), 16);
+  const g = parseInt(h.slice(2, 4), 16);
+  const b = parseInt(h.slice(4, 6), 16);
+  const darken = (v) => Math.max(0, Math.round(v * 0.55));
+  const lighten = (v) => Math.min(255, Math.round(v * 0.6 + 255 * 0.4));
+  const toHex = (r2, g2, b2) =>
+    '#' + [r2, g2, b2].map((n) => n.toString(16).padStart(2, '0').toUpperCase()).join('');
+  // Luminance proxy so we can hint hero text flip for light primaries
+  // (the revision parser uses 0.55 as the pastel threshold; mirroring it).
+  const lum = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+  return {
+    primary: toHex(r, g, b),
+    secondary: toHex(darken(r), darken(g), darken(b)),
+    accent: toHex(lighten(r), lighten(g), lighten(b)),
+    ...(lum > 0.55 ? { heroTextOverride: 'dark' } : {}),
+  };
+}
+
+// Resolve a short user color reply ("blue", "navy", "#1e40af", "forest
+// green") into a full three-color palette. Returns null if nothing
+// recognized so the caller can fall back to LLM parsing.
+function resolveColorReply(text) {
+  const clean = String(text || '').trim().toLowerCase();
+  if (!clean) return null;
+  // Direct hex (with or without leading #) → derived palette.
+  const hexMatch = clean.match(/^#?([0-9a-f]{6})\b/i);
+  if (hexMatch) return derivePaletteFromHex(`#${hexMatch[1].toUpperCase()}`);
+  // Exact named match.
+  if (NAMED_COLOR_PALETTES[clean]) return NAMED_COLOR_PALETTES[clean];
+  // Longest-matching phrase wins ("dark green" beats "green").
+  const sortedNames = Object.keys(NAMED_COLOR_PALETTES).sort((a, b) => b.length - a.length);
+  for (const name of sortedNames) {
+    const pattern = new RegExp(`\\b${name.replace(/\s+/g, '\\s+')}\\b`, 'i');
+    if (pattern.test(clean)) return NAMED_COLOR_PALETTES[name];
+  }
+  return null;
 }
 
 // A "salon-like" business gets the dedicated salon template with its booking flow.
@@ -2040,9 +2162,20 @@ async function handleCollectContact(user, message) {
   });
   user.metadata = {
     ...(user.metadata || {}),
-    websiteData: mergedWebsiteData,
-    contactSkipped: true,
+    websiteData: { ...(user.metadata?.websiteData || {}), ...contactData },
   };
+
+  // Optional logo step — runs between contact and the confirmation summary
+  // unless the user already uploaded one or opted out. Previously
+  // handleCollectContact skipped straight to showConfirmSummary regardless
+  // of the logo state, so nextMissingState's logo check never fired.
+  const wdAfter = user.metadata.websiteData;
+  if (!wdAfter.logoUrl && !wdAfter.logoSkipped) {
+    const prompt = "Got a logo? Send it as an image (JPG or PNG) — I'll clean up the background automatically. Or reply *skip* and I'll use a text logo with your brand initial.";
+    await sendTextMessage(user.phone_number, await localize(prompt, user));
+    await logMessage(user.id, 'Asking for logo upload', 'assistant');
+    return STATES.WEB_COLLECT_LOGO;
+  }
 
   return showConfirmSummary(user);
 }
@@ -2245,6 +2378,108 @@ async function showConfirmSummary(user, prefix = '') {
   return STATES.WEB_CONFIRM;
 }
 
+// ─── Logo collection ───────────────────────────────────────────────────────
+// Optional step — runs after contact, before the confirmation summary.
+// Accepts either an image message (JPG/PNG) or a "skip" reply. On image,
+// downloads the WhatsApp media, runs it through the three-tier logo
+// processor (transparent passthrough → remove.bg API → original upload)
+// and stores the resulting public URL in websiteData.logoUrl. On skip,
+// sets websiteData.logoSkipped=true so nextMissingState() stops asking.
+async function handleCollectLogo(user, message) {
+  const text = (message.text || '').trim();
+
+  // Skip path — explicit opt-out in any language we can reasonably detect
+  // via keyword. Keeping this regex-based instead of LLM since the user
+  // is answering a very specific yes/no-ish prompt.
+  if (text && /^(skip|no|nope|nah|no thanks|don'?t have|none|n\/a|na|nahi|baad may|baad|later)$/i.test(text)) {
+    const wd = { ...(user.metadata?.websiteData || {}) };
+    wd.logoSkipped = true;
+    await updateUserMetadata(user.id, { websiteData: wd });
+    user.metadata = { ...(user.metadata || {}), websiteData: wd };
+    await sendTextMessage(user.phone_number, await localize("No problem — I'll use a clean text logo with your brand initial.", user, text));
+    await logMessage(user.id, 'User skipped logo upload', 'assistant');
+    return smartAdvance(user, message, null);
+  }
+
+  // Image path — the sender captured the message with `type: 'image'` and
+  // a mediaId. downloadMedia pulls the bytes from WhatsApp's CDN.
+  const hasImage = message.type === 'image' && (message.mediaId || message.mediaUrl);
+  if (!hasImage) {
+    await sendTextMessage(
+      user.phone_number,
+      await localize(
+        "I didn't catch an image there. Send your logo as an image (JPG or PNG), or reply *skip* to use a text logo.",
+        user,
+        text
+      )
+    );
+    return STATES.WEB_COLLECT_LOGO;
+  }
+
+  await sendTextMessage(user.phone_number, await localize('Got it — processing your logo...', user, text));
+
+  let mediaBuffer = null;
+  let mediaMime = 'image/png';
+  try {
+    const { downloadMedia } = require('../../messages/sender');
+    const media = await downloadMedia(message.mediaId || message.mediaUrl);
+    if (media?.buffer) {
+      mediaBuffer = media.buffer;
+      mediaMime = media.mimeType || mediaMime;
+    }
+  } catch (err) {
+    logger.error(`[LOGO-COLLECT] Media download failed: ${err.message}`);
+  }
+
+  if (!mediaBuffer) {
+    await sendTextMessage(
+      user.phone_number,
+      await localize(
+        "I couldn't download that image — can you try sending it again? Or reply *skip* to move on without a logo.",
+        user,
+        text
+      )
+    );
+    return STATES.WEB_COLLECT_LOGO;
+  }
+
+  let result = null;
+  try {
+    const { processLogo } = require('../../website-gen/logoProcessor');
+    result = await processLogo(mediaBuffer, mediaMime);
+  } catch (err) {
+    logger.error(`[LOGO-COLLECT] processLogo threw: ${err.message}`);
+  }
+
+  if (!result?.url) {
+    // Processing failed entirely (upload error, all tiers gave up). Treat
+    // it as skip so the flow doesn't stall — better to ship a text logo
+    // than get stuck.
+    const wd = { ...(user.metadata?.websiteData || {}) };
+    wd.logoSkipped = true;
+    await updateUserMetadata(user.id, { websiteData: wd });
+    user.metadata = { ...(user.metadata || {}), websiteData: wd };
+    await sendTextMessage(
+      user.phone_number,
+      await localize("Something went wrong processing that image — I'll use a text logo for now. You can always send one later.", user, text)
+    );
+    return smartAdvance(user, message, null);
+  }
+
+  const wd = { ...(user.metadata?.websiteData || {}) };
+  wd.logoUrl = result.url;
+  wd.logoSkipped = false;
+  await updateUserMetadata(user.id, { websiteData: wd });
+  user.metadata = { ...(user.metadata || {}), websiteData: wd };
+
+  const ack = result.wasProcessed
+    ? "Logo saved — background cleaned up and ready to go."
+    : "Logo saved.";
+  await sendTextMessage(user.phone_number, await localize(ack, user, text));
+  await logMessage(user.id, `Logo uploaded (${result.source})`, 'assistant');
+  return smartAdvance(user, message, null);
+}
+
 async function handleConfirm(user, message) {
   const originalText = (message.text || '').trim();
 
@@ -2255,16 +2490,10 @@ async function handleConfirm(user, message) {
   const confirmIntent = await classifyConfirmIntent(originalText, user.id);
 
   if (confirmIntent === 'confirm') {
-    await sendTextMessage(
-      user.phone_number,
-      await localize(
-        'Alright, give me about 30-60 seconds to build your site...',
-        user,
-        originalText
-      )
-    );
-    await logMessage(user.id, 'Confirmed, generating website', 'assistant');
-    return generateWebsite(user);
+    // Before building, ask about domain. Combined Stripe link needs the
+    // domain price locked in so the activation banner matches the chat link.
+    await logMessage(user.id, 'Confirmed, asking about domain before build', 'assistant');
+    return askDomainChoice(user);
   }
 
   // User wants to change something — use originalText to preserve capitalization
@@ -2287,80 +2516,147 @@ async function handleConfirm(user, message) {
   // If nothing matches, fall through to the LLM classifier below for natural
   // prose in any language — "address ko Gulshan Iqbal kr do" / "cambia el
   // email a foo@bar.com" / "change name please to MyCo".
+  //
+  // Areas MUST be matched before services, because "Service areas: tariq"
+  // otherwise fell into the services regex (the `are` in `areas` matched
+  // the `are` alternation) and dumped the area list into services.
+  const areasChange = originalText.match(/(?:service\s+)?areas?\s*(?:to|:|should be|are|change)\s*(.+)/i);
+  // Services regex now requires a word boundary + non-"area" lookahead so
+  // "Service areas" stops being mis-parsed as "Service" + "are" + "as...".
+  const servicesChange = originalText.match(/\bservices?\b(?!\s+areas?)\s*(?:to|:|should be|are|change)\s*(.+)/i);
   const nameChange = originalText.match(/(?:business\s*)?name\s*(?:to|:|should be|is)\s*(.+)/i);
   const industryChange = originalText.match(/industry\s*(?:to|:|should be|is)\s*(.+)/i);
-  const servicesChange = originalText.match(/services?\s*(?:to|:|should be|are|change)\s*(.+)/i);
   const emailChange = originalText.match(/e-?mail\s*(?:to|:|should be|is)\s*(.+)/i);
   const phoneChange = originalText.match(/(?:phone|tel|mobile|number)\s*(?:to|:|should be|is)\s*(.+)/i);
   const addressChange = originalText.match(/(?:address|location|addr)\s*(?:to|:|should be|is)\s*(.+)/i);
   const contactChange = originalText.match(/contact\s*(?:to|:|should be|is)\s*(.+)/i);
 
-  const applyFieldEdit = async (field, value) => {
+  // Mutates wd in place for one field. Returns a short ack string like
+  // "business name → *MyCo*" or null if the value wasn't applicable. Shared
+  // by the single-edit and multi-edit paths below.
+  const mutateWdForField = (field, value) => {
     const v = String(value || '').trim();
     if (!v) return null;
     switch (field) {
       case 'businessName':
-      case 'name': {
+      case 'name':
         wd.businessName = v;
-        return applyAndReshow(`Business name updated to *${wd.businessName}*`);
-      }
-      case 'industry': {
+        return `business name → *${wd.businessName}*`;
+      case 'industry':
         wd.industry = v;
-        const needsSalonFlow =
-          isSalonIndustry(v) &&
-          !wd.bookingMode &&
-          (!Array.isArray(wd.salonServices) || wd.salonServices.length === 0);
-        if (needsSalonFlow) {
-          await updateUserMetadata(user.id, { websiteData: wd, salonFlowOrigin: 'CONFIRM' });
-          user.metadata = { ...(user.metadata || {}), websiteData: wd };
-          const txt = `Updated industry to *${v}* — a few quick salon-specific questions, then we'll build it.`;
-          await sendTextMessage(user.phone_number, await localize(txt, user, originalText));
-          return startSalonFlow(user);
-        }
-        return applyAndReshow(`Industry updated to *${wd.industry}*`);
-      }
-      case 'services': {
+        return `industry → *${wd.industry}*`;
+      case 'services':
         wd.services = v
           .split(/\s*,\s*|\s+(?:and|&|aur|y|et|und)\s+/i)
           .map((s) => s.trim())
           .filter(Boolean);
-        return applyAndReshow(`Services updated to *${wd.services.join(', ')}*`);
-      }
+        return `services → *${wd.services.join(', ')}*`;
+      case 'areas':
+      case 'serviceAreas':
+        wd.serviceAreas = v
+          .split(/\s*,\s*|\s+(?:and|&|aur|y|et|und)\s+/i)
+          .map((s) => s.trim())
+          .filter(Boolean);
+        return `service areas → *${wd.serviceAreas.join(', ')}*`;
       case 'email':
       case 'contactEmail': {
         const m = v.match(/[\w.-]+@[\w.-]+\.\w+/);
         wd.contactEmail = m ? m[0] : v;
-        return applyAndReshow(`Email updated to *${wd.contactEmail}*`);
+        return `email → *${wd.contactEmail}*`;
       }
       case 'phone':
-      case 'contactPhone': {
+      case 'contactPhone':
         wd.contactPhone = v;
-        return applyAndReshow(`Phone updated to *${wd.contactPhone}*`);
-      }
+        return `phone → *${wd.contactPhone}*`;
       case 'address':
-      case 'contactAddress': {
+      case 'contactAddress':
         wd.contactAddress = v;
-        return applyAndReshow(`Address updated to *${wd.contactAddress}*`);
-      }
+        return `address → *${wd.contactAddress}*`;
       case 'contact': {
         const parsed = parseContactFields(v);
-        if (parsed.contactEmail) wd.contactEmail = parsed.contactEmail;
-        if (parsed.contactPhone) wd.contactPhone = parsed.contactPhone;
-        if (parsed.contactAddress) wd.contactAddress = parsed.contactAddress;
-        return applyAndReshow('Contact info updated');
+        const applied = [];
+        if (parsed.contactEmail) { wd.contactEmail = parsed.contactEmail; applied.push(`email → *${wd.contactEmail}*`); }
+        if (parsed.contactPhone) { wd.contactPhone = parsed.contactPhone; applied.push(`phone → *${wd.contactPhone}*`); }
+        if (parsed.contactAddress) { wd.contactAddress = parsed.contactAddress; applied.push(`address → *${wd.contactAddress}*`); }
+        return applied.length ? applied.join('; ') : null;
       }
       default:
         return null;
     }
   };
 
-  if (nameChange) { const r = await applyFieldEdit('businessName', nameChange[1]); if (r !== null) return r; }
-  if (industryChange) { const r = await applyFieldEdit('industry', industryChange[1]); if (r !== null) return r; }
-  if (servicesChange) { const r = await applyFieldEdit('services', servicesChange[1]); if (r !== null) return r; }
-  if (emailChange) { const r = await applyFieldEdit('email', emailChange[1]); if (r !== null) return r; }
-  if (phoneChange) { const r = await applyFieldEdit('phone', phoneChange[1]); if (r !== null) return r; }
-  if (addressChange) { const r = await applyFieldEdit('address', addressChange[1]); if (r !== null) return r; }
-  if (contactChange) { const r = await applyFieldEdit('contact', contactChange[1]); if (r !== null) return r; }
+  // Apply a single field, save, and re-show the summary. Used by the LLM
+  // fallback path below (which only identifies one field at a time) and
+  // for the industry→salon-flow special case.
+  const applyFieldEdit = async (field, value) => {
+    // Industry changing to a salon-ish value kicks off the salon-specific
+    // wizard (services, hours, booking mode). Don't batch this with other
+    // fields — the flow jump would be jarring mid-edit.
+    if (field === 'industry') {
+      const v = String(value || '').trim();
+      if (!v) return null;
+      wd.industry = v;
+      const needsSalonFlow =
+        isSalonIndustry(v) &&
+        !wd.bookingMode &&
+        (!Array.isArray(wd.salonServices) || wd.salonServices.length === 0);
+      if (needsSalonFlow) {
+        await updateUserMetadata(user.id, { websiteData: wd, salonFlowOrigin: 'CONFIRM' });
+        user.metadata = { ...(user.metadata || {}), websiteData: wd };
+        const txt = `Updated industry to *${v}* — a few quick salon-specific questions, then we'll build it.`;
+        await sendTextMessage(user.phone_number, await localize(txt, user, originalText));
+        return startSalonFlow(user);
+      }
+      return applyAndReshow(`Industry updated to *${wd.industry}*`);
+    }
+    const label = mutateWdForField(field, value);
+    if (!label) return null;
+    return applyAndReshow(label.charAt(0).toUpperCase() + label.slice(1));
+  };
+
+  // Collect ALL regex matches on the user's message, then apply them as a
+  // batch. Previously each matcher `return`ed early on first hit, so a user
+  // who wrote "Business name: X\nServices: Y" only got the name changed —
+  // the services line was silently dropped. Dispatch order still matters
+  // for disambiguation (areas before services so "Service areas:" doesn't
+  // fall into the services matcher).
+  const matches = [];
+  if (areasChange) matches.push({ field: 'areas', value: areasChange[1] });
+  if (nameChange) matches.push({ field: 'businessName', value: nameChange[1] });
+  if (industryChange) matches.push({ field: 'industry', value: industryChange[1] });
+  if (servicesChange) matches.push({ field: 'services', value: servicesChange[1] });
+  if (emailChange) matches.push({ field: 'email', value: emailChange[1] });
+  if (phoneChange) matches.push({ field: 'phone', value: phoneChange[1] });
+  if (addressChange) matches.push({ field: 'address', value: addressChange[1] });
+  if (contactChange) matches.push({ field: 'contact', value: contactChange[1] });
+
+  // Industry-to-salon edge case (side-effect flow transition): only single-edit.
+  const singleIndustrySalon =
+    matches.length === 1 &&
+    matches[0].field === 'industry' &&
+    isSalonIndustry(matches[0].value) &&
+    !wd.bookingMode &&
+    (!Array.isArray(wd.salonServices) || wd.salonServices.length === 0);
+  if (singleIndustrySalon) {
+    const r = await applyFieldEdit(matches[0].field, matches[0].value);
+    if (r !== null) return r;
+  }
+
+  if (matches.length > 0) {
+    const labels = [];
+    for (const m of matches) {
+      const label = mutateWdForField(m.field, m.value);
+      if (label) labels.push(label);
+    }
+    if (labels.length > 0) {
+      const ackPrefix = labels.length === 1
+        ? `✅ ${labels[0].charAt(0).toUpperCase() + labels[0].slice(1)}. Here's the updated summary:`
+        : `✅ Updated ${labels.length} fields: ${labels.join('; ')}. Here's the updated summary:`;
+      await updateUserMetadata(user.id, { websiteData: wd });
+      user.metadata = { ...(user.metadata || {}), websiteData: wd };
+      return showConfirmSummary(user, ackPrefix);
+    }
+  }
 
   // Regex didn't match. Try the LLM — catches natural prose in any language:
   // "address ko Gulshan Iqbal kr do" (Urdu), "cambia el email a X" (Spanish),
@@ -2368,12 +2664,14 @@ async function handleConfirm(user, message) {
   try {
     const prompt = `The user is reviewing a website-setup summary and may want to change ONE specific field. Identify which field (if any) and the exact new value they provided.
 
-Fields: businessName, industry, services, email, phone, address, contact
+Fields: businessName, industry, services, areas, email, phone, address, contact
 
 Rules:
 - Extract only if the user is clearly asking to change/update/set a field.
 - Understand any language: English, Roman Urdu, Urdu, Hindi, Spanish, Arabic, etc.
 - Preserve emails / phone numbers / URLs / addresses exactly as written.
+- Distinguish "services" (what the business DOES — e.g. plumbing, haircuts) from "areas" (where it operates — neighborhoods or cities). "Service areas" = areas, NOT services.
+- For areas with multiple items, keep the whole comma/and-separated list as the value.
 - If the user is NOT asking to change a field (e.g. they're saying "yes", "looks good", "cancel", a question, or something unrelated), return {"field": null}.
 
 User said: "${originalText}"
@@ -2382,6 +2680,8 @@ Return JSON ONLY. Examples:
 {"field": "address", "value": "Gulshan Iqbal, Karachi"}
 {"field": "businessName", "value": "MyCo"}
 {"field": "email", "value": "test@example.com"}
+{"field": "services", "value": "Web design, SEO, Branding"}
+{"field": "areas", "value": "Tariq Road, PECHS"}
 {"field": null}`;
 
     const response = await generateResponse(
@@ -2500,10 +2800,28 @@ async function generateWebsite(user) {
     const { findOrCreateUser } = require('../../db/users');
     const freshUser = await findOrCreateUser(user.phone_number, user.channel, user.via_phone_number_id);
     const websiteData = freshUser.metadata?.websiteData || {};
+
+    // Industry-matched default palette. getColorsForIndustry runs when
+    // WEB_COLLECT_SERVICES or WEB_COLLECT_AGENT_PROFILE execute — but
+    // those handlers are skipped entirely when the sales bot pre-seeds
+    // services via TRIGGER_WEBSITE_DEMO. Without this fallback merge, a
+    // plumbing / HVAC / realtor lead that came through sales chat would
+    // reach the generator with no primaryColor/accentColor/secondaryColor,
+    // and the template's buildTokens() would fall back to its own
+    // defaults (which don't match the researched per-industry palettes).
+    // Only sets colors the user hasn't explicitly overridden via revision.
+    if (!websiteData.primaryColor || !websiteData.accentColor) {
+      const industryPalette = getColorsForIndustry(websiteData.industry || '');
+      if (!websiteData.primaryColor) websiteData.primaryColor = industryPalette.primaryColor;
+      if (!websiteData.accentColor) websiteData.accentColor = industryPalette.accentColor;
+      if (!websiteData.secondaryColor) websiteData.secondaryColor = industryPalette.secondaryColor;
+      logger.info(`[WEBGEN] Applied industry palette for "${websiteData.industry}": ${JSON.stringify(industryPalette)}`);
+    }
+
     logger.info(`[WEBGEN] User data loaded:`, {
       businessName: websiteData.businessName,
       industry: websiteData.industry,
-      hasLogo: !!websiteData.logo,
+      hasLogo: !!(websiteData.logoUrl || websiteData.logo),
       hasContact: !!(websiteData.contactEmail || websiteData.contactPhone),
     });
 
@@ -2512,51 +2830,63 @@ async function generateWebsite(user) {
     const siteId = freshUser.metadata?.currentSiteId;
     logger.info(`[WEBGEN] Step 2/5: Generating website content via LLM for "${websiteData.businessName}" (template=${templateId})`);
 
-    // 1a. Ensure there's a Stripe payment link for the activation banner.
-    // If the sales bot has already created one for this user, reuse it;
-    // otherwise create a default ($299 "Website Activation") link so the
-    // banner's "Activate Now" button always has somewhere to go.
+    // 1a. Create the activation Stripe link for this build. Website+domain
+    // combined flow: the link amount = website price + domain price, and the
+    // same URL is surfaced both on the preview banner and in chat. The
+    // domain price was locked in during the WEB_DOMAIN_CHOICE step (stored
+    // in user.metadata). A prior pending link (if any) gets auto-superseded
+    // by createPaymentLink so the new combined link is the only one live.
+    const websitePrice = parseInt(process.env.DEFAULT_ACTIVATION_PRICE || '199', 10);
+    const domainPrice = parseInt(freshUser.metadata?.domainPrice || 0, 10);
+    const selectedDomain = freshUser.metadata?.selectedDomain || null;
+    const activationTotal = websitePrice + domainPrice;
+
     let paymentLinkUrl = null;
     try {
-      const { supabase } = require('../../config/database');
-      const { data: existingPayment } = await supabase
-        .from('payments')
-        .select('payment_link_url, amount, status')
-        .eq('user_id', user.id)
-        .eq('status', 'pending')
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      if (existingPayment?.payment_link_url) {
-        paymentLinkUrl = existingPayment.payment_link_url;
-        logger.info(`[WEBGEN] Reusing existing pending payment link for activation banner`);
-      } else {
-        const { createPaymentLink } = require('../../payments/stripe');
-        const defaultAmount = parseInt(process.env.DEFAULT_ACTIVATION_PRICE || '299', 10);
-        const linkResult = await createPaymentLink({
-          userId: user.id,
-          phoneNumber: user.phone_number,
-          amount: defaultAmount,
-          serviceType: 'website',
-          packageTier: 'activation',
-          description: `Website activation — ${websiteData.businessName || 'site'}`,
-          customerEmail: user.metadata?.email || websiteData.contactEmail || null,
-          customerName: websiteData.businessName || null,
-        });
-        paymentLinkUrl = linkResult?.url || null;
-        logger.info(`[WEBGEN] Created default activation payment link: $${defaultAmount}`);
-      }
+      const { createPaymentLink } = require('../../payments/stripe');
+
+      const description = selectedDomain && domainPrice > 0
+        ? `Website activation + domain ${selectedDomain} — ${websiteData.businessName || 'site'}`
+        : selectedDomain
+          ? `Website activation (DNS for ${selectedDomain}) — ${websiteData.businessName || 'site'}`
+          : `Website activation — ${websiteData.businessName || 'site'}`;
+
+      const linkResult = await createPaymentLink({
+        userId: user.id,
+        phoneNumber: user.phone_number,
+        amount: activationTotal,
+        serviceType: 'website',
+        packageTier: 'activation',
+        description,
+        customerEmail: user.metadata?.email || websiteData.contactEmail || null,
+        customerName: websiteData.businessName || null,
+        websiteAmount: websitePrice,
+        domainAmount: domainPrice,
+        selectedDomain,
+        originalAmount: activationTotal,
+      });
+      paymentLinkUrl = linkResult?.pixieUrl || linkResult?.url || null;
+      logger.info(
+        `[WEBGEN] Activation link created: $${activationTotal} ` +
+          `(website $${websitePrice} + domain $${domainPrice} for ${selectedDomain || 'no domain'})`
+      );
     } catch (err) {
       // Non-fatal — banner will fall back to a WhatsApp CTA if no link
       logger.warn(`[WEBGEN] Activation payment link setup failed: ${err.message}`);
     }
 
+    // Banner shows the same dollar figure the chat CTA charges. At initial
+    // build there's no discount yet — originalAmount matches activationAmount
+    // and discountPct is 0 until the 22h discount job fires.
     const siteConfig = await generateWebsiteContent(websiteData, {
       templateId,
       siteId,
       userId: user.id,
       paymentStatus: 'preview',
       paymentLinkUrl,
+      activationAmount: activationTotal,
+      originalAmount: activationTotal,
+      discountPct: 0,
     });
     logger.info(`[WEBGEN] Content generated:`, {
       headline: siteConfig.headline,
@@ -2609,13 +2939,24 @@ async function generateWebsite(user) {
 
     // Send the Stripe activation link as its own message so the user sees
     // the EXACT same URL in chat that the "Activate Now" button on the
-    // site points to. One tap either way — same outcome.
+    // site points to. One tap either way — same outcome. The total includes
+    // the domain price if one was selected, so the chat CTA and the banner
+    // always match.
     if (paymentLinkUrl) {
+      const priceLine = domainPrice > 0 && selectedDomain
+        ? `*$${activationTotal}* — $${websitePrice} website + $${domainPrice} for *${selectedDomain}*.`
+        : selectedDomain
+          ? `*$${activationTotal}* — I'll point *${selectedDomain}* at your new site right after payment.`
+          : `*$${activationTotal}*.`;
       await sendTextMessage(
         user.phone_number,
-        `🔒 *Preview mode.* To make it live and unlock the contact form:\n\n👉 ${paymentLinkUrl}\n\nSame link as the *Activate Now* button on your site. Pay either way — the banner disappears once payment clears.`
+        `🔒 *Preview mode.* ${priceLine}\n\nActivate to make it live and unlock the contact form:\n\n👉 ${paymentLinkUrl}\n\nSame link as the *Activate Now* button on your site.`
       );
-      await logMessage(user.id, `Activation link sent: ${paymentLinkUrl}`, 'assistant');
+      await logMessage(
+        user.id,
+        `Activation link sent: $${activationTotal} (${selectedDomain || 'no domain'}) ${paymentLinkUrl}`,
+        'assistant'
+      );
     }
 
     await logMessage(user.id, `Website deployed: ${previewUrl}`, 'assistant');
@@ -2752,7 +3093,35 @@ async function handleRevisions(user, message) {
 
   // Handle revision requests via LLM
   if (buttonId === 'web_revise' || message.text) {
-    const revisionText = message.text || 'I want to make changes';
+    let revisionText = message.text || 'I want to make changes';
+
+    // Follow-up color answer: last turn we asked "which color?" and set
+    // awaitingColor=true. If the user replied with a short color-ish
+    // message ("blue", "#1E40AF", "navy", "dark green"), rewrite it
+    // into an explicit FULL-PALETTE revision request so the LLM parser
+    // catches all three of primaryColor/secondaryColor/accentColor at
+    // once. A single-color primary swap leaves the old accent behind,
+    // which clashes with the new palette; shipping a coherent designer
+    // palette keeps the site professional even after recolors.
+    if (user.metadata?.awaitingColor && message.text && message.text.trim().length <= 40) {
+      const palette = resolveColorReply(message.text);
+      if (palette) {
+        const parts = [
+          `change primaryColor to ${palette.primary}`,
+          `secondaryColor to ${palette.secondary}`,
+          `accentColor to ${palette.accent}`,
+        ];
+        if (palette.heroTextOverride) {
+          parts.push(`and set heroTextOverride to ${palette.heroTextOverride}`);
+        }
+        revisionText = parts.join(', ');
+        logger.info(`[WEBDEV-REVISE] awaitingColor resolved "${message.text.trim()}" → palette ${JSON.stringify(palette)}`);
+      }
+      // Clear the flag whether we parsed a color or not — if they gave us
+      // a non-color reply ("nevermind", "actually change the headline"),
+      // fall through to the normal parser and let it handle the pivot.
+      await updateUserMetadata(user.id, { awaitingColor: false });
+    }
 
     // Only process free text if a website was actually generated
     if (!buttonId) {
@@ -2914,6 +3283,14 @@ async function handleRevisions(user, message) {
       }
 
       if (updates._unclear) {
+        // If the clarification question is specifically about colors, set a
+        // follow-up flag so the NEXT user reply — which will likely be a
+        // short answer like "blue" or "#1E40AF" — gets interpreted as a
+        // color change without the LLM needing any extra context.
+        const isColorQuestion = /colou?r/i.test(String(updates._message || ''));
+        if (isColorQuestion) {
+          await updateUserMetadata(user.id, { awaitingColor: true });
+        }
         await sendTextMessage(user.phone_number, updates._message);
         return STATES.WEB_REVISIONS;
       }
@@ -3033,6 +3410,346 @@ async function handleRevisions(user, message) {
   }
 
   return STATES.WEB_REVISIONS;
+}
+
+// ─── DOMAIN CHOICE (pre-build) ─────────────────────────────────────
+// After WEB_CONFIRM approval, we ask about the domain BEFORE building the
+// site. The domain price gets folded into the activation Stripe link so
+// the preview banner and the chat CTA are always in sync.
+//
+// Three branches:
+//   "new" / "yes"  → Namecheap search → user picks one → generate
+//   "own" / "have" → collect their existing domain   → generate
+//   "skip" / "no"  → skip, no domain                 → generate
+
+const { checkDomainAvailability } = require('../../website-gen/domainChecker');
+
+async function askDomainChoice(user) {
+  const { updateUserState } = require('../../db/users');
+  await updateUserState(user.id, STATES.WEB_DOMAIN_CHOICE);
+
+  const businessName = user.metadata?.websiteData?.businessName || '';
+  const sanitized = businessName.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const example = sanitized && sanitized.length >= 2 ? `${sanitized}.com` : 'yourbusiness.com';
+
+  await sendTextMessage(
+    user.phone_number,
+    await localize(
+      `Before I build — what do you want to do about a domain?\n\n` +
+        `• *new* — I'll find one for you (e.g. ${example})\n` +
+        `• *own* — you already have a domain\n` +
+        `• *skip* — just host it on a free preview URL for now`,
+      user
+    )
+  );
+  await logMessage(user.id, 'Asking domain choice (new/own/skip)', 'assistant');
+  return STATES.WEB_DOMAIN_CHOICE;
+}
+
+async function handleDomainChoice(user, message) {
+  const raw = (message.text || '').trim();
+  const text = raw.toLowerCase();
+
+  // Skip path — no domain.
+  if (/^(skip|no|nope|nah|later|pass|not now|maybe later)$/i.test(text)) {
+    await updateUserMetadata(user.id, {
+      domainChoice: 'skip',
+      selectedDomain: null,
+      domainPrice: 0,
+    });
+    await sendTextMessage(
+      user.phone_number,
+      await localize("No problem — going straight to building.", user, raw)
+    );
+    await logMessage(user.id, 'Domain choice: skip', 'assistant');
+    return generateWebsite(user);
+  }
+
+  // "I already own one" path.
+  if (/^(own|have|mine|my|i\s*(?:have|own))\b/i.test(text)) {
+    await updateUserMetadata(user.id, { domainChoice: 'own' });
+    const { updateUserState } = require('../../db/users');
+    await updateUserState(user.id, STATES.WEB_DOMAIN_OWN_INPUT);
+    await sendTextMessage(
+      user.phone_number,
+      await localize("Great — what's your domain? (e.g. glowstudio.com)", user, raw)
+    );
+    return STATES.WEB_DOMAIN_OWN_INPUT;
+  }
+
+  // "Find one" path.
+  if (/^(new|yes|yeah|yep|sure|ok|okay|find|search|look|help)\b/i.test(text)) {
+    const businessName = user.metadata?.websiteData?.businessName || '';
+    const sanitized = businessName.toLowerCase().replace(/[^a-z0-9]/g, '');
+    await updateUserMetadata(user.id, { domainChoice: 'need' });
+
+    if (sanitized && sanitized.length >= 2) {
+      return runDomainSearchInline(user, sanitized);
+    }
+    const { updateUserState } = require('../../db/users');
+    await updateUserState(user.id, STATES.WEB_DOMAIN_SEARCH);
+    await sendTextMessage(
+      user.phone_number,
+      await localize("What name should I search for? (e.g. mybusiness)", user, raw)
+    );
+    return STATES.WEB_DOMAIN_SEARCH;
+  }
+
+  // Full domain typed — treat as "own".
+  const fullMatch = raw.match(/([a-z0-9-]+\.[a-z]{2,}(?:\.[a-z]{2,})?)/i);
+  if (fullMatch) {
+    return saveOwnDomain(user, fullMatch[1].toLowerCase());
+  }
+
+  // Plausible single-word name with no spaces → treat as search term.
+  const cleaned = text.replace(/[^a-z0-9-]/g, '');
+  if (!/\s/.test(raw) && cleaned.length >= 2 && cleaned.length <= 30) {
+    await updateUserMetadata(user.id, { domainChoice: 'need' });
+    return runDomainSearchInline(user, cleaned);
+  }
+
+  // Fallback — reprompt.
+  await sendTextMessage(
+    user.phone_number,
+    await localize(
+      "Just reply *new*, *own*, or *skip* — or type the domain you want.",
+      user,
+      raw
+    )
+  );
+  return STATES.WEB_DOMAIN_CHOICE;
+}
+
+async function handleDomainOwnInput(user, message) {
+  const raw = (message.text || '').trim();
+  const text = raw.toLowerCase();
+
+  // Exit — user changed their mind.
+  if (/^(skip|cancel|back|never\s*mind|nvm|forget\s*it)$/i.test(text)) {
+    await updateUserMetadata(user.id, {
+      domainChoice: 'skip',
+      selectedDomain: null,
+      domainPrice: 0,
+    });
+    await sendTextMessage(
+      user.phone_number,
+      await localize("All good — skipping the domain and building now.", user, raw)
+    );
+    return generateWebsite(user);
+  }
+
+  // Validate domain format.
+  const match = raw.match(/([a-z0-9][a-z0-9-]*\.[a-z]{2,}(?:\.[a-z]{2,})?)/i);
+  if (match) {
+    return saveOwnDomain(user, match[1].toLowerCase());
+  }
+
+  await sendTextMessage(
+    user.phone_number,
+    await localize(
+      "Doesn't look like a domain. Try something like *glowstudio.com* — or reply *skip*.",
+      user,
+      raw
+    )
+  );
+  return STATES.WEB_DOMAIN_OWN_INPUT;
+}
+
+async function saveOwnDomain(user, domain) {
+  await updateUserMetadata(user.id, {
+    domainChoice: 'own',
+    selectedDomain: domain,
+    domainPrice: 0, // Already owned — no registration charge.
+  });
+  await sendTextMessage(
+    user.phone_number,
+    await localize(
+      `Got it — *${domain}*. After payment I'll send DNS instructions so you can point it at your new site. Building now...`,
+      user
+    )
+  );
+  await logMessage(user.id, `Domain choice: own (${domain})`, 'assistant');
+  return generateWebsite(user);
+}
+
+async function handleDomainSearch(user, message) {
+  const raw = (message.text || '').trim();
+  const text = raw.toLowerCase();
+
+  // Exit phrases — bail out of domain flow, build with no domain.
+  if (/\b(skip|nah|nope|forget\s*it|never\s*mind|nvm|not\s*now|cancel|stop|exit|back|no\s*thanks?)\b/i.test(text) &&
+      !/[\w-]+\.[a-z]{2,}/i.test(raw)) {
+    await updateUserMetadata(user.id, {
+      domainChoice: 'skip',
+      selectedDomain: null,
+      domainPrice: 0,
+    });
+    await sendTextMessage(
+      user.phone_number,
+      await localize("No problem — skipping domain and building now.", user, raw)
+    );
+    return generateWebsite(user);
+  }
+
+  const domainOptions = user.metadata?.domainOptions || [];
+
+  // Pick by number.
+  const numMatch = text.match(/^(\d+)$/);
+  if (numMatch && domainOptions.length > 0) {
+    const idx = parseInt(numMatch[1], 10) - 1;
+    if (idx >= 0 && idx < domainOptions.length &&
+        domainOptions[idx].available && !domainOptions[idx].premium) {
+      return selectDomainInline(user, domainOptions[idx]);
+    }
+    await sendTextMessage(
+      user.phone_number,
+      await localize("That one's not available. Try another number or a new name.", user, raw)
+    );
+    return STATES.WEB_DOMAIN_SEARCH;
+  }
+
+  // Pick by ordinal word.
+  const ordinalMap = { first: 0, '1st': 0, second: 1, '2nd': 1, third: 2, '3rd': 2, fourth: 3, '4th': 3, fifth: 4, '5th': 4 };
+  const ordMatch = text.match(/\b(first|1st|second|2nd|third|3rd|fourth|4th|fifth|5th)\b/);
+  if (ordMatch && domainOptions.length > 0) {
+    const idx = ordinalMap[ordMatch[1]];
+    if (idx !== undefined && idx < domainOptions.length &&
+        domainOptions[idx].available && !domainOptions[idx].premium) {
+      return selectDomainInline(user, domainOptions[idx]);
+    }
+  }
+
+  // Full domain typed (e.g. "mybiz.com").
+  const fullMatch = raw.match(/([a-z0-9-]+\.[a-z]{2,})/i);
+  if (fullMatch) {
+    const typedDomain = fullMatch[1].toLowerCase();
+    const fromOptions = domainOptions.find(d => d.domain.toLowerCase() === typedDomain);
+    if (fromOptions && fromOptions.available && !fromOptions.premium) {
+      return selectDomainInline(user, fromOptions);
+    }
+    // Not in current options — run a fresh search.
+    const base = typedDomain.split('.')[0];
+    return runDomainSearchInline(user, base);
+  }
+
+  // New base name for search.
+  const cleaned = text.replace(/[^a-z0-9-]/g, '');
+  if (cleaned.length >= 2 && cleaned.length <= 30 && !/\s/.test(raw)) {
+    return runDomainSearchInline(user, cleaned);
+  }
+
+  await sendTextMessage(
+    user.phone_number,
+    await localize(
+      "Reply with the *number* of a domain above, or type a new name to search again.",
+      user,
+      raw
+    )
+  );
+  return STATES.WEB_DOMAIN_SEARCH;
+}
+
+async function runDomainSearchInline(user, baseName) {
+  const { updateUserState } = require('../../db/users');
+  await updateUserState(user.id, STATES.WEB_DOMAIN_SEARCH);
+  await sendTextMessage(
+    user.phone_number,
+    await localize(`Checking domain availability for *${baseName}*...`, user)
+  );
+
+  let results = [];
+  try {
+    results = await checkDomainAvailability(baseName);
+  } catch (err) {
+    logger.error(`[WEBDEV-DOMAIN] search failed: ${err.message} (code=${err.code || 'unknown'})`);
+
+    // DomainLookupUnavailable = registrar API is down or returned no prices.
+    // We REFUSE to quote a made-up price, so the only sane options are
+    // "use a domain you already own" or "skip for now". Route back to
+    // WEB_DOMAIN_CHOICE so both paths are available in a single prompt.
+    if (err.code === 'DOMAIN_LOOKUP_UNAVAILABLE') {
+      const { updateUserState } = require('../../db/users');
+      await updateUserState(user.id, STATES.WEB_DOMAIN_CHOICE);
+      await sendTextMessage(
+        user.phone_number,
+        await localize(
+          "Our domain registrar is temporarily unreachable so I can't pull live prices right now.\n\n" +
+            "I don't want to quote a price we can't honor — two options:\n\n" +
+            "• *own* — use a domain you already own (just needs DNS pointing after payment)\n" +
+            "• *skip* — launch on the free preview URL for now, add a domain anytime",
+          user
+        )
+      );
+      return STATES.WEB_DOMAIN_CHOICE;
+    }
+
+    // Generic failure (network blip) — let user retry with a different name.
+    await sendTextMessage(
+      user.phone_number,
+      await localize(
+        "Couldn't reach the registrar right now. Try a different name, or reply *skip* / *own* to proceed without a new domain.",
+        user
+      )
+    );
+    return STATES.WEB_DOMAIN_SEARCH;
+  }
+
+  const available = results.filter(r => r.available && !r.premium);
+
+  if (available.length === 0) {
+    await sendTextMessage(
+      user.phone_number,
+      await localize(
+        `No domains available with *${baseName}*. Try a different name, or reply *skip* to build without one.`,
+        user
+      )
+    );
+    await updateUserMetadata(user.id, { domainOptions: results, domainSearchName: baseName });
+    return STATES.WEB_DOMAIN_SEARCH;
+  }
+
+  let msg = '*Available domains:*\n\n';
+  results.forEach((r, i) => {
+    const price = r.price ? ` — $${r.price}/yr` : '';
+    if (r.premium) msg += `${i + 1}. ⚠️ ${r.domain} — Premium${price} (skipped)\n`;
+    else if (r.available) msg += `${i + 1}. ✅ ${r.domain}${price}\n`;
+    else msg += `${i + 1}. ❌ ${r.domain} — taken\n`;
+  });
+  msg += '\nReply with a *number* to pick one, a different name to search again, or *skip*.';
+
+  await sendTextMessage(user.phone_number, await localize(msg, user));
+  await updateUserMetadata(user.id, {
+    domainOptions: results,
+    domainSearchName: baseName,
+  });
+  await logMessage(
+    user.id,
+    `Domain search: ${available.map(r => r.domain).join(', ')} available`,
+    'assistant'
+  );
+  return STATES.WEB_DOMAIN_SEARCH;
+}
+
+async function selectDomainInline(user, option) {
+  const price = option.price ? parseFloat(option.price) : 0;
+  await updateUserMetadata(user.id, {
+    domainChoice: 'need',
+    selectedDomain: option.domain.toLowerCase(),
+    domainPrice: Math.ceil(price), // whole USD — Namecheap returns 12.88 etc.
+  });
+  await sendTextMessage(
+    user.phone_number,
+    await localize(
+      `Locked in *${option.domain}* — $${Math.ceil(price)}/yr. Building your site now…`,
+      user
+    )
+  );
+  await logMessage(
+    user.id,
+    `Domain selected: ${option.domain} ($${Math.ceil(price)}/yr)`,
+    'assistant'
+  );
+  return generateWebsite(user);
 }
 
 /**

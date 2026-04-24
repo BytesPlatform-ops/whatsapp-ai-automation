@@ -304,7 +304,7 @@ function getNav(c, cur, opts = {}) {
   const dark = opts.dark ? ' dark' : '';
   return `
 <nav class="nav${dark}">
-  <a href="/" class="nav-b">${esc(c.businessName)}</a>
+  <a href="/" class="nav-b">${c.logoUrl ? `<img src="${attr(c.logoUrl)}" alt="${attr(c.businessName || '')}" style="height:32px;width:auto;display:inline-block;vertical-align:middle;object-fit:contain;margin-right:8px">` : ''}${esc(c.businessName)}</a>
   <div class="nav-ls">
     ${ps.map((p) => `<a href="${p.h}" class="nav-l${p.h === cur ? ' active' : ''}">${p.n}</a>`).join('')}
     <a href="/booking" class="nav-cta"><span>Reserve</span></a>
@@ -317,38 +317,8 @@ function getNav(c, cur, opts = {}) {
 </div>`;
 }
 
-// Collect all distinct Unsplash photographers used on the site, for the
-// consolidated footer attribution. De-duped by photographer name so a busy
-// salon doesn't end up with a wall of credits.
-function collectUnsplashCredits(c) {
-  const all = [];
-  if (c.heroImage && c.heroImage.photographer) all.push(c.heroImage);
-  for (const s of (c.salonServices || [])) {
-    if (s.image && s.image.photographer) all.push(s.image);
-  }
-  const seen = new Set();
-  const unique = [];
-  for (const img of all) {
-    const key = img.photographer;
-    if (!seen.has(key)) {
-      seen.add(key);
-      unique.push(img);
-    }
-  }
-  return unique;
-}
-
 function getFooter(c) {
   const ps = pages(c);
-  const credits = collectUnsplashCredits(c);
-  const creditsHtml = credits.length > 0
-    ? `<div class="foot-credits">
-         <span>Photography —</span>
-         ${credits.map((img) => `<a href="${attr(img.photographerUrl)}" target="_blank" rel="noopener">${esc(img.photographer)}</a>`).join('<span class="sep">·</span>')}
-         <span class="sep">·</span>
-         <a href="${attr(credits[0].unsplashUrl)}" target="_blank" rel="noopener">Unsplash</a>
-       </div>`
-    : '';
   return `
 <footer class="foot">
   <div class="foot-inner">
@@ -372,7 +342,6 @@ function getFooter(c) {
       <a href="/booking">Book a visit</a>
     </div>
   </div>
-  ${creditsHtml}
   <div class="foot-bottom">
     <span>© ${new Date().getFullYear()} ${esc(c.businessName)} — All rights reserved.</span>
     <span>Handcrafted in ${esc((c.contactAddress || '').split(',').pop() || 'the studio')}</span>

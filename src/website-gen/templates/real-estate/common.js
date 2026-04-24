@@ -53,6 +53,15 @@ function fmtMoney(n, currency = 'USD') {
 }
 
 // ─── Design tokens ──────────────────────────────────────────────────────────
+// TOKENS holds the default editorial real-estate palette (deep navy +
+// champagne gold). buildTokens(c) merges user overrides on top so
+// revisions like "change colors to emerald" actually recolor the rendered
+// CSS — without this the template was emitting hardcoded navy regardless
+// of what site_data.primaryColor was set to.
+//
+// Status-badge colours (For Sale / Just Listed / Pending / Sold) stay
+// hardcoded — they're not brand chrome, they're a UX signal on listings
+// that users shouldn't accidentally recolor.
 
 const TOKENS = {
   navy: '#1A2B45',
@@ -72,6 +81,38 @@ const TOKENS = {
   badgePending: '#B8975C',
   badgeSold: '#1A2B45',
 };
+
+// Darken a hex color by the given factor (0–1). Used to compute a hover
+// state for the accent when the user hasn't provided one — mixing the
+// stale default gold-hover (#B8975C) with a fresh pink/emerald/etc
+// primary leaves a visible gold-brown smudge on anchor hovers, which is
+// exactly the "golden tint" complaint.
+function darkenHex(hex, factor = 0.82) {
+  const h = String(hex || '').replace('#', '').trim();
+  if (h.length !== 6) return hex;
+  const r = Math.max(0, Math.round(parseInt(h.slice(0, 2), 16) * factor));
+  const g = Math.max(0, Math.round(parseInt(h.slice(2, 4), 16) * factor));
+  const b = Math.max(0, Math.round(parseInt(h.slice(4, 6), 16) * factor));
+  const toHex = (n) => n.toString(16).padStart(2, '0').toUpperCase();
+  return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+}
+
+function buildTokens(c = {}) {
+  const primary = c.primaryColor || TOKENS.navy;
+  const secondary = c.secondaryColor || TOKENS.navyHover;
+  const accent = c.accentColor || TOKENS.gold;
+  return {
+    ...TOKENS,
+    navy: primary,
+    navyHover: secondary,
+    charcoal: primary,
+    heading: primary,
+    gold: accent,
+    goldHover: darkenHex(accent, 0.82),  // derive from the live accent, not the stale default
+    badgeSold: primary,     // status badge mirrors the brand navy
+    badgeJustListed: accent, // "just listed" badge reuses brand accent
+  };
+}
 
 // ─── Inline icons (minimal — used sparingly per editorial style) ────────────
 
@@ -168,8 +209,8 @@ const DEFAULT_LISTINGS = [
 
 // ─── Styles ─────────────────────────────────────────────────────────────────
 
-function getRealEstateStyles(heroPal) {
-  const t = TOKENS;
+function getRealEstateStyles(heroPal, c = {}) {
+  const t = buildTokens(c);
   // When the hero palette resolves to dark text (bright Unsplash image), flip
   // the title/subhead colours and lighten the left-weighted overlay so the
   // photo shows through. Otherwise keep the existing white-on-navy look.
@@ -881,8 +922,14 @@ function getNav(c, cur) {
   const forceSolid = cur !== '/';
   const solidAttrs = forceSolid ? ' solid' : '';
   const dataAttr = forceSolid ? ' data-force-solid="true"' : '';
+  // User-uploaded logo replaces the text wordmark when present. Kept at
+  // 36px tall so serif text alongside the brokerage sub-line still reads
+  // at roughly the same vertical weight as the default wordmark layout.
+  const logoImg = c.logoUrl
+    ? `<img src="${esc(c.logoUrl)}" alt="${esc(c.businessName || '')}" style="height:36px;width:auto;display:inline-block;vertical-align:middle;object-fit:contain;margin-right:10px">`
+    : '';
   return `<nav class="nav${solidAttrs}"${dataAttr}><div class="ctn nav-inner">
-    <a href="/" class="nav-brand">${esc(c.businessName)}${brokerage}</a>
+    <a href="/" class="nav-brand">${logoImg}${esc(c.businessName)}${brokerage}</a>
     <div class="nav-links">
       ${pages.filter((p) => p.h !== '/').map((p) => `<a href="${p.h}"${p.h === cur ? ' class="active"' : ''}>${p.n}</a>`).join('')}
     </div>
@@ -937,15 +984,15 @@ function getFooter(c) {
       <span>&copy; ${new Date().getFullYear()} ${esc(c.businessName)}. All rights reserved.</span>
       <span>REALTOR&reg; &middot; Equal Housing Opportunity</span>
     </div>
-    ${c.heroImage && c.heroImage.photographer ? `<div style="margin-top:14px;font-size:10.5px;color:rgba(250,247,242,.35);letter-spacing:.03em">Hero photo by <a href="${esc(c.heroImage.photographerUrl)}" target="_blank" rel="noopener" style="color:rgba(250,247,242,.5)">${esc(c.heroImage.photographer)}</a> on <a href="${esc(c.heroImage.unsplashUrl || 'https://unsplash.com')}" target="_blank" rel="noopener" style="color:rgba(250,247,242,.5)">Unsplash</a></div>` : ''}
   </div></footer>`;
 }
 
 function getFAB(c) {
   // Schedule FAB — calendar icon, gold, mobile only
+  const t = buildTokens(c);
   const url = c.calendlyUrl || '/contact';
   const isExternal = /^https?:/.test(url);
-  return `<a class="fab" href="${esc(url)}"${isExternal ? ' target="_blank" rel="noopener"' : ''} aria-label="Schedule a call">${icon('calendar', 22, TOKENS.navy)}</a>`;
+  return `<a class="fab" href="${esc(url)}"${isExternal ? ' target="_blank" rel="noopener"' : ''} aria-label="Schedule a call">${icon('calendar', 22, t.navy)}</a>`;
 }
 
 // ─── Form attrs / hidden fields ─────────────────────────────────────────────
@@ -1021,11 +1068,11 @@ function wrapRealEstatePage(c, cur, body, opts = {}) {
 <meta property="og:title" content="${title}">
 <meta property="og:description" content="${desc}">
 <meta property="og:type" content="website">
-<meta name="theme-color" content="${TOKENS.navy}">
+<meta name="theme-color" content="${buildTokens(c).navy}">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,500;1,600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<style>${getRealEstateStyles(opts.heroPal)}</style>
+<style>${getRealEstateStyles(opts.heroPal, c)}</style>
 ${schemas}
 </head>
 <body>
@@ -1040,6 +1087,7 @@ ${getRealEstateScript()}
 
 module.exports = {
   TOKENS,
+  buildTokens,
   DEFAULT_DESIGNATIONS,
   DEFAULT_LISTINGS,
   esc,

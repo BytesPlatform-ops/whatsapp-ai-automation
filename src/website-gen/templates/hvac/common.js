@@ -22,6 +22,15 @@ function telHref(phone) {
 }
 
 // ─── Design tokens ──────────────────────────────────────────────────────────
+// TOKENS holds the default HVAC palette; buildTokens(c) merges the user's
+// primaryColor / secondaryColor / accentColor on top so revisions like
+// "change color to forest green" actually reach the rendered CSS. Prior
+// to this, TOKENS was a static object that every page referenced
+// directly, so no amount of config override would ever recolor the site.
+//
+// Callers: getHvacStyles(c) for the global stylesheet, and each per-page
+// generator (home.js, about.js, etc.) for its inline `style="..."`
+// snippets. Emergency red stays hardcoded — 24/7 convention, not brand.
 
 const TOKENS = {
   // Brand
@@ -42,6 +51,20 @@ const TOKENS = {
   muted: '#94A3B8',
   onDark: '#F1F5F9',
 };
+
+function buildTokens(c = {}) {
+  const primary = c.primaryColor || TOKENS.trust;
+  const accent = c.accentColor || TOKENS.orange;
+  const secondary = c.secondaryColor || TOKENS.darkBg;
+  return {
+    ...TOKENS,
+    trust: primary,
+    action: primary,
+    orange: accent,
+    orangeHover: accent,
+    darkBg: secondary,
+  };
+}
 
 // ─── HVAC icons (inline SVG path bodies) ────────────────────────────────────
 
@@ -536,8 +559,8 @@ function getTradeCopy(c) {
 
 // ─── Styles ─────────────────────────────────────────────────────────────────
 
-function getHvacStyles() {
-  const t = TOKENS;
+function getHvacStyles(c = {}) {
+  const t = buildTokens(c);
   return `
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
 html{scroll-behavior:smooth;-webkit-text-size-adjust:100%}
@@ -723,9 +746,9 @@ a:hover{color:${t.trust}}
 .testi-q{font-size:16px;line-height:1.65;color:${t.heading};position:relative;z-index:1}
 .testi-meta{display:flex;align-items:center;gap:12px;padding-top:18px;border-top:1px solid ${t.border}}
 .avatar{width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,${t.trust},${t.action});color:#fff;display:inline-flex;align-items:center;justify-content:center;font-weight:700;font-size:16px;box-shadow:0 4px 10px rgba(30,58,95,.2)}
-.avatar.av-1{background:linear-gradient(135deg,#1E3A5F,#2563EB)}
-.avatar.av-2{background:linear-gradient(135deg,#0F766E,#14B8A6)}
-.avatar.av-3{background:linear-gradient(135deg,#C2410C,#F97316)}
+.avatar.av-1{background:linear-gradient(135deg,${t.trust},${t.action})}
+.avatar.av-2{background:linear-gradient(135deg,${t.trust},${t.darkBg})}
+.avatar.av-3{background:linear-gradient(135deg,${t.orangeHover},${t.orange})}
 .testi-name{font-weight:700;font-size:14.5px;color:${t.heading}}
 .testi-role{font-size:12.5px;color:${t.muted}}
 .g-pill{margin-left:auto;display:inline-flex;align-items:center;gap:6px;font-size:12px;color:${t.muted};font-weight:500}
@@ -1255,8 +1278,15 @@ function getHvacNav(c, cur) {
   const phone = c.contactPhone || '';
   const tel = telHref(phone);
   const initial = esc((c.businessName || 'H').trim().charAt(0).toUpperCase());
+  // If the user uploaded a logo during WEB_COLLECT_LOGO, show the image
+  // in place of the initial-letter badge. Inline height:32 matches
+  // logo-mark sizing so the business name beside it lines up the same
+  // way. object-fit:contain preserves aspect ratio for any shape logo.
+  const logoMark = c.logoUrl
+    ? `<img src="${esc(c.logoUrl)}" alt="${esc(c.businessName || '')}" class="logo-mark logo-img" style="width:auto;height:32px;background:none;padding:0;object-fit:contain">`
+    : `<span class="logo-mark">${initial}</span>`;
   return `<nav class="nav"><div class="ctn nav-inner">
-    <a href="/" class="nav-logo"><span class="logo-mark">${initial}</span>${esc(c.businessName)}</a>
+    <a href="/" class="nav-logo">${logoMark}${esc(c.businessName)}</a>
     <div class="nav-links">
       ${pages.filter(p => p.h !== '/').map(p => `<a href="${p.h}"${p.h === cur ? ' class="active"' : ''}>${p.n}</a>`).join('')}
     </div>
@@ -1424,11 +1454,11 @@ function wrapHvacPage(c, cur, body, opts = {}) {
 <meta property="og:title" content="${title}">
 <meta property="og:description" content="${desc}">
 <meta property="og:type" content="website">
-<meta name="theme-color" content="${TOKENS.trust}">
+<meta name="theme-color" content="${buildTokens(c).trust}">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@500;700;800&display=swap" rel="stylesheet">
-<style>${getHvacStyles()}</style>
+<style>${getHvacStyles(c)}</style>
 ${schemas}
 </head>
 <body>
@@ -1458,6 +1488,7 @@ function svcIconTint(titleOrIcon) {
 
 module.exports = {
   TOKENS,
+  buildTokens,
   DEFAULT_SERVICES,
   PLUMBING_DEFAULT_SERVICES,
   ELECTRICAL_DEFAULT_SERVICES,

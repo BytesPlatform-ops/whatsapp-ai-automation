@@ -1,14 +1,12 @@
-// Real-estate neighborhood image fetcher — one Unsplash photo per
+// Real-estate neighborhood image fetcher — one Pexels photo per
 // neighborhood, with specific queries (street / architecture / lifestyle)
 // rather than generic "city name" searches, which tend to return generic
 // skyline shots.
 
-const axios = require('axios');
 const { env } = require('../config/env');
 const { logger } = require('../utils/logger');
+const { searchPhotos, mapPhotoToResult } = require('./pexelsClient');
 
-const UNSPLASH_API = 'https://api.unsplash.com';
-const UTM = 'utm_source=bytes_platform&utm_medium=referral';
 const CONCURRENCY = 4;
 const PER_FETCH_TIMEOUT_MS = 7000;
 
@@ -27,33 +25,16 @@ function queryForNeighborhood(city, neighborhood, index) {
   return tmpl(city || '', neighborhood || '').replace(/\s{2,}/g, ' ').trim();
 }
 
-async function fetchOne(query, accessKey) {
-  try {
-    const response = await axios.get(`${UNSPLASH_API}/search/photos`, {
-      params: { query, orientation: 'landscape', content_filter: 'high', per_page: 6, order_by: 'relevant' },
-      headers: { Authorization: `Client-ID ${accessKey}`, 'Accept-Version': 'v1' },
-      timeout: PER_FETCH_TIMEOUT_MS,
-    });
-    const results = response.data?.results || [];
-    if (!results.length) return null;
-    const pick = results[Math.floor(Math.random() * Math.min(3, results.length))];
-    if (!pick?.urls?.regular) return null;
-    if (pick.links?.download_location) {
-      axios.get(pick.links.download_location, {
-        headers: { Authorization: `Client-ID ${accessKey}` },
-        timeout: 5000,
-      }).catch(() => {});
-    }
-    return {
-      url: `${pick.urls.regular}&w=1000&q=80&auto=format&fit=crop`,
-      photographer: pick.user?.name || 'Unsplash',
-      photographerUrl: `${(pick.user?.links?.html) || 'https://unsplash.com'}?${UTM}`,
-      unsplashUrl: `https://unsplash.com/?${UTM}`,
-    };
-  } catch (err) {
-    logger.warn(`[NEIGH-IMG] "${query}" failed: ${err.response?.status || err.message}`);
-    return null;
-  }
+async function fetchOne(query) {
+  const results = await searchPhotos(query, {
+    orientation: 'landscape',
+    perPage: 6,
+    timeout: PER_FETCH_TIMEOUT_MS,
+    logTag: 'NEIGH-IMG',
+  });
+  if (!results || !results.length) return null;
+  const pick = results[Math.floor(Math.random() * Math.min(3, results.length))];
+  return mapPhotoToResult(pick, { width: 1000, quality: 80 });
 }
 
 async function runPool(items, limit, worker) {
@@ -73,11 +54,10 @@ async function runPool(items, limit, worker) {
 
 // Returns a map { [neighborhoodName]: { url, photographer, ... } }
 async function fetchNeighborhoodImages(city, neighborhoods) {
-  const accessKey = env.unsplash?.accessKey;
-  if (!accessKey || !Array.isArray(neighborhoods) || !neighborhoods.length) return {};
+  if (!env.pexels?.apiKey || !Array.isArray(neighborhoods) || !neighborhoods.length) return {};
   const queries = neighborhoods.map((n, i) => queryForNeighborhood(city, n, i));
   logger.info(`[NEIGH-IMG] Fetching ${queries.length} neighborhood images for ${city || 'unspecified city'}`);
-  const images = await runPool(queries, CONCURRENCY, (q) => fetchOne(q, accessKey));
+  const images = await runPool(queries, CONCURRENCY, (q) => fetchOne(q));
   const hits = images.filter(Boolean).length;
   logger.info(`[NEIGH-IMG] Got ${hits}/${queries.length} neighborhood images`);
   const map = {};
@@ -90,8 +70,7 @@ async function fetchNeighborhoodImages(city, neighborhoods) {
 // Agent-portrait placeholder lifestyle photo — queried once per site, NOT
 // a person's face (user's preference per real_estate_context decision 4).
 async function fetchAgentPlaceholderImage() {
-  const accessKey = env.unsplash?.accessKey;
-  if (!accessKey) return null;
+  if (!env.pexels?.apiKey) return null;
   const pool = [
     'modern office desk minimalist',
     'coffee shop natural light morning',
@@ -100,7 +79,7 @@ async function fetchAgentPlaceholderImage() {
     'hands keys home exchange',
   ];
   const query = pool[Math.floor(Math.random() * pool.length)];
-  return fetchOne(query, accessKey);
+  return fetchOne(query);
 }
 
 module.exports = { fetchNeighborhoodImages, fetchAgentPlaceholderImage, queryForNeighborhood };

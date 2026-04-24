@@ -1,36 +1,21 @@
-const axios = require('axios');
-const { env } = require('../config/env');
 const { logger } = require('../utils/logger');
-
-const UNSPLASH_API = 'https://api.unsplash.com';
-const UTM = 'utm_source=bytes_platform&utm_medium=referral';
+const { searchPhotos, mapPhotoToResult } = require('./pexelsClient');
 
 /**
- * Fetch a landscape hero image from Unsplash for a given search query.
- * Uses the /search/photos endpoint (relevance-ranked) and picks one of the
- * top results, so specific queries like "air conditioner cleaning" return
- * actually-relevant photos instead of generic random-pool matches.
+ * Fetch a landscape hero image from Pexels for a given search query.
+ * Picks one of the top 3 relevance-ranked results randomly so two sites
+ * in the same industry don't end up with identical hero photos.
  *
  * Returns null if no API key is configured or on any failure — callers
  * should fall back to the gradient hero.
  *
  * @param {string} query - Visual keywords describing what the hero photo should show
  *                         (e.g. "ac cleaning duct", "dental clinic", "bakery cake")
- * @returns {Promise<null | { url: string, photographer: string, photographerUrl: string, unsplashUrl: string }>}
+ * @returns {Promise<null | { url: string, photographer: string, photographerUrl: string, sourceUrl: string, dominantColor: string | null }>}
  */
 async function getHeroImage(query) {
-  const accessKey = env.unsplash?.accessKey;
-  if (!accessKey) {
-    // Bumped from debug → warn so missing keys are visible in production
-    // logs (the hero then falls back to a gradient, which is what the user
-    // was seeing on generic sites).
-    logger.warn('[HERO-IMG] No UNSPLASH_ACCESS_KEY set - hero will fall back to gradient');
-    return null;
-  }
-
-  // Strip noise words that dilute Unsplash's relevance ranking. Also cap
-  // word count: Unsplash rejects/rate-limits long verbose queries (403),
-  // and anything past 3-4 meaningful words hurts relevance anyway.
+  // Strip noise words that dilute relevance ranking, and cap to 3-4
+  // meaningful words — longer queries hurt relevance.
   const cleaned = (query || '')
     .replace(/\b(services?|solutions?|company|business|professional|corporate|industry)\b/gi, '')
     .replace(/[-_/,]+/g, ' ')
@@ -38,43 +23,20 @@ async function getHeroImage(query) {
     .trim();
   const words = cleaned.split(/\s+/).filter(Boolean);
   const primaryQuery = (words.length > 4 ? words.slice(0, 3) : words).join(' ') || 'modern office';
-  // Short fallback — progressively simpler queries if the primary fails or
-  // hits rate limits. Guarantees the hero slot is never empty.
+
+  // Progressive fallback queries — guarantees the hero slot is never empty
+  // if the primary returns zero results.
   const fallbackQueries = [];
   if (words.length >= 2) fallbackQueries.push(words.slice(0, 2).join(' '));
   if (words.length >= 1) fallbackQueries.push(words[0]);
 
-  async function tryFetch(q) {
-    try {
-      const response = await axios.get(`${UNSPLASH_API}/search/photos`, {
-        params: {
-          query: q,
-          orientation: 'landscape',
-          content_filter: 'high',
-          per_page: 10,
-          order_by: 'relevant',
-        },
-        headers: {
-          Authorization: `Client-ID ${accessKey}`,
-          'Accept-Version': 'v1',
-        },
-        timeout: 8000,
-      });
-      return response.data?.results || [];
-    } catch (err) {
-      const status = err.response?.status;
-      logger.warn(`[HERO-IMG] Unsplash fetch failed for "${q}" (status ${status || 'n/a'}): ${err.message}`);
-      return null;
-    }
-  }
-
-  let results = await tryFetch(primaryQuery);
+  let results = await searchPhotos(primaryQuery, { logTag: 'HERO-IMG' });
   let finalQuery = primaryQuery;
   if (!results || results.length === 0) {
     for (const fb of fallbackQueries) {
       if (fb === primaryQuery) continue;
       logger.info(`[HERO-IMG] Retrying with fallback query "${fb}"`);
-      results = await tryFetch(fb);
+      results = await searchPhotos(fb, { logTag: 'HERO-IMG' });
       if (results && results.length) {
         finalQuery = fb;
         break;
@@ -86,41 +48,17 @@ async function getHeroImage(query) {
     return null;
   }
 
-  // Pick randomly from the top 3 relevance-ranked results so two businesses
-  // with the same industry don't get identical images.
+  // Top-3 random pick keeps sites with same industry from looking cloned.
   const topN = Math.min(3, results.length);
   const photo = results[Math.floor(Math.random() * topN)];
-  if (!photo || !photo.urls?.regular) {
-    logger.warn(`[HERO-IMG] Unsplash photo missing urls.regular for query "${finalQuery}"`);
+  const mapped = mapPhotoToResult(photo, { width: 1600, height: 900, quality: 80 });
+  if (!mapped) {
+    logger.warn(`[HERO-IMG] Pexels photo missing src for query "${finalQuery}"`);
     return null;
   }
 
-  // Unsplash API TOS requires pinging the download_location endpoint when a
-  // photo is used in a product. Fire-and-forget - we don't block on it.
-  if (photo.links?.download_location) {
-    axios
-      .get(photo.links.download_location, {
-        headers: { Authorization: `Client-ID ${accessKey}` },
-        timeout: 5000,
-      })
-      .catch((err) => {
-        logger.debug(`[HERO-IMG] Download tracking ping failed: ${err.message}`);
-      });
-  }
-
-  const photographer = photo.user?.name || 'Unsplash';
-  const photographerProfile = photo.user?.links?.html || 'https://unsplash.com';
-  const dominantColor = photo.color || null;
-
-  logger.info(`[HERO-IMG] Fetched Unsplash photo for "${finalQuery}" by ${photographer}, dominant=${dominantColor || 'n/a'}`);
-
-  return {
-    url: `${photo.urls.regular}&w=1600&q=80&auto=format&fit=crop`,
-    photographer,
-    photographerUrl: `${photographerProfile}?${UTM}`,
-    unsplashUrl: `https://unsplash.com/?${UTM}`,
-    dominantColor,
-  };
+  logger.info(`[HERO-IMG] Fetched Pexels photo for "${finalQuery}" by ${mapped.photographer}, dominant=${mapped.dominantColor || 'n/a'}`);
+  return mapped;
 }
 
 module.exports = { getHeroImage };

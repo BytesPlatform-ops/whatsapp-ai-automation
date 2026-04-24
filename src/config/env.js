@@ -44,6 +44,9 @@ const optional = [
   'UNSPLASH_ACCESS_KEY',
   'TESTER_PHONES',
 ];
+// Note: UNSPLASH_ACCESS_KEY / PEXELS_API_KEY are intentionally NOT required.
+// Image fetches degrade gracefully — sites render with gradient heroes when
+// no image source is configured.
 
 function validateEnv() {
   const missing = required.filter((key) => !process.env[key]);
@@ -128,9 +131,21 @@ const env = {
         : 'https://api.namecheap.com/xml.response';
     },
   },
-  // Unsplash (hero images for generated websites)
+  // Unsplash (hero images for generated websites — legacy, kept as fallback)
   unsplash: {
     accessKey: process.env.UNSPLASH_ACCESS_KEY || '',
+  },
+  // Pexels (primary image source for generated websites — no attribution
+  // required on customer-facing sites, 20k req/month free).
+  pexels: {
+    apiKey: process.env.PEXELS_API_KEY || '',
+  },
+  // remove.bg (background removal for user-uploaded logos). Free tier is
+  // 50 images/month at preview resolution — enough for nav/hero placement
+  // on generated sites. Missing key → logo processor falls back to using
+  // the uploaded image as-is.
+  removeBg: {
+    apiKey: process.env.REMOVE_BG_API_KEY || '',
   },
   agentPhone: process.env.AGENT_PHONE_NUMBER || '',
   // Comma-separated phone numbers (no + prefix needed, normalization is

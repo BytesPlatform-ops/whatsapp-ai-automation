@@ -5,6 +5,13 @@ const { logger } = require('../utils/logger');
  * Create a payment record.
  */
 async function createPayment(data) {
+  // Website+domain combined payments split the total across two columns so
+  // the 22h discount job can cut the website portion without touching the
+  // domain registration cost (Namecheap bills us for that verbatim).
+  const websiteAmount = data.websiteAmount != null ? data.websiteAmount : data.amount;
+  const domainAmount = data.domainAmount != null ? data.domainAmount : 0;
+  const originalAmount = data.originalAmount != null ? data.originalAmount : data.amount;
+
   const { data: payment, error } = await supabase
     .from('payments')
     .insert({
@@ -21,6 +28,10 @@ async function createPayment(data) {
       customer_email: data.customerEmail || null,
       customer_name: data.customerName || null,
       metadata: data.metadata || {},
+      website_amount: websiteAmount,
+      domain_amount: domainAmount,
+      original_amount: originalAmount,
+      selected_domain: data.selectedDomain || null,
     })
     .select()
     .single();

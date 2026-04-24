@@ -1,4 +1,4 @@
-const { esc, telHref, icon, wrapHvacPage, getLocalBusinessSchema, getTradeCopy, TOKENS } = require('./common');
+const { esc, telHref, icon, wrapHvacPage, getLocalBusinessSchema, getTradeCopy, buildTokens } = require('./common');
 
 function slugify(s) {
   return String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
@@ -6,6 +6,7 @@ function slugify(s) {
 
 function generateAreasPage(c) {
   const tc = getTradeCopy(c);
+  const TOKENS = buildTokens(c);
   const phone = c.contactPhone || '';
   const tel = telHref(phone);
   const primary = c.primaryCity || '';

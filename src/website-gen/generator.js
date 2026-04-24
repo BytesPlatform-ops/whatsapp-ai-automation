@@ -75,6 +75,7 @@ async function generateWebsiteContent(businessData, extras = {}) {
     contactPhone,
     contactAddress,
     logo,
+    logoUrl,
     // Salon-specific — pass-through to the salon template.
     bookingMode,
     bookingUrl,
@@ -308,7 +309,7 @@ Generate compelling website copy for this business. Return ONLY valid JSON.`;
     try {
       heroImage = await getHeroImage(imageQuery);
       if (!heroImage) {
-        logger.warn(`[WEBGEN] No hero image returned for "${imageQuery}" — check UNSPLASH_ACCESS_KEY or rate limits`);
+        logger.warn(`[WEBGEN] No hero image returned for "${imageQuery}" — check PEXELS_API_KEY or rate limits`);
       }
     } catch (err) {
       logger.warn(`[WEBGEN] Hero image fetch threw: ${err.message}`);
@@ -460,6 +461,11 @@ Generate compelling website copy for this business. Return ONLY valid JSON.`;
     contactPhone: contactPhone || '',
     contactAddress: contactAddress || '',
     logo: logo || null,
+    // logoUrl — public URL of the user's uploaded logo (after background
+    // removal via src/website-gen/logoProcessor.js). Templates render this
+    // in the nav; c.logo is kept as a legacy field for any pre-existing
+    // paths that may still write to it.
+    logoUrl: logoUrl || null,
     heroImage,
     ...generatedContent,
     // Template selector + salon pass-through (harmless for non-salon templates).
@@ -470,6 +476,12 @@ Generate compelling website copy for this business. Return ONLY valid JSON.`;
     // Stripe charge. paymentLinkUrl is the Stripe URL the banner points to.
     paymentStatus: extras.paymentStatus || 'preview',
     paymentLinkUrl: extras.paymentLinkUrl || null,
+    // Combined website+domain price shown on the activation banner. When a
+    // 22h discount has been applied, originalAmount stays at the pre-discount
+    // total and discountPct > 0 so the banner renders strikethrough + badge.
+    activationAmount: extras.activationAmount || null,
+    originalAmount: extras.originalAmount || null,
+    discountPct: extras.discountPct || 0,
     bookingMode: bookingMode || null,
     bookingUrl: bookingUrl || null,
     instagramHandle: instagramHandle || null,

@@ -3,40 +3,77 @@ const { logger } = require('../utils/logger');
 const { env } = require('../config/env');
 
 /**
- * Check availability of a base name across multiple TLDs.
- * Uses Namecheap API if configured, falls back to DNS heuristic.
+ * Check availability + pricing for a base name across multiple TLDs.
+ *
+ * NameSilo is the PRIMARY registrar (no IP whitelist, reseller-friendly TOS,
+ * instant signup). Namecheap is kept as an env-gated fallback only — used
+ * when NameSilo isn't configured.
+ *
+ * Strategy:
+ *   1. NameSilo primary — one GET, returns availability + price inline.
+ *   2. Namecheap fallback — legacy, rarely used in production now.
+ *   3. All fail → throw DomainLookupUnavailable so webDev.js routes the
+ *      user to own/skip instead of quoting a zero price.
  */
+class DomainLookupUnavailable extends Error {
+  constructor(cause) {
+    super(`Domain lookup unavailable: ${cause}`);
+    this.name = 'DomainLookupUnavailable';
+    this.code = 'DOMAIN_LOOKUP_UNAVAILABLE';
+  }
+}
+
 async function checkDomainAvailability(baseName) {
   const sanitized = baseName.toLowerCase().replace(/[^a-z0-9-]/g, '');
   if (!sanitized || sanitized.length < 2) return [];
 
-  // Use Namecheap API if configured (more accurate)
-  if (env.namecheap.apiKey) {
+  const hasNameSilo = !!process.env.NAMESILO_API_KEY;
+  const hasNamecheap = !!env.namecheap.apiKey;
+
+  // 1. NameSilo primary.
+  if (hasNameSilo) {
     try {
-      const { checkDomainAvailability: ncCheck } = require('../integrations/namecheap');
-      return await ncCheck(sanitized);
+      const namesilo = require('../integrations/namesilo');
+      const results = await namesilo.checkDomainAvailability(sanitized);
+
+      const hasAnyPriced = results.some(
+        (r) => r.available && !r.premium && r.price && parseFloat(r.price) > 0
+      );
+      if (!hasAnyPriced) {
+        throw new DomainLookupUnavailable('NameSilo returned no priced results');
+      }
+
+      return results.map((r) => ({ ...r, priceSource: 'namesilo' }));
     } catch (err) {
-      logger.error('[DOMAIN] Namecheap check failed, falling back to DNS:', err.message);
+      if (err instanceof DomainLookupUnavailable) throw err;
+      logger.error(`[DOMAIN] NameSilo lookup failed: ${err.message}`);
+      // Fall through to Namecheap fallback if present, else rethrow.
+      if (!hasNamecheap) throw new DomainLookupUnavailable(err.message);
     }
   }
 
-  // Fallback: DNS heuristic
-  const tlds = ['.com', '.co', '.io', '.net', '.org'];
-  const results = await Promise.all(
-    tlds.map(async (tld) => {
-      const domain = sanitized + tld;
-      try {
-        await dns.resolve(domain);
-        return { domain, available: false };
-      } catch (err) {
-        if (err.code === 'ENOTFOUND' || err.code === 'ENODATA' || err.code === 'ESERVFAIL') {
-          return { domain, available: true };
-        }
-        return { domain, available: false };
+  // 2. Namecheap fallback (legacy).
+  if (hasNamecheap) {
+    try {
+      const { checkDomainAvailability: ncCheck } = require('../integrations/namecheap');
+      const results = await ncCheck(sanitized);
+
+      const hasAnyPriced = results.some(
+        (r) => r.available && !r.premium && r.price && parseFloat(r.price) > 0
+      );
+      if (hasAnyPriced) {
+        return results.map((r) => ({ ...r, priceSource: 'namecheap' }));
       }
-    })
-  );
-  return results;
+
+      throw new DomainLookupUnavailable('Namecheap returned no priced results');
+    } catch (err) {
+      if (err instanceof DomainLookupUnavailable) throw err;
+      logger.error(`[DOMAIN] Namecheap fallback failed: ${err.message}`);
+      throw new DomainLookupUnavailable(err.message);
+    }
+  }
+
+  throw new DomainLookupUnavailable('No registrar configured');
 }
 
 /**
@@ -56,4 +93,4 @@ async function verifyDNS(domain) {
   return { verified: false };
 }
 
-module.exports = { checkDomainAvailability, verifyDNS };
+module.exports = { checkDomainAvailability, verifyDNS, DomainLookupUnavailable };

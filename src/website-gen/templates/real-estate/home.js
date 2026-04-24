@@ -1,7 +1,7 @@
 const {
   esc, telHref, slugify, fmtMoney, icon, iconFilled, googleGlyph, agentHeadshot,
   wrapRealEstatePage, getRealEstateAgentSchema, netlifyFormAttrs, netlifyHiddenFields,
-  TOKENS, DEFAULT_DESIGNATIONS, DEFAULT_LISTINGS,
+  buildTokens, DEFAULT_DESIGNATIONS, DEFAULT_LISTINGS,
 } = require('./common');
 const { computeHeroPaletteFromConfig } = require('../../heroPalette');
 
@@ -14,6 +14,7 @@ function statusClass(status) {
 }
 
 function generateHomePage(c) {
+  const TOKENS = buildTokens(c);
   const phone = c.contactPhone || '';
   const tel = telHref(phone);
   const city = c.primaryCity || '';

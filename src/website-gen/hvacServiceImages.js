@@ -1,13 +1,11 @@
-// HVAC-specific Unsplash image fetcher — per service, with HVAC-relevant
+// HVAC-specific Pexels image fetcher — per service, with HVAC-relevant
 // query hints so "Furnace Repair" pulls a technician working on a furnace,
 // not a cozy fireplace.
 
-const axios = require('axios');
 const { env } = require('../config/env');
 const { logger } = require('../utils/logger');
+const { searchPhotos, mapPhotoToResult } = require('./pexelsClient');
 
-const UNSPLASH_API = 'https://api.unsplash.com';
-const UTM = 'utm_source=bytes_platform&utm_medium=referral';
 const CONCURRENCY = 4;
 const PER_FETCH_TIMEOUT_MS = 7000;
 
@@ -40,37 +38,16 @@ function sharpenHvacQuery(name) {
   return `${raw} hvac`.replace(/\s{2,}/g, ' ').trim() || 'hvac technician';
 }
 
-async function fetchOne(query, accessKey) {
-  try {
-    const response = await axios.get(`${UNSPLASH_API}/search/photos`, {
-      params: { query, orientation: 'landscape', content_filter: 'high', per_page: 6, order_by: 'relevant' },
-      headers: { Authorization: `Client-ID ${accessKey}`, 'Accept-Version': 'v1' },
-      timeout: PER_FETCH_TIMEOUT_MS,
-    });
-    const results = response.data?.results || [];
-    if (!results.length) return null;
-    const pick = results[Math.floor(Math.random() * Math.min(3, results.length))];
-    if (!pick?.urls?.regular) return null;
-
-    if (pick.links?.download_location) {
-      axios
-        .get(pick.links.download_location, {
-          headers: { Authorization: `Client-ID ${accessKey}` },
-          timeout: 5000,
-        })
-        .catch(() => {});
-    }
-
-    return {
-      url: `${pick.urls.regular}&w=1000&q=80&auto=format&fit=crop`,
-      photographer: pick.user?.name || 'Unsplash',
-      photographerUrl: `${(pick.user?.links?.html) || 'https://unsplash.com'}?${UTM}`,
-      unsplashUrl: `https://unsplash.com/?${UTM}`,
-    };
-  } catch (err) {
-    logger.warn(`[HVAC-IMG] "${query}" failed: ${err.response?.status || err.message}`);
-    return null;
-  }
+async function fetchOne(query) {
+  const results = await searchPhotos(query, {
+    orientation: 'landscape',
+    perPage: 6,
+    timeout: PER_FETCH_TIMEOUT_MS,
+    logTag: 'HVAC-IMG',
+  });
+  if (!results || !results.length) return null;
+  const pick = results[Math.floor(Math.random() * Math.min(3, results.length))];
+  return mapPhotoToResult(pick, { width: 1000, quality: 80 });
 }
 
 async function runPool(items, limit, worker) {
@@ -89,17 +66,16 @@ async function runPool(items, limit, worker) {
 }
 
 /**
- * Fetch one Unsplash image per HVAC service title, in parallel. Returns a new
- * array of services with `.image = { url, photographer, photographerUrl, unsplashUrl }`.
+ * Fetch one Pexels image per HVAC service title, in parallel. Returns a new
+ * array of services with `.image = { url, photographer, photographerUrl, ... }`.
  * Silent on individual failures.
  */
 async function attachHvacServiceImages(services) {
-  const accessKey = env.unsplash?.accessKey;
-  if (!accessKey || !Array.isArray(services) || services.length === 0) return services || [];
+  if (!env.pexels?.apiKey || !Array.isArray(services) || services.length === 0) return services || [];
 
   const queries = services.map((s) => sharpenHvacQuery(s.title || s.name));
   logger.info(`[HVAC-IMG] Fetching ${queries.length} service images`);
-  const images = await runPool(queries, CONCURRENCY, (q) => fetchOne(q, accessKey));
+  const images = await runPool(queries, CONCURRENCY, (q) => fetchOne(q));
   const hits = images.filter(Boolean).length;
   logger.info(`[HVAC-IMG] Got ${hits}/${queries.length} service images`);
 

@@ -31,13 +31,18 @@ const STATES = {
   SALON_INSTAGRAM: 'SALON_INSTAGRAM',
   SALON_HOURS: 'SALON_HOURS',
   SALON_SERVICE_DURATIONS: 'SALON_SERVICE_DURATIONS',
+  // Domain choice happens BEFORE preview now — combined Stripe link at generation.
+  WEB_DOMAIN_CHOICE: 'WEB_DOMAIN_CHOICE',
+  WEB_DOMAIN_OWN_INPUT: 'WEB_DOMAIN_OWN_INPUT',
+  WEB_DOMAIN_SEARCH: 'WEB_DOMAIN_SEARCH',
   WEB_CONFIRM: 'WEB_CONFIRM',
   WEB_GENERATING: 'WEB_GENERATING',
   WEB_GENERATION_FAILED: 'WEB_GENERATION_FAILED',
   WEB_PREVIEW: 'WEB_PREVIEW',
   WEB_REVISIONS: 'WEB_REVISIONS',
 
-  // Custom domain flow
+  // Legacy custom domain flow (post-approval). Kept as aliases so in-flight
+  // users don't get stuck. New flow uses WEB_DOMAIN_* states above.
   DOMAIN_OFFER: 'DOMAIN_OFFER',
   DOMAIN_SEARCH: 'DOMAIN_SEARCH',
   DOMAIN_PURCHASE_WAIT: 'DOMAIN_PURCHASE_WAIT',
