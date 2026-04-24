@@ -23,7 +23,7 @@ class DomainLookupUnavailable extends Error {
   }
 }
 
-async function checkDomainAvailability(baseName) {
+async function checkDomainAvailability(baseName, tldList) {
   const sanitized = baseName.toLowerCase().replace(/[^a-z0-9-]/g, '');
   if (!sanitized || sanitized.length < 2) return [];
 
@@ -34,7 +34,7 @@ async function checkDomainAvailability(baseName) {
   if (hasNameSilo) {
     try {
       const namesilo = require('../integrations/namesilo');
-      const results = await namesilo.checkDomainAvailability(sanitized);
+      const results = await namesilo.checkDomainAvailability(sanitized, tldList);
 
       const hasAnyPriced = results.some(
         (r) => r.available && !r.premium && r.price && parseFloat(r.price) > 0

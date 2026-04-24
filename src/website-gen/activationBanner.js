@@ -43,20 +43,37 @@ function renderActivationBanner(config = {}) {
   // the checkout / already-paid status loads inline.
   const isActivationLink = /stripe\.com|buy\.stripe|payments\.link|\/pay\//i.test(String(actionUrl || ''));
 
-  // Price display — combined website+domain. If a 22h discount has been
-  // applied, show strikethrough on the original with the new total beside it.
+  // Price display — combined website+domain. Shown ONLY on the CTA button
+  // (not duplicated in the text line). When a discount has been applied,
+  // the button shows strikethrough + new price inline so the customer sees
+  // the offer at a glance without cluttering the text.
   const amount = Number(config.activationAmount) || 0;
   const origAmount = Number(config.originalAmount) || amount;
   const discountPct = Number(config.discountPct) || 0;
   const hasDiscount = discountPct > 0 && origAmount > amount;
-  const priceLabel = amount > 0
-    ? (hasDiscount
-        ? `<span class="pixie-price-strike">$${origAmount}</span><span class="pixie-price-now">$${amount}</span><span class="pixie-discount-badge">${discountPct}% off</span>`
-        : `<span class="pixie-price-now">$${amount}</span>`)
-    : '';
-  const ctaLabel = isActivationLink
-    ? (amount > 0 ? `Activate — $${amount}` : 'Activate Now')
-    : 'Activate →';
+
+  // CTA button label — price lives here, nowhere else.
+  let ctaLabel;
+  if (!isActivationLink) {
+    ctaLabel = 'Activate →';
+  } else if (amount <= 0) {
+    ctaLabel = 'Activate Now';
+  } else if (hasDiscount) {
+    ctaLabel = `Activate — <span class="pixie-cta-strike">$${origAmount}</span> $${amount}`;
+  } else {
+    ctaLabel = `Activate — $${amount}`;
+  }
+
+  // Leading badge — tone changes with state. Green "PREVIEW" normally,
+  // orange "20% OFF" during the discount window (more urgent feel).
+  const badgeClass = hasDiscount ? 'pixie-badge pixie-badge-discount' : 'pixie-badge';
+  const badgeText = hasDiscount ? `${discountPct}% OFF` : 'PREVIEW MODE';
+
+  // Descriptive line (desktop only — hidden on mobile for space).
+  // Kept consistent across discount/no-discount so desktop layout doesn't
+  // shift under the customer's feet when the 22h discount fires. Only the
+  // badge + button price change; the copy stays the same.
+  const descText = `Activate this site to make it live${config.businessName ? ` for ${escapeHtml(config.businessName)}` : ''}.`;
 
   // Styles use hard-coded colors (not template tokens) so the banner looks
   // identical across HVAC / Real Estate / Salon / Generic — it's an
@@ -97,59 +114,56 @@ function renderActivationBanner(config = {}) {
     color: #25D366;
     flex-shrink: 0;
   }
-  #pixie-activation-banner .pixie-text {
+  #pixie-activation-banner .pixie-badge {
+    flex-shrink: 0;
+    padding: 3px 9px;
+    border-radius: 4px;
+    font-size: 10.5px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    background: rgba(37, 211, 102, 0.18);
+    color: #25D366;
+  }
+  #pixie-activation-banner .pixie-badge-discount {
+    background: #F97316;
+    color: #fff;
+    animation: pixie-pulse 2s ease-in-out infinite;
+  }
+  @keyframes pixie-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+  }
+  #pixie-activation-banner .pixie-desc {
+    flex: 1 1 auto;
+    min-width: 0;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-  }
-  #pixie-activation-banner .pixie-text strong {
-    color: #fff;
-    font-weight: 700;
-    letter-spacing: 0.02em;
-    text-transform: uppercase;
-    font-size: 11.5px;
-    margin-right: 6px;
-    padding: 2px 7px;
-    border-radius: 4px;
-    background: rgba(37, 211, 102, 0.15);
-    color: #25D366;
+    color: #CBD5E1;
+    font-size: 13px;
   }
   #pixie-activation-banner .pixie-cta {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
+    gap: 7px;
     background: #25D366;
     color: #0A1628;
-    padding: 8px 16px;
+    padding: 9px 18px;
     border-radius: 999px;
     font-weight: 700;
-    font-size: 13px;
+    font-size: 13.5px;
     text-decoration: none;
     transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
     white-space: nowrap;
     box-shadow: 0 6px 20px -6px rgba(37,211,102,0.6);
+    flex-shrink: 0;
   }
-  #pixie-activation-banner .pixie-price-strike {
+  #pixie-activation-banner .pixie-cta-strike {
     text-decoration: line-through;
     opacity: 0.55;
-    margin-right: 8px;
-    color: #94A3B8;
     font-weight: 500;
-  }
-  #pixie-activation-banner .pixie-price-now {
-    color: #fff;
-    font-weight: 700;
-  }
-  #pixie-activation-banner .pixie-discount-badge {
-    margin-left: 8px;
-    background: #F97316;
-    color: #fff;
-    padding: 2px 7px;
-    border-radius: 4px;
-    font-size: 11px;
-    font-weight: 700;
-    letter-spacing: 0.02em;
-    text-transform: uppercase;
+    margin-right: 2px;
   }
   #pixie-activation-banner .pixie-cta:hover {
     background: #1EBE5D;
@@ -169,36 +183,58 @@ function renderActivationBanner(config = {}) {
   html.pixie-preview-mode .scroll-bar {
     top: 48px !important;
   }
-  /* Mobile: stack text over button, keep compact */
+  /* Mobile: strip it down to [BADGE] [BUTTON]. Lock icon + desc are both
+     hidden — the PREVIEW badge already communicates intent, and skipping
+     the icon frees up space so the CTA button can breathe. space-between
+     pins badge left and button right. */
   @media (max-width: 640px) {
     #pixie-activation-banner {
-      padding: 9px 14px;
-      gap: 10px;
-      font-size: 12px;
+      padding: 10px 14px;
+      gap: 12px;
+      justify-content: space-between;
     }
-    #pixie-activation-banner .pixie-text {
+    #pixie-activation-banner .pixie-lock {
       display: none;
     }
-    #pixie-activation-banner .pixie-text-mobile {
-      display: inline-block;
-      color: #fff;
-      font-weight: 600;
+    #pixie-activation-banner .pixie-desc {
+      display: none;
+    }
+    #pixie-activation-banner .pixie-badge {
+      font-size: 10.5px;
+      padding: 4px 10px;
+      letter-spacing: 0.1em;
     }
     #pixie-activation-banner .pixie-cta {
-      padding: 7px 13px;
-      font-size: 12px;
+      padding: 10px 16px;
+      font-size: 13px;
+      box-shadow: 0 4px 14px -4px rgba(37,211,102,0.7);
+    }
+    #pixie-activation-banner .pixie-cta-strike {
+      font-size: 11.5px;
     }
     html.pixie-preview-mode body {
-      padding-top: 44px !important;
+      padding-top: 48px !important;
     }
     html.pixie-preview-mode .nav,
     html.pixie-preview-mode nav.nav,
     html.pixie-preview-mode .scroll-bar {
-      top: 44px !important;
+      top: 48px !important;
     }
   }
-  @media (min-width: 641px) {
-    #pixie-activation-banner .pixie-text-mobile { display: none; }
+  /* Extra-narrow phones (≤360px): tighten padding further */
+  @media (max-width: 360px) {
+    #pixie-activation-banner {
+      padding: 9px 10px;
+      gap: 8px;
+    }
+    #pixie-activation-banner .pixie-badge {
+      font-size: 10px;
+      padding: 3px 8px;
+    }
+    #pixie-activation-banner .pixie-cta {
+      padding: 9px 14px;
+      font-size: 12.5px;
+    }
   }
   /* Contact form lock overlay */
   .pixie-form-locked {
@@ -233,10 +269,10 @@ function renderActivationBanner(config = {}) {
       <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
     </svg>
   </span>
-  <span class="pixie-text"><strong>Preview Mode</strong>Activate this site to make it live${config.businessName ? ` for ${escapeHtml(config.businessName)}` : ''}.${priceLabel ? ` ${priceLabel}` : ''}</span>
-  <span class="pixie-text-mobile">${priceLabel || 'Preview Mode'}</span>
+  <span class="${badgeClass}">${badgeText}</span>
+  <span class="pixie-desc">${descText}</span>
   <a class="pixie-cta" href="${escapeHtml(actionUrl)}"${isActivationLink ? '' : ' target="_blank" rel="noopener"'}>
-    ${ctaLabel}
+    <span>${ctaLabel}</span>
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
       <path d="M5 12h14M13 5l7 7-7 7"/>
     </svg>

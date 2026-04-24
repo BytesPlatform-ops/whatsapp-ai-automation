@@ -136,11 +136,32 @@ async function costPriceForTld(tld) {
  * use that directly (no second `getPrices` call needed), then apply the
  * configured markup.
  */
-async function checkDomainAvailability(baseName) {
+// NameSilo's JSON response shape is frustrating: for multi-domain queries
+// `available`/`unavailable`/`invalid` come back as arrays, but for single-
+// domain queries they nest as `{ domain: {...} }` (the XML-to-JSON parser
+// treats a lone <domain> element differently). Normalize both cases.
+function normalizeDomainList(section) {
+  if (section == null) return [];
+  if (Array.isArray(section)) return section;
+  if (typeof section === 'object') {
+    // Single-row case: { domain: { domain: "x", price: ... } }
+    if (section.domain && typeof section.domain === 'object') return [section.domain];
+    // Bare object that already IS the row
+    if (section.domain && typeof section.domain === 'string') return [section];
+  }
+  return [section];
+}
+
+async function checkDomainAvailability(baseName, tldList) {
   const sanitized = baseName.toLowerCase().replace(/[^a-z0-9-]/g, '');
   if (!sanitized || sanitized.length < 2) return [];
 
-  const tlds = ['.com', '.co', '.io', '.net', '.org'];
+  // Caller can pass an explicit TLD list (e.g. widened pool for filtering
+  // to ≤$25, or a single TLD for a targeted lookup). Defaults to the
+  // classic 5 for backwards compatibility.
+  const tlds = (Array.isArray(tldList) && tldList.length)
+    ? tldList.map((t) => (t.startsWith('.') ? t : `.${t}`))
+    : ['.com', '.co', '.io', '.net', '.org'];
   const domains = tlds.map((tld) => sanitized + tld);
 
   let reply;
@@ -151,15 +172,59 @@ async function checkDomainAvailability(baseName) {
     throw err;
   }
 
-  // NameSilo returns 3 arrays: available, unavailable, invalid. Any missing
-  // means that category was empty.
-  const toArray = (x) => (Array.isArray(x) ? x : x ? [x] : []);
-  const avail = toArray(reply.available);
-  const invalid = toArray(reply.invalid);
+  const avail = normalizeDomainList(reply.available);
+  const invalid = normalizeDomainList(reply.invalid);
 
   // Build final result in the same order as input domains. Price is raw
   // NameSilo wholesale — no markup applied.
   return domains.map((d) => {
+    const a = avail.find((row) => (row.domain || row) === d);
+    if (a) {
+      const rawPrice = parseFloat(a.price) || 0;
+      return {
+        domain: d,
+        available: true,
+        premium: (a.premium || 0) > 0,
+        price: rawPrice > 0 ? rawPrice.toFixed(2) : '',
+      };
+    }
+    const isInvalid = invalid.some((row) => (row.domain || row) === d);
+    return {
+      domain: d,
+      available: false,
+      premium: false,
+      price: '',
+      reason: isInvalid ? 'invalid' : 'taken',
+    };
+  });
+}
+
+/**
+ * Check availability + price for a pre-built list of full domains (any
+ * mix of bases and TLDs). Used by the alternative-name suggestion flow —
+ * LLM proposes 5 base names, we query each × 2-3 TLDs in one batch call.
+ *
+ * Returns rows in the same shape as checkDomainAvailability.
+ */
+async function checkDomainsExact(domainList) {
+  if (!Array.isArray(domainList) || domainList.length === 0) return [];
+  const cleanDomains = domainList
+    .map((d) => String(d || '').toLowerCase().trim())
+    .filter((d) => /^[a-z0-9][a-z0-9-]*\.[a-z]{2,}$/.test(d));
+  if (cleanDomains.length === 0) return [];
+
+  let reply;
+  try {
+    reply = await nsRequest('checkRegisterAvailability', { domains: cleanDomains.join(',') });
+  } catch (err) {
+    logger.error(`[NAMESILO] Batch availability check failed: ${err.message}`);
+    throw err;
+  }
+
+  const avail = normalizeDomainList(reply.available);
+  const invalid = normalizeDomainList(reply.invalid);
+
+  return cleanDomains.map((d) => {
     const a = avail.find((row) => (row.domain || row) === d);
     if (a) {
       const rawPrice = parseFloat(a.price) || 0;
@@ -189,8 +254,7 @@ async function checkSingleDomain(domain) {
   const clean = domain.toLowerCase().trim();
 
   const reply = await nsRequest('checkRegisterAvailability', { domains: clean });
-  const toArray = (x) => (Array.isArray(x) ? x : x ? [x] : []);
-  const avail = toArray(reply.available);
+  const avail = normalizeDomainList(reply.available);
   const a = avail.find((row) => (row.domain || row) === clean);
   if (a) {
     const rawPrice = parseFloat(a.price) || 0;
@@ -404,6 +468,7 @@ module.exports = {
   getTldPricing,
   costPriceForTld,
   checkDomainAvailability,
+  checkDomainsExact,
   checkSingleDomain,
   addContact,
   ensureContactId,

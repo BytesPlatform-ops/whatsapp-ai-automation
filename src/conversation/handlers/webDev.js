@@ -2902,7 +2902,14 @@ async function generateWebsite(user) {
     const selectedDomain = freshUser.metadata?.selectedDomain || null;
     const activationTotal = websitePrice + domainPrice;
 
-    let paymentLinkUrl = null;
+    // Banner URL (for the site) uses the idempotent Pixie /pay/:id wrapper —
+    // if someone re-clicks the banner after paying, they get an "already
+    // paid" page instead of a second checkout.
+    // Chat URL uses the raw Stripe link — customers expect to see a
+    // recognizable buy.stripe.com URL in WhatsApp, and the chat link is
+    // conceptually one-time-use (they click it once and pay).
+    let bannerPaymentUrl = null;
+    let chatPaymentUrl = null;
     try {
       const { createPaymentLink } = require('../../payments/stripe');
 
@@ -2926,7 +2933,8 @@ async function generateWebsite(user) {
         selectedDomain,
         originalAmount: activationTotal,
       });
-      paymentLinkUrl = linkResult?.pixieUrl || linkResult?.url || null;
+      bannerPaymentUrl = linkResult?.pixieUrl || linkResult?.url || null;
+      chatPaymentUrl = linkResult?.url || linkResult?.pixieUrl || null;
       logger.info(
         `[WEBGEN] Activation link created: $${activationTotal} ` +
           `(website $${websitePrice} + domain $${domainPrice} for ${selectedDomain || 'no domain'})`
@@ -2935,6 +2943,7 @@ async function generateWebsite(user) {
       // Non-fatal — banner will fall back to a WhatsApp CTA if no link
       logger.warn(`[WEBGEN] Activation payment link setup failed: ${err.message}`);
     }
+    const paymentLinkUrl = bannerPaymentUrl; // backwards-compat alias for the banner
 
     // Banner shows the same dollar figure the chat CTA charges. At initial
     // build there's no discount yet — originalAmount matches activationAmount
@@ -3003,7 +3012,7 @@ async function generateWebsite(user) {
     // site points to. One tap either way — same outcome. The total includes
     // the domain price if one was selected, so the chat CTA and the banner
     // always match.
-    if (paymentLinkUrl) {
+    if (chatPaymentUrl) {
       const priceLine = domainPrice > 0 && selectedDomain
         ? `*$${activationTotal}* — $${websitePrice} website + $${domainPrice} for *${selectedDomain}*.`
         : selectedDomain
@@ -3011,11 +3020,11 @@ async function generateWebsite(user) {
           : `*$${activationTotal}*.`;
       await sendTextMessage(
         user.phone_number,
-        `🔒 *Preview mode.* ${priceLine}\n\nActivate to make it live and unlock the contact form:\n\n👉 ${paymentLinkUrl}\n\nSame link as the *Activate Now* button on your site.`
+        `🔒 *Preview mode.* ${priceLine}\n\nActivate to make it live and unlock the contact form:\n\n👉 ${chatPaymentUrl}\n\nSame checkout as the *Activate Now* button on your site.`
       );
       await logMessage(
         user.id,
-        `Activation link sent: $${activationTotal} (${selectedDomain || 'no domain'}) ${paymentLinkUrl}`,
+        `Activation link sent (Stripe direct): $${activationTotal} (${selectedDomain || 'no domain'}) ${chatPaymentUrl}`,
         'assistant'
       );
     }
@@ -3680,7 +3689,12 @@ async function handleDomainSearch(user, message) {
     }
   }
 
-  // Full domain typed (e.g. "mybiz.com").
+  // Full domain typed (e.g. "mybiz.ai"). Two sub-cases:
+  //   1. Already in the current options list → pick it.
+  //   2. Not in options → do a targeted single-domain lookup so we can
+  //      show the real price for the exact TLD they asked for (previously
+  //      we stripped the TLD and re-searched the default list, which was
+  //      the "user typed .ai, got same .com/.co/.io list again" bug).
   const fullMatch = raw.match(/([a-z0-9-]+\.[a-z]{2,})/i);
   if (fullMatch) {
     const typedDomain = fullMatch[1].toLowerCase();
@@ -3688,9 +3702,7 @@ async function handleDomainSearch(user, message) {
     if (fromOptions && fromOptions.available && !fromOptions.premium) {
       return selectDomainInline(user, fromOptions);
     }
-    // Not in current options — run a fresh search.
-    const base = typedDomain.split('.')[0];
-    return runDomainSearchInline(user, base);
+    return runSpecificDomainLookup(user, typedDomain);
   }
 
   // New base name for search.
@@ -3710,6 +3722,155 @@ async function handleDomainSearch(user, message) {
   return STATES.WEB_DOMAIN_SEARCH;
 }
 
+// Widened TLD pool for default searches. We query all of these in one
+// Namecheap/NameSilo call, then filter to affordable results and show the
+// 5 best. Skews toward recognizable + cheap — avoids quoting a $95 .ai
+// or $50 .tech in the suggestion list.
+const DEFAULT_TLD_POOL = [
+  'com', 'co', 'net', 'org', 'app',
+  'dev', 'xyz', 'shop', 'store', 'me',
+  'biz', 'info',
+];
+const MAX_PRICE_USD = 25;
+const MAX_RESULTS = 5;
+// .com gets priority — most recognizable to customers. Remaining slots
+// filled by cheapest alternatives under the price cap.
+const PRIORITY_TLDS = ['com', 'net', 'org', 'co'];
+
+/**
+ * Rank + trim results:
+ *   1. Drop unavailable, premium, or over-priced.
+ *   2. Surface .com first if available (most recognizable).
+ *   3. Fill remaining slots with cheapest alternatives.
+ */
+function pickTopDomains(results) {
+  const affordable = results.filter(
+    (r) =>
+      r.available &&
+      !r.premium &&
+      r.price &&
+      parseFloat(r.price) > 0 &&
+      parseFloat(r.price) <= MAX_PRICE_USD
+  );
+  if (affordable.length === 0) return [];
+
+  const tldOf = (d) => (d.domain.split('.').pop() || '').toLowerCase();
+
+  // Bucket priority TLDs in their fixed order, then sort the rest by price.
+  const priority = [];
+  for (const p of PRIORITY_TLDS) {
+    const hit = affordable.find((r) => tldOf(r) === p);
+    if (hit) priority.push(hit);
+  }
+  const rest = affordable
+    .filter((r) => !PRIORITY_TLDS.includes(tldOf(r)))
+    .sort((a, b) => parseFloat(a.price) - parseFloat(b.price));
+
+  return [...priority, ...rest].slice(0, MAX_RESULTS);
+}
+
+/**
+ * Ask the LLM for 5 similar-but-distinct base names when the user's first
+ * choice is taken. Constrained to: close to the original (suffixes,
+ * related terms, industry words), short, domain-safe. Not random.
+ *
+ * Returns up to 5 affordable available rows (≤$25), same shape as
+ * checkDomainAvailability results — callers drop them straight into the
+ * domainOptions list.
+ */
+async function findAlternativeDomains(baseName, industry) {
+  const prompt =
+    `The business wants a domain but "${baseName}" is taken across common TLDs.\n` +
+    `Business context: "${baseName}"${industry ? ` — ${industry}` : ''}.\n\n` +
+    `Suggest 5 DOMAIN-SAFE alternative base names that are:\n` +
+    `- Similar to the original (suffixes like "co", "hq", "pro", "hub", or ` +
+    `industry-adjacent words)\n` +
+    `- NOT random or unrelated — a human should recognize they belong to the ` +
+    `same business\n` +
+    `- Lowercase, alphanumeric only (no hyphens, no spaces, no dots)\n` +
+    `- Between 4 and 20 characters each\n` +
+    `- Distinct from each other\n\n` +
+    `Return ONLY the 5 names, one per line, nothing else.\n\n` +
+    `Example — for "glowstudio" (salon): glowstudioco, trulyglow, glowbeauty, ` +
+    `glowsalon, glowbar`;
+
+  let raw;
+  try {
+    raw = await generateResponse(
+      'You are a domain naming consultant. Keep suggestions close to the brand.',
+      [{ role: 'user', content: prompt }],
+      { operation: 'domain_alternatives' }
+    );
+  } catch (err) {
+    logger.warn(`[WEBDEV-DOMAIN] LLM alternatives call failed: ${err.message}`);
+    return [];
+  }
+
+  const candidates = String(raw || '')
+    .split(/\r?\n/)
+    .map((s) => s.trim().toLowerCase())
+    .map((s) => s.replace(/^[\d\.\-\*\)\s]+/, '')) // strip numbering/bullets
+    .map((s) => s.replace(/[^a-z0-9]/g, ''))
+    .filter((s) => s.length >= 4 && s.length <= 20)
+    .filter((s) => s !== baseName.toLowerCase())
+    .slice(0, 5);
+
+  if (candidates.length === 0) {
+    logger.warn(`[WEBDEV-DOMAIN] LLM returned no usable alternatives for ${baseName}`);
+    return [];
+  }
+
+  // Query each candidate × top 3 priority TLDs in one batch call.
+  const domains = [];
+  for (const c of candidates) {
+    for (const t of ['com', 'net', 'co']) {
+      domains.push(`${c}.${t}`);
+    }
+  }
+
+  let rows;
+  try {
+    const namesilo = require('../../integrations/namesilo');
+    rows = await namesilo.checkDomainsExact(domains);
+  } catch (err) {
+    logger.warn(`[WEBDEV-DOMAIN] Batch lookup for alternatives failed: ${err.message}`);
+    return [];
+  }
+
+  // Filter to affordable + available, prefer .com within each suggestion,
+  // cap at 5 total.
+  const affordable = rows.filter(
+    (r) =>
+      r.available &&
+      !r.premium &&
+      r.price &&
+      parseFloat(r.price) > 0 &&
+      parseFloat(r.price) <= MAX_PRICE_USD
+  );
+
+  // Group by base name, pick cheapest TLD for each, then flatten.
+  const byBase = new Map();
+  for (const r of affordable) {
+    const base = r.domain.split('.')[0];
+    const cur = byBase.get(base);
+    if (!cur || parseFloat(r.price) < parseFloat(cur.price)) {
+      byBase.set(base, r);
+    }
+  }
+
+  logger.info(
+    `[WEBDEV-DOMAIN] LLM alternatives for "${baseName}": ` +
+      `candidates=[${candidates.join(',')}], affordable=${byBase.size}`
+  );
+
+  // Preserve LLM's ordering (most recommended first).
+  const result = [];
+  for (const c of candidates) {
+    if (byBase.has(c)) result.push(byBase.get(c));
+  }
+  return result.slice(0, 5);
+}
+
 async function runDomainSearchInline(user, baseName) {
   const { updateUserState } = require('../../db/users');
   await updateUserState(user.id, STATES.WEB_DOMAIN_SEARCH);
@@ -3720,7 +3881,7 @@ async function runDomainSearchInline(user, baseName) {
 
   let results = [];
   try {
-    results = await checkDomainAvailability(baseName);
+    results = await checkDomainAvailability(baseName, DEFAULT_TLD_POOL);
   } catch (err) {
     logger.error(`[WEBDEV-DOMAIN] search failed: ${err.message} (code=${err.code || 'unknown'})`);
 
@@ -3755,39 +3916,142 @@ async function runDomainSearchInline(user, baseName) {
     return STATES.WEB_DOMAIN_SEARCH;
   }
 
-  const available = results.filter(r => r.available && !r.premium);
+  // Filter → rank → top 5 (≤ $25, prefer .com).
+  let top = pickTopDomains(results);
 
-  if (available.length === 0) {
+  // Nothing affordable under the original base name — ask the LLM for 5
+  // similar-but-distinct alternatives and search those. Keeps the UX
+  // forward-moving instead of a dead "nothing available" message.
+  if (top.length === 0) {
     await sendTextMessage(
       user.phone_number,
       await localize(
-        `No domains available with *${baseName}*. Try a different name, or reply *skip* to build without one.`,
+        `*${baseName}* is all taken. Let me find you something close…`,
         user
       )
     );
-    await updateUserMetadata(user.id, { domainOptions: results, domainSearchName: baseName });
-    return STATES.WEB_DOMAIN_SEARCH;
+    const industry = user.metadata?.websiteData?.industry || '';
+    top = await findAlternativeDomains(baseName, industry);
+
+    if (top.length === 0) {
+      await sendTextMessage(
+        user.phone_number,
+        await localize(
+          `Couldn't find good alternatives either. Try typing a different base name, or reply *skip*.`,
+          user
+        )
+      );
+      await updateUserMetadata(user.id, { domainOptions: [], domainSearchName: baseName });
+      return STATES.WEB_DOMAIN_SEARCH;
+    }
   }
 
   let msg = '*Available domains:*\n\n';
-  results.forEach((r, i) => {
-    const price = r.price ? ` — $${r.price}/yr` : '';
-    if (r.premium) msg += `${i + 1}. ⚠️ ${r.domain} — Premium${price} (skipped)\n`;
-    else if (r.available) msg += `${i + 1}. ✅ ${r.domain}${price}\n`;
-    else msg += `${i + 1}. ❌ ${r.domain} — taken\n`;
+  top.forEach((r, i) => {
+    msg += `${i + 1}. ✅ ${r.domain} — $${r.price}/yr\n`;
   });
-  msg += '\nReply with a *number* to pick one, a different name to search again, or *skip*.';
+  msg += '\nReply with a *number* to pick one, or type a specific domain (e.g. *mybiz.ai*) and I\'ll look up its price. Or *skip*.';
 
   await sendTextMessage(user.phone_number, await localize(msg, user));
+  // Save only the top 5 to domainOptions — that's the list the user sees
+  // and can reference by number. Keeps index math consistent.
   await updateUserMetadata(user.id, {
-    domainOptions: results,
+    domainOptions: top,
     domainSearchName: baseName,
   });
   await logMessage(
     user.id,
-    `Domain search: ${available.map(r => r.domain).join(', ')} available`,
+    `Domain search: ${top.map((r) => r.domain + '@$' + r.price).join(', ')}`,
     'assistant'
   );
+  return STATES.WEB_DOMAIN_SEARCH;
+}
+
+/**
+ * Targeted lookup for a specific full domain the user typed (e.g. they
+ * want anshplumbing.ai even though .ai wasn't in the default list). We
+ * hit NameSilo for just that one domain, show its real price (no $25 cap
+ * because they asked for it explicitly), and let them confirm or back
+ * out to the main list.
+ *
+ * Replaces the old "strip the TLD and re-search the default 5" behavior
+ * which silently ignored what the user asked for.
+ */
+async function runSpecificDomainLookup(user, domain) {
+  const { updateUserState } = require('../../db/users');
+  await updateUserState(user.id, STATES.WEB_DOMAIN_SEARCH);
+  await sendTextMessage(
+    user.phone_number,
+    await localize(`Checking *${domain}*...`, user)
+  );
+
+  let result;
+  try {
+    const namesilo = require('../../integrations/namesilo');
+    result = await namesilo.checkSingleDomain(domain);
+  } catch (err) {
+    logger.error(`[WEBDEV-DOMAIN] specific lookup failed for ${domain}: ${err.message}`);
+    await sendTextMessage(
+      user.phone_number,
+      await localize(
+        `Couldn't check *${domain}* right now. Try a different domain or reply *skip*.`,
+        user
+      )
+    );
+    return STATES.WEB_DOMAIN_SEARCH;
+  }
+
+  if (!result || !result.available) {
+    await sendTextMessage(
+      user.phone_number,
+      await localize(
+        `*${domain}* isn't available. Pick one from the list above, or try a different name.`,
+        user
+      )
+    );
+    return STATES.WEB_DOMAIN_SEARCH;
+  }
+
+  if (result.premium) {
+    await sendTextMessage(
+      user.phone_number,
+      await localize(
+        `*${domain}* is a premium domain — I can't auto-register those. Pick from the list above or try a different name.`,
+        user
+      )
+    );
+    return STATES.WEB_DOMAIN_SEARCH;
+  }
+
+  // Replace the domainOptions list with just this single domain at index 1
+  // so the user can confirm by typing "1" or "yes" (existing handler picks
+  // option[0] on "first"/"1"). Previous list options become stale — that's
+  // fine, user explicitly pivoted to this specific domain.
+  const price = parseFloat(result.price) || 0;
+  const singleOption = {
+    domain: result.domain,
+    available: true,
+    premium: false,
+    price: price.toFixed(2),
+  };
+  await updateUserMetadata(user.id, {
+    domainOptions: [singleOption],
+    domainSearchName: domain,
+  });
+
+  const expensiveNote = price > MAX_PRICE_USD
+    ? `\n\n_Heads up — this one's pricier than our typical suggestions (usually ≤$${MAX_PRICE_USD}/yr), but it's what you asked for._`
+    : '';
+
+  await sendTextMessage(
+    user.phone_number,
+    await localize(
+      `1. ✅ *${result.domain}* — *$${price.toFixed(2)}/yr*${expensiveNote}\n\n` +
+        `Reply *yes* (or *1*) to pick it, type a different domain, or *skip*.`,
+      user
+    )
+  );
+  await logMessage(user.id, `Specific domain lookup: ${result.domain} @ $${price}`, 'assistant');
   return STATES.WEB_DOMAIN_SEARCH;
 }
 
