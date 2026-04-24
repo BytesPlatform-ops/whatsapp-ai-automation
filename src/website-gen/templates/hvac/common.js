@@ -958,15 +958,15 @@ function getHvacNav(c, cur) {
   const phone = c.contactPhone || '';
   const tel = telHref(phone);
   const initial = esc((c.businessName || 'H').trim().charAt(0).toUpperCase());
-  // If the user uploaded a logo during WEB_COLLECT_LOGO, show the image
-  // in place of the initial-letter badge. Inline height:32 matches
-  // logo-mark sizing so the business name beside it lines up the same
-  // way. object-fit:contain preserves aspect ratio for any shape logo.
-  const logoMark = c.logoUrl
-    ? `<img src="${esc(c.logoUrl)}" alt="${esc(c.businessName || '')}" class="logo-mark logo-img" style="width:auto;height:32px;background:none;padding:0;object-fit:contain">`
-    : `<span class="logo-mark">${initial}</span>`;
+  // If the user uploaded a logo during WEB_COLLECT_LOGO, show ONLY the
+  // image — the logo IS the wordmark, so repeating the business name
+  // beside it doubles up the identity. Without a logo, fall back to
+  // the letter-badge + text wordmark pair.
+  const navBrand = c.logoUrl
+    ? `<img src="${esc(c.logoUrl)}" alt="${esc(c.businessName || '')}" class="logo-img" style="width:auto;height:40px;object-fit:contain;display:inline-block;vertical-align:middle">`
+    : `<span class="logo-mark">${initial}</span>${esc(c.businessName)}`;
   return `<nav class="nav"><div class="ctn nav-inner">
-    <a href="/" class="nav-logo">${logoMark}${esc(c.businessName)}</a>
+    <a href="/" class="nav-logo">${navBrand}</a>
     <div class="nav-links">
       ${pages.filter(p => p.h !== '/').map(p => `<a href="${p.h}"${p.h === cur ? ' class="active"' : ''}>${p.n}</a>`).join('')}
     </div>
