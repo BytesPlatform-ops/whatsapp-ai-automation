@@ -267,11 +267,56 @@ router.post('/api/conversations/:userId/takeover', async (req, res) => {
   try {
     const { takeover } = req.body;
     const { updateUserMetadata } = require('../db/users');
-    await updateUserMetadata(req.params.userId, { humanTakeover: !!takeover });
+    // On release, also drop any auto-flag metadata from the abuse detector
+    // so the user's next clean turn doesn't immediately re-surface them
+    // in the "auto-flagged" admin filter before strikes naturally reset.
+    const patch = { humanTakeover: !!takeover };
+    if (!takeover) patch.aiHandover = null;
+    await updateUserMetadata(req.params.userId, patch);
     logger.info(`[ADMIN] ${takeover ? 'Takeover' : 'Release'} for user ${req.params.userId}`);
     res.json({ success: true });
   } catch (err) {
     logger.error('[ADMIN] Takeover error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// List users whose chats are currently paused — either because the abuse
+// detector auto-flagged them (metadata.aiHandover.auto === true) OR an
+// admin manually took over (metadata.humanTakeover === true). Used by the
+// admin panel's "handover inbox" tile so operators can see at a glance
+// who's waiting on human review.
+router.get('/api/handover-users', async (_req, res) => {
+  try {
+    const { supabase } = require('../config/database');
+    // PostgREST JSON operators on nested keys get fiddly — fetch the
+    // recently-active slice and filter in JS. 300 users is plenty for
+    // an inbox view; no single operator ever has more than a few
+    // handfuls paused at once in practice.
+    const { data, error } = await supabase
+      .from('users')
+      .select('id, phone_number, channel, metadata, updated_at')
+      .order('updated_at', { ascending: false })
+      .limit(300);
+    if (error) throw error;
+
+    const flagged = (data || []).filter((u) => {
+      return !!u.metadata?.humanTakeover || u.metadata?.aiHandover?.state === 'paused';
+    });
+
+    const users = flagged.map((u) => ({
+      id: u.id,
+      phone: u.phone_number,
+      channel: u.channel,
+      auto: !!u.metadata?.aiHandover?.auto,
+      reason: u.metadata?.aiHandover?.reason || null,
+      flaggedAt: u.metadata?.aiHandover?.at || null,
+      manualTakeover: !!u.metadata?.humanTakeover && !u.metadata?.aiHandover?.auto,
+      updatedAt: u.updated_at,
+    }));
+    res.json({ users });
+  } catch (err) {
+    logger.error('[ADMIN] handover-users list error:', err.message);
     res.status(500).json({ error: err.message });
   }
 });

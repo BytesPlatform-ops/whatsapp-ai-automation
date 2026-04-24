@@ -30,7 +30,6 @@ const { env } = require('../config/env');
 const JUDGE_EVERY_N_TURNS = 5;
 const MIN_TURNS_BEFORE_JUDGE = 5;
 const STRIKES_TO_HANDOVER = 2;
-const CANNED_REPLY_COOLDOWN_MS = 60 * 60 * 1000;  // 1 hour
 
 const CANNED_PAUSED_REPLY =
   "Thanks for your messages — I've asked a human from our team to take a look at this chat. They'll reply as soon as they can.";
@@ -49,43 +48,6 @@ Return ONLY valid JSON:
 Default toward "off_topic" when you're uncertain. Only pick "abusive" when the signal is obvious (injection attempts, nonsense strings, clear trolling).`;
 
 /**
- * Cheap, synchronous check — called at the top of every inbound turn.
- * Returns true when the user is currently in a paused/blocked handover
- * state, so the router can short-circuit and not dispatch to any LLM
- * handler. Also fires the canned reply (rate-limited) so the user
- * knows their messages are seen.
- */
-async function isHandoverActive(user) {
-  const handover = user?.metadata?.aiHandover;
-  if (!handover?.state) return false;
-  // 'paused' and 'blocked' both short-circuit the AI path. They differ
-  // only in how they get cleared (paused: admin unpauses, blocked:
-  // manual DB update) — from the router's POV, same behavior.
-  return handover.state === 'paused' || handover.state === 'blocked';
-}
-
-async function sendCannedHandoverReply(user) {
-  const handover = user?.metadata?.aiHandover || {};
-  const now = Date.now();
-  const lastAt = handover.lastCannedAt ? new Date(handover.lastCannedAt).getTime() : 0;
-  if (now - lastAt < CANNED_REPLY_COOLDOWN_MS) {
-    // Silently drop. User is spamming a paused chat — don't reward with
-    // more sends. They'll see the earlier canned reply at the top of
-    // their screen.
-    logger.debug(`[ABUSE] Canned reply throttled for ${user.phone_number} — last sent ${Math.round((now - lastAt) / 60000)}min ago`);
-    return false;
-  }
-  try {
-    const { sendTextMessage } = require('../messages/sender');
-    await sendTextMessage(user.phone_number, CANNED_PAUSED_REPLY);
-  } catch (err) {
-    logger.warn(`[ABUSE] Failed to send canned reply: ${err.message}`);
-  }
-  await patchHandover(user.id, { lastCannedAt: new Date(now).toISOString() });
-  return true;
-}
-
-/**
  * Post-turn hook. Increments the turn counter and, every N turns, runs
  * the LLM judge on the most recent window of messages. Fire-and-forget —
  * never blocks the main response path.
@@ -100,8 +62,10 @@ async function maybeRunJudge(user) {
     if (isTester(user)) return;
   } catch {}
 
-  // Already paused — no need to keep judging. The admin controls recovery.
-  if (await isHandoverActive(user)) return;
+  // Already in human-takeover (manually by admin or previously auto-flagged
+  // by this same detector) — no reason to keep scoring them. Admin clears
+  // the flag via the existing /api/conversations/:userId/takeover endpoint.
+  if (user.metadata?.humanTakeover) return;
 
   const current = Number(user.metadata?.abuseTurnCount || 0) + 1;
   await patchMetadata(user.id, { abuseTurnCount: current });
@@ -156,24 +120,46 @@ async function maybeRunJudge(user) {
     }
   } else {
     // engaged or off_topic — clear strike counter so a stray turn doesn't
-    // stack up over time on an otherwise fine conversation.
-    if (prevStrikes > 0) {
-      await patchMetadata(user.id, { abuseStrikes: 0, lastJudgedAt: new Date().toISOString() });
-    } else {
-      await patchMetadata(user.id, { lastJudgedAt: new Date().toISOString() });
-    }
+    // stack up over time on an otherwise fine conversation. Also clear
+    // any stale aiHandover metadata from a previous flag the admin
+    // already released — keeps the admin panel "auto-flagged" filter
+    // accurate instead of showing users who are now behaving.
+    const patch = { abuseStrikes: 0, lastJudgedAt: new Date().toISOString() };
+    if (user.metadata?.aiHandover?.auto) patch.aiHandover = null;
+    await patchMetadata(user.id, patch);
   }
 }
 
 /**
  * Flip the user into a paused handover state + notify the admin. Idempotent:
  * calling it on an already-paused user is a no-op.
+ *
+ * Sets `metadata.humanTakeover: true` so the router's existing takeover
+ * gate silently drops subsequent inbound turns — same mechanism the admin
+ * panel uses when an operator manually takes over a chat. Also stashes
+ * `metadata.aiHandover` with the reason + timestamp + auto flag so admin
+ * can tell at a glance which users were auto-flagged (vs manually paused)
+ * and why.
  */
 async function applyHandover(user, reason) {
-  if (await isHandoverActive(user)) return;
+  if (user.metadata?.humanTakeover) return;
   const nowIso = new Date().toISOString();
-  await patchHandover(user.id, { state: 'paused', reason, at: nowIso, lastCannedAt: null });
+  await patchMetadata(user.id, {
+    humanTakeover: true,
+    aiHandover: { state: 'paused', reason, at: nowIso, auto: true },
+  });
   logger.warn(`[ABUSE] Handover triggered for ${user.phone_number} — reason: ${reason}`);
+
+  // One-time canned reply so the user knows their messages are received
+  // and a human will follow up. Subsequent inbound turns hit the existing
+  // router-level humanTakeover short-circuit and get dropped silently, so
+  // there's no spam-farming vector for the user to loop the bot.
+  try {
+    const { sendTextMessage } = require('../messages/sender');
+    await sendTextMessage(user.phone_number, CANNED_PAUSED_REPLY);
+  } catch (err) {
+    logger.warn(`[ABUSE] Canned reply failed: ${err.message}`);
+  }
 
   // Fire-and-forget admin email. Don't block the inbound turn on SendGrid.
   sendAdminHandoverAlert(user, reason).catch((err) =>
@@ -241,13 +227,6 @@ async function patchMetadata(userId, patch) {
   await supabase.from('users').update({ metadata: merged }).eq('id', userId);
 }
 
-async function patchHandover(userId, patch) {
-  const { data: row } = await supabase.from('users').select('metadata').eq('id', userId).maybeSingle();
-  const existing = row?.metadata?.aiHandover || {};
-  const merged = { ...(row?.metadata || {}), aiHandover: { ...existing, ...patch } };
-  await supabase.from('users').update({ metadata: merged }).eq('id', userId);
-}
-
 function escapeHtml(s) {
   return String(s == null ? '' : s)
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -255,8 +234,6 @@ function escapeHtml(s) {
 }
 
 module.exports = {
-  isHandoverActive,
-  sendCannedHandoverReply,
   maybeRunJudge,
   applyHandover,
 };
