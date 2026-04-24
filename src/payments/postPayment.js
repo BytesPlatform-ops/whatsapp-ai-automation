@@ -160,6 +160,26 @@ async function handleConfirmedPayment(payment, paidSession) {
       if (site) {
         await updateSite(site.id, { custom_domain: selectedDomain, status: 'domain_dns_pending' });
       }
+
+      // Feedback: the site is live at the preview URL and the customer
+      // has their DNS instructions — that's "delivered" from our side.
+      // Skipped for testers and when more services are queued, handled
+      // inside scheduleDeliveryPrompt.
+      try {
+        const { scheduleDeliveryPrompt } = require('../feedback/feedback');
+        await scheduleDeliveryPrompt(
+          {
+            id: p.user_id,
+            phone_number: targetPhone,
+            channel: targetChannel,
+            via_phone_number_id: targetVia,
+            metadata: paidUserRecord?.metadata || {},
+          },
+          'website'
+        );
+      } catch (err) {
+        logger.warn(`[PAY] scheduleDeliveryPrompt (own-domain) failed: ${err.message}`);
+      }
     }
     // ── 4b. New-domain flow (we register + configure DNS on our side).
     //    Triggers when the customer asked us to find a domain and picked
@@ -342,6 +362,26 @@ async function handleConfirmedPayment(payment, paidSession) {
           `Your site is fully yours — watermark gone, contact form live. I'm here if you need anything.`
       ));
       await logMessage(p.user_id, `Payment confirmed: ${amountDisplay} (no domain)`, 'assistant');
+
+      // Feedback: site is live on its preview URL — that's a fully
+      // delivered state. Skipped for testers and when more services
+      // are queued, handled inside scheduleDeliveryPrompt.
+      try {
+        const { scheduleDeliveryPrompt } = require('../feedback/feedback');
+        await scheduleDeliveryPrompt(
+          {
+            id: p.user_id,
+            phone_number: targetPhone,
+            channel: targetChannel,
+            via_phone_number_id: targetVia,
+            metadata: paidUserRecord?.metadata || {},
+          },
+          'website'
+        );
+      } catch (err) {
+        logger.warn(`[PAY] scheduleDeliveryPrompt (no-domain) failed: ${err.message}`);
+      }
+
       const { updateUserState } = require('../db/users');
       await updateUserState(p.user_id, 'SALES_CHAT');
     }

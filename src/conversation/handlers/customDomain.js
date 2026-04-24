@@ -16,25 +16,28 @@ const SITE_COST = parseInt(process.env.DEFAULT_ACTIVATION_PRICE || '199', 10);
 
 async function handleCustomDomain(user, message) {
   // Defensive guard: if a user somehow lands in DOMAIN_OFFER or
-  // DOMAIN_SEARCH with a domain ALREADY selected pre-build (via the
-  // current WEB_DOMAIN_CHOICE flow), short-circuit the legacy re-pitch.
-  // The primary fix lives in webDev.js#handleRevisions — this is just
-  // a safety net so no future code path can drop a pre-locked user
-  // into the legacy domain flow.
-  const alreadyHasDomain = !!user.metadata?.selectedDomain;
+  // DOMAIN_SEARCH after they already answered the pre-build domain
+  // question (WEB_DOMAIN_CHOICE: need / own / skip), short-circuit
+  // the legacy re-pitch. The primary fix lives in webDev.js#handleRevisions
+  // — this is just a safety net so no future code path drops a user
+  // who has already made their choice back into the legacy flow.
+  const hasSelectedDomain = !!user.metadata?.selectedDomain;
+  const skippedDomain = user.metadata?.domainChoice === 'skip';
+  const alreadyAnswered = hasSelectedDomain || skippedDomain;
   const inLegacyEntry =
     user.state === STATES.DOMAIN_OFFER || user.state === STATES.DOMAIN_SEARCH;
-  if (alreadyHasDomain && inLegacyEntry) {
+  if (alreadyAnswered && inLegacyEntry) {
     logger.info(
-      `[DOMAIN] Skipping legacy ${user.state} for ${user.phone_number} — selectedDomain=${user.metadata.selectedDomain} already locked`
+      `[DOMAIN] Skipping legacy ${user.state} for ${user.phone_number} ` +
+        `— domainChoice=${user.metadata.domainChoice || '?'}, selectedDomain=${user.metadata.selectedDomain || 'none'}`
     );
-    await sendTextMessage(
-      user.phone_number,
-      `You've already got *${user.metadata.selectedDomain}* locked in — no need to pick again. Your activation link was in the preview message; let me know if you'd like any changes to the site.`
-    );
+    const body = hasSelectedDomain
+      ? `You've already got *${user.metadata.selectedDomain}* locked in — no need to pick again. Your activation link was in the preview message; let me know if you'd like any changes to the site.`
+      : `You already said you'd skip a custom domain, so the site's set to launch on its preview URL. Your activation link was in the preview message above — let me know if you'd like any changes to the site.`;
+    await sendTextMessage(user.phone_number, body);
     await logMessage(
       user.id,
-      `Legacy domain state hit with selectedDomain=${user.metadata.selectedDomain} — bounced back to revisions`,
+      `Legacy domain state hit (domainChoice=${user.metadata.domainChoice || 'none'}) — bounced back to revisions`,
       'assistant'
     );
     return STATES.WEB_REVISIONS;
@@ -92,14 +95,28 @@ async function handleDomainOffer(user, message) {
   const isNo = /^(no|nah|nope|later|not now|n|skip|maybe later)$/i.test(text);
 
   if (isNo) {
-    // No domain — offer the site for $100 flat
+    // No domain — the site is already priced at $199 via the activation
+    // link sent on the preview. The old "$100 flat" pitch was a legacy
+    // discount pricing that no longer matches anything else in the flow;
+    // quoting it here contradicted what the user already saw. Just ack
+    // and point them back to their existing activation link.
+    let activationUrl = null;
+    try {
+      const { getLatestPendingPayment } = require('../../db/payments');
+      const pending = await getLatestPendingPayment(user.id);
+      activationUrl = pending?.stripe_payment_link_url || null;
+    } catch (err) {
+      logger.warn(`[DOMAIN_OFFER] Pending payment lookup failed: ${err.message}`);
+    }
+    const tail = activationUrl
+      ? `Your activation link is still live:\n\n👉 ${activationUrl}`
+      : `Your activation link is in the preview message above.`;
     await sendTextMessage(
       user.phone_number,
-      "No worries on the domain! The website itself is *$100*. Want me to send the payment link?"
+      `No worries on the domain — your site will launch on its preview URL. ${tail}\n\nOr tell me if you'd like any changes to the site.`
     );
-    await logMessage(user.id, 'User declined domain — offering $100 for site only', 'assistant');
-    // Stay in sales to handle the $100 payment
-    return STATES.SALES_CHAT;
+    await logMessage(user.id, 'User declined domain — pointed back to existing activation link', 'assistant');
+    return STATES.WEB_REVISIONS;
   }
 
   if (isYes) {

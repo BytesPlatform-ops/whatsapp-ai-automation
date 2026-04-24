@@ -248,6 +248,12 @@ function questionForState(state, websiteData) {
         "_Tip: tap 📎 → Location to drop a pin and I'll use it as the address._"
       );
     }
+    case STATES.WEB_COLLECT_LOGO:
+      // Kept in sync with the prompt sent by handleCollectLogo when that
+      // state is entered through the normal ladder — without this case,
+      // smartAdvance / salesBot fast-paths into WEB_COLLECT_LOGO emit an
+      // empty question and the conversation stalls.
+      return "Got a logo? Send it as an image (JPG or PNG) — I'll clean up the background automatically. Or reply *skip* and I'll use a text logo with your brand initial.";
     default: return '';
   }
 }
@@ -3152,13 +3158,99 @@ async function handleGenerationFailed(user, message) {
   return STATES.WEB_GENERATION_FAILED;
 }
 
-// Post-approval path when the user already picked a domain BEFORE the
-// preview was built (the current default via WEB_DOMAIN_CHOICE). In
-// that case the DOMAIN_OFFER question is noise — we already have the
-// domain, the activation Stripe link, and the preview banner pointing
-// at it. This helper just acknowledges the approval and resurfaces the
-// existing activation link so the user knows exactly what to click.
-async function acknowledgeApprovalWithDomain(user) {
+// User is claiming they've paid the activation link. Hits when they
+// write "made the payment", "i paid", "payment done", etc. — short
+// replies that would otherwise be mis-classified as design approval
+// (or, worse, mis-routed into the legacy DOMAIN_OFFER re-pitch). Kept
+// narrow: regex first so there's no LLM latency on the fast path; the
+// gating in handleRevisions already caps to ≤80 chars so long prose
+// like "i paid but can you also change the headline" still goes
+// through the revision parser.
+const PAID_CLAIM_RX = /\b(?:i\s+(?:just\s+)?paid|paid\s+(?:it|for\s+it|the\s+(?:link|site|website|activation))?|made\s+(?:the\s+)?payment|payment\s+(?:is\s+)?(?:done|made|complete(?:d)?|sent|successful)|done\s+paying|i(?:'ve| have)\s+(?:just\s+)?paid|just\s+paid|sent\s+the\s+money|payment\s+sent)\b/i;
+
+// Poll Stripe for a user's latest pending payment and, if paid, run
+// the full post-payment flow (same path the Stripe webhook uses). In
+// test mode or when webhooks aren't configured, this is the user's
+// on-demand way to trigger confirmation. Returns a new state so the
+// caller can just `return handlePaidClaim(user)` from its branch.
+async function handlePaidClaim(user) {
+  const { getLatestPendingPayment } = require('../../db/payments');
+  const { env } = require('../../config/env');
+
+  let pending = null;
+  try {
+    pending = await getLatestPendingPayment(user.id);
+  } catch (err) {
+    logger.warn(`[WEBDEV-PAID-CLAIM] Pending payment lookup failed: ${err.message}`);
+  }
+
+  const pendingUrl = pending?.stripe_payment_link_url || null;
+  const restateLink = pendingUrl
+    ? `Here's the activation link again just in case:\n\n👉 ${pendingUrl}`
+    : `Your activation link is in the preview message above.`;
+
+  // No pending row — either already confirmed, or was never created.
+  // Be gracious: thank them and stay put. If the payment was already
+  // processed, the banner was already removed and the confirmation was
+  // already sent — a duplicate here would be noise.
+  if (!pending?.stripe_payment_link_id) {
+    await sendTextMessage(
+      user.phone_number,
+      `Thanks! If the payment went through you should see your site unlock shortly. If anything looks off, just let me know.`
+    );
+    await logMessage(user.id, 'Paid claim: no pending payment found', 'assistant');
+    return STATES.WEB_REVISIONS;
+  }
+
+  // Poll Stripe for a completed session on this payment link. If found,
+  // hand off to the shared post-payment handler — it's idempotent and
+  // sends its own success message to the user, so we don't double-send.
+  try {
+    if (env.stripe?.secretKey) {
+      const Stripe = require('stripe');
+      const stripeClient = new Stripe(env.stripe.secretKey);
+      const sessions = await stripeClient.checkout.sessions.list({
+        payment_link: pending.stripe_payment_link_id,
+        limit: 5,
+      });
+      const paidSession = sessions.data.find(
+        (s) => s.payment_status === 'paid' || s.status === 'complete'
+      );
+      if (paidSession) {
+        const { handleConfirmedPayment } = require('../../payments/postPayment');
+        const result = await handleConfirmedPayment(pending, paidSession);
+        logger.info(
+          `[WEBDEV-PAID-CLAIM] User claim confirmed via on-demand poll for ${user.phone_number} ` +
+            `(payment ${pending.id}, skipped=${!!result.skipped})`
+        );
+        return STATES.WEB_REVISIONS;
+      }
+    }
+  } catch (err) {
+    logger.warn(`[WEBDEV-PAID-CLAIM] Stripe poll threw: ${err.message}`);
+  }
+
+  // Not paid yet at Stripe. Could be a) mid-processing, b) the user
+  // meant "I'm about to pay", or c) they paid a stale link. Give them
+  // a short acknowledgement with the live link restated — the 2-minute
+  // scheduler poll will catch a real payment whether or not they
+  // message back.
+  await sendTextMessage(
+    user.phone_number,
+    `Thanks! I don't see the payment landed on Stripe's side yet — it sometimes takes a minute or two to confirm. I'll unlock your site as soon as it clears. ${restateLink}`
+  );
+  await logMessage(user.id, 'Paid claim: not yet confirmed at Stripe — restated link', 'assistant');
+  return STATES.WEB_REVISIONS;
+}
+
+// Post-approval path when the user already answered the pre-build
+// domain question (WEB_DOMAIN_CHOICE → need / own / skip). In all three
+// cases the legacy DOMAIN_OFFER re-pitch is noise — we already have
+// their choice, the activation Stripe link, and the preview banner
+// pointing at it. This helper acknowledges the approval and resurfaces
+// the existing activation link so the user knows exactly what to click.
+// Handles both the "domain locked in" and "skipped, site-only" shapes.
+async function acknowledgeApprovalAfterDomainChoice(user) {
   const selectedDomain = user.metadata?.selectedDomain || null;
   const websitePrice = parseInt(process.env.DEFAULT_ACTIVATION_PRICE || '199', 10);
   const domainPrice = parseInt(user.metadata?.domainPrice || 0, 10);
@@ -3217,8 +3309,8 @@ async function handleRevisions(user, message) {
 
     // Domain was already chosen pre-build — skip the legacy "want a
     // domain?" re-pitch and resurface the existing activation link.
-    if (user.metadata?.selectedDomain) {
-      return acknowledgeApprovalWithDomain(user);
+    if (user.metadata?.selectedDomain || user.metadata?.domainChoice === 'skip') {
+      return acknowledgeApprovalAfterDomainChoice(user);
     }
 
     const example = domainExampleFor(user.metadata?.websiteData?.businessName);
@@ -3289,6 +3381,19 @@ async function handleRevisions(user, message) {
         return STATES.WEB_REVISIONS;
       }
 
+      // Paid-claim short-circuit — runs BEFORE the design-approval
+      // classifier. "Made the payment" / "i paid" / "done paying" are
+      // claims about Stripe, not about the site design. The approval
+      // classifier used to read them as positive-sentiment short
+      // replies and mis-route them into the approval → DOMAIN_OFFER
+      // legacy flow. Instead: poll Stripe on demand. If paid, hand off
+      // to handleConfirmedPayment (same code path the webhook hits);
+      // if not, tell the user we haven't seen it yet and restate the
+      // link.
+      if (revisionText && revisionText.length <= 80 && PAID_CLAIM_RX.test(revisionText)) {
+        return handlePaidClaim(user);
+      }
+
       // Short-circuit clear approval sentiment BEFORE running the heavy
       // REVISION_PARSER_PROMPT. "i love the website", "perfect hai", "sí
       // genial", etc. are unambiguous approvals — the revision parser has
@@ -3303,8 +3408,8 @@ async function handleRevisions(user, message) {
           const siteId = user.metadata?.currentSiteId;
           if (siteId) await updateSite(siteId, { status: 'approved' });
 
-          if (user.metadata?.selectedDomain) {
-            return acknowledgeApprovalWithDomain(user);
+          if (user.metadata?.selectedDomain || user.metadata?.domainChoice === 'skip') {
+            return acknowledgeApprovalAfterDomainChoice(user);
           }
 
           const example = domainExampleFor(user.metadata?.websiteData?.businessName);
@@ -3427,8 +3532,8 @@ async function handleRevisions(user, message) {
         const siteId = user.metadata?.currentSiteId;
         if (siteId) await updateSite(siteId, { status: 'approved' });
 
-        if (user.metadata?.selectedDomain) {
-          return acknowledgeApprovalWithDomain(user);
+        if (user.metadata?.selectedDomain || user.metadata?.domainChoice === 'skip') {
+          return acknowledgeApprovalAfterDomainChoice(user);
         }
 
         const example = domainExampleFor(currentConfig?.businessName || user.metadata?.websiteData?.businessName);
