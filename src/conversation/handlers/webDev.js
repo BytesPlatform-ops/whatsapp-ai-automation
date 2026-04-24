@@ -2133,6 +2133,18 @@ async function handleCollectContact(user, message) {
     websiteData: { ...(user.metadata?.websiteData || {}), ...contactData },
   };
 
+  // Optional logo step — runs between contact and the confirmation summary
+  // unless the user already uploaded one or opted out. Previously
+  // handleCollectContact skipped straight to showConfirmSummary regardless
+  // of the logo state, so nextMissingState's logo check never fired.
+  const wdAfter = user.metadata.websiteData;
+  if (!wdAfter.logoUrl && !wdAfter.logoSkipped) {
+    const prompt = "Got a logo? Send it as an image (JPG or PNG) — I'll clean up the background automatically. Or reply *skip* and I'll use a text logo with your brand initial.";
+    await sendTextMessage(user.phone_number, await localize(prompt, user));
+    await logMessage(user.id, 'Asking for logo upload', 'assistant');
+    return STATES.WEB_COLLECT_LOGO;
+  }
+
   return showConfirmSummary(user);
 }
 
@@ -2669,6 +2681,24 @@ async function generateWebsite(user) {
     const { findOrCreateUser } = require('../../db/users');
     const freshUser = await findOrCreateUser(user.phone_number, user.channel, user.via_phone_number_id);
     const websiteData = freshUser.metadata?.websiteData || {};
+
+    // Industry-matched default palette. getColorsForIndustry runs when
+    // WEB_COLLECT_SERVICES or WEB_COLLECT_AGENT_PROFILE execute — but
+    // those handlers are skipped entirely when the sales bot pre-seeds
+    // services via TRIGGER_WEBSITE_DEMO. Without this fallback merge, a
+    // plumbing / HVAC / realtor lead that came through sales chat would
+    // reach the generator with no primaryColor/accentColor/secondaryColor,
+    // and the template's buildTokens() would fall back to its own
+    // defaults (which don't match the researched per-industry palettes).
+    // Only sets colors the user hasn't explicitly overridden via revision.
+    if (!websiteData.primaryColor || !websiteData.accentColor) {
+      const industryPalette = getColorsForIndustry(websiteData.industry || '');
+      if (!websiteData.primaryColor) websiteData.primaryColor = industryPalette.primaryColor;
+      if (!websiteData.accentColor) websiteData.accentColor = industryPalette.accentColor;
+      if (!websiteData.secondaryColor) websiteData.secondaryColor = industryPalette.secondaryColor;
+      logger.info(`[WEBGEN] Applied industry palette for "${websiteData.industry}": ${JSON.stringify(industryPalette)}`);
+    }
+
     logger.info(`[WEBGEN] User data loaded:`, {
       businessName: websiteData.businessName,
       industry: websiteData.industry,
