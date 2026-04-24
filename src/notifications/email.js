@@ -151,24 +151,100 @@ async function sendPaymentNotification({ userName, userPhone, userEmail, amount,
 }
 
 /**
- * Notify team that a domain setup is needed.
+ * Notify team that a domain setup is needed. Pixie-branded layout that
+ * mirrors sendPaymentNotification / sendLeadNotification — gradient
+ * header, hero domain block, customer card, preview-site CTA, deadline
+ * strip — so the inbox feels like one product. All caller-supplied
+ * values are HTML-escaped (the previous version interpolated raw input
+ * into the table cells, which would have rendered or broken the layout
+ * if a name/domain ever contained `<` or `&`).
  */
 async function sendDomainRequestNotification({ userName, userPhone, userEmail, selectedDomain, sitePreviewUrl, netlifySiteId }) {
+  const safeName = userName || 'New customer';
+  const safePhone = userPhone || '';
+  const safeEmail = userEmail || '';
+  const safeDomain = selectedDomain || '';
+  const safePreview = sitePreviewUrl || '';
+  const safeSiteId = netlifySiteId || '';
+  const requestedAt = new Date().toLocaleString('en-US', {
+    dateStyle: 'medium', timeStyle: 'short',
+  });
+
+  const html = `
+    <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:600px;margin:0 auto;background:#ffffff">
+      <!-- Gradient header: navy → teal → WhatsApp green -->
+      <div style="background:linear-gradient(135deg,#0A1628 0%,#0F766E 55%,#25D366 100%);padding:28px 32px;border-radius:12px 12px 0 0">
+        <div style="color:rgba(255,255,255,0.8);font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;margin-bottom:8px">PIXIE · DOMAIN SETUP</div>
+        <h1 style="color:#fff;font-size:22px;font-weight:800;margin:0;line-height:1.3">${escape(safeName)} needs a custom domain.</h1>
+      </div>
+
+      <!-- Body -->
+      <div style="padding:0;border:1px solid #e5e7eb;border-top:none;border-radius:0 0 12px 12px">
+
+        <!-- Domain hero -->
+        <div style="text-align:center;padding:32px 32px 26px;border-bottom:1px solid #e5e7eb;background:linear-gradient(180deg,#ffffff 0%,#f8fafc 100%)">
+          <div style="font-size:11px;font-weight:700;color:#6b7280;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:10px">Requested Domain</div>
+          <div style="font-size:30px;font-weight:900;color:#0F766E;letter-spacing:-0.5px;line-height:1.15;word-break:break-all">${escape(safeDomain)}</div>
+          <div style="margin-top:12px;font-size:12px;color:#94a3b8">Requested ${escape(requestedAt)}</div>
+        </div>
+
+        <!-- Customer block -->
+        <div style="padding:26px 32px 8px">
+          <div style="font-size:11px;font-weight:700;color:#6b7280;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:12px">Customer</div>
+          <div style="font-size:17px;font-weight:700;color:#0f172a;line-height:1.35;margin-bottom:6px">${escape(safeName)}</div>
+          <table role="presentation" style="width:100%;font-size:14px;color:#475569;border-collapse:collapse">
+            ${safePhone ? `<tr><td style="padding:3px 0;width:80px;color:#94a3b8;font-size:12px;letter-spacing:0.05em">Phone</td><td style="padding:3px 0"><a href="tel:${escape(safePhone.replace(/[^\d+]/g, ''))}" style="color:#0F766E;text-decoration:none">${escape(safePhone)}</a></td></tr>` : ''}
+            ${safeEmail ? `<tr><td style="padding:3px 0;color:#94a3b8;font-size:12px;letter-spacing:0.05em">Email</td><td style="padding:3px 0"><a href="mailto:${escape(safeEmail)}" style="color:#0F766E;text-decoration:none">${escape(safeEmail)}</a></td></tr>` : ''}
+          </table>
+        </div>
+
+        ${safePreview ? `
+        <!-- Preview CTA -->
+        <div style="padding:24px 32px 4px">
+          <div style="font-size:11px;font-weight:700;color:#6b7280;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:10px">Preview Site</div>
+          <a href="${escape(safePreview)}" style="display:inline-block;background:#25D366;color:#0A1628;padding:12px 24px;border-radius:999px;font-weight:700;text-decoration:none;font-size:15px">Open the preview →</a>
+          <div style="margin-top:10px;font-size:12px;color:#94a3b8;word-break:break-all">${escape(safePreview)}</div>
+        </div>` : ''}
+
+        ${safeSiteId ? `
+        <!-- Netlify Site ID -->
+        <div style="padding:22px 32px 4px">
+          <div style="font-size:11px;font-weight:700;color:#6b7280;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:10px">Netlify Site ID</div>
+          <div style="background:#f8fafc;border:1px solid #e5e7eb;border-radius:6px;padding:10px 14px;font-family:'SFMono-Regular',Consolas,Menlo,monospace;font-size:13px;color:#0f172a;word-break:break-all">${escape(safeSiteId)}</div>
+        </div>` : ''}
+
+        <!-- Action note -->
+        <div style="margin:26px 32px 0;padding:14px 16px;background:#fef3c7;border-left:3px solid #f59e0b;border-radius:6px;font-size:13.5px;color:#78350f;line-height:1.55">
+          <strong>Action needed:</strong> purchase the domain, point DNS at the Netlify site above, and add it as a custom domain inside Netlify — within <strong>2 business days</strong>.
+        </div>
+
+        <!-- Spacer -->
+        <div style="height:22px"></div>
+      </div>
+
+      <!-- Footer -->
+      <div style="padding:16px 32px;text-align:center;font-size:11px;color:#9ca3af">
+        Sent by Pixie · <a href="https://pixiebot.co" style="color:#6b7280;text-decoration:none">pixiebot.co</a>
+      </div>
+    </div>
+  `;
+
+  const text = `Domain setup needed — ${safeDomain}\n\n` +
+    `Customer: ${safeName}\n` +
+    (safePhone ? `Phone: ${safePhone}\n` : '') +
+    (safeEmail ? `Email: ${safeEmail}\n` : '') +
+    `Domain: ${safeDomain}\n` +
+    (safePreview ? `Preview: ${safePreview}\n` : '') +
+    (safeSiteId ? `Netlify Site ID: ${safeSiteId}\n` : '') +
+    `Requested: ${requestedAt}\n\n` +
+    `Action: purchase the domain, configure DNS, add as custom domain in Netlify within 2 business days.\n\n` +
+    `— Sent by Pixie · pixiebot.co`;
+
   return sendEmail({
     to: NOTIFY_EMAIL,
-    subject: `🌐 Domain Setup Needed: ${selectedDomain} for ${userName || userPhone}`,
-    html: `
-      <h2>Domain Setup Request</h2>
-      <table style="border-collapse:collapse;font-family:sans-serif;">
-        <tr><td style="padding:8px;font-weight:bold;">Customer</td><td style="padding:8px;">${userName || 'N/A'}</td></tr>
-        <tr><td style="padding:8px;font-weight:bold;">Phone</td><td style="padding:8px;">${userPhone}</td></tr>
-        <tr><td style="padding:8px;font-weight:bold;">Email</td><td style="padding:8px;">${userEmail || 'Not provided'}</td></tr>
-        <tr><td style="padding:8px;font-weight:bold;">Domain</td><td style="padding:8px;font-weight:bold;color:#4f46e5;">${selectedDomain}</td></tr>
-        <tr><td style="padding:8px;font-weight:bold;">Preview URL</td><td style="padding:8px;"><a href="${sitePreviewUrl || '#'}">${sitePreviewUrl || 'N/A'}</a></td></tr>
-        <tr><td style="padding:8px;font-weight:bold;">Netlify Site ID</td><td style="padding:8px;">${netlifySiteId || 'N/A'}</td></tr>
-      </table>
-      <p style="margin-top:16px;color:#666;">Please purchase the domain and configure DNS within 2 business days.</p>
-    `,
+    subject: `Domain setup needed — ${safeDomain} for ${safeName}`,
+    html,
+    text,
   });
 }
 
