@@ -2917,12 +2917,12 @@ async function generateWebsite(user) {
     const selectedDomain = freshUser.metadata?.selectedDomain || null;
     const activationTotal = websitePrice + domainPrice;
 
-    // Banner URL (for the site) uses the idempotent Pixie /pay/:id wrapper —
-    // if someone re-clicks the banner after paying, they get an "already
-    // paid" page instead of a second checkout.
-    // Chat URL uses the raw Stripe link — customers expect to see a
-    // recognizable buy.stripe.com URL in WhatsApp, and the chat link is
-    // conceptually one-time-use (they click it once and pay).
+    // Both the banner on the preview site and the chat message point to
+    // the same raw Stripe checkout URL — customers consistently see a
+    // recognizable buy.stripe.com URL wherever they click. The banner is
+    // automatically removed from the site once payment clears
+    // (redeployAsPaid), so there's no "accidental second payment" risk
+    // from the banner path either.
     let bannerPaymentUrl = null;
     let chatPaymentUrl = null;
     try {
@@ -2948,8 +2948,11 @@ async function generateWebsite(user) {
         selectedDomain,
         originalAmount: activationTotal,
       });
-      bannerPaymentUrl = linkResult?.pixieUrl || linkResult?.url || null;
-      chatPaymentUrl = linkResult?.url || linkResult?.pixieUrl || null;
+      // Prefer raw Stripe URL for both — same recognizable checkout URL
+      // in banner and chat. Fall back to pixieUrl only if url isn't set.
+      const rawStripeUrl = linkResult?.url || linkResult?.pixieUrl || null;
+      bannerPaymentUrl = rawStripeUrl;
+      chatPaymentUrl = rawStripeUrl;
       logger.info(
         `[WEBGEN] Activation link created: $${activationTotal} ` +
           `(website $${websitePrice} + domain $${domainPrice} for ${selectedDomain || 'no domain'})`
@@ -3531,73 +3534,176 @@ async function askDomainChoice(user) {
   return STATES.WEB_DOMAIN_CHOICE;
 }
 
+// Shared "finalize" helpers so the fast-path and the LLM-classified path
+// land on the same code. Keeps the three branches (new / own / skip)
+// defined in one place instead of duplicated at each decision point.
+async function proceedSkipDomain(user, raw) {
+  await updateUserMetadata(user.id, {
+    domainChoice: 'skip',
+    selectedDomain: null,
+    domainPrice: 0,
+  });
+  await sendTextMessage(
+    user.phone_number,
+    await localize("No problem — going straight to building.", user, raw)
+  );
+  await logMessage(user.id, 'Domain choice: skip', 'assistant');
+  return generateWebsite(user);
+}
+
+async function proceedAskForOwnDomain(user, raw) {
+  await updateUserMetadata(user.id, { domainChoice: 'own' });
+  const { updateUserState } = require('../../db/users');
+  await updateUserState(user.id, STATES.WEB_DOMAIN_OWN_INPUT);
+  await sendTextMessage(
+    user.phone_number,
+    await localize("Great — what's your domain? (e.g. glowstudio.com)", user, raw)
+  );
+  return STATES.WEB_DOMAIN_OWN_INPUT;
+}
+
+async function proceedSearchNewDomain(user, raw, searchBase) {
+  await updateUserMetadata(user.id, { domainChoice: 'need' });
+  const base = searchBase || '';
+  const sanitized = base.toLowerCase().replace(/[^a-z0-9]/g, '');
+  if (sanitized && sanitized.length >= 2) {
+    return runDomainSearchInline(user, sanitized);
+  }
+  // No searchable base — if we have a business name, use that; else ask.
+  const businessName = user.metadata?.websiteData?.businessName || '';
+  const bizSanitized = businessName.toLowerCase().replace(/[^a-z0-9]/g, '');
+  if (bizSanitized && bizSanitized.length >= 2) {
+    return runDomainSearchInline(user, bizSanitized);
+  }
+  const { updateUserState } = require('../../db/users');
+  await updateUserState(user.id, STATES.WEB_DOMAIN_SEARCH);
+  await sendTextMessage(
+    user.phone_number,
+    await localize("What name should I search for? (e.g. mybusiness)", user, raw)
+  );
+  return STATES.WEB_DOMAIN_SEARCH;
+}
+
+/**
+ * LLM-based classifier for the domain-choice reply. Handles free-form
+ * natural language ("yeah let's find a new one", "i have one already",
+ * "skip it for now", "my domain is glow.com") that the regex fast-path
+ * can't cover. Returns `{ intent: 'new'|'own'|'skip'|'unclear',
+ * domain: string|null, searchBase: string|null }`.
+ */
+async function classifyDomainIntent(text, businessName) {
+  const system = `You classify how a user wants to handle their domain for a new website. The three valid intents are:
+- "new" — user wants us to FIND / SEARCH a new domain for them
+- "own" — user already owns a domain they want to use
+- "skip" — user wants to skip the domain step entirely, use the free preview URL for now
+- "unclear" — ambiguous or off-topic
+
+If the user mentions a FULL domain (with a TLD, e.g. glowstudio.com), extract it as \`domain\`.
+If they mention a SPECIFIC base name to search for (not a full domain, e.g. "search for pixiehq"), extract it as \`searchBase\`.
+
+Return STRICT JSON only, no prose, no code fences.`;
+
+  const prompt = `Business name context: "${businessName || 'unknown'}"
+User said: "${text}"
+
+Return JSON: {"intent":"new|own|skip|unclear","domain":null|"x.com","searchBase":null|"basename"}
+
+Examples:
+- "yeah lets do new one" → {"intent":"new","domain":null,"searchBase":null}
+- "find me one" → {"intent":"new","domain":null,"searchBase":null}
+- "search for pixiehq" → {"intent":"new","domain":null,"searchBase":"pixiehq"}
+- "i have my own" → {"intent":"own","domain":null,"searchBase":null}
+- "already got a domain" → {"intent":"own","domain":null,"searchBase":null}
+- "my domain is glowstudio.com" → {"intent":"own","domain":"glowstudio.com","searchBase":null}
+- "use glow.io" → {"intent":"own","domain":"glow.io","searchBase":null}
+- "skip for now" → {"intent":"skip","domain":null,"searchBase":null}
+- "maybe later" → {"intent":"skip","domain":null,"searchBase":null}
+- "not now, just build it" → {"intent":"skip","domain":null,"searchBase":null}
+- "what's the weather" → {"intent":"unclear","domain":null,"searchBase":null}`;
+
+  let response;
+  try {
+    response = await generateResponse(system, [{ role: 'user', content: prompt }], {
+      operation: 'domain_choice_classify',
+    });
+  } catch (err) {
+    logger.warn(`[WEBDEV-DOMAIN] LLM classifier failed: ${err.message}`);
+    return { intent: 'unclear', domain: null, searchBase: null };
+  }
+
+  const jsonMatch = String(response || '').match(/\{[\s\S]*?\}/);
+  if (!jsonMatch) return { intent: 'unclear', domain: null, searchBase: null };
+  try {
+    const parsed = JSON.parse(jsonMatch[0]);
+    const intent = ['new', 'own', 'skip', 'unclear'].includes(parsed.intent)
+      ? parsed.intent
+      : 'unclear';
+    return {
+      intent,
+      domain: parsed.domain && /^[a-z0-9][a-z0-9-]*\.[a-z]{2,}/i.test(parsed.domain)
+        ? parsed.domain.toLowerCase()
+        : null,
+      searchBase: parsed.searchBase && typeof parsed.searchBase === 'string'
+        ? parsed.searchBase.toLowerCase().replace(/[^a-z0-9-]/g, '')
+        : null,
+    };
+  } catch {
+    return { intent: 'unclear', domain: null, searchBase: null };
+  }
+}
+
 async function handleDomainChoice(user, message) {
   const raw = (message.text || '').trim();
   const text = raw.toLowerCase();
 
-  // Skip path — no domain.
+  // Fast-path: obvious single-word answers skip the LLM call entirely.
+  // Keeps p95 latency down for the 80% case where user types exactly
+  // what the prompt asked for.
   if (/^(skip|no|nope|nah|later|pass|not now|maybe later)$/i.test(text)) {
-    await updateUserMetadata(user.id, {
-      domainChoice: 'skip',
-      selectedDomain: null,
-      domainPrice: 0,
-    });
-    await sendTextMessage(
-      user.phone_number,
-      await localize("No problem — going straight to building.", user, raw)
-    );
-    await logMessage(user.id, 'Domain choice: skip', 'assistant');
-    return generateWebsite(user);
+    return proceedSkipDomain(user, raw);
+  }
+  if (/^(new|yes|yeah|yep|sure|ok|okay|find|search|look|help)$/i.test(text)) {
+    return proceedSearchNewDomain(user, raw, null);
+  }
+  if (/^(own|have|mine|my)$/i.test(text)) {
+    return proceedAskForOwnDomain(user, raw);
   }
 
-  // "I already own one" path.
-  if (/^(own|have|mine|my|i\s*(?:have|own))\b/i.test(text)) {
-    await updateUserMetadata(user.id, { domainChoice: 'own' });
-    const { updateUserState } = require('../../db/users');
-    await updateUserState(user.id, STATES.WEB_DOMAIN_OWN_INPUT);
-    await sendTextMessage(
-      user.phone_number,
-      await localize("Great — what's your domain? (e.g. glowstudio.com)", user, raw)
-    );
-    return STATES.WEB_DOMAIN_OWN_INPUT;
-  }
-
-  // "Find one" path.
-  if (/^(new|yes|yeah|yep|sure|ok|okay|find|search|look|help)\b/i.test(text)) {
-    const businessName = user.metadata?.websiteData?.businessName || '';
-    const sanitized = businessName.toLowerCase().replace(/[^a-z0-9]/g, '');
-    await updateUserMetadata(user.id, { domainChoice: 'need' });
-
-    if (sanitized && sanitized.length >= 2) {
-      return runDomainSearchInline(user, sanitized);
-    }
-    const { updateUserState } = require('../../db/users');
-    await updateUserState(user.id, STATES.WEB_DOMAIN_SEARCH);
-    await sendTextMessage(
-      user.phone_number,
-      await localize("What name should I search for? (e.g. mybusiness)", user, raw)
-    );
-    return STATES.WEB_DOMAIN_SEARCH;
-  }
-
-  // Full domain typed — treat as "own".
-  const fullMatch = raw.match(/([a-z0-9-]+\.[a-z]{2,}(?:\.[a-z]{2,})?)/i);
-  if (fullMatch) {
+  // Full domain typed directly (e.g. "glowstudio.com") → own-domain path
+  // without an extra round-trip.
+  const fullMatch = raw.match(/([a-z0-9][a-z0-9-]*\.[a-z]{2,}(?:\.[a-z]{2,})?)/i);
+  if (fullMatch && !/\s/.test(raw)) {
     return saveOwnDomain(user, fullMatch[1].toLowerCase());
   }
 
-  // Plausible single-word name with no spaces → treat as search term.
-  const cleaned = text.replace(/[^a-z0-9-]/g, '');
-  if (!/\s/.test(raw) && cleaned.length >= 2 && cleaned.length <= 30) {
-    await updateUserMetadata(user.id, { domainChoice: 'need' });
-    return runDomainSearchInline(user, cleaned);
+  // Natural-language reply ("yeah lets do a new one", "i have my own",
+  // "skip for now"). Route through the LLM classifier.
+  const businessName = user.metadata?.websiteData?.businessName || '';
+  const result = await classifyDomainIntent(raw, businessName);
+
+  if (result.intent === 'skip') return proceedSkipDomain(user, raw);
+
+  if (result.intent === 'own') {
+    if (result.domain) return saveOwnDomain(user, result.domain);
+    return proceedAskForOwnDomain(user, raw);
   }
 
-  // Fallback — reprompt.
+  if (result.intent === 'new') {
+    return proceedSearchNewDomain(user, raw, result.searchBase);
+  }
+
+  // Fallback — unclear. If it looks like a plausible bare search term
+  // (no spaces, alphanumeric), treat it as a new-search request;
+  // otherwise reprompt.
+  const cleaned = text.replace(/[^a-z0-9-]/g, '');
+  if (!/\s/.test(raw) && cleaned.length >= 2 && cleaned.length <= 30) {
+    return proceedSearchNewDomain(user, raw, cleaned);
+  }
+
   await sendTextMessage(
     user.phone_number,
     await localize(
-      "Just reply *new*, *own*, or *skip* — or type the domain you want.",
+      "Want me to find you a *new domain*, do you *already own one*, or *skip* for now? You can also just type the domain you want.",
       user,
       raw
     )

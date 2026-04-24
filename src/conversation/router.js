@@ -602,6 +602,20 @@ async function _routeMessage(message) {
     const ho = await handleHandoffButton(user, message);
     if (ho?.handled) return;
 
+    // ── Abuse handover short-circuit ────────────────────────────────────
+    // The abuse judge has flagged this user and flipped them into a
+    // paused handover state. Don't dispatch to any LLM handler —
+    // that's the whole point of the pause, it saves tokens. Instead,
+    // send one throttled canned reply so the user knows their message
+    // was received, and return. Admin has to unpause via the admin
+    // panel (or clear user.metadata.aiHandover.state in DB).
+    const abuse = require('../abuse/detector');
+    if (await abuse.isHandoverActive(user)) {
+      logger.info(`[ROUTER] Handover active for ${from} — skipping AI dispatch`);
+      await abuse.sendCannedHandoverReply(user);
+      return;
+    }
+
     // Free-text reply to "what happened?" after the user tapped
     // Had issues on a previous delivery prompt.
     const pc = await handlePendingComment(user, message);
@@ -1405,6 +1419,20 @@ async function _routeMessage(message) {
   // Refresh the rolling conversation summary if we've crossed the interval.
   // Fire-and-forget — must not block the turn; the summary manager swallows errors.
   maybeUpdateSummary(user).catch(() => {});
+
+  // Fire-and-forget abuse judge. Every 5 inbound turns, a small LLM call
+  // scans the conversation and flags the user when the intent looks like
+  // token-burn (gibberish, jailbreak attempts, persistent trolling).
+  // Two consecutive 'abusive' verdicts trigger handover — the next inbound
+  // turn will short-circuit to the canned reply at the top of this fn.
+  try {
+    const abuse = require('../abuse/detector');
+    abuse.maybeRunJudge(user).catch((err) =>
+      logger.warn(`[ABUSE] Judge threw: ${err.message}`)
+    );
+  } catch (err) {
+    logger.warn(`[ABUSE] Could not dispatch judge: ${err.message}`);
+  }
 }
 
 module.exports = { routeMessage };

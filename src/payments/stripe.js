@@ -111,14 +111,14 @@ async function createPaymentLink({
       ? `${publicBase.replace(/\/+$/, '')}/pay/${payment.id}`
       : paymentLink.url;
 
-    // Keep the site's activation banner in sync with whatever link the
-    // user sees in chat. Banner uses the pixieUrl so a re-click after
-    // payment shows "already paid" instead of a second Stripe checkout.
-    // Fire-and-forget — if redeploy fails, the chat link still works,
-    // banner will self-heal on next redeploy.
+    // Keep the site's activation banner in sync with the same Stripe URL
+    // the user sees in chat. Both point to raw buy.stripe.com for a
+    // consistent experience. The banner is removed entirely once payment
+    // clears (redeployAsPaid), so there's no double-click-after-payment
+    // risk from the banner path.
     try {
       const { updateSiteBannerLink } = require('../website-gen/redeployer');
-      updateSiteBannerLink(userId, pixieUrl).catch((err) =>
+      updateSiteBannerLink(userId, paymentLink.url).catch((err) =>
         logger.warn(`[STRIPE] Banner sync threw for user ${userId}: ${err.message}`)
       );
     } catch (err) {
