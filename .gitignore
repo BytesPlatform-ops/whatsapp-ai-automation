@@ -7,6 +7,8 @@ dist/
 # Design Automation (separate Next.js project — do not commit here)
 Design-Automation-V2/
 
+.claude/
+
 # Local smoke-test output from HVAC template
 src/website-gen/templates/hvac/smoke-out/
 

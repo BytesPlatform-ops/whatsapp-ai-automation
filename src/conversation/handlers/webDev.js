@@ -2,6 +2,7 @@ const {
   sendTextMessage,
   sendInteractiveButtons,
   sendCTAButton,
+  sendWithMenuButton,
 } = require('../../messages/sender');
 const { logMessage, getConversationHistory } = require('../../db/conversations');
 const { updateUserMetadata, updateUserState } = require('../../db/users');
@@ -56,9 +57,14 @@ function nextMissingWebDevState(websiteData, fullMetadata = {}) {
   } else if (websiteData.services == null) {
     return STATES.WEB_COLLECT_SERVICES;
   }
-  // Phone is critical (especially for HVAC). Email alone is not enough — make
-  // sure we collect at least a phone OR address before confirming.
-  if (!websiteData.contactPhone && !websiteData.contactAddress) return STATES.WEB_COLLECT_CONTACT;
+  // Contact step: require an explicit phone OR email OR an explicit skip
+  // signal. Address alone is NOT enough — a location pin dropped mid-flow
+  // (Phase 14) auto-seeds contactAddress, which would otherwise sneak past
+  // the contact ask entirely. Users expect to be asked for phone/email
+  // regardless of whether their address was already captured.
+  const hasPrimaryContact = !!websiteData.contactPhone || !!websiteData.contactEmail;
+  const contactStepDone = hasPrimaryContact || fullMetadata.contactSkipped === true;
+  if (!contactStepDone) return STATES.WEB_COLLECT_CONTACT;
   // Optional logo collection — skipped if the user already sent one or
   // explicitly opted out (logoSkipped=true). Flagged via metadata not
   // websiteData so stale sessions don't loop back.
@@ -146,16 +152,32 @@ function questionForState(state, websiteData) {
       if (websiteData?.primaryCity) {
         return `Which areas / neighborhoods do you serve around *${websiteData.primaryCity}*? List them separated by commas. Example: *Clifton, DHA, Gulshan*. Or just skip to use *${websiteData.primaryCity}* as the only area.`;
       }
-      return 'Which city are you based in, and which areas do you serve? Example: *Austin: Round Rock, Cedar Park, Pflugerville*.';
+      return (
+        'Which city are you based in, and which areas do you serve? Example: *Austin: Round Rock, Cedar Park, Pflugerville*.\n\n' +
+        '_Tip: tap 📎 → Location to drop a pin and I\'ll pick up the city from it._'
+      );
     }
     case STATES.WEB_COLLECT_SERVICES: {
       const { isHvac, resolveTrade } = require('../../website-gen/templates');
       if (isHvac(websiteData.industry)) {
         const trade = resolveTrade(websiteData.industry);
-        if (trade === 'plumbing') {
-          return "Which plumbing services do you offer? List them separated by commas — or just skip to use our default list (leak repair, drain cleaning, water heater install, pipe repair, sewer services, and more).";
-        }
-        return "Which HVAC services do you offer? List them separated by commas — or just skip to use our default list (AC repair, heating, heat pumps, duct cleaning, thermostats, and more).";
+        // Trade-specific prompt with example defaults — keep the example
+        // lists in sync with the DEFAULT_SERVICES arrays in
+        // templates/hvac/common.js so the user's mental model of what
+        // they're about to get matches what actually seeds the site.
+        const TRADE_PROMPT = {
+          hvac: "Which HVAC services do you offer? List them separated by commas — or just skip to use our default list (AC repair, heating, heat pumps, duct cleaning, thermostats, and more).",
+          plumbing: "Which plumbing services do you offer? List them separated by commas — or just skip to use our default list (leak repair, drain cleaning, water heater install, pipe repair, sewer services, and more).",
+          electrical: "Which electrical services do you offer? List them separated by commas — or just skip to use our default list (panel upgrades, wiring, outlet install, EV chargers, lighting, generators, and more).",
+          roofing: "Which roofing services do you offer? List them separated by commas — or just skip to use our default list (roof repair, full replacement, storm damage, shingles, gutters, inspections, and more).",
+          appliance: "Which appliances do you repair? List them separated by commas — or just skip to use our default list (fridge, washer, dryer, dishwasher, oven, microwave, garbage disposal, and more).",
+          'garage-door': "Which garage door services do you offer? List them separated by commas — or just skip to use our default list (spring replacement, opener repair, new install, off-track fix, smart openers, and more).",
+          locksmith: "Which locksmith services do you offer? List them separated by commas — or just skip to use our default list (lockouts, rekeying, lock install, key cutting, car keys, safe opening, and more).",
+          'pest-control': "Which pests do you handle? List them separated by commas — or just skip to use our default list (general pest control, termites, rodents, bed bugs, mosquitoes, bees, and more).",
+          'water-damage': "Which restoration services do you offer? List them separated by commas — or just skip to use our default list (water extraction, structural drying, mold remediation, flood cleanup, sewage cleanup, and more).",
+          'tree-service': "Which tree services do you offer? List them separated by commas — or just skip to use our default list (tree removal, trimming, pruning, stump grinding, storm cleanup, arborist assessments, and more).",
+        };
+        return TRADE_PROMPT[trade] || TRADE_PROMPT.hvac;
       }
       return "What services or products do you offer? List them separated by commas, or just skip this one.";
     }
@@ -196,8 +218,10 @@ function questionForState(state, websiteData) {
         "Or reply *skip* and I'll use professional stock photos."
       );
     }
-    case STATES.WEB_COLLECT_CONTACT: return "Last thing — what contact info do you want on the site? Send your email, phone, and/or address.";
-    case STATES.WEB_COLLECT_LOGO: return "Got a logo? Send it as an image (JPG or PNG) — I'll clean up the background automatically. Or reply *skip* and I'll use a text logo with your brand initial.";
+    case STATES.WEB_COLLECT_CONTACT: return (
+      "Last thing — what contact info do you want on the site? Send your email, phone, and/or address.\n\n" +
+      "_Tip: tap 📎 → Location to drop a pin and I'll use it as the address._"
+    );
     default: return '';
   }
 }
@@ -2021,11 +2045,13 @@ async function handleCollectContact(user, message) {
   }
 
   // If the input is a multi-field contact blob (2+ labeled fields like
-  // "address: X, email: Y, phone: Z"), skip the single-field edit detector
-  // entirely — otherwise the greedy tail regex inside detectFieldEdit picks
-  // the LAST colon in the message and misreads "+123456789056" as the
-  // address value.
-  const labelCount = (contactText.match(/\b(?:email|e-?mail|phone|tel|mobile|address|location|addr)\s*[:\-]/gi) || []).length;
+  // "address: X, email: Y, phone: Z" OR "email is X and phone is Y"), skip
+  // the single-field edit detector — otherwise the greedy tail regex
+  // inside detectFieldEdit picks the LAST "is|:" in the message and
+  // misreads "phone is 09876544567" as the email value. The regex below
+  // counts labels followed by ANY of (colon, hyphen, "is", "are") so
+  // prose-style multi-field input is caught too.
+  const labelCount = (contactText.match(/\b(?:email|e-?mail|phone|tel|mobile|address|location|addr)\s+(?:is|are)\b|\b(?:email|e-?mail|phone|tel|mobile|address|location|addr)\s*[:\-]/gi) || []).length;
 
   // Delegation path: the user doesn't want to provide contact info and is
   // saying so in a non-literal way ("surprise me", "just add something
@@ -2125,8 +2151,14 @@ async function handleCollectContact(user, message) {
     }
   }
 
+  const mergedWebsiteData = { ...(user.metadata?.websiteData || {}), ...contactData };
+  // Mark the contact step completed so nextMissingWebDevState doesn't loop
+  // back on users who provided only an address (or skipped). Setting this
+  // unconditionally once handleCollectContact finishes is safe — we've
+  // asked the user once, that's the UX contract.
   await updateUserMetadata(user.id, {
-    websiteData: { ...(user.metadata?.websiteData || {}), ...contactData },
+    websiteData: mergedWebsiteData,
+    contactSkipped: true,
   });
   user.metadata = {
     ...(user.metadata || {}),
@@ -2151,6 +2183,40 @@ async function handleCollectContact(user, message) {
 // Render the pre-generation confirmation summary. Shared by handleCollectContact,
 // the edit-intent fast-path, the salon-flow loopback, and the sales bot's
 // website-demo trigger when everything is already known.
+/**
+ * Build the "*Services:*" line for both summary views. When the user
+ * supplied services, show them verbatim. When they skipped AND the
+ * industry resolves to a trade template (HVAC, plumbing, electrical,
+ * roofing, etc.), preview the trade's default list so "None" never
+ * appears in the summary — the generator will auto-seed those defaults
+ * at build time, so the preview is accurate. Non-trade industries that
+ * skipped get a truthful note about how the generic template handles it.
+ */
+function renderServicesLine(wd) {
+  if (Array.isArray(wd.services) && wd.services.length > 0) {
+    return `*Services:* ${wd.services.join(', ')}`;
+  }
+  try {
+    const { isHvac, resolveTrade } = require('../../website-gen/templates');
+    if (isHvac(wd.industry)) {
+      const trade = resolveTrade(wd.industry);
+      const { TRADE_COPY } = require('../../website-gen/templates/hvac/common');
+      const entry = TRADE_COPY[trade];
+      if (entry && Array.isArray(entry.defaultServices) && entry.defaultServices.length > 0) {
+        const titles = entry.defaultServices.map((s) => s.title);
+        const previewN = 5;
+        const preview = titles.slice(0, previewN).join(', ');
+        const remaining = titles.length - previewN;
+        const tail = remaining > 0 ? `, and ${remaining} more` : '';
+        return `*Services:* using our default ${entry.label.toLowerCase()} list (${preview}${tail})`;
+      }
+    }
+  } catch {
+    // Fall through to the generic note.
+  }
+  return `*Services:* None — we'll skip a dedicated services page`;
+}
+
 /**
  * Read-only peek at the current website-details summary — used when the
  * user asks "what are my current details?" mid-flow. Same content as
@@ -2197,7 +2263,11 @@ async function showSummaryPeek(user) {
       const extraAreas = wd.serviceAreas.filter((a) => a && a.toLowerCase() !== (wd.primaryCity || '').toLowerCase());
       if (extraAreas.length) lines.push(`*Service Areas:* ${extraAreas.join(', ')}`);
     }
-    if (Array.isArray(wd.services) && wd.services.length) lines.push(`*Services:* ${wd.services.join(', ')}`);
+    // Always show the services line now — empty+trade shows the default
+    // preview, empty+generic says we'll skip the page. Hiding it used to
+    // leave the summary ambiguous about what services would actually
+    // appear on the generated site.
+    lines.push(renderServicesLine(wd));
   }
 
   if (wd.bookingMode === 'embed') lines.push(`*Booking:* External link (${wd.bookingUrl || 'set'})`);
@@ -2207,9 +2277,14 @@ async function showSummaryPeek(user) {
   if (wd.instagramHandle) lines.push(`*Instagram:* @${wd.instagramHandle}`);
   lines.push(`*Contact:* ${contactInfo}`);
 
+  // localize() handles the English-override safety net internally by
+  // fetching the latest user message when none is passed.
   const summary = lines.join('\n');
-  await sendTextMessage(user.phone_number, await localize(summary, user));
-  await logMessage(user.id, 'Showed summary peek (mid-flow)', 'assistant');
+  const localized = await localize(summary, user);
+  await sendTextMessage(user.phone_number, localized);
+  // Log the actual peek text so the admin conversation page shows what the
+  // user saw on WhatsApp, not a placeholder label.
+  await logMessage(user.id, localized, 'assistant');
 }
 
 async function showConfirmSummary(user, prefix = '') {
@@ -2261,8 +2336,7 @@ async function showConfirmSummary(user, prefix = '') {
         lines.push(`*Service Areas:* ${wd.serviceAreas.join(', ')}`);
       }
     }
-    const servicesList = (wd.services || []).length > 0 ? wd.services.join(', ') : 'None (skipped)';
-    lines.push(`*Services:* ${servicesList}`);
+    lines.push(renderServicesLine(wd));
   }
 
   // Salon extras (booking mode + Instagram) so salon users see their setup.
@@ -2289,11 +2363,17 @@ async function showConfirmSummary(user, prefix = '') {
   // SAME send as the summary. Earlier they were two sequential sends and
   // if the second one ever failed, the user saw "Here's the updated
   // summary:" with no summary under it — confusing and blocked progress.
+  // localize() auto-fetches the latest user message from history when no
+  // `latestUserMessage` is passed, so the English-override safety net
+  // fires and stale preferredLanguage caches can't translate the summary
+  // into the wrong language.
   const summary = lines.join('\n');
   const combined = prefix ? `${prefix.trim()}\n\n${summary}` : summary;
   const localized = await localize(combined, user);
   await sendTextMessage(user.phone_number, localized);
-  await logMessage(user.id, 'Showing website confirmation summary', 'assistant');
+  // Log the ACTUAL summary text so the admin conversation page shows what
+  // the user saw on WhatsApp, not a placeholder label.
+  await logMessage(user.id, localized, 'assistant');
 
   return STATES.WEB_CONFIRM;
 }
@@ -2619,6 +2699,45 @@ Return JSON ONLY. Examples:
     }
   } catch (err) {
     logger.warn(`[WEBDEV-CONFIRM] Edit-intent LLM classify failed: ${err.message}`);
+  }
+
+  // Phase 12/13: before falling back to the edit-hint, check if the user
+  // is actually trying to switch to a different service ("skip this, can
+  // you make a chatbot?", "forget the website, do a logo instead", "i
+  // need a logo and some ads too"). WEB_CONFIRM isn't in COLLECTION_STATES
+  // so the router's menu-intent branch doesn't fire — we have to do the
+  // flow-switch check here.
+  //
+  // Gate on EXPLICIT skip phrasing to avoid false positives — a message
+  // like "add chatbot features to the site" should NOT jump to chatbot
+  // mode, but "skip this, make a chatbot" should.
+  const explicitSwitchRx = /\b(skip\s+(?:this|it|that)|forget\s+(?:this|it|that|the)|scrap\s+(?:this|it|that)|cancel\s+(?:this|it|that)|drop\s+(?:this|it|that)|nevermind|never\s*mind|instead\s*of|rather\s+than|nvm)\b/i;
+  const hasExplicitSwitch = explicitSwitchRx.test(originalText);
+  if (hasExplicitSwitch) {
+    try {
+      const { detectServiceQueue, startServiceQueue } = require('../serviceQueue');
+      const queue = await detectServiceQueue(originalText, user.id);
+      if (queue.length >= 2) {
+        const { updateUserState } = require('../../db/users');
+        await updateUserState(user.id, STATES.SERVICE_SELECTION);
+        const newState = await startServiceQueue({ ...user, state: STATES.SERVICE_SELECTION }, queue);
+        return newState || STATES.SERVICE_SELECTION;
+      }
+
+      const { pickServiceFromSwitch, handleServiceSelection } = require('./serviceSelection');
+      const target = await pickServiceFromSwitch(originalText, user.id);
+      if (target) {
+        const { updateUserState } = require('../../db/users');
+        await updateUserState(user.id, STATES.SERVICE_SELECTION);
+        const newState = await handleServiceSelection(
+          { ...user, state: STATES.SERVICE_SELECTION },
+          { buttonId: target, listId: '', text: '', type: 'text' }
+        );
+        return newState || STATES.SERVICE_SELECTION;
+      }
+    } catch (err) {
+      logger.warn(`[WEBDEV-CONFIRM] Flow-switch check failed: ${err.message}`);
+    }
   }
 
   // Still nothing — ask the user to be more specific. Localize the hint.
@@ -3633,6 +3752,64 @@ async function selectDomainInline(user, option) {
   return generateWebsite(user);
 }
 
+/**
+ * Cross-flow entry (Phase 11 / Phase 12). Start or RESUME the webdev flow,
+ * honoring any shared business context already accumulated (from a previous
+ * webdev attempt OR from the cross-flow pool populated by other flows).
+ *
+ * - Fresh user (no businessName): standard "what's your business name?" opener.
+ * - Returning user with partial webdev progress OR carryover from another
+ *   flow: acknowledge what we already have and jump to the first missing
+ *   step via nextMissingWebDevState — so a user who switched to logo/ads
+ *   and came back doesn't get re-asked for data they already provided.
+ *
+ * Called by serviceSelection.js (direct menu tap / flow-switch target) and
+ * serviceQueue.js (queue advance).
+ */
+async function startWebdevFlow(user) {
+  const { getSharedBusinessContext } = require('../entityAccumulator');
+  const shared = getSharedBusinessContext(user);
+
+  if (!shared.businessName) {
+    await sendWithMenuButton(
+      user.phone_number,
+      '🌐 *Website Development*\n\n' +
+        "I'll help you create a professional website! I just need a few details about your business.\n\n" +
+        "First, what's your *business name*?"
+    );
+    await logMessage(user.id, 'Starting website development flow', 'assistant');
+    return STATES.WEB_COLLECT_NAME;
+  }
+
+  // Resume — figure out the first missing field and ask that, acknowledging
+  // what we already have so the user knows we didn't forget.
+  const wd = user.metadata?.websiteData || {};
+  const nextState = nextMissingWebDevState(wd, user.metadata || {}) || STATES.WEB_CONFIRM;
+
+  if (nextState === STATES.WEB_CONFIRM) {
+    // Everything's already collected — jump to the confirm summary.
+    await logMessage(user.id, `Resuming webdev with full context, showing confirm`, 'assistant');
+    return showConfirmSummary(user);
+  }
+
+  const question = questionForState(nextState, wd);
+  const ctxLines = [];
+  if (shared.businessName) ctxLines.push(`*${shared.businessName}*`);
+  if (shared.industry) ctxLines.push(`_${shared.industry}_`);
+  const carriedNote = ctxLines.length ? `Picking up with ${ctxLines.join(' · ')}.\n\n` : '';
+
+  await sendWithMenuButton(
+    user.phone_number,
+    `🌐 *Website Development*\n\n${carriedNote}${question}`
+  );
+  await logMessage(
+    user.id,
+    `Resuming webdev at ${nextState} (name=${shared.businessName}, industry=${shared.industry || 'none'})`,
+    'assistant'
+  );
+  return nextState;
+}
+
 module.exports = {
   handleWebDev,
   handleGenerationFailed,
@@ -3642,5 +3819,6 @@ module.exports = {
   questionForState,
   isSalonIndustry,
   startSalonFlow,
+  startWebdevFlow,
   showConfirmSummary,
 };

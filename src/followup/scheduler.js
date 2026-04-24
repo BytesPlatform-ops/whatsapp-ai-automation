@@ -335,6 +335,31 @@ async function processUserFollowup(user) {
   // If all steps are done, skip
   if (completedSteps.length >= FOLLOWUP_LADDER.length) return;
 
+  // Website-payment ladder guard: all three messages in FOLLOWUP_MESSAGES
+  // reference "payment link" / "your site is ready to go live" / "$100".
+  // Sending them to a user who never engaged with the webdev flow is
+  // confusing (the scheduler doesn't know they were just exploring). Gate
+  // the ladder on ANY sign of webdev engagement:
+  //   - websiteData.businessName: they started the collection flow
+  //   - selectedDomain: they picked a domain
+  //   - websiteDemoTriggered: sales bot fired [TRIGGER_WEBSITE_DEMO]
+  //   - paymentLinkSentAt / lastPaymentAmount: a link/payment exists
+  //
+  // If none apply, skip silently. We could send a different soft nudge
+  // for exploratory users later, but radio silence is better than a
+  // wrong payment prompt.
+  const wd = metadata.websiteData || {};
+  const engagedWithWebdev =
+    !!wd.businessName ||
+    !!metadata.selectedDomain ||
+    !!metadata.websiteDemoTriggered ||
+    !!metadata.paymentLinkSentAt ||
+    !!metadata.lastPaymentAmount;
+  if (!engagedWithWebdev) {
+    logger.debug(`[FOLLOWUP] Skipping website-payment ladder for ${user.phone_number} — no webdev engagement signals`);
+    return;
+  }
+
   const nextStep = getNextFollowup(lastMsg.created_at, completedSteps, leadTemp);
   if (!nextStep) return;
 

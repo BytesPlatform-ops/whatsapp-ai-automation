@@ -136,7 +136,9 @@ async function handleCollectUrl(user, message) {
           'Your free SEO audit report for ' + url,
           `SEO-Audit-${new URL(url).hostname}.pdf`
         );
-        await logMessage(user.id, 'Sent PDF report', 'assistant');
+        // Log the text equivalent of the report so admin conversation
+        // view shows the audit contents, not just "[PDF sent]".
+        await logMessage(user.id, `📄 Sent SEO audit PDF for ${url}:\n\n${summary}`, 'assistant');
         logger.info('[SEO] PDF sent successfully');
       } catch (pdfErr) {
         logger.error('[SEO] Failed to send PDF, sending text fallback:', pdfErr.message);
@@ -159,10 +161,13 @@ async function handleCollectUrl(user, message) {
     let seoTopFix = '';
     try {
       const { generateResponse: extractTopFix } = require('../../llm/provider');
+      // 15s ceiling — it's extracting 2-6 words, not writing an essay. The
+      // default 90s timeout on a stalled call would block the sales pitch
+      // from firing for way too long.
       const rawFix = await extractTopFix(
         'You read SEO audit reports. Extract the single most impactful improvement opportunity from the report and name it in 2-6 words. No sentence, no punctuation, no quotes — just the issue name. Examples: "missing title tags", "slow page load", "thin homepage content", "no meta descriptions", "broken internal links".',
         [{ role: 'user', content: analysis.slice(0, 6000) }],
-        { userId: user.id, operation: 'seo_top_fix_extract' }
+        { userId: user.id, operation: 'seo_top_fix_extract', timeoutMs: 15_000 }
       );
       seoTopFix = String(rawFix || '').trim().replace(/^["']|["']$/g, '').slice(0, 60);
       logger.info(`[SEO] Top fix extracted: "${seoTopFix}"`);
@@ -177,6 +182,36 @@ async function handleCollectUrl(user, message) {
       seoTopFix,
       seoAuditCompletedAt: new Date().toISOString(),
     });
+
+    // Phase 15: record completion so future sessions recognize the user.
+    // SEO flow doesn't collect a business name — derive one from the URL
+    // ("https://hasnain-plumbing.com" -> "hasnain-plumbing"). Only set
+    // return-greet fields when we don't already have a stronger
+    // completion marker from a webdev / logo / ad / chatbot flow.
+    try {
+      const md = user.metadata || {};
+      if (!md.lastBusinessName) {
+        const host = String(url || '').replace(/^https?:\/\//i, '').replace(/^www\./i, '').split('/')[0];
+        const derived = host ? host.split('.')[0].replace(/[-_]+/g, ' ').trim() : '';
+        if (derived) {
+          await updateUserMetadata(user.id, {
+            lastBusinessName: derived,
+            lastCompletedProjectType: 'seo',
+            lastCompletedProjectAt: new Date().toISOString(),
+          });
+        }
+      }
+    } catch (completionErr) {
+      logger.warn(`[SEO] markProjectCompleted failed: ${completionErr.message}`);
+    }
+
+    // Feedback: schedule the post-delivery prompt.
+    try {
+      const { scheduleDeliveryPrompt } = require('../../feedback/feedback');
+      await scheduleDeliveryPrompt(user, 'seo');
+    } catch (feedbackErr) {
+      logger.warn(`[SEO] scheduleDeliveryPrompt failed: ${feedbackErr.message}`);
+    }
 
     // Feed a synthetic message to the sales bot so it pitches immediately
     // Use a message WITHOUT a URL to avoid the fallback SEO trigger catching it again

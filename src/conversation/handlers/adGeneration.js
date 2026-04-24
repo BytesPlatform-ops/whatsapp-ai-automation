@@ -30,6 +30,7 @@ const { logger } = require('../../utils/logger');
 const { generateAdIdeas, expandIdeaToPrompt } = require('../../adGeneration/ideation');
 const { generateAdImage } = require('../../adGeneration/imageGen');
 const { uploadAdImage } = require('../../adGeneration/imageUploader');
+const { generateResponse } = require('../../llm/provider');
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -93,23 +94,74 @@ async function handleAdGeneration(user, message) {
 // ── Step handlers ─────────────────────────────────────────────────────────────
 
 /**
- * Entry point — clear any previous adData and ask for business name
+ * Entry point — clear any previous adData, pre-fill from the shared
+ * cross-flow pool (set by the webdev flow), and route to the first
+ * state that still needs input. When businessName + industry are
+ * carried from websiteData, we skip both questions and jump straight
+ * to AD_COLLECT_NICHE.
  */
 async function handleStart(user, message) {
+  const { getSharedBusinessContext } = require('../entityAccumulator');
+  const shared = getSharedBusinessContext(user);
+
+  // Reset ad-specific fields; pre-fill the shared ones.
   await saveAdData(user, {
-    businessName: null, industry: null, niche: null, productType: null,
-    slogan: null, pricing: null, brandColors: null, imageBase64: null, ideas: null, selectedIdeaIndex: null,
+    businessName: shared.businessName || null,
+    industry: shared.industry || null,
+    // Ad-specific — always start fresh.
+    niche: null, productType: null, slogan: null, pricing: null,
+    brandColors: null, imageBase64: null, ideas: null, selectedIdeaIndex: null,
+    suggestedBusinessName: null,
   });
 
+  const hasName = !!shared.businessName;
+  const hasIndustry = !!shared.industry;
+
+  // Craft an intro that acknowledges what carried over from webdev so
+  // the user isn't confused by the skipped questions.
+  const ctxLines = [];
+  if (hasName) ctxLines.push(`*${shared.businessName}*`);
+  if (hasIndustry) ctxLines.push(`_${shared.industry}_`);
+  const carriedNote = ctxLines.length ? `\n\nUsing what I have from earlier: ${ctxLines.join(' · ')}.\n` : '';
+
+  // Decide the first state that still needs input.
+  if (!hasName) {
+    await sendWithMenuButton(
+      user.phone_number,
+      '🎨 *Marketing Ad Generator*\n\n' +
+        'I\'ll create a professional marketing ad image for your brand — the same quality used by top digital agencies!\n\n' +
+        'Let\'s start with the basics.\n\n' +
+        'What is your *business name*?'
+    );
+    await logMessage(user.id, 'Started ad generation flow', 'assistant');
+    return STATES.AD_COLLECT_BUSINESS;
+  }
+
+  if (!hasIndustry) {
+    await sendWithMenuButton(
+      user.phone_number,
+      `🎨 *Marketing Ad Generator*${carriedNote}\n` +
+        `What *industry* are you in?\n\n` +
+        'Examples:\n' +
+        '• Food & Beverage\n• Fashion & Apparel\n• Beauty & Skincare\n' +
+        '• Tech / Software\n• Real Estate\n• Fitness & Gym\n• Education\n• Retail / E-commerce\n\n' +
+        'Type your industry:'
+    );
+    await logMessage(user.id, `Started ad generation with prefilled name=${shared.businessName}`, 'assistant');
+    return STATES.AD_COLLECT_INDUSTRY;
+  }
+
+  // Name + industry both carried. Skip to the first ad-specific ask.
   await sendWithMenuButton(
     user.phone_number,
-    '🎨 *Marketing Ad Generator*\n\n' +
-      'I\'ll create a professional marketing ad image for your brand — the same quality used by top digital agencies!\n\n' +
-      'Let\'s start with the basics.\n\n' +
-      'What is your *business name*?'
+    `🎨 *Marketing Ad Generator*${carriedNote}\n` +
+      `What *product or service* is this ad promoting?\n\n` +
+      'Be specific — the more detail, the better the ad!\n\n' +
+      'Examples:\n' +
+      '• Premium Basmati Rice\n• Wedding Photography Package\n• Online Excel Course\n• Handmade Leather Bags'
   );
-  await logMessage(user.id, 'Started ad generation flow', 'assistant');
-  return STATES.AD_COLLECT_BUSINESS;
+  await logMessage(user.id, `Started ad generation with prefilled name=${shared.businessName}, industry=${shared.industry}`, 'assistant');
+  return STATES.AD_COLLECT_NICHE;
 }
 
 // Words that look like user confirmations, not real brand names
@@ -118,10 +170,47 @@ const CONFIRMATION_WORDS = new Set(['ok', 'okay', 'yes', 'no', 'sure', 'go', 'ne
 // Words that mean "use the previously suggested brand name"
 const SAME_BRAND_WORDS = new Set(['same', 'yes', 'yeah', 'yep', 'sure', 'ok', 'okay', 'continue', 'use it', 'that one', 'use that']);
 
+// Whole-message skip detector — covers "skip", "skip it", "nope", "no
+// thanks", etc. Anchored to full trimmed text so a user who actually
+// typed "skip this fee" (hypothetical brand line) isn't misread as a
+// skip intent.
+const SKIP_RX = /^(?:skip|skip\s+(?:it|this|that|for\s*now)|no|nope|nah|n\/?a|na|none|nothing|pass|no\s+thanks?|dont|don'?t|leave\s+(?:it|blank)|i'?m\s+(?:gonna\s+)?skip(?:ping)?)$/i;
+const isSkip = (text) => SKIP_RX.test(String(text || '').trim());
+
+// Shared follow-up after business name is saved. Either skip to the
+// niche question when we could infer industry from the name, or ask
+// for industry normally.
+async function ackAdNameAndAdvance(user, nameUsed, inferredIndustry) {
+  if (inferredIndustry) {
+    await sendWithMenuButton(
+      user.phone_number,
+      `Great! *${nameUsed}* · _${inferredIndustry}_ 👍\n\n` +
+        `What *product or service* is this ad promoting?\n\n` +
+        'Be specific — the more detail, the better the ad!\n\n' +
+        'Examples:\n' +
+        '• Premium Basmati Rice\n• Wedding Photography Package\n• Online Excel Course\n• Handmade Leather Bags'
+    );
+    await logMessage(user.id, `Ad flow: name="${nameUsed}", inferred industry="${inferredIndustry}"`, 'assistant');
+    return STATES.AD_COLLECT_NICHE;
+  }
+
+  await sendWithMenuButton(
+    user.phone_number,
+    `Great! *${nameUsed}* 👍\n\nWhat *industry* are you in?\n\n` +
+      'Examples:\n' +
+      '• Food & Beverage\n• Fashion & Apparel\n• Beauty & Skincare\n' +
+      '• Tech / Software\n• Real Estate\n• Fitness & Gym\n• Education\n• Retail / E-commerce\n\n' +
+      'Type your industry:'
+  );
+  await logMessage(user.id, `Business name: ${nameUsed}`, 'assistant');
+  return STATES.AD_COLLECT_INDUSTRY;
+}
+
 async function handleCollectBusiness(user, message) {
   const name = (message.text || '').trim();
   const adData = getAdData(user);
   const suggested = adData.suggestedBusinessName;
+  const { inferIndustryFromBusinessName } = require('../entityAccumulator');
 
   // Case 1: We have a suggested business name from a previous flow
   if (suggested) {
@@ -129,32 +218,24 @@ async function handleCollectBusiness(user, message) {
 
     // 1a. User confirmed with "same/yes/sure/etc" → use the suggested name
     if (lower && (SAME_BRAND_WORDS.has(lower) || /\b(same|yes|continue|that\s*one|use\s*(it|that))\b/i.test(lower))) {
-      await saveAdData(user, { businessName: suggested, suggestedBusinessName: null });
-      await sendWithMenuButton(
-        user.phone_number,
-        `Great! Designing a new ad for *${suggested}* 👍\n\nWhat *industry* are you in?\n\n` +
-          'Examples:\n' +
-          '• Food & Beverage\n• Fashion & Apparel\n• Beauty & Skincare\n' +
-          '• Tech / Software\n• Real Estate\n• Fitness & Gym\n• Education\n• Retail / E-commerce\n\n' +
-          'Type your industry:'
-      );
-      await logMessage(user.id, `Business name confirmed (suggested): ${suggested}`, 'assistant');
-      return STATES.AD_COLLECT_INDUSTRY;
+      const inferred = await inferIndustryFromBusinessName(suggested, user.id);
+      await saveAdData(user, {
+        businessName: suggested,
+        suggestedBusinessName: null,
+        ...(inferred ? { industry: inferred } : {}),
+      });
+      return ackAdNameAndAdvance(user, suggested, inferred);
     }
 
     // 1b. User typed a different business name → use that, clear suggestion
     if (name && name.length >= 2) {
-      await saveAdData(user, { businessName: name, suggestedBusinessName: null });
-      await sendWithMenuButton(
-        user.phone_number,
-        `Got it — designing a new ad for *${name}* 👍\n\nWhat *industry* are you in?\n\n` +
-          'Examples:\n' +
-          '• Food & Beverage\n• Fashion & Apparel\n• Beauty & Skincare\n' +
-          '• Tech / Software\n• Real Estate\n• Fitness & Gym\n• Education\n• Retail / E-commerce\n\n' +
-          'Type your industry:'
-      );
-      await logMessage(user.id, `Business name (overridden suggestion): ${name}`, 'assistant');
-      return STATES.AD_COLLECT_INDUSTRY;
+      const inferred = await inferIndustryFromBusinessName(name, user.id);
+      await saveAdData(user, {
+        businessName: name,
+        suggestedBusinessName: null,
+        ...(inferred ? { industry: inferred } : {}),
+      });
+      return ackAdNameAndAdvance(user, name, inferred);
     }
 
     // 1c. Empty/too short → re-prompt
@@ -176,18 +257,12 @@ async function handleCollectBusiness(user, message) {
     return STATES.AD_COLLECT_BUSINESS;
   }
 
-  await saveAdData(user, { businessName: name });
-
-  await sendWithMenuButton(
-    user.phone_number,
-    `Great! *${name}* 👍\n\nWhat *industry* are you in?\n\n` +
-      'Examples:\n' +
-      '• Food & Beverage\n• Fashion & Apparel\n• Beauty & Skincare\n' +
-      '• Tech / Software\n• Real Estate\n• Fitness & Gym\n• Education\n• Retail / E-commerce\n\n' +
-      'Type your industry:'
-  );
-  await logMessage(user.id, `Business name: ${name}`, 'assistant');
-  return STATES.AD_COLLECT_INDUSTRY;
+  const inferred = await inferIndustryFromBusinessName(name, user.id);
+  await saveAdData(user, {
+    businessName: name,
+    ...(inferred ? { industry: inferred } : {}),
+  });
+  return ackAdNameAndAdvance(user, name, inferred);
 }
 
 async function handleCollectIndustry(user, message) {
@@ -211,6 +286,59 @@ async function handleCollectIndustry(user, message) {
   return STATES.AD_COLLECT_NICHE;
 }
 
+// Trade words where the industry alone tells us it's a service — no point
+// asking "physical / service / digital" when the user already said plumbing.
+const SERVICE_INDUSTRY_RX = /\b(plumb(?:ing|er)?|electric(?:al|ian)?|hvac|roof(?:ing|er)?|pest\s*control|cleaning|cleaner|janitorial|locksmith|landscap\w*|lawn\s*care|tree\s*service|water\s*damage|restoration|handyman|carpent\w*|paint(?:er|ing)|appliance\s*repair|garage\s*door|contractor|construction|photograph\w*|videograph\w*|salon|barber\w*|spa|dental|dentist|medical|clinic|legal|lawyer|attorney|law\s*firm|accountant|accounting|bookkeep\w*|consult\w*|agency|marketing|realt\w*|real\s*estate|tutor\w*|coach\w*|therap\w*|fitness|gym|personal\s*trainer|auto\s*repair|mechanic|car\s*wash|detailing|moving|movers|delivery|catering|event\s*planning|wedding\s*planner|staffing|recruit\w*|pet\s*(?:care|grooming)|veterinary|childcare|daycare|driving\s*school|cleaning\s*services?|hair\s*salon)\b/i;
+
+const DIGITAL_INDUSTRY_RX = /\b(saas|software\s*(?:company|startup)?|mobile\s*app|web\s*app|online\s*course|e-?learning|digital\s*product)\b/i;
+
+const NICHE_SERVICE_RX = /\b(services?|consultation|repair|installation?|package\s*deal|packages?\s*(?:deal|offer)|subscription\s*service|booking|appointment|treatment|session|lesson|class|coaching|consulting|maintenance|inspection|audit|cleaning)\b/i;
+const NICHE_DIGITAL_RX = /\b(course|e-?book|mobile\s*app|web\s*app|template|plugin|extension|saas)\b/i;
+
+/**
+ * Try to infer the product type (physical / service / digital) from the
+ * industry and niche text, so we can skip the 3-button question when the
+ * answer is already obvious. Returns null when truly ambiguous — caller
+ * falls back to asking the user.
+ */
+async function inferProductType(niche, industry, userId) {
+  const n = String(niche || '').toLowerCase();
+  const i = String(industry || '').toLowerCase();
+
+  // Fast path: industry alone is enough for service trades / digital industries.
+  if (SERVICE_INDUSTRY_RX.test(i)) return 'service';
+  if (DIGITAL_INDUSTRY_RX.test(i)) return 'digital';
+  // Fast path: niche clearly signals digital or service.
+  if (NICHE_DIGITAL_RX.test(n)) return 'digital';
+  if (NICHE_SERVICE_RX.test(n)) return 'service';
+
+  // LLM fallback for the genuinely ambiguous cases.
+  try {
+    const prompt = `An advertiser gave us their industry and what they're advertising. Classify the offering as "physical", "service", or "digital".
+
+Industry: "${industry || 'unknown'}"
+Advertising: "${niche}"
+
+Rules:
+- "physical" = tangible goods (clothing, food items, jewelry, bags, furniture, produce).
+- "service" = work performed for the customer (repairs, consultations, cleaning, legal work, salon treatments, packages/deals bundling services, coaching, events).
+- "digital" = downloadable or online-only products (courses, ebooks, software, apps, SaaS subscriptions).
+- If truly unclear, return "unknown".
+
+Return ONLY one word: physical, service, digital, or unknown.`;
+    const resp = await generateResponse(prompt, [{ role: 'user', content: niche }], {
+      userId,
+      operation: 'ad_type_infer',
+    });
+    const cleaned = (resp || '').trim().toLowerCase().replace(/[^a-z]/g, '');
+    if (cleaned === 'physical' || cleaned === 'service' || cleaned === 'digital') return cleaned;
+    return null;
+  } catch (err) {
+    logger.warn(`[AD-GEN] inferProductType failed: ${err.message}`);
+    return null;
+  }
+}
+
 async function handleCollectNiche(user, message) {
   const niche = (message.text || '').trim();
   if (!niche || niche.length < 3) {
@@ -219,6 +347,23 @@ async function handleCollectNiche(user, message) {
   }
 
   await saveAdData(user, { niche });
+
+  const adData = getAdData(user);
+  const inferred = await inferProductType(niche, adData.industry, user.id);
+
+  if (inferred) {
+    await saveAdData(user, { productType: inferred });
+    await sendWithMenuButton(
+      user.phone_number,
+      `"${niche}" — got it!\n\n` +
+        '✍️ *Brand Slogan / Tagline*\n\n' +
+        'Type your slogan to display on the ad:\n\n' +
+        'Examples: _"Fresh From Farm"_ or _"Style Redefined"_\n\n' +
+        'Or type *skip* to continue without one:'
+    );
+    await logMessage(user.id, `Niche: ${niche} · Inferred type: ${inferred}`, 'assistant');
+    return STATES.AD_COLLECT_SLOGAN;
+  }
 
   await sendInteractiveButtons(
     user.phone_number,
@@ -279,7 +424,7 @@ async function handleCollectType(user, message) {
 
 async function handleCollectSlogan(user, message) {
   const text = (message.text || '').trim();
-  let slogan = text.toLowerCase() === 'skip' ? null : text || null;
+  let slogan = isSkip(text) ? null : text || null;
 
   // Strip leading confirmation words: "yes fresh from farm" → "fresh from farm"
   if (slogan) {
@@ -300,7 +445,7 @@ async function handleCollectSlogan(user, message) {
 
 async function handleCollectPricing(user, message) {
   const text = (message.text || '').trim();
-  const pricing = text.toLowerCase() === 'skip' ? null : text || null;
+  const pricing = isSkip(text) ? null : text || null;
 
   await saveAdData(user, { pricing });
 
@@ -317,7 +462,7 @@ async function handleCollectPricing(user, message) {
 
 async function handleCollectColors(user, message) {
   const text = (message.text || '').trim();
-  const brandColors = text.toLowerCase() === 'skip' ? null : text || null;
+  const brandColors = isSkip(text) ? null : text || null;
 
   await saveAdData(user, { brandColors });
 
@@ -537,6 +682,22 @@ async function handleSelectIdea(user, message) {
   await sendImage(user.phone_number, publicUrl, caption);
   await logMessage(user.id, `Ad image generated and sent: ${publicUrl}`, 'assistant');
 
+  // Phase 15: record completion so future sessions recognize the user.
+  try {
+    const { markProjectCompleted } = require('../returnVisitor');
+    await markProjectCompleted(user, { type: 'ad', businessName: adData.businessName });
+  } catch (err) {
+    logger.warn(`[AD-GEN] markProjectCompleted failed: ${err.message}`);
+  }
+
+  // Feedback: schedule the post-delivery prompt.
+  try {
+    const { scheduleDeliveryPrompt } = require('../../feedback/feedback');
+    await scheduleDeliveryPrompt(user, 'ad');
+  } catch (err) {
+    logger.warn(`[AD-GEN] scheduleDeliveryPrompt failed: ${err.message}`);
+  }
+
   // Follow-up options
   await sendInteractiveButtons(
     user.phone_number,
@@ -581,7 +742,9 @@ async function handleResults(user, message) {
   }
 
   if (btnId === 'ad_generate_another') {
-    // Restart the whole flow with cleared data (same user, fresh input)
+    // Restart the whole flow with cleared data (same user, fresh input).
+    // Note: intentionally does NOT advance the service queue — user is
+    // explicitly asking for another ad, not done with ads.
     return handleStart(user, message);
   }
 
@@ -603,6 +766,12 @@ async function handleResults(user, message) {
   }
 
   if (btnId === 'back_menu') {
+    // Phase 12: if there's a queued service waiting, advance to it
+    // before falling back to the generic welcome.
+    const { maybeStartNextQueuedService } = require('../serviceQueue');
+    const nextState = await maybeStartNextQueuedService(user);
+    if (nextState) return nextState;
+
     const { handleWelcome } = require('./welcome');
     return handleWelcome(user, message);
   }
@@ -624,4 +793,11 @@ async function handleRestartFlow(user, message) {
   return handleStart(user, message);
 }
 
-module.exports = { handleAdGeneration };
+// Exported so serviceSelection.js can invoke it directly when the user
+// picks the "Marketing Ads" menu option. Skips collection states whose
+// fields are already in the shared websiteData pool (Phase 11).
+async function startAdFlow(user) {
+  return handleStart(user, null);
+}
+
+module.exports = { handleAdGeneration, startAdFlow };

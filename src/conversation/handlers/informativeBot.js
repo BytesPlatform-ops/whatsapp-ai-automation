@@ -41,8 +41,11 @@ async function handleInformativeBot(user, message) {
   }
 
   try {
-    // Get recent conversation history for context
-    const history = await getConversationHistory(user.id, 20);
+    // Get recent conversation history for context. Filter past /reset
+    // so the bot treats a fresh session as truly fresh.
+    const history = await getConversationHistory(user.id, 20, {
+      afterTimestamp: user.metadata?.lastResetAt || null,
+    });
     const messages = history.map((m) => ({
       role: m.role,
       content: m.message_text,

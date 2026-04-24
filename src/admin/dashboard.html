@@ -48,6 +48,10 @@
           <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>
           Conversations
         </a>
+        <a href="#" class="sidebar-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm" data-section="feedback">
+          <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z"/></svg>
+          Feedback
+        </a>
         <a href="#" class="sidebar-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm" data-section="leadsummaries">
           <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
           Lead Summaries
@@ -142,6 +146,9 @@
 var currentSection = (window.location.hash || '#overview').slice(1) || 'overview';
 var leadsData = [];
 var adAttrWindow = 30; // days; 0 = all-time
+// Feedback filter state — kept across section reloads so refresh
+// respects the user's current view.
+var fbFilters = { source: 'all', rating: 'all', flow: 'all', resolved: 'all' };
 
 // API helpers
 function api(endpoint) {
@@ -260,6 +267,9 @@ function loadSection(section) {
       break;
     case 'leadsummaries': promise = api('lead-summaries').then(renderLeadSummaries); break;
     case 'domains': promise = api('domains').then(renderDomains); break;
+    case 'feedback':
+      promise = api('feedback?' + new URLSearchParams(fbFilters).toString()).then(renderFeedback);
+      break;
   }
   promise.catch(function(err) {
     document.getElementById('content').innerHTML = '<div class="bg-red-50 text-red-700 rounded-xl p-6"><b>Error loading data:</b> ' + esc(err.message) + '</div>';
@@ -574,6 +584,9 @@ function convListItems(leads) {
     // Two flavours of "manual": currently in human-takeover mode, and/or
     // operator has sent at least one reply. Show both badges if both apply.
     var badges = '';
+    if (l.is_tester) {
+      badges += '<span class="inline-flex items-center gap-1 ml-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-gray-200 text-gray-700" title="This number is in TESTER_PHONES — feedback signals are suppressed">🧪 TESTER</span>';
+    }
     if (l.human_takeover) {
       badges += '<span class="inline-flex items-center gap-1 ml-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-500 text-white shadow-sm" title="Human takeover is active — AI is paused for this conversation">🙋 TAKEOVER</span>';
     }
@@ -581,11 +594,26 @@ function convListItems(leads) {
       badges += '<span class="inline-flex items-center gap-1 ml-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500 text-white shadow-sm" title="' + l.manual_count + ' manual repl' + (l.manual_count === 1 ? 'y' : 'ies') + ' sent">✋ MANUAL' + (l.manual_count > 1 ? ' ×' + l.manual_count : '') + '</span>';
     }
     var manualBadge = badges;
+    // WhatsApp-only 24h-window indicator. A green dot = the user messaged
+    // within the last 24 hours so free-form replies will go through. A
+    // red dot = window closed, we can only send an approved template.
+    // Messenger/Instagram don't have this 24h rule, so we skip the dot
+    // for non-WhatsApp channels.
+    var windowDot = '';
+    if ((l.channel || 'whatsapp') === 'whatsapp') {
+      if (l.within_24h) {
+        windowDot = '<span class="inline-block w-2 h-2 rounded-full bg-green-500" title="24h window OPEN — you can send free-form replies"></span>';
+      } else if (l.last_inbound_at) {
+        windowDot = '<span class="inline-block w-2 h-2 rounded-full bg-red-500" title="24h window CLOSED (' + (l.hours_since_inbound || 0) + 'h since last inbound) — reply requires an approved template"></span>';
+      } else {
+        windowDot = '<span class="inline-block w-2 h-2 rounded-full bg-gray-300" title="No inbound yet from this user"></span>';
+      }
+    }
     return '<div class="rounded-xl ' + rowClasses + ' p-4 flex items-center justify-between transition-colors cursor-pointer" onclick="openConversation(\'' + l.id + '\', \'' + esc(l.phone_number) + '\', \'' + esc(l.name || '') + '\')">' +
       '<div class="flex items-center gap-4">' +
         '<div class="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-bold text-sm">' + (l.name ? l.name[0].toUpperCase() : '#') + '</div>' +
         '<div>' +
-          '<p class="font-semibold text-sm flex items-center gap-2 flex-wrap">' + esc(l.name || l.phone_number) + ' ' + channelIcon(l.channel || 'whatsapp') + ' ' + viaLinePill(l.via_phone_number_id) + manualBadge + '</p>' +
+          '<p class="font-semibold text-sm flex items-center gap-2 flex-wrap">' + windowDot + ' ' + esc(l.name || l.phone_number) + ' ' + channelIcon(l.channel || 'whatsapp') + ' ' + viaLinePill(l.via_phone_number_id) + manualBadge + '</p>' +
           '<p class="text-xs text-gray-500">' + esc(l.phone_number) + ' &middot; ' + l.message_count + ' messages</p>' +
         '</div>' +
       '</div>' +
@@ -712,9 +740,47 @@ function openConversation(userId, phone, name) {
   api('conversations/' + userId).then(function(data) {
     var user = data.user;
     var msgs = data.messages;
+    var win = data.window || {};
     var isTakenOver = user.metadata && user.metadata.humanTakeover;
     updateTakeoverButton(isTakenOver);
-    var html = '<div class="bg-indigo-50 rounded-lg p-3 mb-4 text-xs space-y-1">' +
+
+    // 24h-window status banner — WhatsApp-only. Green = can reply
+    // free-form. Red = window closed, admin needs an approved template
+    // to message the user. Also updates the Send input's placeholder
+    // below.
+    var windowBanner = '';
+    var isWhatsApp = (user.channel || 'whatsapp') === 'whatsapp';
+    if (isWhatsApp) {
+      if (win.within_24h) {
+        windowBanner = '<div class="bg-green-50 border border-green-200 rounded-lg p-3 mb-4 text-xs text-green-800 flex items-center gap-2">' +
+          '<span class="inline-block w-2 h-2 rounded-full bg-green-500"></span>' +
+          '<span><b>24h reply window: open</b>' + (win.hours_since_inbound != null ? ' (last inbound ' + win.hours_since_inbound + 'h ago)' : '') + ' — free-form replies will go through.</span>' +
+          '</div>';
+      } else if (win.last_inbound_at) {
+        windowBanner = '<div class="bg-red-50 border border-red-200 rounded-lg p-3 mb-4 text-xs text-red-800 flex items-start gap-2">' +
+          '<span class="inline-block w-2 h-2 rounded-full bg-red-500 mt-1 shrink-0"></span>' +
+          '<span><b>24h reply window: closed</b> (' + (win.hours_since_inbound || 0) + 'h since last inbound) — WhatsApp will reject free-form replies. The user must send a message first, OR we need to send an approved template (HSM) to re-open the window.</span>' +
+          '</div>';
+      } else {
+        windowBanner = '<div class="bg-gray-50 border border-gray-200 rounded-lg p-3 mb-4 text-xs text-gray-700 flex items-center gap-2">' +
+          '<span class="inline-block w-2 h-2 rounded-full bg-gray-400"></span>' +
+          '<span><b>No inbound yet</b> — this user hasn\'t messaged us. Only approved templates can be sent first.</span>' +
+          '</div>';
+      }
+    }
+
+    // Update the Send input placeholder / enabled state based on window.
+    var replyInput = document.getElementById('admin-reply-input');
+    if (replyInput) {
+      if (isWhatsApp && !win.within_24h) {
+        replyInput.placeholder = '24h window closed — send may fail (template required)';
+      } else {
+        replyInput.placeholder = 'Type a message...';
+      }
+    }
+
+    var html = windowBanner +
+    '<div class="bg-indigo-50 rounded-lg p-3 mb-4 text-xs space-y-1">' +
       '<p><b>State:</b> ' + esc(user.state) + (isTakenOver ? ' <span class="badge bg-red-100 text-red-700 ml-1">Human Control</span>' : '') + '</p>' +
       '<p><b>Joined:</b> ' + fmtDate(user.created_at) + '</p>' +
       (user.metadata && user.metadata.leadBrief ? '<p><b>Lead Brief:</b> ' + esc(user.metadata.leadBrief).slice(0, 300) + '</p>' : '') +
@@ -725,6 +791,18 @@ function openConversation(userId, phone, name) {
     '</div>';
 
     msgs.forEach(function(m) {
+      if (m.role === 'system') {
+        // /reset sentinels and other system-role rows render as a
+        // centered divider instead of a chat bubble so they read as
+        // boundaries in the timeline, not messages exchanged with
+        // the user.
+        html += '<div class="flex items-center gap-2 my-3 text-[11px] text-gray-400 uppercase tracking-wider">' +
+          '<div class="flex-1 h-px bg-gray-200"></div>' +
+          '<span>' + esc(m.message_text || 'system') + '</span>' +
+          '<div class="flex-1 h-px bg-gray-200"></div>' +
+        '</div>';
+        return;
+      }
       var isUser = m.role === 'user';
       html += '<div class="max-w-[85%] rounded-2xl px-4 py-2.5 text-sm ' + (isUser ? 'chat-user' : 'chat-bot') + '">' +
         renderMessageContent(m) +
@@ -809,6 +887,16 @@ function pollConversation() {
     var body = document.getElementById('conv-modal-body');
     var newMsgs = msgs.slice(lastMsgCount);
     newMsgs.forEach(function(m) {
+      if (m.role === 'system') {
+        var sysDiv = document.createElement('div');
+        sysDiv.className = 'flex items-center gap-2 my-3 text-[11px] text-gray-400 uppercase tracking-wider';
+        sysDiv.innerHTML =
+          '<div class="flex-1 h-px bg-gray-200"></div>' +
+          '<span>' + esc(m.message_text || 'system') + '</span>' +
+          '<div class="flex-1 h-px bg-gray-200"></div>';
+        body.appendChild(sysDiv);
+        return;
+      }
       var isUser = m.role === 'user';
       var div = document.createElement('div');
       div.className = 'max-w-[85%] rounded-2xl px-4 py-2.5 text-sm ' + (isUser ? 'chat-user' : 'chat-bot');
@@ -873,7 +961,13 @@ function sendAdminReply(e) {
         }
       }
     } else {
-      alert('Failed to send: ' + (data.error || 'Unknown error'));
+      // Surface the structured detail when the backend returned a 409
+      // (WhatsApp-specific policy error) so the operator knows WHY the
+      // send failed rather than seeing a generic "Unknown error".
+      var msg = data.error || 'Unknown error';
+      if (data.detail) msg += '\n\n' + data.detail;
+      if (data.metaCode) msg += '\n\nMeta code: ' + data.metaCode;
+      alert('Failed to send: ' + msg);
     }
   })
   .catch(function(err) {
@@ -1732,6 +1826,165 @@ function renderPayments(payments) {
       '<tbody>' + (rows || '<tr><td colspan="9" class="p-8 text-center text-gray-400">No payments yet</td></tr>') + '</tbody>' +
     '</table></div></div>' +
   '</div>';
+}
+
+// ─── Feedback ─────────────────────────────────
+// User-submitted ratings after project delivery + friction signals
+// the bot detected implicitly (frustration, correction loops, rapid
+// resets, help-escape). Visual tier matches the user's priority —
+// implicit rows get red accent (actionable friction), explicit
+// "issues" get yellow, explicit "loved/good" get green.
+function setFeedbackFilter(key, value) {
+  fbFilters[key] = value;
+  loadSection('feedback');
+}
+
+function fbRatingBadge(r) {
+  if (r === 'loved') return '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-green-100 text-green-700">🔥 Loved</span>';
+  if (r === 'good') return '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-100 text-blue-700">👍 Good</span>';
+  if (r === 'issues') return '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-100 text-amber-700">🤔 Issues</span>';
+  return '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-gray-100 text-gray-600">—</span>';
+}
+
+function fbTriggerLabel(t) {
+  var map = {
+    'delivery-prompt': 'Post-delivery rating',
+    'frustrated-phrasing': 'Frustrated phrasing',
+    'correction-loop': 'Correction loop',
+    'rapid-reset': 'Rapid reset',
+    'help-escape': 'Asked for human',
+    'admin-requested': 'Admin-requested',
+  };
+  return map[t] || t;
+}
+
+function renderFeedbackCard(row) {
+  // Visual priority: implicit rows = red accent (most actionable),
+  // explicit issues = yellow, explicit loved/good = green.
+  var accent = 'border-gray-200';
+  if (row.source === 'implicit') accent = 'border-l-[4px] border-l-red-500 border-red-200';
+  else if (row.rating === 'issues') accent = 'border-l-[4px] border-l-amber-500 border-amber-200';
+  else if (row.rating === 'loved' || row.rating === 'good') accent = 'border-l-[4px] border-l-green-500 border-green-200';
+
+  var who = row.user_name || row.phone_number || '—';
+  var comment = row.comment
+    ? '<div class="mt-2 text-sm text-gray-700 whitespace-pre-wrap bg-gray-50 rounded-md px-3 py-2">' + esc(row.comment) + '</div>'
+    : '';
+
+  var excerpt = '';
+  if (Array.isArray(row.excerpt) && row.excerpt.length) {
+    var lines = row.excerpt.slice(-4).map(function(m) {
+      var tag = m.role === 'user' ? '<span class="text-indigo-600 font-semibold">user</span>' : '<span class="text-gray-500">bot</span>';
+      return '<div class="text-xs text-gray-600">' + tag + ': ' + esc(String(m.text || '').slice(0, 120)) + '</div>';
+    }).join('');
+    excerpt = '<div class="mt-2 pt-2 border-t border-gray-100 space-y-0.5">' + lines + '</div>';
+  }
+
+  var resolved = row.resolved
+    ? '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-green-100 text-green-700">Resolved</span>'
+    : '<button onclick="resolveFeedback(\'' + row.id + '\', true)" class="text-xs text-indigo-600 hover:text-indigo-800 font-medium">Mark resolved</button>';
+
+  return '<div class="bg-white rounded-xl border ' + accent + ' p-4">' +
+    '<div class="flex items-start justify-between gap-3">' +
+      '<div class="min-w-0">' +
+        '<div class="flex items-center gap-2 flex-wrap">' +
+          fbRatingBadge(row.rating) +
+          '<span class="text-xs text-gray-500">' + esc(fbTriggerLabel(row.trigger_type)) + '</span>' +
+          '<span class="text-xs text-gray-400">&middot;</span>' +
+          '<span class="text-xs text-gray-500">' + esc(row.flow || 'general') + '</span>' +
+        '</div>' +
+        '<div class="mt-1 font-semibold text-sm">' + esc(who) + '</div>' +
+        '<div class="text-xs text-gray-500">' + esc(row.phone_number || '') + ' · ' + timeAgo(row.created_at) + '</div>' +
+        comment +
+        excerpt +
+      '</div>' +
+      '<div class="flex flex-col items-end gap-2 shrink-0">' +
+        '<button onclick="openConversation(\'' + row.user_id + '\', \'' + esc(row.phone_number || '') + '\', \'' + esc(who) + '\')" class="text-xs px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-md font-medium">Open chat</button>' +
+        resolved +
+      '</div>' +
+    '</div>' +
+  '</div>';
+}
+
+function renderFeedback(data) {
+  var s = data.summary || {};
+  var rows = data.rows || [];
+
+  function filterChip(label, key, val) {
+    var active = fbFilters[key] === val;
+    return '<button onclick="setFeedbackFilter(\'' + key + '\', \'' + val + '\')" class="' +
+      (active
+        ? 'px-3 py-1.5 text-xs font-medium rounded-lg bg-indigo-600 text-white'
+        : 'px-3 py-1.5 text-xs font-medium rounded-lg bg-white text-gray-600 border hover:bg-gray-50') +
+      '">' + esc(label) + '</button>';
+  }
+
+  var html = '<div class="flex items-center justify-between mb-6">' +
+    '<h2 class="text-2xl font-bold">Feedback</h2>' +
+    '<button onclick="loadSection(\'feedback\')" class="text-sm text-indigo-600 hover:text-indigo-800">Refresh</button>' +
+  '</div>' +
+
+  // Summary cards
+  '<div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">' +
+    '<div class="bg-white rounded-xl border p-4"><p class="text-2xl font-bold">' + (s.total || 0) + '</p><p class="text-xs text-gray-500">Total</p></div>' +
+    '<div class="bg-white rounded-xl border-l-4 border-red-500 p-4"><p class="text-2xl font-bold">' + (s.implicit || 0) + '</p><p class="text-xs text-gray-500">Implicit (friction)</p></div>' +
+    '<div class="bg-white rounded-xl border-l-4 border-amber-500 p-4"><p class="text-2xl font-bold">' + (s.issues || 0) + '</p><p class="text-xs text-gray-500">Issues reported</p></div>' +
+    '<div class="bg-white rounded-xl border-l-4 border-green-500 p-4"><p class="text-2xl font-bold">' + ((s.loved || 0) + (s.good || 0)) + '</p><p class="text-xs text-gray-500">Positive ratings</p></div>' +
+  '</div>' +
+
+  // Filter bar
+  '<div class="bg-white rounded-xl border p-3 mb-4 space-y-2">' +
+    '<div class="flex items-center gap-2 flex-wrap">' +
+      '<span class="text-xs text-gray-500 font-semibold mr-1">Source:</span>' +
+      filterChip('All', 'source', 'all') +
+      filterChip('Implicit', 'source', 'implicit') +
+      filterChip('Explicit', 'source', 'explicit') +
+    '</div>' +
+    '<div class="flex items-center gap-2 flex-wrap">' +
+      '<span class="text-xs text-gray-500 font-semibold mr-1">Rating:</span>' +
+      filterChip('All', 'rating', 'all') +
+      filterChip('🔥 Loved', 'rating', 'loved') +
+      filterChip('👍 Good', 'rating', 'good') +
+      filterChip('🤔 Issues', 'rating', 'issues') +
+    '</div>' +
+    '<div class="flex items-center gap-2 flex-wrap">' +
+      '<span class="text-xs text-gray-500 font-semibold mr-1">Flow:</span>' +
+      filterChip('All', 'flow', 'all') +
+      filterChip('Website', 'flow', 'website') +
+      filterChip('Logo', 'flow', 'logo') +
+      filterChip('Ad', 'flow', 'ad') +
+      filterChip('Chatbot', 'flow', 'chatbot') +
+      filterChip('SEO', 'flow', 'seo') +
+      filterChip('General', 'flow', 'general') +
+    '</div>' +
+    '<div class="flex items-center gap-2 flex-wrap">' +
+      '<span class="text-xs text-gray-500 font-semibold mr-1">Status:</span>' +
+      filterChip('All', 'resolved', 'all') +
+      filterChip('Open', 'resolved', 'open') +
+      filterChip('Resolved', 'resolved', 'resolved') +
+    '</div>' +
+  '</div>';
+
+  if (rows.length === 0) {
+    html += '<div class="bg-white rounded-xl border p-8 text-center text-gray-500">No feedback matches the current filters yet.</div>';
+  } else {
+    html += '<div class="space-y-3">' + rows.map(renderFeedbackCard).join('') + '</div>';
+  }
+
+  document.getElementById('content').innerHTML = html;
+}
+
+function resolveFeedback(id, resolved) {
+  fetch('/admin/api/feedback/' + id + '/resolve', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ resolved: !!resolved }),
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(d) {
+    if (d.success) loadSection('feedback');
+    else alert('Failed: ' + (d.error || 'unknown error'));
+  });
 }
 
 // ─── Ad Attribution ───────────────────────────

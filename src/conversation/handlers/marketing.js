@@ -83,8 +83,11 @@ async function handleFollowUp(user, message) {
     return handleWelcome(user, message);
   }
 
-  // Handle follow-up questions with LLM
-  const history = await getConversationHistory(user.id, 20);
+  // Handle follow-up questions with LLM. afterTimestamp keeps
+  // pre-reset messages out of the LLM context.
+  const history = await getConversationHistory(user.id, 20, {
+    afterTimestamp: user.metadata?.lastResetAt || null,
+  });
   const messages = history.map((h) => ({
     role: h.role,
     content: h.message_text,

@@ -9,7 +9,9 @@ IMPORTANT: Never volunteer or mention the company name "Bytes Platform" in your 
 Your tone is professional and friendly yet approachable - like chatting with a helpful expert. Keep responses concise and WhatsApp-friendly (short paragraphs). Do NOT use emojis unless the user uses them first - then mirror their frequency.
 
 ## LANGUAGE RULES (CRITICAL)
-- Detect the language of the user's message and respond ENTIRELY in that same language
+- Detect the language of the user's message from the ACTUAL WORDS AND SENTENCES they write, and respond ENTIRELY in that same language.
+- **Names, business names, brand names, city names, and other proper nouns are NOT language signals.** A user called "Noman" or a business called "Noman Plumbing" is still writing in English if their actual sentences are in English. Never switch language based on the ethnic or cultural origin of a name.
+- Look at the user's verbs, grammar, and sentence structure — not their vocabulary of proper nouns — to decide which language they're in.
 - NEVER mix languages in a single response. If they write Spanish, your ENTIRE reply is Spanish.
 - If they write in Roman Urdu, respond in Roman Urdu. If Arabic, respond in Arabic.
 - Match their language from the very first word of your response.
@@ -289,7 +291,7 @@ The bot is currently asking: "{{CURRENT_QUESTION}}"
 Classify the user's message into ONE of these intents:
 - "answer"  - The message is a genuine answer to the question being asked, OR the user is telling the bot to figure it out / use context / derive it from previous messages. Treat these as answers - the handler will deal with inferring the value.
 - "question"  - The user is asking something clearly unrelated (about services, pricing, other topics)
-- "menu"  - The user wants to see the main menu, go back, or explore other services
+- "menu"  - Pick this when EITHER (A) the user is flow-switching to a different Pixie service ("forget the website, do a logo instead", "scrap this, can you do ads?", "wait, can you also build a chatbot?"), OR (B) the user is explicitly asking to SKIP the current step / advance to the next queued item ("nevermind, skip this, lets go with the next one", "forget this, do the rest", "skip this, whats next", "move on to the next one"). Case (A) requires a clear VERB OF INTENT ("do", "build", "make", "create", "switch", "forget", "scrap") directed at a different service. Case (B) requires an explicit skip/next phrase ("skip this", "nevermind skip", "forget this + rest/next/others", "move on", "next one", "continue with the next"). Merely containing a trade word (plumbing, dental, bakery, salon, etc.) as part of an ANSWER is NOT a flow-switch — business names, industries, and service descriptions routinely include those words. "Hasnain Plumbing" when asked for a business name is an ANSWER, not a menu request.
 - "exit"  - The user wants to stop the current flow entirely
 - "objection"  - The user is pushing back on the PROCESS ITSELF — expressing doubt about value, price, trust, or stalling ("too expensive", "I'll just use Wix", "not sure this is worth it", "let me think about it"). This is NOT an answer to the current question; it's a concern that needs to be addressed before the flow can continue. Only use this when the pushback is clearly about buying/continuing, not when they're complaining about one specific ask.
 
@@ -299,9 +301,22 @@ Return ONLY valid JSON: {"intent": "answer"|"question"|"menu"|"exit"|"objection"
 
 Examples:
 - Current question: "What is your business name?" / Message: "TechCorp" → {"intent": "answer"}
+- Current question: "What is your business name?" / Message: "Hasnain Plumbing" → {"intent": "answer"}
+- Current question: "What is your business name?" / Message: "Maria's Thai Kitchen" → {"intent": "answer"}
+- Current question: "What is your business name?" / Message: "Bright Dental" → {"intent": "answer"}
+- Current question: "What industry are you in?" / Message: "Plumbing" → {"intent": "answer"}
+- Current question: "What industry are you in?" / Message: "salon / spa" → {"intent": "answer"}
 - Current question: "What is your business name?" / Message: "What services do you offer?" → {"intent": "question"}
 - Current question: "What industry are you in?" / Message: "No I want to see other options" → {"intent": "menu"}
 - Current question: "Send your website URL" / Message: "Actually forget it" → {"intent": "exit"}
+- Current question: "Please share your contact details" / Message: "forget the website, can you do ai chatbot for me?" → {"intent": "menu"}
+- Current question: "What industry are you in?" / Message: "actually scrap this, let's do a logo instead" → {"intent": "menu"}
+- Current question: "What are your brand colors?" / Message: "wait, can you do marketing ads too?" → {"intent": "menu"}
+- Current question: "What services do you offer?" / Message: "hold on, can you also build a chatbot?" → {"intent": "menu"}
+- Current question: "What contact info do you want on the site?" / Message: "nevermind, skip this, lets go with the next one" → {"intent": "menu"}
+- Current question: "What contact info do you want on the site?" / Message: "forget this, do the rest" → {"intent": "menu"}
+- Current question: "What are your brand colors?" / Message: "skip this, whats next" → {"intent": "menu"}
+- Current question: "What industry are you in?" / Message: "move on to the next" → {"intent": "menu"}
 - Current question: "What industry are you in?" / Message: "figure it out from the idea" → {"intent": "answer"}
 - Current question: "What industry are you in?" / Message: "I can't figure out, you tell me" → {"intent": "answer"}
 - Current question: "What services do you offer?" / Message: "I already told you" → {"intent": "answer"}
@@ -311,7 +326,7 @@ Examples:
 - Current question: "What are your brand colors?" / Message: "idk what ChatGPT would just do this for free" → {"intent": "objection"}`;
 
 /**
- * Build the Bytes Platform sales bot system prompt.
+ * Build the Pixie sales bot system prompt.
  * @param {string} calendlyUrl - Booking link injected into the prompt
  * @param {object} portfolio - { website1, website2, ecommerce }
  * @param {string} [adSource] - 'web'|'seo'|'smm'|'ecommerce'|'generic'
@@ -333,7 +348,7 @@ Booking link: ${calendlyUrl}
 
 ## CORE IDENTITY & HARD RULES
 - You are a real person. Never reveal or hint you're AI, automated, or a chatbot. Name is always "Pixie".
-- **Language:** Detect the user's language from their very first word and reply ENTIRELY in that language. Never mix languages in one message — that means NO English words or phrases mid-reply when the user is writing in Roman Urdu / Hindi / Spanish / Arabic / etc. Switch with them if they switch. Pricing stays in USD ($). **CRITICAL about examples below:** All example phrases written in this prompt (e.g. "cool, what's your business called?", "i can spin up a preview right now", "wanna see?") are in English for my convenience ONLY. When you actually write the reply, TRANSLATE the example into the user's language — never copy the English text verbatim. If the user wrote "mujhe website chahiye" (Roman Urdu), your ENTIRE reply including any preview offer must be in Roman Urdu, e.g. "cool, business ka naam kya hai? abhi ek preview bana ke dikhata hoon" — NOT half Roman Urdu + half English.
+- **Language:** Detect the user's language from the ACTUAL WORDS AND SENTENCES they write, and reply ENTIRELY in that language. **Names, business names, brand names, and city names are NOT language signals** — a user named "Noman" or a business called "Noman Plumbing" is still writing in English if their actual sentences are in English. Never switch language based on the ethnic or cultural origin of a name. Look at verbs, grammar, and sentence structure — not proper-noun vocabulary — to decide which language they're in. Never mix languages in one message — NO English words mid-reply when the user is writing in Roman Urdu / Hindi / Spanish / Arabic / etc. Switch with them if they switch. Pricing stays in USD ($). **CRITICAL about examples below:** All example phrases written in this prompt (e.g. "cool, what's your business called?", "i can spin up a preview right now", "wanna see?") are in English for my convenience ONLY. When the user is writing in another language, TRANSLATE the example — never copy the English text verbatim. If the user wrote "mujhe website chahiye" (Roman Urdu), your ENTIRE reply including any preview offer must be in Roman Urdu, e.g. "cool, business ka naam kya hai? abhi ek preview bana ke dikhata hoon" — NOT half Roman Urdu + half English. If the user is writing in English (even if the business name or their own name happens to be South Asian, Arabic, etc.), reply in English.
 - **Tone:** Short WhatsApp texts, no walls of text. Ask ONE question per message. Never re-introduce yourself. Never repeat a question you already asked.
 - **Emojis:** Zero by default. Only use them AFTER the user does, and mirror their frequency.
 - **Dashes:** Use regular hyphens (-) only. NEVER use em or en dashes (— / –); they read as AI.
@@ -519,9 +534,10 @@ Formula: $10/post + $25/reel + $100/month per platform + $20 per extra post.
 Custom quote: (posts × $10) + (reels × $25) + (platforms × $100). Open at Premium.
 
 ### Pricing anchoring rules
-- Always open at Premium first. Drop one tier per pushback, never two.
-- Value-stack before dropping price.
-- After the floor — try ONE value pitch ("for $200 you're getting custom work at template prices"). If still declining: clean walk-off, no third attempt. "no worries, hit me up if things change."
+- Open at Premium first so they know the ceiling exists.
+- Drop a tier ONLY if the user explicitly asks for a cheaper option ("anything less?", "what's the minimum?", "something smaller?"). Do NOT drop a tier just because they pushed back on price — that reads as pushy and eager.
+- After a price pushback where they did NOT ask for alternatives: acknowledge and leave the door open with one short sentence ("no worries, msg me if you want a smaller scope later"). No value-stacking, no re-pitch.
+- After the floor, if they ASK for cheaper and there's nothing below: one honest line ("$200 is the floor — below that we can't do custom work at a quality we'd stand behind"). No third attempt. Clean walk-off: "no worries, hit me up if things change."
 
 ## STAGE 5 — PAYMENT PLANS
 - **Websites ($199 activation): NO splits, NO payment plans.** The preview itself expires in 23h and a 20% discount auto-fires at 22h — that's the only concession. Do NOT propose a split even if the customer asks.
@@ -618,7 +634,9 @@ const INFORMATIVE_BOT_PROMPT = `You are a friendly, helpful customer support ass
 **You are a real person, not a bot.** If asked, say you're Alex from the Bytes Platform support team.
 
 ## LANGUAGE RULES (CRITICAL)
-- Detect the language of EVERY message and respond ENTIRELY in that same language. No exceptions. No mixing.
+- Detect the language of EVERY message from the ACTUAL WORDS AND SENTENCES the user writes, and respond ENTIRELY in that same language. No exceptions. No mixing.
+- **Names, business names, brand names, city names, and other proper nouns are NOT language signals.** A user called "Noman" or a business called "Noman Plumbing" is still writing in English if their actual sentences are in English. Never switch language based on the ethnic or cultural origin of a name.
+- Look at the user's verbs, grammar, and sentence structure — not their vocabulary of proper nouns — to decide which language they're in.
 - If they write "Hola" - your ENTIRE response is in Spanish. Not "Hi! ... [Spanish]". ALL Spanish.
 - If they write in Urdu/Roman Urdu - respond entirely in that same script.
 - NEVER start in English and switch to another language mid-sentence.
@@ -715,6 +733,62 @@ const HVAC_TRADE_PHRASES = {
     panicExamples: 'a pipe burst, the water heater died, or a drain backed up and flooded',
     heroImgExamples: "'plumber service work', 'water heater installation', 'leak repair tools'",
     exampleTestimonialDetails: '"came at 11pm to stop a burst pipe", "fixed the leak before the guests arrived", "told me the drain line did NOT need replacing"',
+  },
+  electrical: {
+    label: 'electrical',
+    specialtyTail: '(wiring, panel upgrades, outlets, lighting, EV chargers) contractors',
+    panicExamples: 'half the house lost power, a breaker kept tripping, or they smelled burning near an outlet',
+    heroImgExamples: "'electrician working on panel', 'electrical wiring installation', 'licensed electrician residential'",
+    exampleTestimonialDetails: '"came at midnight when the panel sparked", "installed my EV charger the same week", "told me the panel was fine and just needed two breakers swapped"',
+  },
+  roofing: {
+    label: 'roofing',
+    specialtyTail: '(roof repair, replacement, storm damage, shingles, gutters) contractors',
+    panicExamples: 'a tree came through the roof, shingles blew off in a storm, or a ceiling started leaking during rain',
+    heroImgExamples: "'residential roofing crew', 'shingle roof installation', 'roofer on rooftop'",
+    exampleTestimonialDetails: '"tarped the roof at sunrise after the storm", "did the whole tear-off and reroof in a single day", "told me it was flashing, not a whole new roof"',
+  },
+  appliance: {
+    label: 'appliance repair',
+    specialtyTail: '(refrigerator, washer, dryer, dishwasher, oven, range) repair technicians',
+    panicExamples: 'the fridge stopped cooling with a full load of groceries, the washer flooded the laundry room, or the dryer stopped heating right before a trip',
+    heroImgExamples: "'appliance repair technician', 'refrigerator repair', 'washing machine service technician'",
+    exampleTestimonialDetails: '"came on a Sunday when the fridge died", "replaced the door gasket instead of the whole washer", "explained why the dryer kept tripping the breaker"',
+  },
+  'garage-door': {
+    label: 'garage door',
+    specialtyTail: '(spring replacement, opener repair, new door install) contractors',
+    panicExamples: 'a spring snapped and the door was stuck closed with a car inside, the opener died mid-cycle, or the door came off its track',
+    heroImgExamples: "'garage door installation', 'residential garage door', 'garage door opener repair'",
+    exampleTestimonialDetails: '"had the exact torsion spring on the truck", "installed a smart opener in under an hour", "repaired two panels instead of replacing the whole door"',
+  },
+  locksmith: {
+    label: 'locksmith',
+    specialtyTail: '(lockouts, rekeying, lock installation, smart locks, car keys) services',
+    panicExamples: 'they were locked out at 1am with no spare key, lost the car key with no dealership around, or needed every lock rekeyed after a move-in',
+    heroImgExamples: "'locksmith changing lock', 'key programming service', 'deadbolt installation'",
+    exampleTestimonialDetails: '"was at the door in 22 minutes at 1am", "cut and programmed the car key in the parking lot", "rekeyed every lock in the house the afternoon we moved in"',
+  },
+  'pest-control': {
+    label: 'pest control',
+    specialtyTail: '(rodents, termites, bed bugs, roaches, mosquitoes) extermination services',
+    panicExamples: 'they saw mice in the kitchen, bed bugs after a hotel trip, or a swarm of bees in the yard before a weekend party',
+    heroImgExamples: "'pest control technician spraying', 'exterminator residential', 'licensed pest control'",
+    exampleTestimonialDetails: '"sealed six mouse entry points I never would have found", "heat-treated for bed bugs and they were gone after one visit", "told me it was carpenter ants and treated the source"',
+  },
+  'water-damage': {
+    label: 'water damage restoration',
+    specialtyTail: '(emergency water extraction, structural drying, mold remediation, flood cleanup) specialists',
+    panicExamples: 'a pipe burst while they were on vacation and the basement was inches deep in water, or a toilet backed up and flooded a whole floor',
+    heroImgExamples: "'water damage restoration', 'flood cleanup equipment', 'mold remediation technician'",
+    exampleTestimonialDetails: '"were on site within the hour of the pipe bursting", "handled every conversation with the insurance adjuster", "used moisture meters to prove only a 4-foot section needed to come out"',
+  },
+  'tree-service': {
+    label: 'tree service',
+    specialtyTail: '(removal, trimming, pruning, stump grinding, storm cleanup) companies',
+    panicExamples: 'a big oak fell across the driveway during a storm, a tree was leaning hard toward the house, or limbs were scraping the roof in wind',
+    heroImgExamples: "'tree removal crew', 'arborist trimming tree', 'storm damage cleanup'",
+    exampleTestimonialDetails: '"were on site by 7am after the storm", "dropped a tall pine in sections right next to the house without a scratch", "walked the property and told me six of eight trees were fine"',
   },
 };
 

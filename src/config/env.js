@@ -41,6 +41,8 @@ const optional = [
   'NAMECHEAP_API_KEY',
   'NAMECHEAP_CLIENT_IP',
   'NAMECHEAP_USE_SANDBOX',
+  'UNSPLASH_ACCESS_KEY',
+  'TESTER_PHONES',
 ];
 // Note: UNSPLASH_ACCESS_KEY / PEXELS_API_KEY are intentionally NOT required.
 // Image fetches degrade gracefully — sites render with gradient heroes when
@@ -146,6 +148,15 @@ const env = {
     apiKey: process.env.REMOVE_BG_API_KEY || '',
   },
   agentPhone: process.env.AGENT_PHONE_NUMBER || '',
+  // Comma-separated phone numbers (no + prefix needed, normalization is
+  // applied in the isTester helper) whose conversations should be
+  // excluded from the feedback system — no post-delivery prompts, no
+  // implicit friction logging, no feedback table writes. Everything
+  // else works normally.
+  testerPhones: (process.env.TESTER_PHONES || '')
+    .split(',')
+    .map((s) => s.replace(/[^\d]/g, ''))
+    .filter(Boolean),
   // Server
   port: parseInt(process.env.PORT, 10) || 3000,
   nodeEnv: process.env.NODE_ENV || 'development',

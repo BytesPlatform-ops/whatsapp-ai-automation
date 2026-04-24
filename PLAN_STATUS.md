@@ -1,6 +1,6 @@
 # Pixie Humanization — Status & Remaining Work
 
-_Snapshot as of workflow-2 branch, commit `b1675dc`._
+_Snapshot as of workflow-3 branch, commit `eae1389`. Updated 2026-04-23._
 
 ## Where things stand
 
@@ -14,67 +14,41 @@ _Snapshot as of workflow-2 branch, commit `b1675dc`._
 | 3 | `d8f2095` | Smart defaults + LLM-first extraction, gpt-5 upgrade |
 | 4 | (rolled back) | Progress indicators were tried and pulled — they read as robotic |
 | 5 | `98b167f` | Undo stack — "wait go back" pops one webdev step |
-| 6 | `b1675dc` | Localizer, per-user serial lock, message dedup, LLM-first intent classifiers for undo/keep, yes/skip, confirm/edit, show-summary, use-own-number, preview approval, real-estate currency detection |
+| 6 | `b1675dc` | Localizer, per-user serial lock, message dedup, LLM-first intent classifiers |
+| 7 | `441d735` | Rapid-message buffering — debounce + in-flight coalescing merges rapid typing into one turn |
+| 8 | `0860992` | Objection handler + gentler sales Stage 6 + language-rule guardrails (names aren't language signals) |
+| 9 | `39a3840` | Session recap — warm contextual welcome-back after 30 min of silence |
+| 10 | `0c1e1f1` | Interactive reply matcher — type a number/title/synonym to pick a button (regex fast-path + LLM fallback) |
+| 11 | `7002857` | Cross-flow entity carryover — webdev's name/industry/services flow into ad / logo / chatbot flows |
 
-### 🟡 In progress (uncommitted, pending re-implementation)
+### 🎁 Extras landed in-session (not in the original 15-task plan)
 
-**Phase 7 — Rapid-message buffering** (reverted from [router.js](src/conversation/router.js); to be rebuilt when you're ready)
-
-Designed approach (hybrid):
-- **Pre-processing debounce (1s):** when a message arrives and nothing is in flight, it's buffered and a 1s timer starts. More messages reset the timer. When 1s of silence passes, the whole batch fires as ONE merged turn.
-- **In-flight coalescing:** if messages arrive while a turn is already running, they're buffered and merged into the NEXT turn (drained after the current one finishes).
-- **Escape hatches:** non-text (images, audio, buttons) skip the buffer and chain on the lock in order. Slash commands (`/reset`, `/menu`) skip debouncing so exact-match still works.
-- **Cap:** 10 buffered messages per user.
-
-**Manual test scenarios once re-built:**
-1. Send three quick text messages within ~2 seconds: `bro` / `by the way` / `actually i meant X`. Expected: one merged reply ~1s after you stop typing, not three separate replies.
-2. Send a single message. Expected: ~1s delay, then a reply (debounce applies to the first message too).
-3. While the bot is clearly "typing" (the 4–8s reply delay), send another text. Expected: the bot's current reply lands, then a follow-up turn processes your second message merged with anything else you sent.
-4. Send a text, then an image before 1s elapses. Expected: the text flushes its own turn, then the image processes in order.
-5. Send `/reset` anytime. Expected: fires immediately, no debounce.
+| Topic | Commit | What landed |
+|-------|--------|-------------|
+| HVAC template expansion | `bc35564` | 8 new trades supported (electrical, roofing, appliance, garage door, locksmith, pest control, water damage, tree service) — each with keyword detection, default services, per-trade LLM content prompt, and credentials card |
+| Trade-aware summary | `da18de0` | Webdev summary now previews default trade services instead of "None (skipped)" |
+| SEO pipeline speed | `d327d3a` | Tightened LLM timeouts so stalls surface as errors instead of 90s silent hangs |
+| Post-website upsell | `355e090` | One in-bot soft cross-sell right after the site goes live (complements the existing day-7/30/60/90 email upsell) |
+| Webdev + localizer fixes | `d86e741` | Multi-field contact input ("email is X and phone is Y") parses correctly; localizer auto-fetches latest user message so stale language caches can't translate replies into the wrong language |
+| Boot smoke check | `0c1e1f1` | `src/boot/handlerSmokeCheck.js` runs on startup — catches missing-import bugs (like the `sendCTAButton` one) before the server accepts traffic |
+| Service selection polish | `7002857` | `/menu` uses a dedicated greeting (no "didn't catch that" for `/menu` itself); "any other services?" routes to the full 10-item list; `pickServiceFromSwitch` handles negation ("forget the website, do chatbot") and plurals ("marketing ads"); `/reset` now clears `conversationSummary`, domain state, preferredLanguage, objectionTopics, upsell flags |
 
 ---
 
-## 🔴 Remaining phases — to be implemented
+## 🔴 Remaining phases
 
-The original plan (`PLAN_UPDATED.txt`) has 15 tasks. Crossing off what's done, here's what's still open. I've grouped them into three buckets by effort / impact so you can pick the order.
+4 phases left. Grouped by bucket.
 
-### Bucket A — still-core humanize work
-
-These map to original Task 1, 7, 12. Short, focused, each is its own phase.
-
-- **Phase 8 — Objection handler** (Task 1)
-  - New handler for `intent === 'objection'`: validate concern → share social proof → low-commitment next step. Track `objectionTopics` in metadata so follow-ups can reference them.
-  - Test scenarios:
-    - `"this is too expensive, i'll just use wix"` mid-webdev → empathetic ack, value context, offer to continue OR schedule a call. Does NOT push.
-    - `"not sure it's worth it"` → validation + social proof + lower-commitment option.
-    - `"let me think about it"` → respects it, seeds a follow-up (no fake urgency).
-
-- **Phase 9 — Session recap after inactivity** (Task 7)
-  - If `now - user.last_message_at > 30 min`, prepend a contextual recap to the next bot reply. Example: _"Welcome back! We were working on your Glow Studio salon site. I had your name + industry — next up is services."_
-  - No generic "continue where we left off".
-
-- **Phase 10 — Interactive digit fallbacks** (Task 12)
-  - Every interactive button/list message gets a "Or type 1, 2, 3 to choose" hint appended. Router maps a digit-only reply to the corresponding button id from the last interactive message sent.
-  - Covers the user-on-desktop case where buttons aren't tappable.
-
-### Bucket B — cross-flow carryover and queueing
-
-Bigger surface area, touches multiple handlers. Map to Task 5 + Task 6.
-
-- **Phase 11 — Accumulator applied to other flows**
-  - Use the Phase 2 entity accumulator in `adGeneration.js`, `logoGeneration.js`, `chatbotService.js`.
-  - Shared fields (business name, industry, colors, contact) carry across flows. Example: user completes webdev for a salon, then says "also make me a logo" → logo flow skips name/industry/colors, only asks logo-specific questions.
+### Bucket B — multi-service handling
 
 - **Phase 12 — Multi-service queue**
-  - When one message names multiple services ("I need a website AND a logo AND some ads"), acknowledge all, suggest an order, queue them in `metadata.serviceQueue`, auto-transition through them.
+  - When one message names multiple services ("I need a website AND a logo AND some ads"), acknowledge all, suggest an order, queue them in `metadata.serviceQueue`, auto-transition through them after each completion.
+  - Entry point in messageAnalyzer / intent classifier to return `topicSwitches: string[]` (plural) when multiple services detected.
 
 ### Bucket C — new input types + return visitors
 
-Map to Task 13, 14, 15.
-
 - **Phase 13 — Abuse detection**
-  - `messageAnalyzer` returns `isAbusive: boolean`. Router short-circuits on abuse: firm polite decline, log for admin, no LLM escalation.
+  - Classifier returns `isAbusive: boolean`. Router short-circuits on abuse: firm polite decline, log for admin, no LLM escalation.
   - Covers hate / phishing / "help me hack a site" / etc.
 
 - **Phase 14 — Document + location handling**
@@ -83,34 +57,59 @@ Map to Task 13, 14, 15.
   - Location: reverse-geocode into city/address and seed `websiteData.contactAddress` / `primaryCity`.
 
 - **Phase 15 — Return-visitor recognition**
-  - On entry, query completed sites/audits/logos for this phone. If any exist, prepend a specific greeting: _"Hey! How's the Glow Studio site treating you?"_ instead of the generic Pixie opener.
+  - On entry, query completed sites/audits/logos for this phone. If any exist, prepend a specific greeting: *"Hey! How's the Glow Studio site treating you?"* instead of the generic Pixie opener.
 
 ---
 
-## Open questions (with my recommendations — review when you have time)
+## Outstanding manual testing
 
-Each item has the question, my recommendation, and the reasoning. If you disagree with any, flag it and we'll change course.
+See [SESSION_2026-04-23.md](SESSION_2026-04-23.md) for the full 25+ scenario checklist covering Phases 8-11 + the in-bot upsell + bug fixes. Every commit landed today needs to be verified on real WhatsApp before the work is shippable.
+
+---
+
+## Open questions (still relevant)
 
 ### 1. Progress indicators — **recommend: leave dead**
 Phase 4 tried "step 3 of 6" style indicators and we rolled them back because they read as robotic. WhatsApp is a casual medium; form-wizard phrasing feels off. We already imply progress softly in a few spots ("last thing — what contact info..."). Good enough.
 
-### 2. Priority order for remaining phases — **recommend: A → B → C**
-- **Bucket A** (objection handler, session recap, digit fallbacks) — small, user-visible, directly addresses things seen going wrong on WhatsApp. Ship first.
-- **Bucket B** (cross-flow carryover, multi-service queue) — biggest UX unlock for returning or multi-service customers, but touches three other flows. Ship second.
-- **Bucket C** (abuse detection, doc/location, return-visitor) — edge-case / infra; worth having but nobody's hit the absence of it yet. Ship last.
+### 2. Priority order for remaining phases — **recommend: B → C**
+- **Phase 12 (multi-service queue)** — good UX unlock for multi-intent messages, but haven't seen users bumping into this a lot.
+- **Phase 13 (abuse detection)** — edge-case / infra; no reported incidents, but cheap insurance.
+- **Phase 14 (doc/location)** — users have sent locations a few times; the bot logs but doesn't use them.
+- **Phase 15 (return-visitor)** — biggest UX unlock for repeat customers. Would combine nicely with the existing email upsell cadence.
 
-### 3. Objection handler scope — **recommend: sales-specific**
-Route through it only when state is `SALES_CHAT` or a webdev collection state. Lower blast radius. If we later see objections happening in chatbot / domain flows, we broaden. Start narrow, widen when we see a real miss.
+Revised take after today: Phase 15 is probably the next highest-impact, Phase 12 second. Happy to build either order.
 
-### 4. Abuse detection placement — **recommend: keep as its own phase**
-Different code path (short-circuits router before any handler), different telemetry (admin log), different tone (firm refusal, not empathy). Folding it into the objection handler would muddy both.
+### 3. Location reverse-geocoding service — **recommend: OpenStreetMap Nominatim**
+Free, no API key, MIT-compatible terms for low volume. Good enough to turn `lat/lng → "Karachi, Sindh, Pakistan"`. Swap to Google Maps later if we ever hit fair-use limits.
 
-### 5. Location reverse-geocoding service — **recommend: OpenStreetMap Nominatim**
-Free, no API key, MIT-compatible terms for low volume. Good enough to turn `lat/lng → "Karachi, Sindh, Pakistan"`. Swap to Google Maps later if we ever hit fair-use limits (unlikely at this volume).
+### 4. Full cross-sell engine (Option C from dev session) — **currently deferred**
+Option B shipped today: one pitch at site-live. If that single pitch converts well we can expand into a multi-event rules-based engine. Decision gate: look at analytics after ~50 post-website upsell fires; if conversion to the next service is decent, expand.
 
-### 6. Testing discipline going forward — **recommend: keep live WhatsApp testing**
-The original dumb-user harness caught easy bugs early; the bugs since Phase 6 (language mirroring, undo-during-edit, currency detection, duplicate greetings) are all things expensive to script into a harness and easier to catch on a real phone. Keep the harness around if it still runs, but don't block on expanding it per phase.
+### 5. Known pre-existing issues not touched today
+- Stale `via_phone_number_id` on some user rows causing `"Unsupported request - method type: post"` errors from Meta on follow-up sends. Needs either a one-time audit/backfill script or a sender-level fallback retry with `env.whatsapp.phoneNumberId` on error 100.
+- 34-minute gap some users saw between "⏳ Analyzing..." and the audit report — most likely Meta webhook queuing on the user side, not reproducible from code. Timeouts tightened so stalls surface rather than silently stall.
 
 ---
 
-When you've read this, either say "all good" and we'll proceed in order (Phase 7 test → Phase 8 objection handler → onwards), or call out the ones you want to change.
+## Recent commit log (reverse chronological)
+
+```
+eae1389  session notes: document today's work + outstanding manual tests
+d86e741  webdev + localizer: parse multi-field contact blobs, kill stale language caches
+355e090  post-website upsell: one soft in-bot pitch after site goes live
+7002857  phase 11: cross-flow entity carryover + smarter menu routing
+0c1e1f1  interactive reply matcher: type a number or the option name to pick
+da18de0  webdev summary: preview trade defaults instead of "None (skipped)"
+39a3840  session recap: warm welcome-back after 30 min of silence
+bc35564  hvac template: add 8 more trades
+d327d3a  seo audit: tighten llm + scraper timeouts
+0860992  humanize pass: gentler sales objections, don't switch language on names
+ccd43db  (prior session) tighten preview-site retention
+555dc21  (prior session) phase 8 completed
+441d735  (prior session) rapid-message buffering
+```
+
+---
+
+When you've read this, either confirm and we'll pick Phase 12 or 15 next, or call out anything to change.

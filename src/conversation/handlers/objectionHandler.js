@@ -91,7 +91,9 @@ async function handleObjection(user, message, currentState, currentQuestion) {
   // means the LLM has less to work with.
   let contextLines = '(no prior context)';
   try {
-    const history = await getConversationHistory(user.id, 4);
+    const history = await getConversationHistory(user.id, 4, {
+      afterTimestamp: user.metadata?.lastResetAt || null,
+    });
     if (Array.isArray(history) && history.length) {
       contextLines = history
         .slice(-4)

@@ -56,7 +56,7 @@ const whatsappPayload = {
             source_id: 'AD_123456789',
             source_type: 'ad',
             source_url: 'https://fb.me/test-ad',
-            headline: `Bytes Platform — ${product.toUpperCase()} Services`,
+            headline: `Pixie — ${product.toUpperCase()} Services`,
             body: adBody,
             ctwa_clid: `ctwa_test_${Date.now()}`,
           },

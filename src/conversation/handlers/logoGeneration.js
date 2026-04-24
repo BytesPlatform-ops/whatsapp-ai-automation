@@ -54,6 +54,11 @@ const CONFIRMATION_WORDS = new Set(['ok', 'okay', 'yes', 'no', 'sure', 'go', 'ne
 // Words that mean "use the previously suggested brand name"
 const SAME_BRAND_WORDS = new Set(['same', 'yes', 'yeah', 'yep', 'sure', 'ok', 'okay', 'continue', 'use it', 'that one', 'use that']);
 
+// Whole-message skip detector — covers "skip", "skip it", "nope",
+// "no thanks", etc. Anchored to full trimmed text.
+const SKIP_RX = /^(?:skip|skip\s+(?:it|this|that|for\s*now)|no|nope|nah|n\/?a|na|none|nothing|pass|no\s+thanks?|dont|don'?t|leave\s+(?:it|blank)|i'?m\s+(?:gonna\s+)?skip(?:ping)?)$/i;
+const isSkip = (text) => SKIP_RX.test(String(text || '').trim());
+
 // ── Main router ───────────────────────────────────────────────────────────────
 
 async function handleLogoGeneration(user, message) {
@@ -86,28 +91,103 @@ async function handleLogoGeneration(user, message) {
 // ── Step handlers ─────────────────────────────────────────────────────────────
 
 async function handleStart(user, message) {
+  // Phase 11: pre-fill shared fields from whatever webdev flow already
+  // accumulated, then skip past the collection states whose fields are
+  // filled. Logo-specific fields (description, style, symbol,
+  // background, brandColors) always start fresh.
+  const { getSharedBusinessContext } = require('../entityAccumulator');
+  const shared = getSharedBusinessContext(user);
+
   await saveLogoData(user, {
-    businessName: null, industry: null, description: null, style: null,
+    businessName: shared.businessName || null,
+    industry: shared.industry || null,
+    description: null, style: null,
     brandColors: null, symbolIdea: null, background: null,
     ideas: null, selectedIdeaIndex: null,
+    suggestedBusinessName: null,
   });
+
+  const hasName = !!shared.businessName;
+  const hasIndustry = !!shared.industry;
+
+  const ctxLines = [];
+  if (hasName) ctxLines.push(`*${shared.businessName}*`);
+  if (hasIndustry) ctxLines.push(`_${shared.industry}_`);
+  const carriedNote = ctxLines.length ? `\n\nUsing what I have from earlier: ${ctxLines.join(' · ')}.\n` : '';
+
+  if (!hasName) {
+    await sendWithMenuButton(
+      user.phone_number,
+      '✨ *Logo Maker*\n\n' +
+        'I\'ll design 5 unique logo concepts for your brand — like having a top branding agency on call!\n\n' +
+        'Let\'s start with the basics.\n\n' +
+        'What is your *business name*?\n\n' +
+        '_(This will be the actual text on your logo, so spell it exactly as you want it to appear)_'
+    );
+    await logMessage(user.id, 'Started logo generation flow', 'assistant');
+    return STATES.LOGO_COLLECT_BUSINESS;
+  }
+
+  if (!hasIndustry) {
+    await sendWithMenuButton(
+      user.phone_number,
+      `✨ *Logo Maker*${carriedNote}\n` +
+        `What *industry* are you in?\n\n` +
+        'Examples:\n' +
+        '• Food & Beverage\n• Fashion & Apparel\n• Beauty & Skincare\n' +
+        '• Tech / Software\n• Real Estate\n• Fitness & Gym\n• Education\n• Retail / E-commerce\n\n' +
+        'Type your industry:'
+    );
+    await logMessage(user.id, `Started logo flow with prefilled name=${shared.businessName}`, 'assistant');
+    return STATES.LOGO_COLLECT_INDUSTRY;
+  }
+
+  // Name + industry both carried → jump to first logo-specific step.
+  await sendWithMenuButton(
+    user.phone_number,
+    `✨ *Logo Maker*${carriedNote}\n` +
+      `In one sentence, *what does your business do*?\n\n` +
+      'This helps me design a logo that visually fits your brand.\n\n' +
+      'Example: _"We deliver fresh organic meals to busy professionals"_'
+  );
+  await logMessage(user.id, `Started logo flow with prefilled name=${shared.businessName}, industry=${shared.industry}`, 'assistant');
+  return STATES.LOGO_COLLECT_DESCRIPTION;
+}
+
+// Shared follow-up after business name saved: either skip to the
+// description ask when we could infer industry from the name, or
+// ask for industry normally. Keeps the three cases in
+// handleCollectBusiness from duplicating the industry ask.
+async function ackNameAndAdvance(user, nameUsed, inferredIndustry) {
+  if (inferredIndustry) {
+    await sendWithMenuButton(
+      user.phone_number,
+      `Great! *${nameUsed}* · _${inferredIndustry}_ 👍\n\n` +
+        `In one sentence, *what does your business do*?\n\n` +
+        'This helps me design a logo that visually fits your brand.\n\n' +
+        'Example: _"We deliver fresh organic meals to busy professionals"_'
+    );
+    await logMessage(user.id, `Logo flow: name="${nameUsed}", inferred industry="${inferredIndustry}"`, 'assistant');
+    return STATES.LOGO_COLLECT_DESCRIPTION;
+  }
 
   await sendWithMenuButton(
     user.phone_number,
-    '✨ *Logo Maker*\n\n' +
-      'I\'ll design 5 unique logo concepts for your brand — like having a top branding agency on call!\n\n' +
-      'Let\'s start with the basics.\n\n' +
-      'What is your *business name*?\n\n' +
-      '_(This will be the actual text on your logo, so spell it exactly as you want it to appear)_'
+    `Great! *${nameUsed}* 👍\n\nWhat *industry* are you in?\n\n` +
+      'Examples:\n' +
+      '• Food & Beverage\n• Fashion & Apparel\n• Beauty & Skincare\n' +
+      '• Tech / Software\n• Real Estate\n• Fitness & Gym\n• Education\n\n' +
+      'Type your industry:'
   );
-  await logMessage(user.id, 'Started logo generation flow', 'assistant');
-  return STATES.LOGO_COLLECT_BUSINESS;
+  await logMessage(user.id, `Business name: ${nameUsed}`, 'assistant');
+  return STATES.LOGO_COLLECT_INDUSTRY;
 }
 
 async function handleCollectBusiness(user, message) {
   const name = (message.text || '').trim();
   const logoData = getLogoData(user);
   const suggested = logoData.suggestedBusinessName;
+  const { inferIndustryFromBusinessName } = require('../entityAccumulator');
 
   // Case 1: We have a suggested business name from a previous flow
   if (suggested) {
@@ -115,32 +195,24 @@ async function handleCollectBusiness(user, message) {
 
     // 1a. User confirmed with "same/yes/sure/etc" → use the suggested name
     if (lower && (SAME_BRAND_WORDS.has(lower) || /\b(same|yes|continue|that\s*one|use\s*(it|that))\b/i.test(lower))) {
-      await saveLogoData(user, { businessName: suggested, suggestedBusinessName: null });
-      await sendWithMenuButton(
-        user.phone_number,
-        `Great! Designing new logos for *${suggested}* 👍\n\nWhat *industry* are you in?\n\n` +
-          'Examples:\n' +
-          '• Food & Beverage\n• Fashion & Apparel\n• Beauty & Skincare\n' +
-          '• Tech / Software\n• Real Estate\n• Fitness & Gym\n• Education\n\n' +
-          'Type your industry:'
-      );
-      await logMessage(user.id, `Business name confirmed (suggested): ${suggested}`, 'assistant');
-      return STATES.LOGO_COLLECT_INDUSTRY;
+      const inferred = await inferIndustryFromBusinessName(suggested, user.id);
+      await saveLogoData(user, {
+        businessName: suggested,
+        suggestedBusinessName: null,
+        ...(inferred ? { industry: inferred } : {}),
+      });
+      return ackNameAndAdvance(user, suggested, inferred);
     }
 
     // 1b. User typed a different business name → use that, clear suggestion
     if (name && name.length >= 2) {
-      await saveLogoData(user, { businessName: name, suggestedBusinessName: null });
-      await sendWithMenuButton(
-        user.phone_number,
-        `Got it — designing new logos for *${name}* 👍\n\nWhat *industry* are you in?\n\n` +
-          'Examples:\n' +
-          '• Food & Beverage\n• Fashion & Apparel\n• Beauty & Skincare\n' +
-          '• Tech / Software\n• Real Estate\n• Fitness & Gym\n• Education\n\n' +
-          'Type your industry:'
-      );
-      await logMessage(user.id, `Business name (overridden suggestion): ${name}`, 'assistant');
-      return STATES.LOGO_COLLECT_INDUSTRY;
+      const inferred = await inferIndustryFromBusinessName(name, user.id);
+      await saveLogoData(user, {
+        businessName: name,
+        suggestedBusinessName: null,
+        ...(inferred ? { industry: inferred } : {}),
+      });
+      return ackNameAndAdvance(user, name, inferred);
     }
 
     // 1c. Empty/too short → re-prompt
@@ -161,18 +233,12 @@ async function handleCollectBusiness(user, message) {
     return STATES.LOGO_COLLECT_BUSINESS;
   }
 
-  await saveLogoData(user, { businessName: name });
-
-  await sendWithMenuButton(
-    user.phone_number,
-    `Great! *${name}* 👍\n\nWhat *industry* are you in?\n\n` +
-      'Examples:\n' +
-      '• Food & Beverage\n• Fashion & Apparel\n• Beauty & Skincare\n' +
-      '• Tech / Software\n• Real Estate\n• Fitness & Gym\n• Education\n\n' +
-      'Type your industry:'
-  );
-  await logMessage(user.id, `Business name: ${name}`, 'assistant');
-  return STATES.LOGO_COLLECT_INDUSTRY;
+  const inferred = await inferIndustryFromBusinessName(name, user.id);
+  await saveLogoData(user, {
+    businessName: name,
+    ...(inferred ? { industry: inferred } : {}),
+  });
+  return ackNameAndAdvance(user, name, inferred);
 }
 
 async function handleCollectIndustry(user, message) {
@@ -288,7 +354,7 @@ async function handleCollectStyle(user, message) {
 
 async function handleCollectColors(user, message) {
   const text = (message.text || '').trim();
-  const brandColors = text.toLowerCase() === 'skip' ? null : text || null;
+  const brandColors = isSkip(text) ? null : text || null;
 
   await saveLogoData(user, { brandColors });
 
@@ -308,7 +374,7 @@ async function handleCollectColors(user, message) {
 
 async function handleCollectSymbol(user, message) {
   const text = (message.text || '').trim();
-  const symbolIdea = text.toLowerCase() === 'skip' ? null : text || null;
+  const symbolIdea = isSkip(text) ? null : text || null;
 
   await saveLogoData(user, { symbolIdea });
 
@@ -527,6 +593,22 @@ async function handleSelectIdea(user, message) {
   await sendImage(user.phone_number, publicUrl, caption);
   await logMessage(user.id, `Logo generated and sent: ${publicUrl}`, 'assistant');
 
+  // Phase 15: record completion so future sessions recognize the user.
+  try {
+    const { markProjectCompleted } = require('../returnVisitor');
+    await markProjectCompleted(user, { type: 'logo', businessName: logoData.businessName });
+  } catch (err) {
+    logger.warn(`[LOGO-GEN] markProjectCompleted failed: ${err.message}`);
+  }
+
+  // Feedback: schedule the post-delivery prompt.
+  try {
+    const { scheduleDeliveryPrompt } = require('../../feedback/feedback');
+    await scheduleDeliveryPrompt(user, 'logo');
+  } catch (err) {
+    logger.warn(`[LOGO-GEN] scheduleDeliveryPrompt failed: ${err.message}`);
+  }
+
   // Follow-up options
   await sendInteractiveButtons(
     user.phone_number,
@@ -589,6 +671,11 @@ async function handleResults(user, message) {
   }
 
   if (btnId === 'back_menu') {
+    // Phase 12: advance a pending service queue before falling back to welcome.
+    const { maybeStartNextQueuedService } = require('../serviceQueue');
+    const nextState = await maybeStartNextQueuedService(user);
+    if (nextState) return nextState;
+
     const { handleWelcome } = require('./welcome');
     return handleWelcome(user, message);
   }
@@ -605,4 +692,11 @@ async function handleResults(user, message) {
   return STATES.LOGO_RESULTS;
 }
 
-module.exports = { handleLogoGeneration };
+// Exported so serviceSelection.js can invoke it directly when the user
+// picks the "Logo Maker" menu option. Skips collection states whose
+// fields are already in the shared websiteData pool (Phase 11).
+async function startLogoFlow(user) {
+  return handleStart(user, null);
+}
+
+module.exports = { handleLogoGeneration, startLogoFlow };

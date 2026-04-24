@@ -188,6 +188,81 @@ async function handleConfirmedPayment(payment, paidSession) {
               )
             );
             await logMessage(p.user_id, `Domain purchased and configured: ${selectedDomain}`, 'assistant');
+
+            // Phase 15: record completion so future sessions can
+            // reference this project by business name.
+            try {
+              const wd = paidUserRecord?.metadata?.websiteData || {};
+              if (wd.businessName) {
+                await updateUserMetadata(p.user_id, {
+                  lastBusinessName: wd.businessName,
+                  lastCompletedProjectType: 'website',
+                  lastCompletedProjectAt: new Date().toISOString(),
+                });
+              }
+            } catch (err) {
+              logger.warn(`[PAY] Failed to mark return-greet fields: ${err.message}`);
+            }
+
+            // Feedback: schedule the post-delivery prompt 30s after
+            // the go-live message. Skipped for testers + when more
+            // services are queued.
+            try {
+              const { scheduleDeliveryPrompt } = require('../feedback/feedback');
+              await scheduleDeliveryPrompt(
+                {
+                  id: p.user_id,
+                  phone_number: targetPhone,
+                  channel: targetChannel,
+                  via_phone_number_id: targetVia,
+                  metadata: paidUserRecord?.metadata || {},
+                },
+                'website'
+              );
+            } catch (err) {
+              logger.warn(`[PAY] scheduleDeliveryPrompt failed: ${err.message}`);
+            }
+
+            // Phase 12: if the user originally queued more services with
+            // the website, advance to the next one instead of the
+            // generic site-live upsell. The explicit queue wins over
+            // the guess-based upsell.
+            const queuedServices = Array.isArray(paidUserRecord?.metadata?.serviceQueue)
+              ? paidUserRecord.metadata.serviceQueue
+              : [];
+            if (queuedServices.length > 0) {
+              const { maybeStartNextQueuedService } = require('../conversation/serviceQueue');
+              const { updateUserState } = require('../db/users');
+              const queueUser = {
+                id: p.user_id,
+                phone_number: targetPhone,
+                channel: targetChannel,
+                via_phone_number_id: targetVia,
+                metadata: paidUserRecord.metadata,
+              };
+              try {
+                const newState = await runWithContext(
+                  { channel: targetChannel, phoneNumberId: targetVia },
+                  () => maybeStartNextQueuedService(queueUser)
+                );
+                if (newState) {
+                  await updateUserState(p.user_id, newState);
+                }
+              } catch (err) {
+                logger.error(`[PAY] Queue advance after site-live failed: ${err.message}`);
+              }
+            } else {
+              // Phase 16 (in-bot cross-sell): pitch the most useful next
+              // service the user hasn't touched. Site is fully paid +
+              // configured here, so the moment is right. Idempotent.
+              await maybeSendSiteLiveUpsell({
+                userId: p.user_id,
+                phone: targetPhone,
+                channel: targetChannel,
+                via: targetVia,
+                metadata: paidUserRecord?.metadata,
+              });
+            }
           } else {
             if (site) await updateSite(site.id, { custom_domain: selectedDomain, status: 'domain_setup_pending' });
             await runWithContext({ channel: targetChannel, phoneNumberId: targetVia }, () =>
@@ -237,7 +312,7 @@ async function handleConfirmedPayment(payment, paidSession) {
     // Non-website payment
     await runWithContext({ channel: targetChannel, phoneNumberId: targetVia }, () => sendTextMessage(
       targetPhone,
-      `Payment of *${amountDisplay}* received! Thank you for choosing Bytes Platform.\n\n` +
+      `Payment of *${amountDisplay}* received! Thank you for choosing Pixie.\n\n` +
         `*Package:* ${p.description || p.service_type}\n\n` +
         `Our team will be in touch shortly to kick things off. If you have any questions in the meantime, just message here.`
     ));
@@ -270,6 +345,64 @@ async function handleConfirmedPayment(payment, paidSession) {
 
   logger.info(`[PAY] Confirmed payment from ${targetPhone}: ${amountDisplay} for ${p.service_type}`);
   return { ok: true };
+}
+
+/**
+ * One soft cross-sell pitch right after a website is confirmed paid.
+ * Picks the most useful NEXT service the user hasn't touched yet:
+ *
+ *   1. No SEO audit done → free SEO audit (natural first move for a new site)
+ *   2. SEO audit done, no logo → logo pitch
+ *   3. SEO + logo done, no chatbot → chatbot pitch
+ *   4. Everything already touched → skip
+ *
+ * Idempotent via metadata.postWebsiteUpsellSent so a webhook+scheduler
+ * double-fire can't pitch twice. Tone is intentionally low-pressure —
+ * "say X whenever" rather than "do you want X now".
+ *
+ * Called only from the "site is actually live / all set" moments in
+ * handleConfirmedPayment — never from the pending / manual-setup
+ * branches, because those aren't final user-happy states.
+ */
+async function maybeSendSiteLiveUpsell({ userId, phone, channel, via, metadata }) {
+  const md = metadata || {};
+  if (md.postWebsiteUpsellSent) return; // already pitched once
+
+  const hadAudit = !!md.seoAuditCompletedAt || !!md.seoAuditTriggered || !!md.lastSeoUrl;
+  const hadLogo = !!(md.logoData && (md.logoData.businessName || md.logoData.ideas));
+  const hadChatbot = !!(md.chatbotData && (md.chatbotData.businessName || md.chatbotData.faqs));
+
+  let pitch = null;
+  let pitched = null;
+  if (!hadAudit) {
+    pitch = `btw — whenever you've had a chance to poke around the site, say *audit* and i'll run a free SEO check on it. no cost, just useful to know what Google will see.`;
+    pitched = 'seo_audit';
+  } else if (!hadLogo) {
+    pitch = `btw — since the site is live, say *logo* anytime and i can design a few concepts to match. no charge to see what i'd do.`;
+    pitched = 'logo';
+  } else if (!hadChatbot) {
+    pitch = `btw — say *chatbot* anytime and i can spin up a 24/7 AI assistant for your site, trained on your services + FAQs. takes like 2 minutes to see a demo.`;
+    pitched = 'chatbot';
+  } else {
+    // User has already touched every related service — nothing useful to pitch.
+    await updateUserMetadata(userId, { postWebsiteUpsellSent: true });
+    return;
+  }
+
+  try {
+    await runWithContext({ channel, phoneNumberId: via }, () => sendTextMessage(phone, pitch));
+    await logMessage(userId, `Post-website upsell pitch sent (${pitched})`, 'assistant');
+    await updateUserMetadata(userId, {
+      postWebsiteUpsellSent: true,
+      postWebsiteUpsellKind: pitched,
+      postWebsiteUpsellAt: new Date().toISOString(),
+    });
+    logger.info(`[PAY] Site-live upsell pitched (${pitched}) to ${phone}`);
+  } catch (err) {
+    // Never block the confirmation flow — the core payment UX already
+    // completed before we got here.
+    logger.warn(`[PAY] Site-live upsell failed for ${phone}: ${err.message}`);
+  }
 }
 
 module.exports = { handleConfirmedPayment };
