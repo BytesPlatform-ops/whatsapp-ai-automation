@@ -218,10 +218,21 @@ function questionForState(state, websiteData) {
         "Or reply *skip* and I'll use professional stock photos."
       );
     }
-    case STATES.WEB_COLLECT_CONTACT: return (
-      "Last thing — what contact info do you want on the site? Send your email, phone, and/or address.\n\n" +
-      "_Tip: tap 📎 → Location to drop a pin and I'll use it as the address._"
-    );
+    case STATES.WEB_COLLECT_CONTACT: {
+      // If an earlier pin already seeded the address, suggesting
+      // another pin is redundant — tell the user what we already
+      // have and ask for email / phone specifically.
+      if (websiteData?.contactAddress) {
+        return (
+          `Last thing — already have your address as *${websiteData.contactAddress}*. ` +
+          "Anything else for the site — email or phone? Or reply *skip* to go with just the address."
+        );
+      }
+      return (
+        "Last thing — what contact info do you want on the site? Send your email, phone, and/or address.\n\n" +
+        "_Tip: tap 📎 → Location to drop a pin and I'll use it as the address._"
+      );
+    }
     default: return '';
   }
 }
@@ -530,9 +541,18 @@ async function handleCollectAreas(user, message) {
     // City already known from sales-chat hydration. Treat the user's reply
     // as a plain list of neighborhoods. Preserve the existing city.
     primaryCity = existingCity;
+    // Strip conversational lead-ins so "we serve in X and Y" → ["X", "Y"]
+    // instead of ["we serve in X", "Y"]. Covers the common English +
+    // Roman Urdu prefixes users actually type here.
+    const stripAreaPrefix = (s) =>
+      s
+        .replace(/^[—\-–:|]+/, '')
+        .replace(/^\s*(?:(?:we\s+(?:serve|cover|operate|work|are|'re))(?:\s+(?:in|across|around|throughout))?|serving(?:\s+(?:in|across|around))?|cover(?:ing)?(?:\s+(?:in|across))?|based\s+in|operate\s+in|mostly(?:\s+(?:in|around))?|around|in|ham\s+(?:serve|kaam)\s+karte\s+(?:hain|hai))\s+/i, '')
+        .replace(/^(?:the|a|an)\s+/i, '')
+        .trim();
     serviceAreas = raw
       .split(/[,;\n]|\band\b/i)
-      .map((s) => s.trim().replace(/^[—\-–:|]/, '').trim())
+      .map((s) => stripAreaPrefix(s.trim()))
       .filter(Boolean);
     if (!serviceAreas.length) serviceAreas = [existingCity];
   } else {
@@ -2053,7 +2073,13 @@ async function handleCollectContact(user, message) {
   // misreads "phone is 09876544567" as the email value. The regex below
   // counts labels followed by ANY of (colon, hyphen, "is", "are") so
   // prose-style multi-field input is caught too.
-  const labelCount = (contactText.match(/\b(?:email|e-?mail|phone|tel|mobile|address|location|addr)\s+(?:is|are)\b|\b(?:email|e-?mail|phone|tel|mobile|address|location|addr)\s*[:\-]/gi) || []).length;
+  // Expanded label list: users commonly write "contact is X" and
+  // "number is Y" to mean phone. Without those in the list, an input
+  // like "email is test@gmail.com and contact is 02928373993" counts
+  // as only 1 label, detectFieldEdit runs, its greedy tail-match
+  // picks the LAST "is" value (the phone) as the email, and we
+  // misroute a two-field input into a single-field edit.
+  const labelCount = (contactText.match(/\b(?:email|e-?mail|phone|tel|mobile|contact|number|address|location|addr)\s+(?:is|are)\b|\b(?:email|e-?mail|phone|tel|mobile|contact|number|address|location|addr)\s*[:\-]/gi) || []).length;
 
   // Delegation path: the user doesn't want to provide contact info and is
   // saying so in a non-literal way ("surprise me", "just add something
@@ -2093,21 +2119,24 @@ async function handleCollectContact(user, message) {
     }
   }
 
-  // Edit-intent guard: if the user is trying to correct an earlier field
-  // ("actually the name should be Glow Salon"), update that field and bounce
-  // to WEB_CONFIRM instead of storing their sentence as contactAddress.
+  // Edit-intent guard: if the user is trying to correct an EARLIER
+  // field ("actually the name should be Glow Salon"), update that
+  // field and bounce to WEB_CONFIRM. IMPORTANT: exclude contact
+  // fields — at this step, "email is X" / "phone is Y" / "address
+  // is Z" are the user's FIRST-TIME contact input, NOT corrections
+  // of a prior value. Treating them as edits would skip the logo
+  // step entirely (showConfirmSummary transitions to WEB_CONFIRM).
+  // So the guard only fires for edits to businessName / industry /
+  // services — genuine corrections to fields collected upstream.
+  const EDIT_ALLOWED_AT_CONTACT_STEP = new Set(['businessName', 'industry', 'services']);
   if (contactText && contactText.length >= 3 && !skipWords.test(contactText) && labelCount < 2) {
     const edit = detectFieldEdit(contactText);
-    if (edit) {
+    if (edit && EDIT_ALLOWED_AT_CONTACT_STEP.has(edit.field)) {
       const wd = { ...(user.metadata?.websiteData || {}) };
       let ackValue = edit.value;
       if (edit.field === 'services') {
         wd.services = edit.value.split(',').map((s) => s.trim()).filter(Boolean);
         ackValue = wd.services.join(', ');
-      } else if (edit.field === 'contactEmail') {
-        const m = edit.value.match(/[\w.-]+@[\w.-]+\.\w+/);
-        wd.contactEmail = m ? m[0] : edit.value;
-        ackValue = wd.contactEmail;
       } else {
         wd[edit.field] = edit.value;
       }
@@ -2118,9 +2147,6 @@ async function handleCollectContact(user, message) {
         businessName: 'business name',
         industry: 'industry',
         services: 'services',
-        contactEmail: 'email',
-        contactPhone: 'phone',
-        contactAddress: 'address',
       }[edit.field] || edit.field;
       await sendTextMessage(
         user.phone_number,
