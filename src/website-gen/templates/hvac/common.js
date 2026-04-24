@@ -1283,7 +1283,7 @@ function getHvacNav(c, cur) {
   // beside it doubles up the identity. Without a logo, fall back to
   // the letter-badge + text wordmark pair.
   const navBrand = c.logoUrl
-    ? `<img src="${esc(c.logoUrl)}" alt="${esc(c.businessName || '')}" class="logo-img" style="width:auto;height:40px;object-fit:contain;display:inline-block;vertical-align:middle">`
+    ? `<img src="${esc(c.logoUrl)}" alt="${esc(c.businessName || '')}" class="logo-img" style="width:auto;height:56px;max-height:56px;object-fit:contain;display:inline-block;vertical-align:middle">`
     : `<span class="logo-mark">${initial}</span>${esc(c.businessName)}`;
   return `<nav class="nav"><div class="ctn nav-inner">
     <a href="/" class="nav-logo">${navBrand}</a>

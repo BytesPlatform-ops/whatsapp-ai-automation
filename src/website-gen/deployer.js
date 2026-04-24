@@ -292,7 +292,7 @@ function getNav(c, cur) {
 <div class="cursor-glow"></div>
 <nav class="nav${isDark?' nav-dark':''}"><div class="nav-i">
   <a href="/" class="nav-b">${c.logoUrl
-    ? `<img src="${esc(c.logoUrl)}" alt="${esc(c.businessName || '')}" style="height:40px;width:auto;display:inline-block;vertical-align:middle;object-fit:contain">`
+    ? `<img src="${esc(c.logoUrl)}" alt="${esc(c.businessName || '')}" style="height:56px;max-height:56px;width:auto;display:inline-block;vertical-align:middle;object-fit:contain">`
     : esc(c.businessName)}</a>
   <div class="nav-ls">${pages.map(p=>`<a href="${p.h}" class="nav-l${p.h===cur?' font-semibold':''}">${p.n}</a>`).join('')}<a href="/contact" class="btn-p" style="padding:10px 24px;font-size:14px">Get Started</a></div>
   <div class="mt" aria-label="Menu"><span></span><span></span><span></span></div>

@@ -928,7 +928,7 @@ function getNav(c, cur) {
   // secondary info. Without a logo, fall back to the serif wordmark
   // pair.
   const navBrand = c.logoUrl
-    ? `<img src="${esc(c.logoUrl)}" alt="${esc(c.businessName || '')}" style="height:40px;width:auto;display:inline-block;vertical-align:middle;object-fit:contain">${brokerage}`
+    ? `<img src="${esc(c.logoUrl)}" alt="${esc(c.businessName || '')}" style="height:56px;max-height:56px;width:auto;display:inline-block;vertical-align:middle;object-fit:contain">${brokerage}`
     : `${esc(c.businessName)}${brokerage}`;
   return `<nav class="nav${solidAttrs}"${dataAttr}><div class="ctn nav-inner">
     <a href="/" class="nav-brand">${navBrand}</a>
