@@ -141,15 +141,27 @@ async function handleConfirmedPayment(payment, paidSession) {
       const netlifySubdomain = site?.netlify_subdomain || '';
       const netlifySiteId = site?.netlify_site_id || '';
 
-      if (env.namecheap?.apiKey) {
+      // Pick the active registrar: NameSilo primary (no IP whitelist),
+      // Namecheap legacy fallback. postPayment only needs the one that's
+      // configured via env — the purchaseAndConfigureDomain signatures
+      // are identical across both integrations.
+      const hasNameSilo = !!process.env.NAMESILO_API_KEY;
+      const hasNamecheap = !!env.namecheap?.apiKey;
+      const registrarAvailable = hasNameSilo || hasNamecheap;
+
+      if (registrarAvailable) {
         try {
-          const { purchaseAndConfigureDomain } = require('../integrations/namecheap');
+          const registrarName = hasNameSilo ? 'namesilo' : 'namecheap';
+          const { purchaseAndConfigureDomain } = require(
+            hasNameSilo ? '../integrations/namesilo' : '../integrations/namecheap'
+          );
           const { addCustomDomainToNetlify } = require('../website-gen/deployer');
 
           await runWithContext({ channel: targetChannel, phoneNumberId: targetVia }, () =>
             sendTextMessage(targetPhone, `⏳ Registering *${selectedDomain}*...`)
           );
 
+          logger.info(`[PAY] Using registrar=${registrarName} for ${selectedDomain}`);
           const result = await purchaseAndConfigureDomain(selectedDomain, netlifySubdomain);
           if (result.success) {
             if (netlifySiteId) {

@@ -3,13 +3,17 @@ const { logger } = require('../utils/logger');
 const { env } = require('../config/env');
 
 /**
- * Check availability of a base name across multiple TLDs via Namecheap.
- * Returns an array of { domain, available, premium, price, priceSource }.
+ * Check availability + pricing for a base name across multiple TLDs.
  *
- * When Namecheap is unreachable we throw a recognizable error up to the
- * caller (NO estimates — quoting a made-up price risks under-charging the
- * customer vs. what Namecheap actually bills us at registration). The
- * WebDev handler catches and routes the user to "own"/"skip" instead.
+ * NameSilo is the PRIMARY registrar (no IP whitelist, reseller-friendly TOS,
+ * instant signup). Namecheap is kept as an env-gated fallback only — used
+ * when NameSilo isn't configured.
+ *
+ * Strategy:
+ *   1. NameSilo primary — one GET, returns availability + price inline.
+ *   2. Namecheap fallback — legacy, rarely used in production now.
+ *   3. All fail → throw DomainLookupUnavailable so webDev.js routes the
+ *      user to own/skip instead of quoting a zero price.
  */
 class DomainLookupUnavailable extends Error {
   constructor(cause) {
@@ -23,31 +27,53 @@ async function checkDomainAvailability(baseName) {
   const sanitized = baseName.toLowerCase().replace(/[^a-z0-9-]/g, '');
   if (!sanitized || sanitized.length < 2) return [];
 
-  if (!env.namecheap.apiKey) {
-    throw new DomainLookupUnavailable('Namecheap API not configured');
-  }
+  const hasNameSilo = !!process.env.NAMESILO_API_KEY;
+  const hasNamecheap = !!env.namecheap.apiKey;
 
-  try {
-    const { checkDomainAvailability: ncCheck } = require('../integrations/namecheap');
-    const results = await ncCheck(sanitized);
+  // 1. NameSilo primary.
+  if (hasNameSilo) {
+    try {
+      const namesilo = require('../integrations/namesilo');
+      const results = await namesilo.checkDomainAvailability(sanitized);
 
-    // If Namecheap returned availability but NO price for available/non-premium
-    // rows, pricing fetch silently failed. Treat it as unusable — never
-    // quote "$0" or make up a number.
-    const hasAnyAvailable = results.some((r) => r.available && !r.premium);
-    const hasAnyPricedAvailable = results.some(
-      (r) => r.available && !r.premium && r.price && parseFloat(r.price) > 0
-    );
-    if (hasAnyAvailable && !hasAnyPricedAvailable) {
-      throw new DomainLookupUnavailable('Namecheap returned no prices');
+      const hasAnyPriced = results.some(
+        (r) => r.available && !r.premium && r.price && parseFloat(r.price) > 0
+      );
+      if (!hasAnyPriced) {
+        throw new DomainLookupUnavailable('NameSilo returned no priced results');
+      }
+
+      return results.map((r) => ({ ...r, priceSource: 'namesilo' }));
+    } catch (err) {
+      if (err instanceof DomainLookupUnavailable) throw err;
+      logger.error(`[DOMAIN] NameSilo lookup failed: ${err.message}`);
+      // Fall through to Namecheap fallback if present, else rethrow.
+      if (!hasNamecheap) throw new DomainLookupUnavailable(err.message);
     }
-
-    return results.map((r) => ({ ...r, priceSource: 'namecheap' }));
-  } catch (err) {
-    if (err instanceof DomainLookupUnavailable) throw err;
-    logger.error(`[DOMAIN] Namecheap lookup failed: ${err.message}`);
-    throw new DomainLookupUnavailable(err.message);
   }
+
+  // 2. Namecheap fallback (legacy).
+  if (hasNamecheap) {
+    try {
+      const { checkDomainAvailability: ncCheck } = require('../integrations/namecheap');
+      const results = await ncCheck(sanitized);
+
+      const hasAnyPriced = results.some(
+        (r) => r.available && !r.premium && r.price && parseFloat(r.price) > 0
+      );
+      if (hasAnyPriced) {
+        return results.map((r) => ({ ...r, priceSource: 'namecheap' }));
+      }
+
+      throw new DomainLookupUnavailable('Namecheap returned no priced results');
+    } catch (err) {
+      if (err instanceof DomainLookupUnavailable) throw err;
+      logger.error(`[DOMAIN] Namecheap fallback failed: ${err.message}`);
+      throw new DomainLookupUnavailable(err.message);
+    }
+  }
+
+  throw new DomainLookupUnavailable('No registrar configured');
 }
 
 /**

@@ -68,6 +68,28 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+// Debug — what outbound IP is this server reaching the internet from?
+// Used to discover the right IP to whitelist at Namecheap / other APIs.
+// Hits ipify from the server side; the IP it reports back is the one
+// Namecheap will see on outbound calls.
+app.get('/debug/outbound-ip', async (_req, res) => {
+  try {
+    const axios = require('axios');
+    const [v4, v6] = await Promise.allSettled([
+      axios.get('https://api.ipify.org?format=json', { timeout: 8000 }),
+      axios.get('https://api64.ipify.org?format=json', { timeout: 8000 }),
+    ]);
+    res.json({
+      outboundIPv4: v4.status === 'fulfilled' ? v4.value.data?.ip : null,
+      outboundIPv6or4: v6.status === 'fulfilled' ? v6.value.data?.ip : null,
+      note: 'Whitelist outboundIPv4 on Namecheap. This IP may rotate on Render free/Starter.',
+      checkedAt: new Date().toISOString(),
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Webhook routes
 app.use('/', webhookRoutes);
 app.use('/', calendlyRoutes);
