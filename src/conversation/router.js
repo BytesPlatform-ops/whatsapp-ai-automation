@@ -5,7 +5,7 @@ const { runWithContext } = require('../messages/channelContext');
 const { STATES } = require('./states');
 const { logger } = require('../utils/logger');
 const { generateResponse } = require('../llm/provider');
-const { INTENT_CLASSIFIER_PROMPT, GENERAL_CHAT_PROMPT } = require('../llm/prompts');
+const { INTENT_CLASSIFIER_PROMPT, GENERAL_CHAT_PROMPT, WEB_REVISIONS_ASIDE_PROMPT } = require('../llm/prompts');
 const { transcribeAudio } = require('../llm/transcribe');
 const { maybeUpdateSummary } = require('./summaryManager');
 const { isDelegation } = require('../config/smartDefaults');
@@ -1328,22 +1328,39 @@ async function _routeMessage(message) {
       // If the LLM call fails, skip the aside and just re-prompt — better
       // than stalling silently.
       const currentQuestion = STATE_QUESTION[user.state];
+
+      // Pick an aside prompt scoped to the current flow. Generic
+      // GENERAL_CHAT_PROMPT pitches the full agency menu (SEO, social,
+      // chatbots…) which reads as a non sequitur when the user is
+      // reviewing a delivered site. The scoped prompt answers in
+      // context AND ends with the forward-looking invitation, which
+      // lets us skip the separate "back to where we were" re-prompt.
+      const scopedAside = user.state === STATES.WEB_REVISIONS;
+      const asidePrompt = scopedAside ? WEB_REVISIONS_ASIDE_PROMPT : GENERAL_CHAT_PROMPT;
+      let asideSent = false;
       try {
         const aside = await generateResponse(
-          GENERAL_CHAT_PROMPT,
+          asidePrompt,
           [{ role: 'user', content: text }],
           { userId: user.id, operation: 'off_topic_aside' }
         );
         await sendTextMessage(user.phone_number, aside);
         await logMessage(user.id, aside, 'assistant');
+        asideSent = true;
       } catch (err) {
         logger.warn(`[ROUTER] Off-topic aside LLM call failed for ${from}: ${err.message}`);
       }
 
-      // Remind them of the current step. If STATE_QUESTION has no entry
-      // for this state, skip the re-prompt (better silence than
-      // "Now, back to where we were - undefined").
-      if (currentQuestion) {
+      // Skip the re-prompt when:
+      //   • a session recap already fired this turn — its trailing
+      //     "what's next?" is a better-worded version of the re-prompt
+      //     and stacking both reads as a three-message flood;
+      //   • we used a scoped aside that already invites the next
+      //     action (WEB_REVISIONS) — re-asking is redundant.
+      // If STATE_QUESTION has no entry for this state, skip too
+      // (better silence than "Now, back to where we were - undefined").
+      const suppressRePrompt = recapFired || (asideSent && scopedAside);
+      if (currentQuestion && !suppressRePrompt) {
         await sendWithMenuButton(
           user.phone_number,
           `Now, back to where we were - ${currentQuestion}`
