@@ -1455,6 +1455,8 @@ function wrapHvacPage(c, cur, body, opts = {}) {
 <meta property="og:description" content="${desc}">
 <meta property="og:type" content="website">
 <meta name="theme-color" content="${buildTokens(c).trust}">
+<link rel="icon" type="image/png" href="${esc(c.logoUrl || 'https://pixiebot.co/pixie-logo.png')}">
+<link rel="apple-touch-icon" href="${esc(c.logoUrl || 'https://pixiebot.co/pixie-logo.png')}">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@500;700;800&display=swap" rel="stylesheet">
