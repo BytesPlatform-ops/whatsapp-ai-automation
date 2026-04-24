@@ -39,7 +39,7 @@ async function reverseGeocode({ latitude, longitude } = {}) {
   if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
   if (lat < -90 || lat > 90 || lon < -180 || lon > 180) return null;
 
-  try {
+  const doRequest = async () => {
     const response = await axios.get(NOMINATIM_URL, {
       params: {
         lat,
@@ -89,9 +89,39 @@ async function reverseGeocode({ latitude, longitude } = {}) {
       streetAddress,
       displayName: typeof data.display_name === 'string' ? data.display_name : null,
     };
+  };
+
+  // One retry on transient failures. Nominatim is free and commonly
+  // times out or returns 5xx under load; a single miss shouldn't
+  // strand a user mid-flow. 1.2s backoff keeps us under the 1 RPS
+  // per-origin policy.
+  const isRetryable = (err) => {
+    const status = err?.response?.status;
+    return (
+      err?.code === 'ECONNABORTED' ||
+      err?.code === 'ETIMEDOUT' ||
+      err?.code === 'ECONNRESET' ||
+      err?.code === 'ENOTFOUND' ||
+      status === 429 ||
+      (typeof status === 'number' && status >= 500 && status < 600)
+    );
+  };
+
+  try {
+    return await doRequest();
   } catch (err) {
-    logger.warn(`[GEOCODE] Reverse lookup failed for (${lat}, ${lon}): ${err.message}`);
-    return null;
+    if (!isRetryable(err)) {
+      logger.warn(`[GEOCODE] Reverse lookup failed for (${lat}, ${lon}): ${err.message}`);
+      return null;
+    }
+    logger.info(`[GEOCODE] Transient failure (${err.message}); retrying once`);
+    await new Promise((r) => setTimeout(r, 1200));
+    try {
+      return await doRequest();
+    } catch (retryErr) {
+      logger.warn(`[GEOCODE] Retry failed for (${lat}, ${lon}): ${retryErr.message}`);
+      return null;
+    }
   }
 }
 

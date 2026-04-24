@@ -152,6 +152,12 @@ function questionForState(state, websiteData) {
       if (websiteData?.primaryCity) {
         return `Which areas / neighborhoods do you serve around *${websiteData.primaryCity}*? List them separated by commas. Example: *Clifton, DHA, Gulshan*. Or just skip to use *${websiteData.primaryCity}* as the only area.`;
       }
+      // Suppress the "tap 📎" tip if the user already dropped a pin
+      // and we couldn't auto-resolve the city — re-suggesting it
+      // implies we ignored their first attempt.
+      if (websiteData?.pinDropped) {
+        return 'Which city are you based in, and which areas do you serve? Example: *Austin: Round Rock, Cedar Park, Pflugerville*.';
+      }
       return (
         'Which city are you based in, and which areas do you serve? Example: *Austin: Round Rock, Cedar Park, Pflugerville*.\n\n' +
         '_Tip: tap 📎 → Location to drop a pin and I\'ll pick up the city from it._'
@@ -226,6 +232,15 @@ function questionForState(state, websiteData) {
         return (
           `Last thing — already have your address as *${websiteData.contactAddress}*. ` +
           "Anything else for the site — email or phone? Or reply *skip* to go with just the address."
+        );
+      }
+      // Pin was dropped earlier but we couldn't resolve it to a
+      // street address. Don't re-suggest dropping another pin —
+      // ask them to type an address instead if they want one.
+      if (websiteData?.pinDropped) {
+        return (
+          "Last thing — contact info for the site. Send your email, phone, and/or a written address. " +
+          "Or reply *skip* to leave contact details off."
         );
       }
       return (

@@ -51,18 +51,32 @@ const LOCATION_SEED_STATES = new Set([
  */
 function buildPostPinFollowUp(state, wd) {
   if (state === STATES.WEB_COLLECT_AREAS) {
-    // Primary city is now set. Ask for neighborhoods, matching the
-    // phrasing used in questionForState when primaryCity is known.
+    // Without a resolved city, ask for it directly — the user will
+    // typically reply with just the name ("Karachi") and
+    // handleCollectAreas will parse it via its LLM fallback.
+    if (!wd.primaryCity) {
+      return 'Which city is that? Just type the name — include any neighborhoods you serve too, if you like.';
+    }
+    // Primary city is known. Ask for neighborhoods, matching the
+    // phrasing used in questionForState when primaryCity is set.
     if (!Array.isArray(wd.serviceAreas) || wd.serviceAreas.length === 0) {
       return `Which areas / neighborhoods do you serve around *${wd.primaryCity}*? List them separated by commas, or just skip to use *${wd.primaryCity}* as the only area.`;
     }
     return '';
   }
   if (state === STATES.WEB_COLLECT_CONTACT) {
-    // Address is now set. Offer to collect the other contact fields or
-    // skip straight to the summary.
     const hasEmail = !!wd.contactEmail;
     const hasPhone = !!wd.contactPhone;
+    // No address resolved from the pin. Acknowledge it and keep
+    // moving — they can still add email/phone or skip.
+    if (!wd.contactAddress) {
+      if (!hasEmail && !hasPhone) {
+        return "I couldn't auto-resolve a street address, but I've noted your location. Send your email or phone if you'd like those on the site, or reply *skip*.";
+      }
+      return "I couldn't auto-resolve a street address, but I've noted your location. Reply *skip* to move on or add anything else you want on the site.";
+    }
+    // Address is now set. Offer to collect the other contact fields or
+    // skip straight to the summary.
     if (!hasEmail && !hasPhone) {
       return 'Anything else for the site — email or phone? Or reply *skip* to go with just the address.';
     }
@@ -100,6 +114,23 @@ async function handleLocation(user, message) {
 
   // ── Graceful fallback when geocoding is unavailable ──────────────
   if (!geo) {
+    // If the user is mid-webdev at a seed state, still advance the
+    // flow: record the pin on websiteData (so downstream prompts can
+    // suppress redundant "tap 📎" tips) and emit a state-aware
+    // follow-up asking for the city / email / phone as appropriate.
+    if (LOCATION_SEED_STATES.has(user.state)) {
+      const wd = { ...(user.metadata?.websiteData || {}) };
+      wd.pinDropped = { latitude: lat, longitude: lon, at: new Date().toISOString() };
+      await updateUserMetadata(user.id, { websiteData: wd });
+      user.metadata = { ...(user.metadata || {}), websiteData: wd };
+      const followUp = buildPostPinFollowUp(user.state, wd);
+      const head = "Got your pin — I couldn't auto-detect the city from those coordinates.";
+      const msg = followUp ? `${head}\n\n${followUp}` : head;
+      await sendTextMessage(user.phone_number, msg);
+      await logMessage(user.id, msg, 'assistant');
+      logger.info(`[LOCATION] Geocode failed for ${user.phone_number} at state ${user.state}; recorded pin and asked for text fallback`);
+      return { handled: true };
+    }
     const msg = `Got your location (${lat.toFixed(4)}, ${lon.toFixed(4)}). I'll save the coordinates — let me know if there's anything specific you want done with them.`;
     await sendTextMessage(user.phone_number, msg);
     await logMessage(user.id, msg, 'assistant');
@@ -126,11 +157,13 @@ async function handleLocation(user, message) {
       wd.contactAddress = addressForWd;
       seeded.push('address');
     }
+    // Record the pin regardless of what got seeded so downstream
+    // prompts can tell "pin already dropped" from "no pin yet".
+    wd.pinDropped = { latitude: lat, longitude: lon, at: new Date().toISOString() };
+    await updateUserMetadata(user.id, { websiteData: wd });
+    user.metadata = { ...(user.metadata || {}), websiteData: wd };
 
     if (seeded.length > 0) {
-      await updateUserMetadata(user.id, { websiteData: wd });
-      user.metadata = { ...(user.metadata || {}), websiteData: wd };
-
       const cityPart = geo.city ? ` based in *${geo.city}*` : '';
       const seedLine = seeded.includes('address')
         ? `Got your location${cityPart}. Saved the address for your site too.`
