@@ -12,7 +12,25 @@ function runWithContext({ channel, phoneNumberId }, fn) {
   // `sendCount` is incremented by sender.js every time a user-visible
   // message actually goes out. The router reads it after a failed turn to
   // decide whether a retry would duplicate already-delivered content.
-  return channelStore.run({ channel, phoneNumberId: phoneNumberId || null, sendCount: 0 }, fn);
+  // `userId` is null at turn start; router fills it in after findOrCreateUser
+  // so the sender can auto-log outbound messages against the right user.
+  return channelStore.run({ channel, phoneNumberId: phoneNumberId || null, sendCount: 0, userId: null }, fn);
+}
+
+/**
+ * Attach the current turn's user.id onto the async-context store. The
+ * sender facade reads this to auto-log outbound messages to the
+ * conversations table — previously handlers had to call logMessage
+ * manually after every sendTextMessage, and the 50%+ of cases where
+ * they forgot left the admin panel's chat history incomplete.
+ */
+function setUserId(userId) {
+  const store = channelStore.getStore();
+  if (store) store.userId = userId || null;
+}
+
+function getUserId() {
+  return channelStore.getStore()?.userId || null;
 }
 
 /**
@@ -61,4 +79,6 @@ module.exports = {
   getCurrentPhoneNumberId,
   noteSendSucceeded,
   getSendCount,
+  setUserId,
+  getUserId,
 };

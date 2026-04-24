@@ -1,7 +1,7 @@
 const { findOrCreateUser, updateUserState, updateUserMetadata } = require('../db/users');
 const { logMessage } = require('../db/conversations');
 const { markAsRead, sendTextMessage, sendInteractiveButtons, sendWithMenuButton, setLastMessageId } = require('../messages/sender');
-const { runWithContext } = require('../messages/channelContext');
+const { runWithContext, setUserId } = require('../messages/channelContext');
 const { STATES } = require('./states');
 const { logger } = require('../utils/logger');
 const { generateResponse } = require('../llm/provider');
@@ -583,6 +583,11 @@ async function _routeMessage(message) {
   // number) so a customer texting two of our WhatsApp numbers gets two
   // independent sessions.
   const user = await findOrCreateUser(from, channel, message.phoneNumberId || null);
+  // Tell the sender facade who we're talking to so every outbound message
+  // (text, buttons, lists, docs, images) auto-logs against this user. Without
+  // this, ~50% of bot replies don't show up in the admin panel chat history
+  // because handlers used to have to call logMessage manually after each send.
+  setUserId(user.id);
 
   // ── Feedback button intercepts ─────────────────────────────────────────
   // Must run BEFORE abuse detection and normal intent routing — these are

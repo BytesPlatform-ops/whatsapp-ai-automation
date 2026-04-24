@@ -5,14 +5,32 @@
  * channel from AsyncLocalStorage and delegates to the correct platform sender.
  */
 
-const { getCurrentChannel, noteSendSucceeded } = require('./channelContext');
+const { getCurrentChannel, noteSendSucceeded, getUserId } = require('./channelContext');
 const whatsappSender = require('./whatsappSender');
 const messengerSender = require('./messengerSender');
 const { rememberInteractive, maybeAppendHint } = require('./interactiveReplyMatcher');
+const { logger } = require('../utils/logger');
 
 function getSender() {
   const channel = getCurrentChannel();
   return channel === 'whatsapp' ? whatsappSender : messengerSender;
+}
+
+/**
+ * Auto-log an outbound bot message against the current turn's user.
+ * No-op when there's no userId in context (background jobs, admin-
+ * initiated sends that already log manually). Errors are swallowed
+ * so a DB hiccup never fails a send.
+ */
+async function autoLogOutbound(text, messageType = 'text') {
+  const userId = getUserId();
+  if (!userId || !text) return;
+  try {
+    const { logMessage } = require('../db/conversations');
+    await logMessage(userId, text, 'assistant', messageType);
+  } catch (err) {
+    logger.debug(`[SENDER] Auto-log failed: ${err.message}`);
+  }
 }
 
 async function sendTextMessage(to, text, options = {}) {
@@ -27,6 +45,7 @@ async function sendTextMessage(to, text, options = {}) {
   }
   const result = await getSender().sendTextMessage(to, text);
   noteSendSucceeded();
+  autoLogOutbound(text).catch(() => {});
   return result;
 }
 
@@ -38,6 +57,8 @@ async function sendInteractiveButtons(to, bodyText, buttons, headerText = null) 
   const bodyWithHint = maybeAppendHint(bodyText, buttons);
   const result = await getSender().sendInteractiveButtons(to, bodyWithHint, buttons, headerText);
   noteSendSucceeded();
+  const btnLabels = (buttons || []).map((b) => b?.title || b?.text || '').filter(Boolean).join(' | ');
+  autoLogOutbound(btnLabels ? `${bodyWithHint}\n[Buttons: ${btnLabels}]` : bodyWithHint).catch(() => {});
   try { rememberInteractive(to, buttons, 'buttons'); } catch {}
   return result;
 }
@@ -51,6 +72,8 @@ async function sendInteractiveList(to, bodyText, buttonText, sections, headerTex
   const bodyWithHint = maybeAppendHint(bodyText, flatRows);
   const result = await getSender().sendInteractiveList(to, bodyWithHint, buttonText, sections, headerText);
   noteSendSucceeded();
+  const rowLabels = flatRows.map((r) => r?.title || '').filter(Boolean).join(' | ');
+  autoLogOutbound(rowLabels ? `${bodyWithHint}\n[List: ${rowLabels}]` : bodyWithHint).catch(() => {});
   try { rememberInteractive(to, flatRows, 'list'); } catch {}
   return result;
 }
@@ -58,30 +81,35 @@ async function sendInteractiveList(to, bodyText, buttonText, sections, headerTex
 async function sendWithMenuButton(to, text, extraButtons = []) {
   const result = await getSender().sendWithMenuButton(to, text, extraButtons);
   noteSendSucceeded();
+  autoLogOutbound(text).catch(() => {});
   return result;
 }
 
 async function sendCTAButton(to, bodyText, buttonText, url, headerText = null) {
   const result = await getSender().sendCTAButton(to, bodyText, buttonText, url, headerText);
   noteSendSucceeded();
+  autoLogOutbound(`${bodyText}\n[CTA: ${buttonText} → ${url}]`).catch(() => {});
   return result;
 }
 
 async function sendDocument(to, documentUrl, caption = '', filename = 'report.pdf') {
   const result = await getSender().sendDocument(to, documentUrl, caption, filename);
   noteSendSucceeded();
+  autoLogOutbound(`[Document: ${filename}]${caption ? ` — ${caption}` : ''}`, 'document').catch(() => {});
   return result;
 }
 
 async function sendDocumentBuffer(to, buffer, caption = '', filename = 'report.pdf', mimeType = 'application/pdf') {
   const result = await getSender().sendDocumentBuffer(to, buffer, caption, filename, mimeType);
   noteSendSucceeded();
+  autoLogOutbound(`[Document: ${filename}]${caption ? ` — ${caption}` : ''}`, 'document').catch(() => {});
   return result;
 }
 
 async function sendImage(to, imageUrl, caption = '') {
   const result = await getSender().sendImage(to, imageUrl, caption);
   noteSendSucceeded();
+  autoLogOutbound(`[Image sent]${caption ? ` — ${caption}` : ''}`, 'image').catch(() => {});
   return result;
 }
 
