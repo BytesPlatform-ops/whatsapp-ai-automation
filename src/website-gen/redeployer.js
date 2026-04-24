@@ -72,9 +72,21 @@ async function redeployWithOverrides(siteId, overrides) {
  * points to the same URL the user sees in WhatsApp chat. No-op when the
  * site is already paid or the URL hasn't changed.
  *
+ * When the payment amount has also changed (e.g. the user picked a
+ * different-priced domain after the preview was built), pass `opts.amount`
+ * so the banner's activation total re-renders to match the chat. Without
+ * this, the banner button clicks through to the correct Stripe checkout
+ * but DISPLAYS the old total, which looks like a bug to the user.
+ *
  * Fire-and-forget — callers log and continue if this fails.
+ *
+ * @param {string|number} userId
+ * @param {string} newUrl            new Stripe payment link URL
+ * @param {object} [opts]
+ * @param {number} [opts.amount]     new activation total (website + domain)
+ *                                   — when omitted, amount is left as-is
  */
-async function updateSiteBannerLink(userId, newUrl) {
+async function updateSiteBannerLink(userId, newUrl, opts = {}) {
   if (!userId || !newUrl) return { ok: false, reason: 'missing args' };
   const { data: site, error } = await supabase
     .from('generated_sites')
@@ -89,11 +101,27 @@ async function updateSiteBannerLink(userId, newUrl) {
     logger.info(`[REDEPLOY] Skipping banner sync for site ${site.id} — already paid`);
     return { ok: true, reason: 'already paid' };
   }
-  if (current.paymentLinkUrl === newUrl) {
+  const amountChanged =
+    opts.amount != null && Number.isFinite(Number(opts.amount)) && Number(opts.amount) !== current.activationAmount;
+  const urlChanged = current.paymentLinkUrl !== newUrl;
+  if (!amountChanged && !urlChanged) {
     return { ok: true, reason: 'already up to date' };
   }
-  logger.info(`[REDEPLOY] Syncing site ${site.id} banner link → ${newUrl}`);
-  return redeployWithOverrides(site.id, { paymentLinkUrl: newUrl, paymentStatus: 'preview' });
+  const overrides = { paymentLinkUrl: newUrl, paymentStatus: 'preview' };
+  if (amountChanged) {
+    overrides.activationAmount = Number(opts.amount);
+    // Reset originalAmount to the same value so a new payment link does
+    // NOT inadvertently render a stale strikethrough "was $X" badge.
+    // The discount scheduler explicitly sets originalAmount+discountPct
+    // when it re-runs, so that path is unaffected.
+    overrides.originalAmount = Number(opts.amount);
+    overrides.discountPct = 0;
+  }
+  logger.info(
+    `[REDEPLOY] Syncing site ${site.id} banner → ${newUrl}` +
+      (amountChanged ? ` (amount $${current.activationAmount} → $${opts.amount})` : '')
+  );
+  return redeployWithOverrides(site.id, overrides);
 }
 
 /**

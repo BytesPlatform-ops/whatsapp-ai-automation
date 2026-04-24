@@ -15,6 +15,31 @@ const { STATES } = require('../states');
 const SITE_COST = parseInt(process.env.DEFAULT_ACTIVATION_PRICE || '199', 10);
 
 async function handleCustomDomain(user, message) {
+  // Defensive guard: if a user somehow lands in DOMAIN_OFFER or
+  // DOMAIN_SEARCH with a domain ALREADY selected pre-build (via the
+  // current WEB_DOMAIN_CHOICE flow), short-circuit the legacy re-pitch.
+  // The primary fix lives in webDev.js#handleRevisions — this is just
+  // a safety net so no future code path can drop a pre-locked user
+  // into the legacy domain flow.
+  const alreadyHasDomain = !!user.metadata?.selectedDomain;
+  const inLegacyEntry =
+    user.state === STATES.DOMAIN_OFFER || user.state === STATES.DOMAIN_SEARCH;
+  if (alreadyHasDomain && inLegacyEntry) {
+    logger.info(
+      `[DOMAIN] Skipping legacy ${user.state} for ${user.phone_number} — selectedDomain=${user.metadata.selectedDomain} already locked`
+    );
+    await sendTextMessage(
+      user.phone_number,
+      `You've already got *${user.metadata.selectedDomain}* locked in — no need to pick again. Your activation link was in the preview message; let me know if you'd like any changes to the site.`
+    );
+    await logMessage(
+      user.id,
+      `Legacy domain state hit with selectedDomain=${user.metadata.selectedDomain} — bounced back to revisions`,
+      'assistant'
+    );
+    return STATES.WEB_REVISIONS;
+  }
+
   switch (user.state) {
     case STATES.DOMAIN_OFFER:
       return handleDomainOffer(user, message);

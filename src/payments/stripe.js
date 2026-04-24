@@ -118,7 +118,11 @@ async function createPaymentLink({
     // risk from the banner path.
     try {
       const { updateSiteBannerLink } = require('../website-gen/redeployer');
-      updateSiteBannerLink(userId, paymentLink.url).catch((err) =>
+      // Pass amount so the banner total re-renders when a new link is
+      // created at a different price (e.g. user picked a different-cost
+      // domain after the preview was built). Without this, the button
+      // clicks to the right checkout but shows the old dollar figure.
+      updateSiteBannerLink(userId, paymentLink.url, { amount }).catch((err) =>
         logger.warn(`[STRIPE] Banner sync threw for user ${userId}: ${err.message}`)
       );
     } catch (err) {

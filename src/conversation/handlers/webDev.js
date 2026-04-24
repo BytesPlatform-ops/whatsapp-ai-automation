@@ -3152,6 +3152,55 @@ async function handleGenerationFailed(user, message) {
   return STATES.WEB_GENERATION_FAILED;
 }
 
+// Post-approval path when the user already picked a domain BEFORE the
+// preview was built (the current default via WEB_DOMAIN_CHOICE). In
+// that case the DOMAIN_OFFER question is noise — we already have the
+// domain, the activation Stripe link, and the preview banner pointing
+// at it. This helper just acknowledges the approval and resurfaces the
+// existing activation link so the user knows exactly what to click.
+async function acknowledgeApprovalWithDomain(user) {
+  const selectedDomain = user.metadata?.selectedDomain || null;
+  const websitePrice = parseInt(process.env.DEFAULT_ACTIVATION_PRICE || '199', 10);
+  const domainPrice = parseInt(user.metadata?.domainPrice || 0, 10);
+  const total = websitePrice + domainPrice;
+
+  // The same Stripe URL the user saw on the preview banner / activation
+  // chat message — pending row was written at createPaymentLink time.
+  // Fire-and-forget: a missing row still lets us send a useful ack.
+  let activationUrl = null;
+  try {
+    const { getLatestPendingPayment } = require('../../db/payments');
+    const pending = await getLatestPendingPayment(user.id);
+    activationUrl = pending?.stripe_payment_link_url || null;
+  } catch (err) {
+    logger.warn(`[WEBDEV-APPROVE] Pending payment lookup failed: ${err.message}`);
+  }
+
+  const priceLine = domainPrice > 0 && selectedDomain
+    ? `*$${total}* — $${websitePrice} website + $${domainPrice} for *${selectedDomain}*.`
+    : selectedDomain
+      ? `*$${total}* — I'll point *${selectedDomain}* at your site once payment clears.`
+      : `*$${total}*.`;
+
+  const tail = activationUrl
+    ? `Activate to go live:\n\n👉 ${activationUrl}`
+    : `Your activation link is in the preview message above — tap it to go live.`;
+
+  await sendTextMessage(
+    user.phone_number,
+    `🎉 *Awesome!* Your website is approved.\n\n${priceLine}\n\n${tail}\n\nOr tell me if you'd like any changes.`
+  );
+  await logMessage(
+    user.id,
+    `Approval ack (pre-selected domain=${selectedDomain || 'none'}, link=${activationUrl ? 'resent' : 'none'})`,
+    'assistant'
+  );
+  // Stay in WEB_REVISIONS so the user can still ask for tweaks or swap
+  // the domain by replying naturally. The legacy DOMAIN_OFFER state
+  // isn't the right home for a user who already has a domain locked.
+  return STATES.WEB_REVISIONS;
+}
+
 async function handleRevisions(user, message) {
   const buttonId = message.buttonId || '';
 
@@ -3165,6 +3214,12 @@ async function handleRevisions(user, message) {
   if (buttonId === 'web_approve') {
     const siteId = user.metadata?.currentSiteId;
     if (siteId) await updateSite(siteId, { status: 'approved' });
+
+    // Domain was already chosen pre-build — skip the legacy "want a
+    // domain?" re-pitch and resurface the existing activation link.
+    if (user.metadata?.selectedDomain) {
+      return acknowledgeApprovalWithDomain(user);
+    }
 
     const example = domainExampleFor(user.metadata?.websiteData?.businessName);
     await sendTextMessage(
@@ -3247,6 +3302,10 @@ async function handleRevisions(user, message) {
         if (approvalIntent === 'confirm') {
           const siteId = user.metadata?.currentSiteId;
           if (siteId) await updateSite(siteId, { status: 'approved' });
+
+          if (user.metadata?.selectedDomain) {
+            return acknowledgeApprovalWithDomain(user);
+          }
 
           const example = domainExampleFor(user.metadata?.websiteData?.businessName);
           await sendTextMessage(
@@ -3367,6 +3426,10 @@ async function handleRevisions(user, message) {
       if (updates._approved) {
         const siteId = user.metadata?.currentSiteId;
         if (siteId) await updateSite(siteId, { status: 'approved' });
+
+        if (user.metadata?.selectedDomain) {
+          return acknowledgeApprovalWithDomain(user);
+        }
 
         const example = domainExampleFor(currentConfig?.businessName || user.metadata?.websiteData?.businessName);
         await sendTextMessage(
