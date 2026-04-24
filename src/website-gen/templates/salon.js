@@ -304,7 +304,7 @@ function getNav(c, cur, opts = {}) {
   const dark = opts.dark ? ' dark' : '';
   return `
 <nav class="nav${dark}">
-  <a href="/" class="nav-b">${esc(c.businessName)}</a>
+  <a href="/" class="nav-b">${c.logoUrl ? `<img src="${attr(c.logoUrl)}" alt="${attr(c.businessName || '')}" style="height:32px;width:auto;display:inline-block;vertical-align:middle;object-fit:contain;margin-right:8px">` : ''}${esc(c.businessName)}</a>
   <div class="nav-ls">
     ${ps.map((p) => `<a href="${p.h}" class="nav-l${p.h === cur ? ' active' : ''}">${p.n}</a>`).join('')}
     <a href="/booking" class="nav-cta"><span>Reserve</span></a>

@@ -922,8 +922,14 @@ function getNav(c, cur) {
   const forceSolid = cur !== '/';
   const solidAttrs = forceSolid ? ' solid' : '';
   const dataAttr = forceSolid ? ' data-force-solid="true"' : '';
+  // User-uploaded logo replaces the text wordmark when present. Kept at
+  // 36px tall so serif text alongside the brokerage sub-line still reads
+  // at roughly the same vertical weight as the default wordmark layout.
+  const logoImg = c.logoUrl
+    ? `<img src="${esc(c.logoUrl)}" alt="${esc(c.businessName || '')}" style="height:36px;width:auto;display:inline-block;vertical-align:middle;object-fit:contain;margin-right:10px">`
+    : '';
   return `<nav class="nav${solidAttrs}"${dataAttr}><div class="ctn nav-inner">
-    <a href="/" class="nav-brand">${esc(c.businessName)}${brokerage}</a>
+    <a href="/" class="nav-brand">${logoImg}${esc(c.businessName)}${brokerage}</a>
     <div class="nav-links">
       ${pages.filter((p) => p.h !== '/').map((p) => `<a href="${p.h}"${p.h === cur ? ' class="active"' : ''}>${p.n}</a>`).join('')}
     </div>

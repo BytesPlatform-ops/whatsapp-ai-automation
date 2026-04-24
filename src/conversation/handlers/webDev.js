@@ -59,6 +59,10 @@ function nextMissingWebDevState(websiteData, fullMetadata = {}) {
   // Phone is critical (especially for HVAC). Email alone is not enough — make
   // sure we collect at least a phone OR address before confirming.
   if (!websiteData.contactPhone && !websiteData.contactAddress) return STATES.WEB_COLLECT_CONTACT;
+  // Optional logo collection — skipped if the user already sent one or
+  // explicitly opted out (logoSkipped=true). Flagged via metadata not
+  // websiteData so stale sessions don't loop back.
+  if (!websiteData.logoUrl && !websiteData.logoSkipped) return STATES.WEB_COLLECT_LOGO;
   return STATES.WEB_CONFIRM;
 }
 
@@ -193,6 +197,7 @@ function questionForState(state, websiteData) {
       );
     }
     case STATES.WEB_COLLECT_CONTACT: return "Last thing — what contact info do you want on the site? Send your email, phone, and/or address.";
+    case STATES.WEB_COLLECT_LOGO: return "Got a logo? Send it as an image (JPG or PNG) — I'll clean up the background automatically. Or reply *skip* and I'll use a text logo with your brand initial.";
     default: return '';
   }
 }
@@ -278,9 +283,10 @@ async function handleWebDev(user, message) {
     case STATES.WEB_COLLECT_LISTINGS_PHOTOS:
       return handleCollectListingsPhotos(user, message);
     case STATES.WEB_COLLECT_COLORS:
-    case STATES.WEB_COLLECT_LOGO:
-      // Legacy: skip straight to contact if stuck in old states
+      // Legacy: skip straight to contact if stuck in this old state
       return STATES.WEB_COLLECT_CONTACT;
+    case STATES.WEB_COLLECT_LOGO:
+      return handleCollectLogo(user, message);
     case STATES.SALON_BOOKING_TOOL:
       return handleSalonBookingTool(user, message);
     case STATES.SALON_INSTAGRAM:
@@ -2278,6 +2284,108 @@ async function showConfirmSummary(user, prefix = '') {
   await logMessage(user.id, 'Showing website confirmation summary', 'assistant');
 
   return STATES.WEB_CONFIRM;
+}
+
+// ─── Logo collection ───────────────────────────────────────────────────────
+// Optional step — runs after contact, before the confirmation summary.
+// Accepts either an image message (JPG/PNG) or a "skip" reply. On image,
+// downloads the WhatsApp media, runs it through the three-tier logo
+// processor (transparent passthrough → remove.bg API → original upload)
+// and stores the resulting public URL in websiteData.logoUrl. On skip,
+// sets websiteData.logoSkipped=true so nextMissingState() stops asking.
+async function handleCollectLogo(user, message) {
+  const text = (message.text || '').trim();
+
+  // Skip path — explicit opt-out in any language we can reasonably detect
+  // via keyword. Keeping this regex-based instead of LLM since the user
+  // is answering a very specific yes/no-ish prompt.
+  if (text && /^(skip|no|nope|nah|no thanks|don'?t have|none|n\/a|na|nahi|baad may|baad|later)$/i.test(text)) {
+    const wd = { ...(user.metadata?.websiteData || {}) };
+    wd.logoSkipped = true;
+    await updateUserMetadata(user.id, { websiteData: wd });
+    user.metadata = { ...(user.metadata || {}), websiteData: wd };
+    await sendTextMessage(user.phone_number, await localize("No problem — I'll use a clean text logo with your brand initial.", user, text));
+    await logMessage(user.id, 'User skipped logo upload', 'assistant');
+    return smartAdvance(user, message, null);
+  }
+
+  // Image path — the sender captured the message with `type: 'image'` and
+  // a mediaId. downloadMedia pulls the bytes from WhatsApp's CDN.
+  const hasImage = message.type === 'image' && (message.mediaId || message.mediaUrl);
+  if (!hasImage) {
+    await sendTextMessage(
+      user.phone_number,
+      await localize(
+        "I didn't catch an image there. Send your logo as an image (JPG or PNG), or reply *skip* to use a text logo.",
+        user,
+        text
+      )
+    );
+    return STATES.WEB_COLLECT_LOGO;
+  }
+
+  await sendTextMessage(user.phone_number, await localize('Got it — processing your logo...', user, text));
+
+  let mediaBuffer = null;
+  let mediaMime = 'image/png';
+  try {
+    const { downloadMedia } = require('../../messages/sender');
+    const media = await downloadMedia(message.mediaId || message.mediaUrl);
+    if (media?.buffer) {
+      mediaBuffer = media.buffer;
+      mediaMime = media.mimeType || mediaMime;
+    }
+  } catch (err) {
+    logger.error(`[LOGO-COLLECT] Media download failed: ${err.message}`);
+  }
+
+  if (!mediaBuffer) {
+    await sendTextMessage(
+      user.phone_number,
+      await localize(
+        "I couldn't download that image — can you try sending it again? Or reply *skip* to move on without a logo.",
+        user,
+        text
+      )
+    );
+    return STATES.WEB_COLLECT_LOGO;
+  }
+
+  let result = null;
+  try {
+    const { processLogo } = require('../../website-gen/logoProcessor');
+    result = await processLogo(mediaBuffer, mediaMime);
+  } catch (err) {
+    logger.error(`[LOGO-COLLECT] processLogo threw: ${err.message}`);
+  }
+
+  if (!result?.url) {
+    // Processing failed entirely (upload error, all tiers gave up). Treat
+    // it as skip so the flow doesn't stall — better to ship a text logo
+    // than get stuck.
+    const wd = { ...(user.metadata?.websiteData || {}) };
+    wd.logoSkipped = true;
+    await updateUserMetadata(user.id, { websiteData: wd });
+    user.metadata = { ...(user.metadata || {}), websiteData: wd };
+    await sendTextMessage(
+      user.phone_number,
+      await localize("Something went wrong processing that image — I'll use a text logo for now. You can always send one later.", user, text)
+    );
+    return smartAdvance(user, message, null);
+  }
+
+  const wd = { ...(user.metadata?.websiteData || {}) };
+  wd.logoUrl = result.url;
+  wd.logoSkipped = false;
+  await updateUserMetadata(user.id, { websiteData: wd });
+  user.metadata = { ...(user.metadata || {}), websiteData: wd };
+
+  const ack = result.wasProcessed
+    ? "Logo saved — background cleaned up and ready to go."
+    : "Logo saved.";
+  await sendTextMessage(user.phone_number, await localize(ack, user, text));
+  await logMessage(user.id, `Logo uploaded (${result.source})`, 'assistant');
+  return smartAdvance(user, message, null);
 }
 
 async function handleConfirm(user, message) {

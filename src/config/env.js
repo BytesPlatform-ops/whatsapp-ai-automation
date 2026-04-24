@@ -138,6 +138,13 @@ const env = {
   pexels: {
     apiKey: process.env.PEXELS_API_KEY || '',
   },
+  // remove.bg (background removal for user-uploaded logos). Free tier is
+  // 50 images/month at preview resolution — enough for nav/hero placement
+  // on generated sites. Missing key → logo processor falls back to using
+  // the uploaded image as-is.
+  removeBg: {
+    apiKey: process.env.REMOVE_BG_API_KEY || '',
+  },
   agentPhone: process.env.AGENT_PHONE_NUMBER || '',
   // Server
   port: parseInt(process.env.PORT, 10) || 3000,
