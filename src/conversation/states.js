@@ -34,6 +34,10 @@ const STATES = {
   // Domain choice happens BEFORE preview now — combined Stripe link at generation.
   WEB_DOMAIN_CHOICE: 'WEB_DOMAIN_CHOICE',
   WEB_DOMAIN_OWN_INPUT: 'WEB_DOMAIN_OWN_INPUT',
+  // Own-domain branch — after the user gives us their domain, ask which
+  // registrar they bought it from so we can send registrar-specific DNS
+  // setup steps post-payment.
+  WEB_DOMAIN_OWN_REGISTRAR: 'WEB_DOMAIN_OWN_REGISTRAR',
   WEB_DOMAIN_SEARCH: 'WEB_DOMAIN_SEARCH',
   WEB_CONFIRM: 'WEB_CONFIRM',
   WEB_GENERATING: 'WEB_GENERATING',

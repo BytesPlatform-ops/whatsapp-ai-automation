@@ -126,8 +126,45 @@ async function handleConfirmedPayment(payment, paidSession) {
       logger.warn(`[PAY] Banner-removal trigger failed: ${err.message}`);
     }
 
-    // ── 4. Domain flow (only when a domain was selected + still pending)
-    if (selectedDomain && meta.domainPaymentPending) {
+    // ── 4a. Own-domain branch — customer already owns the domain, they
+    //    just need DNS pointing instructions tailored to their registrar.
+    //    No purchase happens; we send step-by-step setup guidance.
+    if (selectedDomain && meta.domainChoice === 'own') {
+      const site = await getLatestSite(p.user_id);
+      const netlifySubdomain = site?.netlify_subdomain || '';
+      const registrar = meta.domainRegistrar || 'your registrar';
+
+      const { generateDnsInstructions } = require('../website-gen/dnsInstructions');
+      const instructions = await generateDnsInstructions({
+        registrar,
+        domain: selectedDomain,
+        netlifySubdomain,
+        userId: p.user_id,
+      });
+
+      await runWithContext({ channel: targetChannel, phoneNumberId: targetVia }, async () => {
+        await sendTextMessage(
+          targetPhone,
+          `Payment of *${amountDisplay}* received! 🎉\n\n` +
+            `Your site is live at: ${site?.preview_url || 'your preview URL'}\n\n` +
+            `Now let's point *${selectedDomain}* at it 👇`
+        );
+        await sendTextMessage(targetPhone, instructions);
+      });
+      await logMessage(
+        p.user_id,
+        `Payment confirmed: ${amountDisplay} — DNS instructions sent for own domain ${selectedDomain} (${registrar})`,
+        'assistant'
+      );
+
+      if (site) {
+        await updateSite(site.id, { custom_domain: selectedDomain, status: 'domain_dns_pending' });
+      }
+    }
+    // ── 4b. New-domain flow (we register + configure DNS on our side).
+    //    Triggers when the customer asked us to find a domain and picked
+    //    one from the search results (domainChoice = 'need').
+    else if (selectedDomain && meta.domainChoice === 'need') {
       await runWithContext({ channel: targetChannel, phoneNumberId: targetVia }, async () => {
         await sendTextMessage(
           targetPhone,

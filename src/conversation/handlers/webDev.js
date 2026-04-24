@@ -353,6 +353,8 @@ async function handleWebDev(user, message) {
       return handleDomainChoice(user, message);
     case STATES.WEB_DOMAIN_OWN_INPUT:
       return handleDomainOwnInput(user, message);
+    case STATES.WEB_DOMAIN_OWN_REGISTRAR:
+      return handleDomainOwnRegistrar(user, message);
     case STATES.WEB_DOMAIN_SEARCH:
       return handleDomainSearch(user, message);
     case STATES.WEB_GENERATING:
@@ -3752,14 +3754,64 @@ async function saveOwnDomain(user, domain) {
     selectedDomain: domain,
     domainPrice: 0, // Already owned — no registration charge.
   });
+  // Route through WEB_DOMAIN_OWN_REGISTRAR to collect where the domain was
+  // bought — registrar dashboards all differ, so DNS instructions need to
+  // be tailored. Saved in metadata, used by postPayment to send tailored
+  // step-by-step DNS setup after the customer pays.
+  const { updateUserState } = require('../../db/users');
+  await updateUserState(user.id, STATES.WEB_DOMAIN_OWN_REGISTRAR);
+  const { registrarOptionsList } = require('../../website-gen/dnsInstructions');
   await sendTextMessage(
     user.phone_number,
     await localize(
-      `Got it — *${domain}*. After payment I'll send DNS instructions so you can point it at your new site. Building now...`,
+      `Got it — *${domain}*. Where did you buy it? (e.g. *${registrarOptionsList()}*, or type whatever you're using)\n\n` +
+        `After payment I'll send step-by-step DNS instructions for that registrar.`,
       user
     )
   );
-  await logMessage(user.id, `Domain choice: own (${domain})`, 'assistant');
+  await logMessage(user.id, `Domain choice: own (${domain}) — asking for registrar`, 'assistant');
+  return STATES.WEB_DOMAIN_OWN_REGISTRAR;
+}
+
+async function handleDomainOwnRegistrar(user, message) {
+  const raw = (message.text || '').trim();
+  const text = raw.toLowerCase();
+
+  // Exit — user changed their mind mid-flow.
+  if (/^(skip|cancel|back|never\s*mind|nvm|forget\s*it)$/i.test(text)) {
+    await updateUserMetadata(user.id, { domainRegistrar: null });
+    await sendTextMessage(
+      user.phone_number,
+      await localize("No problem — I'll send generic DNS steps after payment. Building now...", user, raw)
+    );
+    return generateWebsite(user);
+  }
+
+  // Accept pretty much anything the user types — LLM will handle obscure
+  // registrar names gracefully via its generic-fallback branch.
+  if (raw.length < 2 || raw.length > 60) {
+    await sendTextMessage(
+      user.phone_number,
+      await localize(
+        `Just type the registrar name — e.g. *GoDaddy*, *Namecheap*, *Cloudflare*, or whatever you use. Or reply *skip* for generic steps.`,
+        user,
+        raw
+      )
+    );
+    return STATES.WEB_DOMAIN_OWN_REGISTRAR;
+  }
+
+  const registrar = raw.slice(0, 60);
+  await updateUserMetadata(user.id, { domainRegistrar: registrar });
+  await sendTextMessage(
+    user.phone_number,
+    await localize(
+      `Perfect — *${registrar}* noted. I'll send step-by-step DNS instructions right after payment. Building your site now...`,
+      user,
+      raw
+    )
+  );
+  await logMessage(user.id, `Domain registrar recorded: ${registrar}`, 'assistant');
   return generateWebsite(user);
 }
 
