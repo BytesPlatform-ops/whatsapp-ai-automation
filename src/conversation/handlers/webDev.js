@@ -1956,14 +1956,16 @@ function parseContactFields(text) {
       .trim();
 
   // Reject addresses that look like leftover junk from a labeled message
-  // (e.g. "contact =", "email", "phone"). An address worth keeping has at
-  // least one digit OR a recognizable street keyword OR is a reasonable
-  // length of actual words (≥8 chars).
+  // (e.g. "contact =", "email", "phone") or filler-word residue after the
+  // parser stripped out matched email/phone values ("yeah the is and
+  // number is" left over from "yeah the email is X and number is Y"). An
+  // address worth keeping must have EITHER a digit OR a recognizable
+  // street keyword — pure-prose strings have neither and are almost
+  // always residue.
   const isPlausibleAddress = (v) => {
     if (!v) return false;
     if (/\d/.test(v)) return true;
-    if (/\b(?:st|street|ave|avenue|road|rd|blvd|boulevard|lane|ln|drive|dr|way|plaza|suite|apt|floor|block|sector|phase)\b/i.test(v)) return true;
-    if (v.length >= 8 && /[a-zA-Z]/.test(v)) return true;
+    if (/\b(?:st|street|ave|avenue|road|rd|blvd|boulevard|lane|ln|drive|dr|way|plaza|suite|apt|floor|block|sector|phase|building|tower|mall|market|colony|bazaar|bazar|nagar|society|square|sq)\b/i.test(v)) return true;
     return false;
   };
 
@@ -2068,9 +2070,20 @@ async function handleCollectContact(user, message) {
     const contactQuestion = 'What contact info do you want on the site? (email, phone, and/or address)';
     const delegated = await classifyDelegation(contactText, contactQuestion);
     if (delegated) {
-      const wd = { ...(user.metadata?.websiteData || {}), contactEmail: '', contactPhone: '', contactAddress: '' };
-      await updateUserMetadata(user.id, { websiteData: wd });
-      user.metadata = { ...(user.metadata || {}), websiteData: wd };
+      // Delegation ("whatever", "you pick", "up to you") means "use
+      // defaults". If we already have something from a location pin
+      // or an earlier turn, that IS the default — preserve it. Only
+      // null-out fields that weren't populated yet so
+      // nextMissingWebDevState knows we're past this step.
+      const prev = user.metadata?.websiteData || {};
+      const wd = {
+        ...prev,
+        contactEmail: prev.contactEmail || '',
+        contactPhone: prev.contactPhone || '',
+        contactAddress: prev.contactAddress || '',
+      };
+      await updateUserMetadata(user.id, { websiteData: wd, contactSkipped: true });
+      user.metadata = { ...(user.metadata || {}), websiteData: wd, contactSkipped: true };
       await sendTextMessage(
         user.phone_number,
         `No problem, I'll leave contact details off the site. You can add them later from the summary.`
@@ -2151,7 +2164,28 @@ async function handleCollectContact(user, message) {
     }
   }
 
-  const mergedWebsiteData = { ...(user.metadata?.websiteData || {}), ...contactData };
+  // Merge carefully: don't overwrite an existing contactAddress (often
+  // seeded from a location pin dropped in a previous step) with an
+  // empty string just because the user's reply only contained email +
+  // phone. Apply the same rule to email + phone — if the user gave us
+  // a reply that parsed only some fields, preserve what we already had
+  // for the missing ones. skipWords path (above) still clears all
+  // three intentionally, via contactData = { '', '', '' }.
+  const prevWd = user.metadata?.websiteData || {};
+  const mergedContact = {
+    contactEmail: contactData.contactEmail || prevWd.contactEmail || '',
+    contactPhone: contactData.contactPhone || prevWd.contactPhone || '',
+    contactAddress: contactData.contactAddress || prevWd.contactAddress || '',
+  };
+  // User tapped skip — three empty strings signal "really clear it".
+  const userExplicitlySkipped = (
+    !contactData.contactEmail &&
+    !contactData.contactPhone &&
+    !contactData.contactAddress &&
+    (!contactText || contactText.length < 3 || skipWords.test(contactText))
+  );
+  const effectiveContact = userExplicitlySkipped ? contactData : mergedContact;
+  const mergedWebsiteData = { ...prevWd, ...effectiveContact };
   // Mark the contact step completed so nextMissingWebDevState doesn't loop
   // back on users who provided only an address (or skipped). Setting this
   // unconditionally once handleCollectContact finishes is safe — we've
@@ -2162,7 +2196,8 @@ async function handleCollectContact(user, message) {
   });
   user.metadata = {
     ...(user.metadata || {}),
-    websiteData: { ...(user.metadata?.websiteData || {}), ...contactData },
+    websiteData: mergedWebsiteData,
+    contactSkipped: true,
   };
 
   // Optional logo step — runs between contact and the confirmation summary
