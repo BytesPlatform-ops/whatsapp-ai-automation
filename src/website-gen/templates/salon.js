@@ -305,7 +305,7 @@ function getNav(c, cur, opts = {}) {
   return `
 <nav class="nav${dark}">
   <a href="/" class="nav-b">${c.logoUrl
-    ? `<img src="${attr(c.logoUrl)}" alt="${attr(c.businessName || '')}" style="height:40px;width:auto;display:inline-block;vertical-align:middle;object-fit:contain">`
+    ? `<img src="${attr(c.logoUrl)}" alt="${attr(c.businessName || '')}" style="height:56px;max-height:56px;width:auto;display:inline-block;vertical-align:middle;object-fit:contain">`
     : esc(c.businessName)}</a>
   <div class="nav-ls">
     ${ps.map((p) => `<a href="${p.h}" class="nav-l${p.h === cur ? ' active' : ''}">${p.n}</a>`).join('')}
