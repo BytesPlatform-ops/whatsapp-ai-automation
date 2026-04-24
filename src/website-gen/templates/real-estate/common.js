@@ -82,6 +82,21 @@ const TOKENS = {
   badgeSold: '#1A2B45',
 };
 
+// Darken a hex color by the given factor (0–1). Used to compute a hover
+// state for the accent when the user hasn't provided one — mixing the
+// stale default gold-hover (#B8975C) with a fresh pink/emerald/etc
+// primary leaves a visible gold-brown smudge on anchor hovers, which is
+// exactly the "golden tint" complaint.
+function darkenHex(hex, factor = 0.82) {
+  const h = String(hex || '').replace('#', '').trim();
+  if (h.length !== 6) return hex;
+  const r = Math.max(0, Math.round(parseInt(h.slice(0, 2), 16) * factor));
+  const g = Math.max(0, Math.round(parseInt(h.slice(2, 4), 16) * factor));
+  const b = Math.max(0, Math.round(parseInt(h.slice(4, 6), 16) * factor));
+  const toHex = (n) => n.toString(16).padStart(2, '0').toUpperCase();
+  return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+}
+
 function buildTokens(c = {}) {
   const primary = c.primaryColor || TOKENS.navy;
   const secondary = c.secondaryColor || TOKENS.navyHover;
@@ -93,8 +108,7 @@ function buildTokens(c = {}) {
     charcoal: primary,
     heading: primary,
     gold: accent,
-    // goldHover: stays at default so hover has visible contrast; most
-    // user overrides look fine against the default hover shade.
+    goldHover: darkenHex(accent, 0.82),  // derive from the live accent, not the stale default
     badgeSold: primary,     // status badge mirrors the brand navy
     badgeJustListed: accent, // "just listed" badge reuses brand accent
   };
