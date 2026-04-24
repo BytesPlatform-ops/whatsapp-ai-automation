@@ -176,22 +176,90 @@ router.post('/api/conversations/:userId/reply', async (req, res) => {
     // (via_phone_number_id keeps the reply in the customer's existing thread).
     // `instant: true` bypasses the 4-8s human-typing delay used for AI replies
     // — operator-sent messages should go out the moment Send is clicked.
-    // The DB log runs in parallel with the WhatsApp send to shave another
-    // ~50-150ms off the response time.
     const trimmed = messageText.trim();
-    await Promise.all([
-      runWithContext(
+    try {
+      await runWithContext(
         { channel: user.channel || 'whatsapp', phoneNumberId: user.via_phone_number_id || null },
         () => sendTextMessage(user.phone_number, trimmed, { instant: true })
-      ),
-      logMessage(user.id, trimmed, 'assistant', 'manual'),
-    ]);
+      );
+    } catch (sendErr) {
+      // Surface Meta API errors clearly so the admin knows why the send
+      // failed — a generic 500 with "Request failed with status 400"
+      // isn't actionable.
+      const metaCode = sendErr.response?.data?.error?.code;
+      const metaMsg = sendErr.response?.data?.error?.message;
+      const metaDetail = sendErr.response?.data?.error?.error_data?.details;
+
+      // Lookup table of user-friendly translations for common Meta
+      // WhatsApp Business error codes. Each returns a 409 so the UI
+      // can show the structured detail.
+      const META_ERROR_EXPLANATIONS = {
+        100: {
+          error: 'The original WhatsApp number for this conversation is no longer accepting messages.',
+          detail: 'The phone_number_id on this user record was revoked or removed from the business account. Ask the user to send a fresh message so we can re-capture the current number.',
+        },
+        131005: {
+          error: 'WhatsApp access denied — token or permission issue.',
+          detail: 'Your WhatsApp access token either lacks the "whatsapp_business_messaging" permission, has expired, or is scoped to a different WABA than this phone number. In Meta Business Manager: (1) verify the phone number is assigned to this app, (2) regenerate the System User token with messaging permissions, and (3) update WHATSAPP_ACCESS_TOKEN in your .env.',
+        },
+        131026: {
+          error: 'WhatsApp could not deliver the message.',
+          detail: 'The recipient may have blocked your business number, unregistered from WhatsApp, or their number is invalid. Nothing you can do from here.',
+        },
+        131030: {
+          error: "WhatsApp's 24-hour window is closed for this user.",
+          detail: "The user hasn't messaged your business number in the last 24 hours, so WhatsApp won't deliver free-form replies. They need to send any message first, or we need an approved message template.",
+        },
+        131047: {
+          error: 'Message could not be sent — user needs to re-engage.',
+          detail: 'The 24h customer-service window has expired. Send an approved template to re-open the conversation.',
+        },
+        131051: {
+          error: 'Unsupported message type for this recipient.',
+          detail: "Meta refused the message format for this user. Try a plain text reply, or check whether the recipient's number supports the message type you're sending.",
+        },
+        190: {
+          error: 'WhatsApp access token has expired.',
+          detail: 'Regenerate your System User token in Meta Business Manager and update WHATSAPP_ACCESS_TOKEN in your .env, then restart the bot.',
+        },
+      };
+
+      if (metaCode && META_ERROR_EXPLANATIONS[metaCode]) {
+        const info = META_ERROR_EXPLANATIONS[metaCode];
+        logger.warn(`[ADMIN] Reply blocked by Meta ${metaCode} (${info.error}) for ${user.phone_number}`);
+        return res.status(409).json({
+          ...info,
+          metaCode,
+          metaMessage: metaMsg,
+          metaDetail,
+        });
+      }
+
+      // Unknown Meta code — still surface the code and message so the
+      // operator has SOMETHING to search for rather than a generic 500.
+      if (metaCode) {
+        logger.warn(`[ADMIN] Unknown Meta error ${metaCode} for ${user.phone_number}: ${metaMsg}`);
+        return res.status(409).json({
+          error: `WhatsApp rejected the send (code ${metaCode}).`,
+          detail: metaDetail || metaMsg || 'No additional detail from Meta.',
+          metaCode,
+          metaMessage: metaMsg,
+        });
+      }
+
+      throw sendErr; // truly unexpected — let the outer catch log + 500
+    }
+
+    // Log the outbound AFTER the send succeeds. Doing them in parallel (as
+    // before) meant a failed send still left a phantom "sent" row in the
+    // admin conversation view.
+    await logMessage(user.id, trimmed, 'assistant', 'manual');
 
     logger.info(`[ADMIN] Manual reply sent to ${user.phone_number} (${user.channel}, via=${user.via_phone_number_id || 'default'}): "${messageText.trim().slice(0, 50)}..."`);
     res.json({ success: true });
   } catch (err) {
-    logger.error('[ADMIN] Reply error:', err.message);
-    res.status(500).json({ error: err.message });
+    logger.error('[ADMIN] Reply error:', err.response?.data?.error || err.message);
+    res.status(500).json({ error: err.response?.data?.error?.message || err.message });
   }
 });
 

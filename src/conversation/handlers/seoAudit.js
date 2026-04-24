@@ -136,7 +136,9 @@ async function handleCollectUrl(user, message) {
           'Your free SEO audit report for ' + url,
           `SEO-Audit-${new URL(url).hostname}.pdf`
         );
-        await logMessage(user.id, 'Sent PDF report', 'assistant');
+        // Log the text equivalent of the report so admin conversation
+        // view shows the audit contents, not just "[PDF sent]".
+        await logMessage(user.id, `📄 Sent SEO audit PDF for ${url}:\n\n${summary}`, 'assistant');
         logger.info('[SEO] PDF sent successfully');
       } catch (pdfErr) {
         logger.error('[SEO] Failed to send PDF, sending text fallback:', pdfErr.message);

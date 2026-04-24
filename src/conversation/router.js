@@ -200,9 +200,15 @@ const STATE_HANDLERS = {
   [STATES.LOGO_RESULTS]: handleLogoGeneration,
 };
 
-// States that collect free-text input - apply intent checking here
+// States that collect free-text input — the intent classifier runs for
+// these so "skip this, do a logo" / "forget it, make a chatbot" / etc.
+// can flow-switch out mid-collection. Excluded: button-driven states
+// (the interactive reply matcher handles those separately), transient
+// system states (*_GENERATING / *_ANALYZING), and WEB_CONFIRM which
+// has its own dedicated flow-switch intercept in handleConfirm.
 const COLLECTION_STATES = new Set([
   STATES.WEB_COLLECT_NAME,
+  STATES.WEB_COLLECT_EMAIL,
   STATES.WEB_COLLECT_INDUSTRY,
   STATES.WEB_COLLECT_AREAS,
   STATES.WEB_COLLECT_AGENT_PROFILE,
@@ -212,9 +218,19 @@ const COLLECTION_STATES = new Set([
   STATES.WEB_COLLECT_SERVICES,
   STATES.WEB_COLLECT_LOGO,
   STATES.WEB_COLLECT_CONTACT,
+  STATES.WEB_REVISIONS,
+  // Salon sub-flow collection states
+  STATES.SALON_BOOKING_TOOL,
+  STATES.SALON_INSTAGRAM,
+  STATES.SALON_HOURS,
+  STATES.SALON_SERVICE_DURATIONS,
+  // SEO post-audit chat
   STATES.SEO_COLLECT_URL,
+  STATES.SEO_FOLLOW_UP,
   STATES.APP_COLLECT_REQUIREMENTS,
+  STATES.APP_FOLLOW_UP,
   STATES.MARKETING_COLLECT_DETAILS,
+  STATES.MARKETING_FOLLOW_UP,
   STATES.SCHEDULE_COLLECT_DATE,
   STATES.SCHEDULE_COLLECT_TIME,
   STATES.CB_COLLECT_NAME,
@@ -223,6 +239,7 @@ const COLLECTION_STATES = new Set([
   STATES.CB_COLLECT_SERVICES,
   STATES.CB_COLLECT_HOURS,
   STATES.CB_COLLECT_LOCATION,
+  STATES.CB_FOLLOW_UP,
   // Ad generation text-collection states
   STATES.AD_COLLECT_BUSINESS,
   STATES.AD_COLLECT_INDUSTRY,
@@ -241,6 +258,7 @@ const COLLECTION_STATES = new Set([
 // Human-readable description of what the bot was asking in each state
 const STATE_QUESTION = {
   [STATES.WEB_COLLECT_NAME]: 'What is your business name?',
+  [STATES.WEB_COLLECT_EMAIL]: "What's your email address? (or reply skip)",
   [STATES.WEB_COLLECT_INDUSTRY]: 'What industry are you in?',
   [STATES.WEB_COLLECT_AREAS]: 'Which city are you based in, and which areas do you serve?',
   [STATES.WEB_COLLECT_AGENT_PROFILE]: 'Tell me your brokerage, years in real estate, and any designations (or just skip).',
@@ -250,9 +268,17 @@ const STATE_QUESTION = {
   [STATES.WEB_COLLECT_SERVICES]: 'What services or products do you offer?',
   [STATES.WEB_COLLECT_LOGO]: "Do you have a logo? (send an image or type 'skip')",
   [STATES.WEB_COLLECT_CONTACT]: 'Please share your contact details (email, phone, address)',
+  [STATES.WEB_REVISIONS]: "Tell me what you'd like to change on the site, or reply approve to move on.",
+  [STATES.SALON_BOOKING_TOOL]: 'Do you use a booking tool (like Fresha, Vagaro) or want one built in?',
+  [STATES.SALON_INSTAGRAM]: "What's your Instagram handle? (or reply skip)",
+  [STATES.SALON_HOURS]: 'What are your opening hours for each day of the week?',
+  [STATES.SALON_SERVICE_DURATIONS]: 'How long does each service take, and what does it cost?',
   [STATES.SEO_COLLECT_URL]: 'Please send your website URL to analyze',
+  [STATES.SEO_FOLLOW_UP]: "Any questions about the audit — or want help fixing what we found?",
   [STATES.APP_COLLECT_REQUIREMENTS]: 'Tell me about your app idea - what does it do and who is it for?',
+  [STATES.APP_FOLLOW_UP]: 'Any questions on the app proposal, or ready to move forward?',
   [STATES.MARKETING_COLLECT_DETAILS]: 'Tell me about your business and your marketing goals',
+  [STATES.MARKETING_FOLLOW_UP]: 'Any questions on the marketing plan, or ready to move forward?',
   [STATES.SCHEDULE_COLLECT_DATE]: 'What date works best for you for the meeting?',
   [STATES.SCHEDULE_COLLECT_TIME]: 'What time works best for you for the meeting?',
   [STATES.CB_COLLECT_NAME]: 'What is your business name?',
@@ -261,6 +287,7 @@ const STATE_QUESTION = {
   [STATES.CB_COLLECT_SERVICES]: 'What services do you offer with their prices?',
   [STATES.CB_COLLECT_HOURS]: 'What are your business hours?',
   [STATES.CB_COLLECT_LOCATION]: 'What is your business address/location?',
+  [STATES.CB_FOLLOW_UP]: 'Any questions about the chatbot — or ready to start your free trial?',
   // Ad generation
   [STATES.AD_COLLECT_BUSINESS]: 'What is your business name?',
   [STATES.AD_COLLECT_INDUSTRY]: 'What industry are you in? (e.g. Food & Beverage, Fashion, Tech)',
@@ -327,6 +354,43 @@ NOT objections: asking a question, providing business info, agreeing, specifying
  * or doing something else (asking a question, wanting the menu, exiting).
  * Returns: "answer" | "question" | "menu" | "exit"
  */
+/**
+ * After we decline a user's business for NSFW-legal reasons (cannabis,
+ * gambling, adult entertainment), we persist metadata.scopeDeclinedAt.
+ * This tiny LLM check decides whether a follow-up message is pushing
+ * back on the same declined topic (→ re-decline) or pivoting to a
+ * different project (→ clear the flag, let normal flow run).
+ *
+ * Returns true when the user is clearly switching topics. Returns
+ * false on any ambiguity so we err on the safe side and re-decline.
+ */
+async function isPivotAwayFromDeclinedScope(text, declinedReason, userId) {
+  const t = String(text || '').trim();
+  if (!t) return false;
+  try {
+    const prompt = `We previously declined to build a website / marketing for a user whose business is "${declinedReason}" (outside our service scope). They just sent a new message. Is this message:
+
+- "pivot": clearly switching to a DIFFERENT business or project (e.g. "actually, I also run a bakery", "what about my other company", "different topic, I need a logo for X", "forget that, new idea"), OR
+- "continue": still pushing back on the decline, asking why, trying to reconsider, or saying anything that could still be about the declined business ("you can't?", "why not?", "but it's legal here", "please", "try anyway", a generic question like "really?").
+
+When in doubt, return "continue" — we only switch to "pivot" when there's a clear mention of a different business or topic.
+
+User message: "${t.replace(/"/g, '\\"').slice(0, 400)}"
+
+Return ONLY one word: pivot or continue.`;
+    const resp = await generateResponse(
+      prompt,
+      [{ role: 'user', content: 'Classify.' }],
+      { userId, operation: 'scope_decline_pivot', timeoutMs: 8_000 }
+    );
+    const cleaned = String(resp || '').trim().toLowerCase().replace(/[^a-z]/g, '');
+    return cleaned === 'pivot';
+  } catch (err) {
+    logger.warn(`[ABUSE] isPivotAwayFromDeclinedScope failed: ${err.message}`);
+    return false; // safe default: re-decline
+  }
+}
+
 async function classifyIntent(state, text, userId) {
   const currentQuestion = STATE_QUESTION[state];
   if (!currentQuestion) return 'answer';
@@ -579,6 +643,43 @@ async function _routeMessage(message) {
       !alreadySilenced
     ) {
       try {
+        // Phase 13 follow-up: if this user was already declined for
+        // nsfw-legal scope in the last 30 min, don't let a generic
+        // pushback ("you can't do it?") slip past the classifier and
+        // re-enter the normal flow. Check whether they're pivoting to
+        // a different topic — if so, clear the flag; otherwise
+        // re-decline softly and stop processing this turn.
+        const scopeDeclinedAt = user.metadata?.scopeDeclinedAt;
+        if (scopeDeclinedAt) {
+          const sinceMs = Date.now() - new Date(scopeDeclinedAt).getTime();
+          const COOLDOWN_MS = 30 * 60 * 1000;
+          if (sinceMs < COOLDOWN_MS) {
+            const reason = user.metadata?.scopeDeclinedReason || 'that kind of business';
+            const pivoted = await isPivotAwayFromDeclinedScope(abuseText, reason, user.id);
+            if (!pivoted) {
+              const reDecline = `still not something we're able to help with for ${reason}. if there's a different project you're working on, happy to chat about that instead.`;
+              await sendTextMessage(user.phone_number, reDecline);
+              await logMessage(user.id, reDecline, 'assistant');
+              logger.info(`[ABUSE] Re-declined nsfw scope (${reason}) for ${from}`);
+              return;
+            }
+            // Pivoted — clear the flag and fall through to normal routing
+            await updateUserMetadata(user.id, { scopeDeclinedAt: null, scopeDeclinedReason: null });
+            if (user.metadata) {
+              user.metadata.scopeDeclinedAt = null;
+              user.metadata.scopeDeclinedReason = null;
+            }
+            logger.info(`[ABUSE] User pivoted away from declined ${reason}, clearing flag`);
+          } else {
+            // Cooldown elapsed — clear silently.
+            await updateUserMetadata(user.id, { scopeDeclinedAt: null, scopeDeclinedReason: null });
+            if (user.metadata) {
+              user.metadata.scopeDeclinedAt = null;
+              user.metadata.scopeDeclinedReason = null;
+            }
+          }
+        }
+
         const { classifyAbuse } = require('./abuseDetector');
         const { handleAbuseCategory } = require('./abuseHandler');
         const category = await classifyAbuse(abuseText, user.id);
@@ -759,6 +860,29 @@ async function _routeMessage(message) {
       revisionCount: 0,
       bonusRevisionUsed: false,
       lastRevisionComplexity: null,
+      // Step-completed flags — without clearing these, a prior session's
+      // skip leaks across and suppresses the matching question forever.
+      emailSkipped: false,
+      contactSkipped: false,
+      // Other flow-state leaks found by the audit: each of these gets
+      // SET mid-flow but was never cleared on reset, so a previous
+      // session's state bled into the next flow.
+      // - bytescartPitched: once true, the sales bot never re-offers
+      //   ByteScart (even to a fresh user after /reset).
+      // - currentMeetingId: stale pointer to a prior meeting row.
+      // - salonFlowOrigin: forces salon sub-flow into CONFIRM loopback
+      //   on a fresh user if set by a prior session.
+      // - webGenStartedAt: the in-progress generation guard gets
+      //   tripped by a stale timestamp.
+      bytescartPitched: false,
+      currentMeetingId: null,
+      salonFlowOrigin: null,
+      webGenStartedAt: null,
+      // Phase 13 nsfw-legal decline flag. Without clearing these, a
+      // user who hits /reset after being declined (e.g. to try a
+      // different business) would stay soft-blocked for 30 min.
+      scopeDeclinedAt: null,
+      scopeDeclinedReason: null,
       // Domain state — otherwise the sales bot sees a leftover
       // selectedDomain and offers "umairbarber.com" to a fresh user.
       selectedDomain: null,
@@ -1069,12 +1193,16 @@ async function _routeMessage(message) {
         logger.warn(`[ROUTER] Off-topic aside LLM call failed for ${from}: ${err.message}`);
       }
 
-      // Remind them of the current step
-      await sendWithMenuButton(
-        user.phone_number,
-        `Now, back to where we were - ${currentQuestion}`
-      );
-      await logMessage(user.id, `Reminded user: ${currentQuestion}`, 'assistant');
+      // Remind them of the current step. If STATE_QUESTION has no entry
+      // for this state, skip the re-prompt (better silence than
+      // "Now, back to where we were - undefined").
+      if (currentQuestion) {
+        await sendWithMenuButton(
+          user.phone_number,
+          `Now, back to where we were - ${currentQuestion}`
+        );
+        await logMessage(user.id, `Reminded user: ${currentQuestion}`, 'assistant');
+      }
       return; // Stay in same state
     }
 

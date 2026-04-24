@@ -54,6 +54,11 @@ const CONFIRMATION_WORDS = new Set(['ok', 'okay', 'yes', 'no', 'sure', 'go', 'ne
 // Words that mean "use the previously suggested brand name"
 const SAME_BRAND_WORDS = new Set(['same', 'yes', 'yeah', 'yep', 'sure', 'ok', 'okay', 'continue', 'use it', 'that one', 'use that']);
 
+// Whole-message skip detector — covers "skip", "skip it", "nope",
+// "no thanks", etc. Anchored to full trimmed text.
+const SKIP_RX = /^(?:skip|skip\s+(?:it|this|that|for\s*now)|no|nope|nah|n\/?a|na|none|nothing|pass|no\s+thanks?|dont|don'?t|leave\s+(?:it|blank)|i'?m\s+(?:gonna\s+)?skip(?:ping)?)$/i;
+const isSkip = (text) => SKIP_RX.test(String(text || '').trim());
+
 // ── Main router ───────────────────────────────────────────────────────────────
 
 async function handleLogoGeneration(user, message) {
@@ -349,7 +354,7 @@ async function handleCollectStyle(user, message) {
 
 async function handleCollectColors(user, message) {
   const text = (message.text || '').trim();
-  const brandColors = text.toLowerCase() === 'skip' ? null : text || null;
+  const brandColors = isSkip(text) ? null : text || null;
 
   await saveLogoData(user, { brandColors });
 
@@ -369,7 +374,7 @@ async function handleCollectColors(user, message) {
 
 async function handleCollectSymbol(user, message) {
   const text = (message.text || '').trim();
-  const symbolIdea = text.toLowerCase() === 'skip' ? null : text || null;
+  const symbolIdea = isSkip(text) ? null : text || null;
 
   await saveLogoData(user, { symbolIdea });
 

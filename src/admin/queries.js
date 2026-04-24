@@ -92,21 +92,43 @@ async function getLeads() {
 
   if (error) throw error;
 
-  // Get last message time for each user
+  // Get last message time for each user. We track TWO timestamps:
+  //   - last_message_at: any role (used for sorting "most recent activity")
+  //   - last_inbound_at: role='user' ONLY (the WhatsApp 24h customer-service
+  //     window is reset by an inbound message; our outbound replies do NOT
+  //     reopen the window, so we must filter by role here to compute the
+  //     green/red indicator correctly).
   const userIds = (users || []).map((u) => u.id);
   const { data: lastMessages } = await supabase
     .from('conversations')
-    .select('user_id, created_at')
+    .select('user_id, created_at, role')
     .in('user_id', userIds.length > 0 ? userIds : ['none'])
     .order('created_at', { ascending: false });
 
-  // Build a map of user_id -> last_message_at
   const lastMessageMap = {};
+  const lastInboundMap = {};
   (lastMessages || []).forEach((m) => {
     if (!lastMessageMap[m.user_id]) {
       lastMessageMap[m.user_id] = m.created_at;
     }
+    if (m.role === 'user' && !lastInboundMap[m.user_id]) {
+      lastInboundMap[m.user_id] = m.created_at;
+    }
   });
+
+  // WhatsApp's customer-service window is 24 hours from the last INBOUND
+  // message. Outside this window, free-form replies get rejected with
+  // error 131030 and we must use an approved message template instead.
+  const WA_WINDOW_MS = 24 * 60 * 60 * 1000;
+  const nowMs = Date.now();
+  const computeWindow = (inboundAt) => {
+    if (!inboundAt) return { within_24h: false, hours_since_inbound: null };
+    const ms = nowMs - new Date(inboundAt).getTime();
+    return {
+      within_24h: ms < WA_WINDOW_MS,
+      hours_since_inbound: Math.floor(ms / (60 * 60 * 1000)),
+    };
+  };
 
   // Get message counts per user
   const { data: messageCounts } = await supabase
@@ -132,7 +154,9 @@ async function getLeads() {
     manualMap[m.user_id] = (manualMap[m.user_id] || 0) + 1;
   });
 
-  return (users || []).map((u) => ({
+  return (users || []).map((u) => {
+    const windowInfo = computeWindow(lastInboundMap[u.id]);
+    return {
     id: u.id,
     phone_number: u.phone_number,
     name: u.name || '',
@@ -141,6 +165,9 @@ async function getLeads() {
     created_at: u.created_at,
     updated_at: u.updated_at,
     last_message_at: lastMessageMap[u.id] || u.updated_at,
+    last_inbound_at: lastInboundMap[u.id] || null,
+    within_24h: windowInfo.within_24h,
+    hours_since_inbound: windowInfo.hours_since_inbound,
     message_count: countMap[u.id] || 0,
     manual_count: manualMap[u.id] || 0,
     // A conversation is considered "manual" if either (a) the operator sent
@@ -165,7 +192,8 @@ async function getLeads() {
     // it here lets the dashboard render a small pill so operators can tell
     // apart two sessions of the same phone (one per line).
     via_phone_number_id: u.via_phone_number_id || null,
-  }));
+    };
+  });
 }
 
 /**
@@ -186,9 +214,30 @@ async function getConversation(userId) {
       .order('created_at', { ascending: true }),
   ]);
 
+  const messages = messagesResult.data || [];
+
+  // Derive the 24h-window indicator from the message list we already
+  // fetched — no extra query. `last_inbound_at` is the most recent
+  // message with role='user'.
+  let lastInboundAt = null;
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (messages[i].role === 'user') {
+      lastInboundAt = messages[i].created_at;
+      break;
+    }
+  }
+  const WA_WINDOW_MS = 24 * 60 * 60 * 1000;
+  const ms = lastInboundAt ? Date.now() - new Date(lastInboundAt).getTime() : null;
+  const window = {
+    last_inbound_at: lastInboundAt,
+    within_24h: ms != null && ms < WA_WINDOW_MS,
+    hours_since_inbound: ms != null ? Math.floor(ms / (60 * 60 * 1000)) : null,
+  };
+
   return {
     user: userResult.data,
-    messages: messagesResult.data || [],
+    messages,
+    window,
   };
 }
 

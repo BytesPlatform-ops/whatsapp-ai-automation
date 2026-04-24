@@ -170,6 +170,13 @@ const CONFIRMATION_WORDS = new Set(['ok', 'okay', 'yes', 'no', 'sure', 'go', 'ne
 // Words that mean "use the previously suggested brand name"
 const SAME_BRAND_WORDS = new Set(['same', 'yes', 'yeah', 'yep', 'sure', 'ok', 'okay', 'continue', 'use it', 'that one', 'use that']);
 
+// Whole-message skip detector — covers "skip", "skip it", "nope", "no
+// thanks", etc. Anchored to full trimmed text so a user who actually
+// typed "skip this fee" (hypothetical brand line) isn't misread as a
+// skip intent.
+const SKIP_RX = /^(?:skip|skip\s+(?:it|this|that|for\s*now)|no|nope|nah|n\/?a|na|none|nothing|pass|no\s+thanks?|dont|don'?t|leave\s+(?:it|blank)|i'?m\s+(?:gonna\s+)?skip(?:ping)?)$/i;
+const isSkip = (text) => SKIP_RX.test(String(text || '').trim());
+
 // Shared follow-up after business name is saved. Either skip to the
 // niche question when we could infer industry from the name, or ask
 // for industry normally.
@@ -417,7 +424,7 @@ async function handleCollectType(user, message) {
 
 async function handleCollectSlogan(user, message) {
   const text = (message.text || '').trim();
-  let slogan = text.toLowerCase() === 'skip' ? null : text || null;
+  let slogan = isSkip(text) ? null : text || null;
 
   // Strip leading confirmation words: "yes fresh from farm" → "fresh from farm"
   if (slogan) {
@@ -438,7 +445,7 @@ async function handleCollectSlogan(user, message) {
 
 async function handleCollectPricing(user, message) {
   const text = (message.text || '').trim();
-  const pricing = text.toLowerCase() === 'skip' ? null : text || null;
+  const pricing = isSkip(text) ? null : text || null;
 
   await saveAdData(user, { pricing });
 
@@ -455,7 +462,7 @@ async function handleCollectPricing(user, message) {
 
 async function handleCollectColors(user, message) {
   const text = (message.text || '').trim();
-  const brandColors = text.toLowerCase() === 'skip' ? null : text || null;
+  const brandColors = isSkip(text) ? null : text || null;
 
   await saveAdData(user, { brandColors });
 

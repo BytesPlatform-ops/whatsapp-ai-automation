@@ -27,8 +27,41 @@ async function sendRequest(payload) {
     logger.debug('Message sent successfully', { to: payload.to, via: pnid });
     return response.data;
   } catch (error) {
+    const status = error.response?.status;
+    const code = error.response?.data?.error?.code;
+    const fallbackPnid = env.whatsapp.phoneNumberId;
+    // Retry-once-on-fallback triggers:
+    //   - 100 (Unsupported request): phone_number_id is revoked /
+    //     decommissioned — Meta returns "method type: post" not allowed.
+    //   - 131005 (Access denied): our token doesn't have messaging
+    //     permission for this specific phone_number_id. Could be a
+    //     cross-WABA mismatch or a phone number that was removed from
+    //     the app's scope.
+    // In both cases, the stored via_phone_number_id is the problem;
+    // the env default may still work.
+    const retryableCodes = new Set([100, 131005]);
+    if (
+      retryableCodes.has(code) &&
+      fallbackPnid &&
+      pnid &&
+      pnid !== fallbackPnid
+    ) {
+      logger.warn(`[WA-SEND] Got error ${code} via stale pnid=${pnid}, retrying via default ${fallbackPnid}`);
+      try {
+        const response = await axios.post(messagesUrl(fallbackPnid), payload, { headers });
+        logger.info(`[WA-SEND] Fallback succeeded via ${fallbackPnid} after error ${code} on ${pnid}`);
+        return response.data;
+      } catch (retryErr) {
+        logger.error('WhatsApp API error (retry also failed):', {
+          status: retryErr.response?.status,
+          data: retryErr.response?.data,
+          via: fallbackPnid,
+        });
+        throw retryErr;
+      }
+    }
     logger.error('WhatsApp API error:', {
-      status: error.response?.status,
+      status,
       data: error.response?.data,
       via: pnid,
     });

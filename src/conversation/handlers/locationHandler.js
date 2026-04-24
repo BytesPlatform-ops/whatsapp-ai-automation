@@ -44,6 +44,40 @@ const LOCATION_SEED_STATES = new Set([
 ]);
 
 /**
+ * After a pin seeds fields, we're still in the same collection state
+ * but the user needs to know what's next. This returns a short prompt
+ * reflecting what's still missing, or an empty string when there's
+ * nothing useful to add (caller sends just the seed ack).
+ */
+function buildPostPinFollowUp(state, wd) {
+  if (state === STATES.WEB_COLLECT_AREAS) {
+    // Primary city is now set. Ask for neighborhoods, matching the
+    // phrasing used in questionForState when primaryCity is known.
+    if (!Array.isArray(wd.serviceAreas) || wd.serviceAreas.length === 0) {
+      return `Which areas / neighborhoods do you serve around *${wd.primaryCity}*? List them separated by commas, or just skip to use *${wd.primaryCity}* as the only area.`;
+    }
+    return '';
+  }
+  if (state === STATES.WEB_COLLECT_CONTACT) {
+    // Address is now set. Offer to collect the other contact fields or
+    // skip straight to the summary.
+    const hasEmail = !!wd.contactEmail;
+    const hasPhone = !!wd.contactPhone;
+    if (!hasEmail && !hasPhone) {
+      return 'Anything else for the site — email or phone? Or reply *skip* to go with just the address.';
+    }
+    if (!hasEmail) {
+      return 'Anything else — want to add an email? Or reply *skip* to move on.';
+    }
+    if (!hasPhone) {
+      return 'Anything else — want to add a phone number? Or reply *skip* to move on.';
+    }
+    return '';
+  }
+  return '';
+}
+
+/**
  * Handle a WhatsApp location pin. Returns { handled: true, newState? }
  * when the caller (router) should return immediately.
  */
@@ -97,19 +131,19 @@ async function handleLocation(user, message) {
       await updateUserMetadata(user.id, { websiteData: wd });
       user.metadata = { ...(user.metadata || {}), websiteData: wd };
 
-      // Build the ack without dominating the chat — short, cheerful,
-      // and then hand back to the normal flow so the user doesn't
-      // need an extra turn to know what happened.
       const cityPart = geo.city ? ` based in *${geo.city}*` : '';
       const seedLine = seeded.includes('address')
         ? `Got your location${cityPart}. Saved the address for your site too.`
         : `Got your location${cityPart}.`;
-      await sendTextMessage(user.phone_number, seedLine);
-      await logMessage(user.id, seedLine, 'assistant');
       logger.info(`[LOCATION] Seeded ${seeded.join('+')} for ${user.phone_number} at state ${user.state}`);
-      // Let the state handler run next turn with the newly-populated
-      // websiteData — smartAdvance will pick up from the next
-      // missing field.
+
+      // Build a state-aware follow-up so the user isn't left wondering
+      // what to say next. Without this, the handler just returns the
+      // seed ack and the conversation stalls.
+      const followUp = buildPostPinFollowUp(user.state, wd);
+      const combined = followUp ? `${seedLine}\n\n${followUp}` : seedLine;
+      await sendTextMessage(user.phone_number, combined);
+      await logMessage(user.id, combined, 'assistant');
       return { handled: true };
     }
   }

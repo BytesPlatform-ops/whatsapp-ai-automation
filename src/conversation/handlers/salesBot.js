@@ -224,6 +224,33 @@ async function handleSalesBot(user, message) {
       if (name && name.length <= 60) websiteDemoBusinessName = name;
     }
   }
+  // Strip generic industry-echo services ("plumbing services" when industry
+  // is "Plumbing"). The LLM that emits the trigger tag often restates the
+  // user's vague answer verbatim, which blocks the trade template's
+  // default-services list from kicking in downstream. This mirrors the
+  // same filter in entityAccumulator.extractWebsiteFields for the
+  // extractor path — without it, the salesBot path skips that safety net.
+  if (Array.isArray(websiteDemoServices) && websiteDemoServices.length > 0) {
+    const industryWord = String(websiteDemoIndustry || '').trim().toLowerCase();
+    if (industryWord) {
+      const stripSuffix = (s) => String(s || '').toLowerCase()
+        .replace(/\s+(services?|work|stuff|things)\s*$/i, '')
+        .trim();
+      const allEcho = websiteDemoServices.every((s) => {
+        const normalized = stripSuffix(s);
+        return (
+          normalized === '' ||
+          normalized === industryWord ||
+          industryWord.includes(normalized) ||
+          normalized.includes(industryWord)
+        );
+      });
+      if (allEcho) {
+        logger.info(`[SALES] Dropping generic services echo ${JSON.stringify(websiteDemoServices)} for industry "${industryWord}" — trade defaults will fill in`);
+        websiteDemoServices = null;
+      }
+    }
+  }
   let chatbotDemoTrigger = cleanText.includes('[TRIGGER_CHATBOT_DEMO]');
   let adGeneratorTrigger = cleanText.includes('[TRIGGER_AD_GENERATOR]');
   let logoMakerTrigger = cleanText.includes('[TRIGGER_LOGO_MAKER]');
@@ -532,12 +559,18 @@ async function handleSalesBot(user, message) {
     // Extract business name: the current message is likely the business name if it's short
     // and not a common word. Also scan recent user messages as fallback.
     const skipWords = /^(yes|yeah|sure|ok|okay|no|hi|hello|hey|i need|i want|chatbot|ai|website|help|please|thanks|thank you)$/i;
+    // Reject question-shaped inputs — "Which payment link" / "What about X"
+    // / "How does it work" / "Can you explain" etc. are user confusion,
+    // not business names. Without this guard we'd end up naming the
+    // chatbot after the user's question.
+    const questionStarterRx = /^(what|which|why|how|where|when|who|does|do|can|could|is|are|was|were|will|would|should|did|may|might|shall|whats|hows|whos)\b/i;
+    const looksLikeQuestion = (s) => questionStarterRx.test(s) || /[?]/.test(s);
     let businessName = null;
 
     // Check current message first - most likely the business name if the LLM just asked for it
     if (text.length >= 2 && text.length <= 50 && text.split(/\s+/).length <= 6
-        && !skipWords.test(text) && !/[?]/.test(text)
-        && !/\b(need|want|chatbot|website|bot|help|looking)\b/i.test(text)) {
+        && !skipWords.test(text) && !looksLikeQuestion(text)
+        && !/\b(need|want|chatbot|website|bot|help|looking|payment|link)\b/i.test(text)) {
       businessName = text;
     }
 
@@ -547,8 +580,8 @@ async function handleSalesBot(user, message) {
       for (let i = userMessages.length - 1; i >= 0; i--) {
         const msg = userMessages[i].content.trim();
         if (msg.length >= 2 && msg.length <= 50 && msg.split(/\s+/).length <= 6
-            && !skipWords.test(msg) && !/[?]/.test(msg)
-            && !/\b(need|want|chatbot|website|bot|help|looking)\b/i.test(msg)) {
+            && !skipWords.test(msg) && !looksLikeQuestion(msg)
+            && !/\b(need|want|chatbot|website|bot|help|looking|payment|link)\b/i.test(msg)) {
           businessName = msg;
           break;
         }

@@ -31,6 +31,18 @@ const GRAY_AREA_PIVOT =
   "Sounds like this needs a quick conversation with the team rather than the standard flow. Let's set up a call so we can scope it properly.";
 
 /**
+ * Best-effort short label for what we declined so the follow-up
+ * re-decline can name it. Matches the most common NSFW-legal phrasings.
+ */
+function extractDeclinedReason(text) {
+  const t = String(text || '').toLowerCase();
+  if (/\b(cannabis|marijuana|weed|cbd|dispensary|hemp)\b/.test(t)) return 'cannabis';
+  if (/\b(gambling|casino|betting|sportsbook|poker)\b/.test(t)) return 'gambling';
+  if (/\b(adult\s*entertainment|adult\s*site|porn|onlyfans|escort|cam\s*site)\b/.test(t)) return 'adult entertainment';
+  return 'that kind of business';
+}
+
+/**
  * Act on a classified category. Caller passes the classified category
  * from classifyAbuse. Returns { handled, newState }.
  *
@@ -75,6 +87,23 @@ async function handleAbuseCategory(user, message, category) {
     const reply = DECLINE_MESSAGES.nsfw_declined;
     await sendTextMessage(user.phone_number, reply);
     await logMessage(user.id, reply, 'assistant');
+    // Persist a soft flag so follow-up pushback ("you can't do it?")
+    // doesn't slip past the classifier and land back in the normal
+    // sales/webdev flow. Router's pre-interceptor re-declines within
+    // a cooldown window unless the user clearly pivots to a different
+    // topic.
+    try {
+      await updateUserMetadata(user.id, {
+        scopeDeclinedAt: new Date().toISOString(),
+        scopeDeclinedReason: extractDeclinedReason(message?.text || ''),
+      });
+      if (user.metadata) {
+        user.metadata.scopeDeclinedAt = new Date().toISOString();
+        user.metadata.scopeDeclinedReason = extractDeclinedReason(message?.text || '');
+      }
+    } catch (err) {
+      logger.warn(`[ABUSE] Failed to persist scopeDeclinedAt: ${err.message}`);
+    }
     return { handled: true };
   }
 

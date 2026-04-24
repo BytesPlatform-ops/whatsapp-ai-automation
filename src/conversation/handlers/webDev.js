@@ -57,9 +57,14 @@ function nextMissingWebDevState(websiteData, fullMetadata = {}) {
   } else if (websiteData.services == null) {
     return STATES.WEB_COLLECT_SERVICES;
   }
-  // Phone is critical (especially for HVAC). Email alone is not enough — make
-  // sure we collect at least a phone OR address before confirming.
-  if (!websiteData.contactPhone && !websiteData.contactAddress) return STATES.WEB_COLLECT_CONTACT;
+  // Contact step: require an explicit phone OR email OR an explicit skip
+  // signal. Address alone is NOT enough — a location pin dropped mid-flow
+  // (Phase 14) auto-seeds contactAddress, which would otherwise sneak past
+  // the contact ask entirely. Users expect to be asked for phone/email
+  // regardless of whether their address was already captured.
+  const hasPrimaryContact = !!websiteData.contactPhone || !!websiteData.contactEmail;
+  const contactStepDone = hasPrimaryContact || fullMetadata.contactSkipped === true;
+  if (!contactStepDone) return STATES.WEB_COLLECT_CONTACT;
   return STATES.WEB_CONFIRM;
 }
 
@@ -143,7 +148,10 @@ function questionForState(state, websiteData) {
       if (websiteData?.primaryCity) {
         return `Which areas / neighborhoods do you serve around *${websiteData.primaryCity}*? List them separated by commas. Example: *Clifton, DHA, Gulshan*. Or just skip to use *${websiteData.primaryCity}* as the only area.`;
       }
-      return 'Which city are you based in, and which areas do you serve? Example: *Austin: Round Rock, Cedar Park, Pflugerville*.';
+      return (
+        'Which city are you based in, and which areas do you serve? Example: *Austin: Round Rock, Cedar Park, Pflugerville*.\n\n' +
+        '_Tip: tap 📎 → Location to drop a pin and I\'ll pick up the city from it._'
+      );
     }
     case STATES.WEB_COLLECT_SERVICES: {
       const { isHvac, resolveTrade } = require('../../website-gen/templates');
@@ -206,7 +214,10 @@ function questionForState(state, websiteData) {
         "Or reply *skip* and I'll use professional stock photos."
       );
     }
-    case STATES.WEB_COLLECT_CONTACT: return "Last thing — what contact info do you want on the site? Send your email, phone, and/or address.";
+    case STATES.WEB_COLLECT_CONTACT: return (
+      "Last thing — what contact info do you want on the site? Send your email, phone, and/or address.\n\n" +
+      "_Tip: tap 📎 → Location to drop a pin and I'll use it as the address._"
+    );
     default: return '';
   }
 }
@@ -2018,12 +2029,19 @@ async function handleCollectContact(user, message) {
     }
   }
 
+  const mergedWebsiteData = { ...(user.metadata?.websiteData || {}), ...contactData };
+  // Mark the contact step completed so nextMissingWebDevState doesn't loop
+  // back on users who provided only an address (or skipped). Setting this
+  // unconditionally once handleCollectContact finishes is safe — we've
+  // asked the user once, that's the UX contract.
   await updateUserMetadata(user.id, {
-    websiteData: { ...(user.metadata?.websiteData || {}), ...contactData },
+    websiteData: mergedWebsiteData,
+    contactSkipped: true,
   });
   user.metadata = {
     ...(user.metadata || {}),
-    websiteData: { ...(user.metadata?.websiteData || {}), ...contactData },
+    websiteData: mergedWebsiteData,
+    contactSkipped: true,
   };
 
   return showConfirmSummary(user);
@@ -2381,6 +2399,45 @@ Return JSON ONLY. Examples:
     }
   } catch (err) {
     logger.warn(`[WEBDEV-CONFIRM] Edit-intent LLM classify failed: ${err.message}`);
+  }
+
+  // Phase 12/13: before falling back to the edit-hint, check if the user
+  // is actually trying to switch to a different service ("skip this, can
+  // you make a chatbot?", "forget the website, do a logo instead", "i
+  // need a logo and some ads too"). WEB_CONFIRM isn't in COLLECTION_STATES
+  // so the router's menu-intent branch doesn't fire — we have to do the
+  // flow-switch check here.
+  //
+  // Gate on EXPLICIT skip phrasing to avoid false positives — a message
+  // like "add chatbot features to the site" should NOT jump to chatbot
+  // mode, but "skip this, make a chatbot" should.
+  const explicitSwitchRx = /\b(skip\s+(?:this|it|that)|forget\s+(?:this|it|that|the)|scrap\s+(?:this|it|that)|cancel\s+(?:this|it|that)|drop\s+(?:this|it|that)|nevermind|never\s*mind|instead\s*of|rather\s+than|nvm)\b/i;
+  const hasExplicitSwitch = explicitSwitchRx.test(originalText);
+  if (hasExplicitSwitch) {
+    try {
+      const { detectServiceQueue, startServiceQueue } = require('../serviceQueue');
+      const queue = await detectServiceQueue(originalText, user.id);
+      if (queue.length >= 2) {
+        const { updateUserState } = require('../../db/users');
+        await updateUserState(user.id, STATES.SERVICE_SELECTION);
+        const newState = await startServiceQueue({ ...user, state: STATES.SERVICE_SELECTION }, queue);
+        return newState || STATES.SERVICE_SELECTION;
+      }
+
+      const { pickServiceFromSwitch, handleServiceSelection } = require('./serviceSelection');
+      const target = await pickServiceFromSwitch(originalText, user.id);
+      if (target) {
+        const { updateUserState } = require('../../db/users');
+        await updateUserState(user.id, STATES.SERVICE_SELECTION);
+        const newState = await handleServiceSelection(
+          { ...user, state: STATES.SERVICE_SELECTION },
+          { buttonId: target, listId: '', text: '', type: 'text' }
+        );
+        return newState || STATES.SERVICE_SELECTION;
+      }
+    } catch (err) {
+      logger.warn(`[WEBDEV-CONFIRM] Flow-switch check failed: ${err.message}`);
+    }
   }
 
   // Still nothing — ask the user to be more specific. Localize the hint.

@@ -38,30 +38,53 @@ const SEO_FOLLOWUP_LADDER = [
   { step: 'seo_followup_24h', afterHours: 24 },
 ];
 
-// Messages per step × personality mode
-const FOLLOWUP_MESSAGES = {
+// Messages per step × personality mode.
+//
+// Templates reference {biz} (their business name or "your site") and —
+// at the 23h step — {fullPrice} and {discountPrice}. The renderer
+// fills these in from metadata. Note: the 2h step no longer assumes a
+// payment link exists — at that point the user may still be mid-flow.
+const FOLLOWUP_TEMPLATES = {
   followup_2h: {
-    COOL: "hey! just checking — did you get a chance to look at the payment link? your site is ready to go live whenever you are 🔥",
-    PROFESSIONAL: "Just checking in — did you have any questions about getting your website live? Happy to help.",
-    UNSURE: "hey! just wanted to check — everything good? your website is ready to go live whenever you want 😊",
-    NEGOTIATOR: "payment link still open. your site is ready. let me know.",
-    DEFAULT: "Hey! Just checking in — did you get a chance to look at the payment link? Your site is ready to go live!",
+    COOL: "hey! just wanted to check in on {biz} — anything i can help unblock so we can wrap this up? 👋",
+    PROFESSIONAL: "Hi — following up on {biz}. If anything's holding things up, I'm happy to help work through it.",
+    UNSURE: "hey! no pressure — just making sure everything's clear with {biz}. happy to answer any questions 😊",
+    NEGOTIATOR: "following up on {biz}. anything i can clarify?",
+    DEFAULT: "Hey! Checking in on {biz} — any questions I can help with?",
   },
   followup_12h: {
-    COOL: "yo your preview site is still up — $100 gets it live on your own domain, everything included. or i can split it if that helps 🤙",
-    PROFESSIONAL: "Your website preview is still available. It's $100 total including your custom domain. We can also split the payment if that works better.",
-    UNSURE: "hey! your website is still saved — just $100 to get it live with your own domain, everything included. we can split the payment too! 😊",
-    NEGOTIATOR: "site's still up. $100 total, domain included. can split if needed. want the link?",
-    DEFAULT: "Your preview site is still up — $100 gets it live on your own domain, everything included!",
+    COOL: "yo — {biz} preview is still up and looking sharp 🔥 $${fullPrice} gets it live on your own domain, everything included. happy to split it if that helps. want the link?",
+    PROFESSIONAL: "Your {biz} preview is still live for review. The package is $${fullPrice} including your custom domain, everything included. Can also split the payment if that works better. Shall I send the link?",
+    UNSURE: "hey! your {biz} preview is still saved 😊 $${fullPrice} total with your own domain, all included. we can split the payment too if that helps. anything i can answer?",
+    NEGOTIATOR: "{biz} preview ready. $${fullPrice} full, domain included. split possible. link?",
+    DEFAULT: "Your {biz} preview is still up — $${fullPrice} gets it live with a custom domain, everything included. Want the payment link?",
   },
   followup_23h: {
-    COOL: "last call — i can do $80 total instead of $100. domain still included. want me to send a new link? 👀",
-    PROFESSIONAL: "Final follow-up — I can offer $80 total (normally $100), domain included. Shall I send a new payment link?",
-    UNSURE: "hey! last message from me — got approval to do $80 total (normally $100), domain included. want the link? 😊",
-    NEGOTIATOR: "last offer — $80 total. domain included. can't go lower. link?",
-    DEFAULT: "Last chance — $80 total instead of $100, domain included. Want a new payment link?",
+    COOL: "last nudge on {biz} 👀 got approval to knock 20% off today — $${discountPrice} instead of $${fullPrice}, everything still included. offer's good for 24h. want a fresh link at the new price?",
+    PROFESSIONAL: "Final follow-up on {biz}. I can offer 20% off today only — $${discountPrice} total (normally $${fullPrice}), everything included. Would you like a fresh payment link at the discount?",
+    UNSURE: "hey! last message from me on {biz} 😊 i got approval to do 20% off if you lock it in today — $${discountPrice} instead of $${fullPrice}, everything still included. want the link?",
+    NEGOTIATOR: "last offer on {biz}. 20% off today = $${discountPrice} (normally $${fullPrice}). everything included. can't go lower. link?",
+    DEFAULT: "Last chance on {biz} — 20% off today only ($${discountPrice} instead of $${fullPrice}), everything included. Want the discounted payment link?",
   },
 };
+
+// Default quoted price for users who haven't been sent a link yet —
+// matches SITE_COST in customDomain.js.
+const DEFAULT_QUOTED_AMOUNT = 100;
+// Discount percent applied at the 23h step.
+const DISCOUNT_PERCENT = 0.20;
+
+/**
+ * Fill {biz}, {fullPrice}, {discountPrice} placeholders in a template
+ * using live values from user metadata. Falls back to sensible defaults
+ * when a field is missing.
+ */
+function renderFollowupMessage(template, { businessName, fullPrice, discountPrice }) {
+  return template
+    .replace(/\{biz\}/g, businessName || 'your site')
+    .replace(/\{fullPrice\}/g, String(fullPrice))
+    .replace(/\{discountPrice\}/g, String(discountPrice));
+}
 
 /**
  * Determine which follow-up step (if any) a user is due for.
@@ -122,10 +145,12 @@ function renderSeoFollowupMessage(personalityMode, topFix, url) {
 }
 
 /**
- * Pick the right message variant for this user's detected personality.
+ * Pick the right message template for this user's detected personality.
+ * Returns the raw template string (still has {biz}/{fullPrice}/etc
+ * placeholders) so callers can render it with live values.
  */
-function pickMessage(step, personalityMode) {
-  const variants = FOLLOWUP_MESSAGES[step];
+function pickTemplate(step, personalityMode) {
+  const variants = FOLLOWUP_TEMPLATES[step];
   if (!variants) return null;
   const mode = (personalityMode || '').toUpperCase();
   return variants[mode] || variants.DEFAULT;
@@ -232,6 +257,31 @@ async function processUserFollowup(user) {
   // If all steps are done, skip
   if (completedSteps.length >= FOLLOWUP_LADDER.length) return;
 
+  // Website-payment ladder guard: all three messages in FOLLOWUP_MESSAGES
+  // reference "payment link" / "your site is ready to go live" / "$100".
+  // Sending them to a user who never engaged with the webdev flow is
+  // confusing (the scheduler doesn't know they were just exploring). Gate
+  // the ladder on ANY sign of webdev engagement:
+  //   - websiteData.businessName: they started the collection flow
+  //   - selectedDomain: they picked a domain
+  //   - websiteDemoTriggered: sales bot fired [TRIGGER_WEBSITE_DEMO]
+  //   - paymentLinkSentAt / lastPaymentAmount: a link/payment exists
+  //
+  // If none apply, skip silently. We could send a different soft nudge
+  // for exploratory users later, but radio silence is better than a
+  // wrong payment prompt.
+  const wd = metadata.websiteData || {};
+  const engagedWithWebdev =
+    !!wd.businessName ||
+    !!metadata.selectedDomain ||
+    !!metadata.websiteDemoTriggered ||
+    !!metadata.paymentLinkSentAt ||
+    !!metadata.lastPaymentAmount;
+  if (!engagedWithWebdev) {
+    logger.debug(`[FOLLOWUP] Skipping website-payment ladder for ${user.phone_number} — no webdev engagement signals`);
+    return;
+  }
+
   const nextStep = getNextFollowup(lastMsg.created_at, completedSteps, leadTemp);
   if (!nextStep) return;
 
@@ -240,41 +290,60 @@ async function processUserFollowup(user) {
     ? extractPersonalityFromBrief(metadata.leadBrief)
     : (metadata.personalityMode || 'DEFAULT');
 
-  const message = pickMessage(nextStep.step, personality);
-  if (!message) return;
+  // Resolve live values for message rendering.
+  //   businessName:  their business — fallback to "your site" when null
+  //   fullPrice:     the amount we last quoted (or DEFAULT_QUOTED_AMOUNT
+  //                  if we haven't generated a link for them yet)
+  //   discountPrice: 20% off fullPrice, rounded, for the 23h step
+  const businessName = wd.businessName || null;
+  const fullPrice = Number.isFinite(metadata.lastPaymentAmount) && metadata.lastPaymentAmount > 0
+    ? Math.round(metadata.lastPaymentAmount)
+    : DEFAULT_QUOTED_AMOUNT;
+  const discountPrice = Math.round(fullPrice * (1 - DISCOUNT_PERCENT));
 
-  logger.info(`Followup: sending ${nextStep.step} to ${user.phone_number} (mode: ${personality}, temp: ${leadTemp})`);
+  const template = pickTemplate(nextStep.step, personality);
+  if (!template) return;
+  const message = renderFollowupMessage(template, { businessName, fullPrice, discountPrice });
+
+  logger.info(`Followup: sending ${nextStep.step} to ${user.phone_number} (mode: ${personality}, temp: ${leadTemp}, fullPrice: $${fullPrice}, discountPrice: $${discountPrice})`);
 
   await sendTextMessage(user.phone_number, message);
   await logMessage(user.id, message, 'assistant');
 
-  // For the 23h step, also send a discounted payment link
+  // For the 23h step, also send a fresh payment link at the real 20%
+  // discount off whatever they were previously quoted.
   if (nextStep.step === 'followup_23h' && !metadata.paymentConfirmed) {
     try {
       const { createPaymentLink } = require('../payments/stripe');
       const { sendCTAButton } = require('../messages/sender');
       const { env: appEnv } = require('../config/env');
-      // $50 upfront (discounted from $60) — domain included
-      const discountUpfront = metadata.selectedDomain ? 50 : 80;
       const description = metadata.selectedDomain
-        ? `Website + domain (${metadata.selectedDomain}) — discount`
-        : 'Website — limited time discount';
+        ? `Website + domain (${metadata.selectedDomain}) — 20% discount`
+        : 'Website — 20% discount';
       if (appEnv.stripe.secretKey) {
         const result = await createPaymentLink({
           userId: user.id,
           phoneNumber: user.phone_number,
-          amount: discountUpfront,
+          amount: discountPrice,
           serviceType: 'website',
           packageTier: 'discount',
           description,
           customerName: user.name || '',
         });
-        await sendCTAButton(user.phone_number, `Tap below to pay $${discountUpfront}`, `💳 Pay $${discountUpfront}`, result.url);
-        await logMessage(user.id, `Discount payment link sent: $${discountUpfront}`, 'assistant');
-        logger.info(`[FOLLOWUP] $${discountUpfront} discount payment link sent to ${user.phone_number}`);
+        await sendCTAButton(user.phone_number, `Tap below to lock in the discount`, `💳 Pay $${discountPrice}`, result.url);
+        await logMessage(user.id, `Discount payment link sent: $${discountPrice} (20% off $${fullPrice})`, 'assistant');
+        logger.info(`[FOLLOWUP] $${discountPrice} discount payment link sent to ${user.phone_number} (20% off $${fullPrice})`);
+        // Overwrite lastPaymentAmount so the user can see the new quote
+        // in metadata and the webhook on payment confirms the right
+        // figure. Keep the original in lastQuotedAmount for history.
+        await updateUserMetadata(user.id, {
+          lastPaymentAmount: discountPrice,
+          lastQuotedAmount: fullPrice,
+          paymentLinkSentAt: new Date().toISOString(),
+        });
       }
     } catch (err) {
-      logger.error(`[FOLLOWUP] Failed to send $80 payment link:`, err.message);
+      logger.error(`[FOLLOWUP] Failed to send discount payment link:`, err.message);
     }
   }
 

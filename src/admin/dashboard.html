@@ -581,11 +581,26 @@ function convListItems(leads) {
       badges += '<span class="inline-flex items-center gap-1 ml-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500 text-white shadow-sm" title="' + l.manual_count + ' manual repl' + (l.manual_count === 1 ? 'y' : 'ies') + ' sent">✋ MANUAL' + (l.manual_count > 1 ? ' ×' + l.manual_count : '') + '</span>';
     }
     var manualBadge = badges;
+    // WhatsApp-only 24h-window indicator. A green dot = the user messaged
+    // within the last 24 hours so free-form replies will go through. A
+    // red dot = window closed, we can only send an approved template.
+    // Messenger/Instagram don't have this 24h rule, so we skip the dot
+    // for non-WhatsApp channels.
+    var windowDot = '';
+    if ((l.channel || 'whatsapp') === 'whatsapp') {
+      if (l.within_24h) {
+        windowDot = '<span class="inline-block w-2 h-2 rounded-full bg-green-500" title="24h window OPEN — you can send free-form replies"></span>';
+      } else if (l.last_inbound_at) {
+        windowDot = '<span class="inline-block w-2 h-2 rounded-full bg-red-500" title="24h window CLOSED (' + (l.hours_since_inbound || 0) + 'h since last inbound) — reply requires an approved template"></span>';
+      } else {
+        windowDot = '<span class="inline-block w-2 h-2 rounded-full bg-gray-300" title="No inbound yet from this user"></span>';
+      }
+    }
     return '<div class="rounded-xl ' + rowClasses + ' p-4 flex items-center justify-between transition-colors cursor-pointer" onclick="openConversation(\'' + l.id + '\', \'' + esc(l.phone_number) + '\', \'' + esc(l.name || '') + '\')">' +
       '<div class="flex items-center gap-4">' +
         '<div class="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-bold text-sm">' + (l.name ? l.name[0].toUpperCase() : '#') + '</div>' +
         '<div>' +
-          '<p class="font-semibold text-sm flex items-center gap-2 flex-wrap">' + esc(l.name || l.phone_number) + ' ' + channelIcon(l.channel || 'whatsapp') + ' ' + viaLinePill(l.via_phone_number_id) + manualBadge + '</p>' +
+          '<p class="font-semibold text-sm flex items-center gap-2 flex-wrap">' + windowDot + ' ' + esc(l.name || l.phone_number) + ' ' + channelIcon(l.channel || 'whatsapp') + ' ' + viaLinePill(l.via_phone_number_id) + manualBadge + '</p>' +
           '<p class="text-xs text-gray-500">' + esc(l.phone_number) + ' &middot; ' + l.message_count + ' messages</p>' +
         '</div>' +
       '</div>' +
@@ -712,9 +727,47 @@ function openConversation(userId, phone, name) {
   api('conversations/' + userId).then(function(data) {
     var user = data.user;
     var msgs = data.messages;
+    var win = data.window || {};
     var isTakenOver = user.metadata && user.metadata.humanTakeover;
     updateTakeoverButton(isTakenOver);
-    var html = '<div class="bg-indigo-50 rounded-lg p-3 mb-4 text-xs space-y-1">' +
+
+    // 24h-window status banner — WhatsApp-only. Green = can reply
+    // free-form. Red = window closed, admin needs an approved template
+    // to message the user. Also updates the Send input's placeholder
+    // below.
+    var windowBanner = '';
+    var isWhatsApp = (user.channel || 'whatsapp') === 'whatsapp';
+    if (isWhatsApp) {
+      if (win.within_24h) {
+        windowBanner = '<div class="bg-green-50 border border-green-200 rounded-lg p-3 mb-4 text-xs text-green-800 flex items-center gap-2">' +
+          '<span class="inline-block w-2 h-2 rounded-full bg-green-500"></span>' +
+          '<span><b>24h reply window: open</b>' + (win.hours_since_inbound != null ? ' (last inbound ' + win.hours_since_inbound + 'h ago)' : '') + ' — free-form replies will go through.</span>' +
+          '</div>';
+      } else if (win.last_inbound_at) {
+        windowBanner = '<div class="bg-red-50 border border-red-200 rounded-lg p-3 mb-4 text-xs text-red-800 flex items-start gap-2">' +
+          '<span class="inline-block w-2 h-2 rounded-full bg-red-500 mt-1 shrink-0"></span>' +
+          '<span><b>24h reply window: closed</b> (' + (win.hours_since_inbound || 0) + 'h since last inbound) — WhatsApp will reject free-form replies. The user must send a message first, OR we need to send an approved template (HSM) to re-open the window.</span>' +
+          '</div>';
+      } else {
+        windowBanner = '<div class="bg-gray-50 border border-gray-200 rounded-lg p-3 mb-4 text-xs text-gray-700 flex items-center gap-2">' +
+          '<span class="inline-block w-2 h-2 rounded-full bg-gray-400"></span>' +
+          '<span><b>No inbound yet</b> — this user hasn\'t messaged us. Only approved templates can be sent first.</span>' +
+          '</div>';
+      }
+    }
+
+    // Update the Send input placeholder / enabled state based on window.
+    var replyInput = document.getElementById('admin-reply-input');
+    if (replyInput) {
+      if (isWhatsApp && !win.within_24h) {
+        replyInput.placeholder = '24h window closed — send may fail (template required)';
+      } else {
+        replyInput.placeholder = 'Type a message...';
+      }
+    }
+
+    var html = windowBanner +
+    '<div class="bg-indigo-50 rounded-lg p-3 mb-4 text-xs space-y-1">' +
       '<p><b>State:</b> ' + esc(user.state) + (isTakenOver ? ' <span class="badge bg-red-100 text-red-700 ml-1">Human Control</span>' : '') + '</p>' +
       '<p><b>Joined:</b> ' + fmtDate(user.created_at) + '</p>' +
       (user.metadata && user.metadata.leadBrief ? '<p><b>Lead Brief:</b> ' + esc(user.metadata.leadBrief).slice(0, 300) + '</p>' : '') +
@@ -873,7 +926,13 @@ function sendAdminReply(e) {
         }
       }
     } else {
-      alert('Failed to send: ' + (data.error || 'Unknown error'));
+      // Surface the structured detail when the backend returned a 409
+      // (WhatsApp-specific policy error) so the operator knows WHY the
+      // send failed rather than seeing a generic "Unknown error".
+      var msg = data.error || 'Unknown error';
+      if (data.detail) msg += '\n\n' + data.detail;
+      if (data.metaCode) msg += '\n\nMeta code: ' + data.metaCode;
+      alert('Failed to send: ' + msg);
     }
   })
   .catch(function(err) {

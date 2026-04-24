@@ -372,19 +372,23 @@ async function handleDemoSent(user, message) {
 
   // They might be asking about the chatbot or giving feedback
   // Send follow-up info if it's been a while
-  await sendInteractiveButtons(
-    user.phone_number,
+  const pricingTiersMsg =
     "How's the chatbot looking? Pretty cool, right? Here's what it can do on a paid plan:\n\n" +
     "*Starter ($97/mo)* - Up to 500 conversations/mo, widget embed, lead capture\n" +
     "*Growth ($249/mo)* - Unlimited conversations, priority support, advanced analytics\n" +
     "*Premium ($599/mo)* - Everything + custom integrations, dedicated account manager\n\n" +
-    "All plans start with a *7-day free trial* - no payment needed to start!",
+    "All plans start with a *7-day free trial* - no payment needed to start!";
+  await sendInteractiveButtons(
+    user.phone_number,
+    pricingTiersMsg,
     [
       { id: 'cb_proceed', title: 'Start Free Trial' },
       { id: 'menu_main', title: 'Back to Menu' },
     ]
   );
-  await logMessage(user.id, 'Showed chatbot pricing tiers', 'assistant');
+  // Log the actual pricing text so the admin conversation page shows
+  // what the user saw, not a placeholder label.
+  await logMessage(user.id, pricingTiersMsg, 'assistant');
   return STATES.CB_FOLLOW_UP;
 }
 

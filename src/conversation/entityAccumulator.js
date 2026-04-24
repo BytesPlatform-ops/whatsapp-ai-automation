@@ -92,7 +92,7 @@ Field rules:
   If the businessName is GENERIC ("TechCorp", "Glow Studio", "BlueBird Ventures") with no trade word, leave industry unset.
 - primaryCity: the city the business is based in.
 - serviceAreas: array of cities/neighborhoods they serve. May overlap with primaryCity.
-- services: array of services or products offered.
+- services: array of SPECIFIC services or products offered. IMPORTANT: when the user's answer just echoes their industry in generic terms ("we do plumbing", "plumbing services", "all types of plumbing", "every kind of roofing work", "the usual dental stuff", "full-service X", "general X services"), treat it as delegation and OMIT the services field entirely — downstream code will supply trade-specific defaults. Only populate services when the user names DISTINCT, CONCRETE services ("leak repair, drain cleaning, water heater install" or "haircut, beard trim, color"). Single-entry results like ["Plumbing services"] or ["Roofing"] are WRONG — omit the field in those cases.
 - contactAddress: physical street address.
 
 Already known (do NOT re-extract these): ${JSON.stringify({
@@ -127,6 +127,25 @@ Return JSON like {"industry":"HVAC","primaryCity":"Austin"} or {} if nothing fou
             .map((x) => (typeof x === 'string' ? x.trim() : ''))
             .filter((x) => x && x.length < 80);
           if (cleaned.length) out[k] = cleaned;
+        }
+      }
+      // Post-filter: if the LLM returned a "services" list whose only
+      // entries are generic industry echoes ("Plumbing services" when
+      // industry is "Plumbing"), drop the field so the trade template's
+      // defaults get used. Prompt tells the LLM to omit these, but
+      // this belt-and-braces check catches the occasional miss.
+      if (Array.isArray(out.services) && out.services.length > 0) {
+        const industryWord = String(known.industry || parsed.industry || '').trim().toLowerCase();
+        if (industryWord) {
+          const stripSuffix = (s) => String(s || '').toLowerCase().replace(/\s+(services?|work|stuff|things)\s*$/i, '').trim();
+          const allEcho = out.services.every((s) => {
+            const normalized = stripSuffix(s);
+            return normalized === industryWord || normalized === '' || industryWord.includes(normalized) || normalized.includes(industryWord);
+          });
+          if (allEcho) {
+            logger.info(`[ENTITY-ACC] Dropping generic services echo ${JSON.stringify(out.services)} for industry "${industryWord}" — will use trade defaults`);
+            delete out.services;
+          }
         }
       }
     }
