@@ -482,7 +482,11 @@ function _processTurn(message) {
         logger.warn(`[ROUTER] First attempt failed AFTER ${getSendCount()} reply(ies) for ${message.from}: ${err.message}. NOT retrying (would duplicate).`);
         return;
       }
-      logger.warn(`[ROUTER] First attempt failed for ${message.from} with no reply sent: ${err.message}. Retrying once.`);
+      logger.warn(`[ROUTER] First attempt failed for ${message.from} with no reply sent: ${err.message}. Retrying once.`, {
+        stack: err.stack?.split('\n').slice(0, 5).join('\n'),
+        errorName: err.name,
+        errorCode: err.code,
+      });
       await new Promise((r) => setTimeout(r, 600));
     }
 
