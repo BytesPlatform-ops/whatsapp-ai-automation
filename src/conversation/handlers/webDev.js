@@ -3333,6 +3333,107 @@ async function handleRevisions(user, message) {
     return generateWebsite(user);
   }
 
+  // Image-as-revision: user sent a photo while in revisions instead of
+  // a Pexels-search description ("change hero to coffee shop"). Reuse
+  // the existing logo-upload pipeline to push their image into Supabase
+  // storage, then redeploy with c.heroImage = { url: theirUploadUrl }.
+  // Layer 1 scope: hero only — disambiguating "which image?" (about,
+  // gallery, services) is a follow-up. The caption, if any, is logged
+  // for context but not interpreted yet.
+  if (message.type === 'image' && (message.mediaId || message.mediaUrl)) {
+    const site = await getLatestSite(user.id);
+    if (!site?.preview_url) {
+      await sendTextMessage(
+        user.phone_number,
+        "I don't have a generated website for you yet — tell me what kind of site you want and I'll start fresh."
+      );
+      return STATES.WEB_REVISIONS;
+    }
+
+    await sendTextMessage(user.phone_number, await localize("Got the image — let me put it on your site...", user, message.text || ''));
+
+    // Download from WhatsApp/Messenger CDN
+    let buffer = null;
+    let mime = 'image/jpeg';
+    try {
+      const { downloadMedia } = require('../../messages/sender');
+      const media = await downloadMedia(message.mediaId || message.mediaUrl);
+      if (media?.buffer) {
+        buffer = media.buffer;
+        mime = media.mimeType || mime;
+      }
+    } catch (err) {
+      logger.error(`[WEB_REVISIONS] Image download failed: ${err.message}`);
+    }
+    if (!buffer) {
+      await sendTextMessage(
+        user.phone_number,
+        "I couldn't download that image. Mind sending it again?"
+      );
+      return STATES.WEB_REVISIONS;
+    }
+
+    // Upload to Supabase Storage. We reuse the logo bucket — it accepts
+    // PNG/JPEG/WebP up to 10MB which covers any phone-camera photo.
+    let publicUrl;
+    try {
+      const { uploadLogoImage } = require('../../logoGeneration/imageUploader');
+      publicUrl = await uploadLogoImage(buffer.toString('base64'), mime);
+    } catch (err) {
+      logger.error(`[WEB_REVISIONS] Image upload failed: ${err.message}`);
+      await sendTextMessage(
+        user.phone_number,
+        "Something went wrong uploading that image — try sending it again in a moment?"
+      );
+      return STATES.WEB_REVISIONS;
+    }
+
+    // Consume one revision only AFTER upload succeeded. If it fails
+    // mid-flow we don't want to burn a revision the user can't see.
+    const revisionCount = (user.metadata?.revisionCount || 0) + 1;
+    await updateUserMetadata(user.id, { revisionCount });
+
+    const currentConfig = site.site_data || user.metadata?.websiteData || {};
+    const updatedConfig = {
+      ...currentConfig,
+      heroImage: { url: publicUrl, source: 'user_upload' },
+    };
+
+    try {
+      const { deployToNetlify } = require('../../website-gen/deployer');
+      const { previewUrl, netlifySiteId, netlifySubdomain } = await deployToNetlify(updatedConfig, site.netlify_site_id || null);
+      await updateSite(site.id, {
+        site_data: updatedConfig,
+        preview_url: previewUrl,
+        netlify_site_id: netlifySiteId,
+        netlify_subdomain: netlifySubdomain,
+      });
+
+      const remaining = Math.max(0, 2 - revisionCount);
+      const note = remaining > 0
+        ? `You have *${remaining}* revision${remaining === 1 ? '' : 's'} left.`
+        : `That was your last free revision — further changes start at $200 or get scoped on a call.`;
+      await sendTextMessage(
+        user.phone_number,
+        await localize(
+          `Done — your image is live on the homepage.\n\n${previewUrl}\n\n${note}\n\nWant to tweak anything else, or are we good?`,
+          user,
+          ''
+        )
+      );
+      await logMessage(user.id, `Image revision applied (revision ${revisionCount}, hero swap from user upload)`, 'assistant');
+    } catch (err) {
+      logger.error(`[WEB_REVISIONS] Image revision deploy failed: ${err.message}`);
+      // Refund the revision — the user got nothing visible.
+      await updateUserMetadata(user.id, { revisionCount: Math.max(0, revisionCount - 1) });
+      await sendTextMessage(
+        user.phone_number,
+        "I uploaded the image but the redeploy failed. Try once more, or tell me to retry?"
+      );
+    }
+    return STATES.WEB_REVISIONS;
+  }
+
   // Handle revision requests via LLM
   if (buttonId === 'web_revise' || message.text) {
     let revisionText = message.text || 'I want to make changes';
