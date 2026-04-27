@@ -1,9 +1,10 @@
-const { DEFAULT_LISTINGS, DEFAULT_DESIGNATIONS } = require('./common');
+const { DEFAULT_LISTINGS, DEFAULT_DESIGNATIONS, wrapRealEstatePage } = require('./common');
 const { generateHomePage } = require('./home');
 const { generateListingsPage } = require('./listings');
 const { generateNeighborhoodsPage } = require('./neighborhoods');
 const { generateAboutPage } = require('./about');
 const { generateContactPage, generateThankYouPage, generateThankYouCmaPage } = require('./contact');
+const { generatePrivacyBody } = require('../_privacy');
 
 function ensureRealEstateDefaults(config) {
   const c = { ...config };
@@ -34,6 +35,7 @@ function generateRealEstatePages(config /* , { watermark = false } = {} */) {
     '/contact/index.html': generateContactPage(c),
     '/thank-you/index.html': generateThankYouPage(c),
     '/thank-you-cma/index.html': generateThankYouCmaPage(c),
+    '/privacy/index.html': wrapRealEstatePage(c, '/privacy', generatePrivacyBody(c)),
   };
 }
 

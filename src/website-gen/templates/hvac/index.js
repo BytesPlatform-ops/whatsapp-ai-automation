@@ -4,6 +4,8 @@ const { generateServicesPage } = require('./services');
 const { generateAreasPage } = require('./areas');
 const { generateAboutPage } = require('./about');
 const { generateContactPage, generateThankYouPage } = require('./contact');
+const { generatePrivacyBody } = require('../_privacy');
+const { wrapHvacPage } = require('./common');
 
 function ensureHvacDefaults(config) {
   const c = { ...config };
@@ -57,6 +59,7 @@ function generateHvacPages(config /* , { watermark = false } = {} */) {
     '/about/index.html': generateAboutPage(c),
     '/contact/index.html': generateContactPage(c),
     '/thank-you/index.html': generateThankYouPage(c),
+    '/privacy/index.html': wrapHvacPage(c, '/privacy', generatePrivacyBody(c)),
   };
 }
 

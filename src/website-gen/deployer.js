@@ -317,7 +317,7 @@ function getFoot(c) {
     </div></div>
   </div>
   <div style="border-top:1px solid rgba(255,255,255,0.08);padding-top:24px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:16px">
-    <div><p style="font-size:12px;opacity:0.4">Built with care. All rights reserved.</p></div>
+    <div><p style="font-size:12px;opacity:0.4">Built with care. All rights reserved. &middot; <a href="/privacy/" style="color:inherit;text-decoration:underline">Privacy Policy</a></p></div>
     <p style="font-size:12px;opacity:0.4">${esc(c.businessName)} &copy; ${new Date().getFullYear()}</p>
   </div>
 </div></footer>
@@ -773,6 +773,7 @@ function generateContactPage(c) {
         </div>
         <div><label style="display:block;font-size:14px;font-weight:600;color:#333;margin-bottom:8px">Email</label><input type="email" name="email" required placeholder="john@example.com" style="width:100%;padding:14px 18px;border:2px solid #eee;border-radius:12px;font-size:15px;font-family:inherit;transition:all 0.3s;outline:none" onfocus="this.style.borderColor='${pc}';this.style.boxShadow='0 0 0 4px ${pc}15'" onblur="this.style.borderColor='#eee';this.style.boxShadow='none'"></div>
         <div><label style="display:block;font-size:14px;font-weight:600;color:#333;margin-bottom:8px">Message</label><textarea rows="5" name="message" required placeholder="Tell us about your project..." style="width:100%;padding:14px 18px;border:2px solid #eee;border-radius:12px;font-size:15px;font-family:inherit;resize:vertical;transition:all 0.3s;outline:none" onfocus="this.style.borderColor='${pc}';this.style.boxShadow='0 0 0 4px ${pc}15'" onblur="this.style.borderColor='#eee';this.style.boxShadow='none'"></textarea></div>
+        ${require('./templates/_privacy').consentField(c, { idPrefix: 'gen', accent: pc })}
         <button type="submit" class="btn-p" style="justify-content:center;font-size:16px;padding:18px 32px;border-radius:12px;width:100%;cursor:pointer">Send Message <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/></svg></button>
       </form>
     </div></section>
@@ -857,11 +858,13 @@ function generateAllPages(config, watermark = false) {
   if (template) {
     pages = template.generateAllPages(config, { watermark });
   } else {
+    const { generatePrivacyBody } = require('./templates/_privacy');
     pages = {
       '/index.html': generateHomePage(config),
       '/about/index.html': generateAboutPage(config),
       '/contact/index.html': generateContactPage(config),
       '/thank-you/index.html': generateThankYouPage(config),
+      '/privacy/index.html': wrap(config, '/privacy', generatePrivacyBody(config)),
     };
     if ((config.services || []).length > 0) {
       pages['/services/index.html'] = generateServicesPage(config);

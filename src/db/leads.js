@@ -22,6 +22,12 @@ async function createLead(fields) {
       user_agent: fields.userAgent || null,
       delivery_status: 'pending',
       metadata: fields.metadata || {},
+      // GDPR audit trail — server validates the checkbox came back true
+      // before calling here, so consent_given will always be true on
+      // newly-created rows. Stored explicitly so the row is self-evident
+      // for a future audit / DSAR without joining other tables.
+      consent_given: !!fields.consentGiven,
+      consent_at: fields.consentAt || (fields.consentGiven ? new Date().toISOString() : null),
     })
     .select()
     .single();

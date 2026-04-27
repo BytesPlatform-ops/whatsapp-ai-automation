@@ -106,13 +106,19 @@ router.post('/api/booking/:siteId', async (req, res) => {
   try {
     const { siteId } = req.params;
     if (!UUID_RE.test(siteId)) return res.status(400).json({ error: 'Invalid site id' });
-    const { service, startAt, customerName, customerEmail, customerPhone, notes } = req.body || {};
+    const { service, startAt, customerName, customerEmail, customerPhone, notes, consentGiven } = req.body || {};
 
     if (!service || !startAt || !customerName) {
       return res.status(400).json({ error: 'Missing required fields' });
     }
     if (!customerEmail && !customerPhone) {
       return res.status(400).json({ error: 'Please provide an email or phone so we can confirm' });
+    }
+    // GDPR consent gate — booking forms collect personal data + an
+    // appointment time; the privacy checkbox is required at the form
+    // level, double-checked here.
+    if (consentGiven !== true && String(consentGiven).toLowerCase() !== 'yes') {
+      return res.status(400).json({ error: 'Please agree to the Privacy Policy to continue' });
     }
 
     const site = await getSiteById(siteId);
@@ -161,6 +167,8 @@ router.post('/api/booking/:siteId', async (req, res) => {
       customerEmail: customerEmail ? String(customerEmail).slice(0, 160) : null,
       customerPhone: customerPhone ? String(customerPhone).slice(0, 40) : null,
       notes: notes ? String(notes).slice(0, 1000) : null,
+      consentGiven: true,
+      consentAt: new Date().toISOString(),
     });
     if (conflict) return res.status(409).json({ error: 'That slot was just taken. Please pick another.' });
 

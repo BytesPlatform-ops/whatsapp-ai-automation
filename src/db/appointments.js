@@ -20,6 +20,8 @@ async function createAppointment({
   customerEmail,
   customerPhone,
   notes,
+  consentGiven,
+  consentAt,
 }) {
   const { data, error } = await supabase
     .from('appointments')
@@ -35,6 +37,8 @@ async function createAppointment({
       notes: notes || null,
       status: 'confirmed',
       cancel_token: newCancelToken(),
+      consent_given: !!consentGiven,
+      consent_at: consentAt || (consentGiven ? new Date().toISOString() : null),
     })
     .select()
     .single();

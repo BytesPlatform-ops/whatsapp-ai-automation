@@ -1340,7 +1340,7 @@ function getHvacFooter(c) {
     </div>
     <div class="foot-bot">
       <span>&copy; ${new Date().getFullYear()} ${esc(c.businessName)}. All rights reserved.</span>
-      <span>Licensed &middot; Insured &middot; Trusted</span>
+      <span><a href="/privacy/" style="color:inherit;text-decoration:underline">Privacy Policy</a> &middot; Licensed &middot; Insured &middot; Trusted</span>
     </div>
   </div></footer>`;
 }

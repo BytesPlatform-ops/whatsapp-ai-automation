@@ -4,6 +4,7 @@ const {
   buildTokens, DEFAULT_DESIGNATIONS, DEFAULT_LISTINGS,
 } = require('./common');
 const { computeHeroPaletteFromConfig } = require('../../heroPalette');
+const { consentField } = require('../_privacy');
 
 function statusClass(status) {
   const s = String(status || '').toLowerCase();
@@ -245,6 +246,9 @@ function generateHomePage(c) {
               <div class="form-row-full">
                 <label class="form-label" for="v-email">Email</label>
                 <input id="v-email" name="email" class="form-input" type="email" required>
+              </div>
+              <div class="form-row-full">
+                ${consentField(c, { idPrefix: 'val' })}
               </div>
               <div class="form-row-full" style="padding-top:6px">
                 <button type="submit" class="btn btn-gold btn-lg" style="width:100%">Get my free CMA</button>

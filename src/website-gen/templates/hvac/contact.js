@@ -1,4 +1,5 @@
 const { esc, telHref, icon, wrapHvacPage, netlifyFormAttrs, netlifyHiddenFields, getLocalBusinessSchema, getTradeCopy, buildTokens } = require('./common');
+const { consentField } = require('../_privacy');
 
 function generateContactPage(c) {
   const tc = getTradeCopy(c);
@@ -64,6 +65,9 @@ function generateContactPage(c) {
             <option>Same-day needed</option>
             <option>Emergency — right now</option>
           </select>
+        </div>
+        <div class="form-row-full">
+          ${consentField(c, { idPrefix: 'quote' })}
         </div>
         <div class="form-row-full" style="padding-top:8px">
           <button type="submit" class="btn btn-orange btn-lg" style="width:100%">Request Free Quote ${icon('arrowRight', 18, '#fff')}</button>

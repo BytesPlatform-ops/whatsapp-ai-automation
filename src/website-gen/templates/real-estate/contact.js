@@ -3,6 +3,7 @@ const {
   wrapRealEstatePage, netlifyFormAttrs, netlifyHiddenFields,
   getRealEstateAgentSchema, buildTokens,
 } = require('./common');
+const { consentField } = require('../_privacy');
 
 function generateContactPage(c) {
   const TOKENS = buildTokens(c);
@@ -94,6 +95,9 @@ function generateContactPage(c) {
                 <div class="form-row-full">
                   <label class="form-label" for="c-msg">Tell me more (optional)</label>
                   <textarea id="c-msg" name="message" class="form-textarea" placeholder="Timeline, budget, must-haves, what scared you off your last agent..."></textarea>
+                </div>
+                <div class="form-row-full">
+                  ${consentField(c, { idPrefix: 'consult', accent: TOKENS.gold || c.primaryColor })}
                 </div>
                 <div class="form-row-full" style="padding-top:6px">
                   <button type="submit" class="btn btn-gold btn-lg" style="width:100%">Send Message</button>

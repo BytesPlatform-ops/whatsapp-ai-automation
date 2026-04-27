@@ -68,6 +68,18 @@ router.post('/public/leads/:siteId', async (req, res) => {
   const formName = clip(pickStr(body, ['form_name', 'form-name', '_form']), 64) || 'contact';
   const sourcePage = clip(pickStr(body, ['source_page', 'source-page', '_source']) || req.get('referer') || '', MAX_FIELD);
 
+  // GDPR consent — every form on the generated site must include the
+  // privacy-policy checkbox (HTML5 `required`, name=`consent_given`,
+  // value=`yes`). The browser blocks submission without it; this is
+  // a server-side double-check so a hand-crafted POST or a tampered
+  // form can't bypass it. Reject with a clear error code so the form
+  // UX (which already requires the box) can surface a useful message.
+  const consentRaw = pickStr(body, ['consent_given', 'consent', 'gdpr_consent']);
+  const consentGiven = /^(yes|true|on|1)$/i.test(String(consentRaw || '').trim());
+  if (!consentGiven) {
+    return res.status(400).json({ ok: false, error: 'consent_required' });
+  }
+
   // Require at least ONE way to reach the lead back — otherwise it's noise.
   if (!email && !phone) {
     return res.status(400).json({ ok: false, error: 'contact_required' });
@@ -116,6 +128,8 @@ router.post('/public/leads/:siteId', async (req, res) => {
       sourcePage,
       ipAddress: ip,
       userAgent,
+      consentGiven,
+      consentAt: new Date().toISOString(),
     });
   } catch (err) {
     logger.error(`[LEADS] Save failed for site ${siteId}: ${err.message}`);

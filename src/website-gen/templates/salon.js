@@ -1,6 +1,7 @@
 const { env } = require('../../config/env');
 const { computeHeroPaletteFromConfig } = require('../heroPalette');
 const { renderActivationBanner } = require('../activationBanner');
+const { consentField, generatePrivacyBody } = require('./_privacy');
 
 // Public URL the static salon site uses to reach the booking API.
 const PUBLIC_API_BASE = process.env.PUBLIC_API_BASE_URL || env.chatbot.baseUrl;
@@ -346,7 +347,7 @@ function getFooter(c) {
   </div>
   <div class="foot-bottom">
     <span>© ${new Date().getFullYear()} ${esc(c.businessName)} — All rights reserved.</span>
-    <span>Handcrafted in ${esc((c.contactAddress || '').split(',').pop() || 'the studio')}</span>
+    <span><a href="/privacy/" style="color:inherit;text-decoration:underline">Privacy Policy</a> &middot; Handcrafted in ${esc((c.contactAddress || '').split(',').pop() || 'the studio')}</span>
   </div>
 </footer>`;
 }
@@ -627,6 +628,7 @@ function generateBookingPage(c) {
               <input id="bk-email" class="bk-input" type="email" placeholder="Email" />
               <input id="bk-phone" class="bk-input" placeholder="Phone number" />
               <textarea id="bk-notes" class="bk-input" placeholder="Anything we should know? (optional)" style="min-height:80px;resize:vertical;font-family:inherit"></textarea>
+              ${consentField(c, { idPrefix: 'bk' })}
               <button id="bk-submit" class="bk-submit" type="button">Confirm Reservation</button>
             </div>
             <p class="bk-note" style="margin:20px 0 0">A confirmation email with a cancellation link will arrive shortly after.</p>
@@ -700,9 +702,11 @@ function generateBookingPage(c) {
           var notes=document.getElementById('bk-notes').value.trim();
           if(!name){showError('Please enter your name.');return;}
           if(!email&&!phone){showError('Please share an email or phone so we can confirm.');return;}
+          var consentEl=document.getElementById('bk-consent');
+          if(!consentEl||!consentEl.checked){showError('Please agree to the Privacy Policy to continue.');return;}
           submitBtn.disabled=true;submitBtn.textContent='Booking…';
           fetch(API+'/api/booking/'+SITE,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
-            service:state.service,startAt:state.slot,customerName:name,customerEmail:email,customerPhone:phone,notes:notes
+            service:state.service,startAt:state.slot,customerName:name,customerEmail:email,customerPhone:phone,notes:notes,consentGiven:true
           })}).then(function(r){return r.json().then(function(j){return {ok:r.ok,j:j}})}).then(function(x){
             submitBtn.disabled=false;submitBtn.textContent='Confirm Reservation';
             if(!x.ok){showError(x.j.error||'Booking failed');return;}
@@ -826,6 +830,7 @@ function generateContactPage(c) {
         <label class="bk-label" for="contact-message">Message</label>
         <textarea id="contact-message" class="bk-input" name="message" required placeholder="Tell us what you&rsquo;re looking for&hellip;" style="min-height:140px;resize:vertical;font-family:inherit"></textarea>
       </div>
+      ${consentField(c, { idPrefix: 'sc' })}
       <button type="submit" class="bk-submit">Send message</button>
     </form>
   </div>
@@ -949,6 +954,7 @@ function generateAllPages(config, watermark = false) {
     '/about/index.html': generateAboutPage(config),
     '/contact/index.html': generateContactPage(config),
     '/thank-you/index.html': generateThankYouPage(config),
+    '/privacy/index.html': wrap(config, '/privacy', generatePrivacyBody(config)),
   };
   if ((config.salonServices || []).length > 0) {
     pages['/services/index.html'] = generateServicesPage(config);

@@ -984,7 +984,7 @@ function getFooter(c) {
     </div>
     <div class="foot-bot">
       <span>&copy; ${new Date().getFullYear()} ${esc(c.businessName)}. All rights reserved.</span>
-      <span>REALTOR&reg; &middot; Equal Housing Opportunity</span>
+      <span><a href="/privacy/" style="color:inherit;text-decoration:underline">Privacy Policy</a> &middot; REALTOR&reg; &middot; Equal Housing Opportunity</span>
     </div>
   </div></footer>`;
 }
