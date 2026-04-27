@@ -524,8 +524,11 @@ async function handleSalesBot(user, message) {
 
   const formatted = formatWhatsApp(textWithoutLink);
   if (formatted && !skipLlmResponse) {
+    // sendTextMessage auto-logs via autoLogOutbound (sender.js) — calling
+    // logMessage here would create a duplicate conversations row that
+    // surfaces as a visible duplicate in the admin transcript and as
+    // duplicated history in subsequent LLM calls.
     await sendTextMessage(user.phone_number, formatted);
-    await logMessage(user.id, formatted, 'assistant');
   }
 
   // GDPR / first-contact disclosure: send a one-line privacy notice as
@@ -542,8 +545,8 @@ async function handleSalesBot(user, message) {
       const url = getPrivacyUrl();
       if (url) {
         const notice = `_By the way — I keep our chat and any details you share so I can help with your project. Full privacy notice: ${url}_`;
+        // sendTextMessage auto-logs (sender.js); avoid duplicate row.
         await sendTextMessage(user.phone_number, notice);
-        await logMessage(user.id, notice, 'assistant');
         const shownAt = new Date().toISOString();
         await updateUserMetadata(user.id, { privacyNoticeShownAt: shownAt });
         user.metadata = { ...(user.metadata || {}), privacyNoticeShownAt: shownAt };
@@ -608,8 +611,8 @@ async function handleSalesBot(user, message) {
     const followUp =
       "Once you pick a time you'll get a confirmation email from Calendly with all the details. " +
       "I'll also ping you here the moment it's booked. Looking forward to it! 🤝";
+    // sendTextMessage auto-logs (sender.js); avoid duplicate row.
     await sendTextMessage(user.phone_number, followUp);
-    await logMessage(user.id, followUp, 'assistant');
 
     // Mark lead as closed - stop follow-up sequences
     await updateUserMetadata(user.id, { leadClosed: true });

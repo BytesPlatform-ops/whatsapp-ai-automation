@@ -697,8 +697,11 @@ async function _routeMessage(message) {
         // Pending stays alive so their next valid digit still matches.
         logger.info(`[INTERACTIVE] Out-of-range digit "${rawText}" for ${from} (total=${result.total})`);
         const nudge = `that was only ${result.total} option${result.total === 1 ? '' : 's'} — pick 1-${result.total} or tap one of the buttons above.`;
+        // sendTextMessage auto-logs via autoLogOutbound (sender.js) — no
+        // explicit logMessage needed. Calling both creates a duplicate row
+        // in the conversations table that surfaces as a visible duplicate
+        // in the admin transcript view.
         await sendTextMessage(user.phone_number, nudge);
-        await logMessage(user.id, nudge, 'assistant');
         // Stop this turn here. The buttons are still visible in the
         // chat and the user can retry; no need to run the state handler
         // (which would re-show the whole menu).
@@ -749,8 +752,8 @@ async function _routeMessage(message) {
             const pivoted = await isPivotAwayFromDeclinedScope(abuseText, reason, user.id);
             if (!pivoted) {
               const reDecline = `still not something we're able to help with for ${reason}. if there's a different project you're working on, happy to chat about that instead.`;
+              // sendTextMessage auto-logs (sender.js); avoid duplicate row.
               await sendTextMessage(user.phone_number, reDecline);
-              await logMessage(user.id, reDecline, 'assistant');
               logger.info(`[ABUSE] Re-declined nsfw scope (${reason}) for ${from}`);
               return;
             }
@@ -835,8 +838,8 @@ async function _routeMessage(message) {
       const recap = await maybeBuildRecap(user);
       if (recap) {
         logger.info(`[RECAP] Sending session recap to ${from}`);
+        // sendTextMessage auto-logs (sender.js); avoid duplicate row.
         await sendTextMessage(user.phone_number, recap);
-        await logMessage(user.id, recap, 'assistant');
         recapFired = true;
       }
     } catch (err) {
@@ -860,8 +863,8 @@ async function _routeMessage(message) {
       const greeting = await maybeBuildReturnGreeting(user);
       if (greeting) {
         logger.info(`[RETURN-GREET] Sending return-visitor greeting to ${from}`);
+        // sendTextMessage auto-logs (sender.js); avoid duplicate row.
         await sendTextMessage(user.phone_number, greeting);
-        await logMessage(user.id, greeting, 'assistant');
       }
     } catch (err) {
       logger.warn(`[RETURN-GREET] Greeting failed for ${from}: ${err.message}`);
@@ -1051,8 +1054,8 @@ async function _routeMessage(message) {
 
     // Send a deterministic Pixie greeting so /reset never produces a
     // greeting-less response. Stopping here also saves an LLM call.
+    // sendTextMessage auto-logs (sender.js); avoid duplicate row in conversations table.
     await sendTextMessage(user.phone_number, "Hi! I'm Pixie. What can I help you with today?");
-    await logMessage(user.id, "Hi! I'm Pixie. What can I help you with today?", 'assistant');
     return;
   }
 
@@ -1313,17 +1316,17 @@ async function _routeMessage(message) {
     logger.debug(`Intent classified for ${from} in state ${user.state}: ${intent}`);
 
     if (intent === 'menu' || intent === 'exit') {
-      // Flow-switch or exit. Figure out which service the user wants to
-      // switch TO (handles negation like "forget the website, do chatbot"
-      // and plurals like "marketing ads" via LLM fallback when regex
-      // alone isn't reliable). If a target service is found, route them
-      // to its start handler directly. If not, show the main menu.
-      await updateUserState(user.id, STATES.SERVICE_SELECTION);
-      user.state = STATES.SERVICE_SELECTION;
-
-      // Phase 12: if the switch names 2+ queueable services ("forget
-      // this, do a website AND a logo AND some ads"), build the queue
-      // and kick off the first flow here. Overwrites any prior queue.
+      // Flow-switch or exit. Try to figure out which service the user wants
+      // to switch TO (handles negation like "forget the website, do chatbot"
+      // and plurals like "marketing ads" via LLM fallback when regex alone
+      // isn't reliable). Only transition + dispatch when we actually find
+      // something to switch to — otherwise the message was an LLM
+      // misclassification (e.g. "bhajo", typos, dismissive Roman-Urdu /
+      // Spanish replies the classifier mis-read as menu intent) and we
+      // fall through so the current handler can treat it as a normal
+      // answer / chat input. The old behavior dumped these users into a
+      // "Here are our main services" menu, which broke the conversational
+      // flow and read as if the bot couldn't keep up.
       const {
         detectServiceQueue,
         startServiceQueue,
@@ -1331,8 +1334,14 @@ async function _routeMessage(message) {
         dropQueuedService,
         hasQueue,
       } = require('./serviceQueue');
+
+      // Phase 12: if the switch names 2+ queueable services ("forget
+      // this, do a website AND a logo AND some ads"), build the queue
+      // and kick off the first flow here. Overwrites any prior queue.
       const plural = await detectServiceQueue(message.text || text || '', user.id);
       if (plural.length >= 2) {
+        await updateUserState(user.id, STATES.SERVICE_SELECTION);
+        user.state = STATES.SERVICE_SELECTION;
         const newState = await startServiceQueue(user, plural);
         if (newState && newState !== user.state) {
           await updateUserState(user.id, newState);
@@ -1355,6 +1364,8 @@ async function _routeMessage(message) {
       const hasSkipPhrasing = skipPhrasingRx.test(message.text || text || '');
       if (!targetService && hasQueue(user) && hasSkipPhrasing) {
         try {
+          await updateUserState(user.id, STATES.SERVICE_SELECTION);
+          user.state = STATES.SERVICE_SELECTION;
           const newState = await maybeStartNextQueuedService(user, 'skipped');
           if (newState) {
             await updateUserState(user.id, newState);
@@ -1362,40 +1373,50 @@ async function _routeMessage(message) {
           }
         } catch (err) {
           // Surface the error instead of leaving the user with only the
-          // "skipping ahead" message. Send a recovery nudge so the user
-          // isn't stuck; the queue has already advanced (next item was
-          // popped), so the message reflects current state.
+          // "skipping ahead" message. The queue has already advanced
+          // (next item was popped), so the message reflects current state.
           logger.error(`[QUEUE] Advance failed after skip: ${err.message}`, { stack: err.stack?.split('\n').slice(0, 5).join('\n') });
           try {
             await sendTextMessage(
               user.phone_number,
-              "hmm, something glitched while starting the next one. try sending *menu* and we can pick it back up."
+              "hmm, something glitched while starting the next one. let me know what you'd like to work on."
             );
           } catch { /* last-resort nudge also failed — nothing more to do */ }
           return;
         }
       }
 
-      // Phase 12: user jumped to a specific service that's ALREADY queued.
-      // Drop it (and anything before it) from the queue so we don't run
-      // the same flow twice when it completes.
-      if (targetService && hasQueue(user)) {
-        await dropQueuedService(user, targetService);
+      // Specific target found — transition + dispatch to its handler.
+      if (targetService) {
+        // Phase 12: user jumped to a specific service that's ALREADY queued.
+        // Drop it (and anything before it) from the queue so we don't run
+        // the same flow twice when it completes.
+        if (hasQueue(user)) await dropQueuedService(user, targetService);
+
+        await updateUserState(user.id, STATES.SERVICE_SELECTION);
+        user.state = STATES.SERVICE_SELECTION;
+
+        const newState = await handleServiceSelection(user, {
+          ...message,
+          // Pre-resolved service tells handleServiceSelection exactly
+          // which case to run.
+          buttonId: targetService,
+          listId: '',
+          text: '',
+        });
+        if (newState && newState !== user.state) {
+          await updateUserState(user.id, newState);
+        }
+        return;
       }
 
-      const newState = await handleServiceSelection(user, {
-        ...message,
-        // Pre-resolved service tells handleServiceSelection exactly which
-        // case to run. Falls back to matchServiceFromText → default if
-        // null (no service mentioned).
-        buttonId: targetService || '',
-        listId: '',
-        text: targetService ? '' : (message.text || ''),
-      });
-      if (newState && newState !== user.state) {
-        await updateUserState(user.id, newState);
-      }
-      return;
+      // No target detected. The classifier said "menu" but neither
+      // detectServiceQueue nor pickServiceFromSwitch could pin down a
+      // service to route to. Do NOT dump the user into a generic
+      // service-selection menu — that's almost always a worse UX than
+      // letting the current handler take a swing at the message.
+      // Fall through (no return, no state transition).
+      logger.info(`[ROUTER] Intent=${intent} but no service target detected for ${from} — falling through to current handler instead of showing menu`);
     }
 
     if (intent === 'question') {
@@ -1419,8 +1440,8 @@ async function _routeMessage(message) {
           [{ role: 'user', content: text }],
           { userId: user.id, operation: 'off_topic_aside' }
         );
+        // sendTextMessage auto-logs (sender.js); avoid duplicate row.
         await sendTextMessage(user.phone_number, aside);
-        await logMessage(user.id, aside, 'assistant');
         asideSent = true;
       } catch (err) {
         logger.warn(`[ROUTER] Off-topic aside LLM call failed for ${from}: ${err.message}`);
