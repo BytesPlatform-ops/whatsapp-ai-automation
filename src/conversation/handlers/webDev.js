@@ -3204,13 +3204,13 @@ async function generateWebsite(user) {
     logger.info(`[WEBGEN] ✅ Complete! Preview sent to ${user.phone_number}: ${previewUrl}`);
 
     // Always go to revisions state — user can approve, request changes, or reject.
-    // Tell them upfront how many free rounds of changes they get — surfacing
-    // the cap here avoids the trust-breaking moment of discovering it only
-    // after they've already hit the wall on revision #3.
-    const revisionFloor = await require('../../db/settings').getNumberSetting('revision_price', 200);
+    // Surfacing the revision policy here avoids the trust-breaking moment of
+    // hitting the wall later. The pitch is: 3 free rounds + unlimited once
+    // they activate the site, which doubles as a soft conversion lever
+    // (more tweaks = activate to unlock).
     await sendTextMessage(
       user.phone_number,
-      `There you go! Have a look and let me know what you think — want any changes, or are you happy with it?\n\n_You get *2 free rounds of revisions*; anything beyond that we'd handle as custom work from $${revisionFloor}._`
+      `There you go! Have a look and let me know what you think — want any changes, or are you happy with it?\n\n_You get *${FREE_REVISIONS} free rounds of revisions*; once you activate the site you unlock *unlimited revisions* — keep tweaking until it's exactly right._`
     );
     await logMessage(user.id, 'Website preview sent, asking for feedback (with revision cap note)', 'assistant');
 
@@ -3489,23 +3489,71 @@ async function classifyImageCaption(caption, targets, userId) {
   }
 }
 
+const FREE_REVISIONS = 3;
+
 /**
- * Hard cap pitch — fired any time the user tries to apply a 3rd or later
- * revision. Replaces the older LIGHT/MEDIUM/HEAVY classifier where LIGHT
- * changes silently went through past revision 2.
+ * True when the user has already paid for activation on their latest
+ * generated site. Paid users get unlimited revisions — both as a sales
+ * lever ("activate to unlock unlimited tweaks") and because we don't
+ * want to nickel-and-dime someone who already paid.
+ *
+ * Detected via site_data.paymentStatus === 'paid' (set by the
+ * post-payment redeploy path in src/website-gen/redeployer.js). If a
+ * site is later refunded, redeployer flips the status back to
+ * 'preview' and the cap re-applies — that's intentional.
+ */
+async function userHasPaidForSite(user) {
+  try {
+    const site = await getLatestSite(user.id);
+    return site?.site_data?.paymentStatus === 'paid';
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Hard cap pitch — fired any time a free-tier user tries to apply
+ * revision #(FREE_REVISIONS + 1) or beyond. The pitch leans on
+ * "activate now and get unlimited" as the natural upgrade path,
+ * not just a flat custom-work quote, since that's the one number
+ * the user already saw.
  */
 async function pitchRevisionUpgrade(user, count) {
-  const revisionFloor = await require('../../db/settings').getNumberSetting('revision_price', 200);
-  await sendTextMessage(
-    user.phone_number,
-    `You've already used your 2 free revisions for this site. Anything more is custom work — it starts at $${revisionFloor}, or we can scope it on a quick call.`
+  const { getNumberSetting } = require('../../db/settings');
+  const websitePrice = await getNumberSetting(
+    'website_price',
+    parseInt(process.env.DEFAULT_ACTIVATION_PRICE || '199', 10)
   );
+  const revisionFloor = await getNumberSetting('revision_price', 200);
+
+  // Resurface the existing activation link if there's a pending payment
+  // row, so the user can pay right from the cap pitch without us sending
+  // them on a hunt for an old message.
+  let activationUrl = null;
+  try {
+    const { getLatestPendingPayment } = require('../../db/payments');
+    const pending = await getLatestPendingPayment(user.id);
+    activationUrl = pending?.stripe_payment_link_url || null;
+  } catch {
+    /* fall through — pitch text still goes out */
+  }
+
+  const lines = [
+    `You've already used your ${FREE_REVISIONS} free revisions for this site.`,
+    '',
+    `*Activate the site for $${websitePrice}* and you get *unlimited revisions* — keep tweaking until it's exactly right.`,
+    '',
+    `Otherwise: any further changes here are scoped as custom work (starts at $${revisionFloor}, or we can hop on a call).`,
+  ];
+  if (activationUrl) lines.push('', `Activate to unlock unlimited revisions:\n${activationUrl}`);
+  await sendTextMessage(user.phone_number, lines.join('\n'));
+
   try {
     const calendlyUrl = require('../../config/env').env.calendlyUrl;
     if (calendlyUrl) {
       await sendCTAButton(
         user.phone_number,
-        'Tap below to book a call with our team 👇',
+        'Or book a call to scope custom work 👇',
         '📅 Book a Call',
         calendlyUrl
       );
@@ -3513,22 +3561,30 @@ async function pitchRevisionUpgrade(user, count) {
   } catch {
     /* CTA is optional — pitch text already went out */
   }
-  await logMessage(user.id, `Revision ${count} blocked — 2-revision cap reached`, 'assistant');
+  await logMessage(user.id, `Revision ${count} blocked — ${FREE_REVISIONS}-revision cap reached, pitched activation`, 'assistant');
 }
 
 /**
  * Single gate that every revision-applying path must pass through. Returns
- * { ok, count } where count is the projected revision number (current+1).
- * On `ok=false` the upgrade pitch has already been sent — caller just
- * returns the appropriate state. The caller is responsible for incrementing
- * `metadata.revisionCount` AFTER receiving ok=true (we don't write here so
- * a later failure can refund without an extra DB hit).
+ * { ok, count, paid } where count is the projected revision number
+ * (current+1) and paid is true when the user is on the unlimited tier.
+ *
+ * Paid users always pass — count still increments so the admin panel
+ * shows their usage, but the cap is bypassed. Free users get
+ * FREE_REVISIONS attempts; the (FREE_REVISIONS+1)th triggers the
+ * upgrade pitch and `ok=false`.
+ *
+ * Caller is responsible for incrementing metadata.revisionCount AFTER
+ * receiving ok=true so a later failure can refund without an extra
+ * DB hit.
  */
 async function gateNextRevision(user) {
   const projected = (user.metadata?.revisionCount || 0) + 1;
-  if (projected > 2) {
+  const paid = await userHasPaidForSite(user);
+  if (paid) return { ok: true, count: projected, paid: true };
+  if (projected > FREE_REVISIONS) {
     await pitchRevisionUpgrade(user, projected);
-    return { ok: false, count: projected };
+    return { ok: false, count: projected, paid: false };
   }
   return { ok: true, count: projected };
 }
@@ -3548,7 +3604,7 @@ async function gateNextRevision(user) {
  * message ("change headline AND swap the hero photo") — without this,
  * the image-swap branch returned early and the text changes vanished.
  */
-async function applyImageRevision({ user, site, currentConfig, targetId, image, revisionCount, additionalUpdates = null }) {
+async function applyImageRevision({ user, site, currentConfig, targetId, image, revisionCount, additionalUpdates = null, paid = false }) {
   const { applyImageToTarget, describeTarget } = require('../../website-gen/imageTargets');
   let updatedConfig = applyImageToTarget(currentConfig, targetId, image);
   const hasExtras = additionalUpdates && Object.keys(additionalUpdates).length > 0;
@@ -3578,11 +3634,16 @@ async function applyImageRevision({ user, site, currentConfig, targetId, image, 
       });
     }
 
-    const remaining = Math.max(0, 2 - revisionCount);
-    const revisionFloor = await require('../../db/settings').getNumberSetting('revision_price', 200);
-    const note = remaining > 0
-      ? `You have *${remaining}* revision${remaining === 1 ? '' : 's'} left.`
-      : `That was your last free revision — further changes start at $${revisionFloor} or get scoped on a call.`;
+    let note;
+    if (paid) {
+      note = '_Unlimited revisions on this site — keep tweaking until it\'s perfect._';
+    } else {
+      const remaining = Math.max(0, FREE_REVISIONS - revisionCount);
+      const revisionFloor = await require('../../db/settings').getNumberSetting('revision_price', 200);
+      note = remaining > 0
+        ? `You have *${remaining}* revision${remaining === 1 ? '' : 's'} left — or activate to unlock unlimited.`
+        : `That was your last free revision — activate the site to unlock unlimited, or further changes get scoped at $${revisionFloor}.`;
+    }
     const headline = hasExtras
       ? `Done — ${where} updated, plus your other changes are in.`
       : `Done — ${where} updated.`;
@@ -3673,9 +3734,10 @@ async function handleRevisions(user, message) {
     const pending = user.metadata.pendingImageUpload;
     await updateUserMetadata(user.id, { pendingImageUpload: null });
 
-    // Hard cap at 2 revisions — block before applying. The upload itself
-    // already happened in a prior turn (Supabase) but that's harmless;
-    // the user just won't see it on the site.
+    // Cap at FREE_REVISIONS for free-tier users; paid users skip this
+    // gate and get unlimited. The image upload already happened in a
+    // prior turn (Supabase) — if we cap-block now, the URL is just
+    // unused, no harm done.
     const limit = await gateNextRevision(user);
     if (!limit.ok) return STATES.SALES_CHAT;
     const revisionCount = limit.count;
@@ -3688,6 +3750,7 @@ async function handleRevisions(user, message) {
       targetId,
       image: { url: pending.url, source: pending.source || 'user_upload' },
       revisionCount,
+      paid: limit.paid,
     });
     return STATES.WEB_REVISIONS;
   }
@@ -3803,9 +3866,9 @@ async function handleRevisions(user, message) {
       return STATES.WEB_REVISIONS;
     }
 
-    // Paths 1 & 2: apply directly. Hard cap at 2 revisions — block the
-    // 3rd attempt before consuming any state. The uploaded image still
-    // sits in Supabase storage but that's fine; it's just a stale URL.
+    // Paths 1 & 2: apply directly. Cap at FREE_REVISIONS for free
+    // users; paid users skip the gate. If cap-blocked, the uploaded
+    // image just sits unused in Supabase — no further harm.
     const limit = await gateNextRevision(user);
     if (!limit.ok) return STATES.SALES_CHAT;
     const revisionCount = limit.count;
@@ -3818,6 +3881,7 @@ async function handleRevisions(user, message) {
       targetId,
       image: uploadedImage,
       revisionCount,
+      paid: limit.paid,
     });
     return STATES.WEB_REVISIONS;
   }
@@ -3929,16 +3993,15 @@ async function handleRevisions(user, message) {
       return STATES.WEB_REVISIONS;
     }
 
-    // Hard cap at 2 free revisions. The earlier LIGHT/MEDIUM/HEAVY
-    // classifier was too lenient — LIGHT-classified asks (color tweaks,
-    // small text edits) silently went through past revision 2, so a
-    // user could keep iterating on small things forever. Now: any 3rd
-    // revision is custom work and gets the upgrade pitch. Approval was
-    // already short-circuited above (classifyConfirmIntent), so anything
-    // reaching this point is a real change request.
+    // Free users get FREE_REVISIONS attempts; the next one triggers the
+    // activation pitch. Paid users skip the cap entirely (unlimited as a
+    // post-purchase perk). Approval was already short-circuited above
+    // via classifyConfirmIntent, so anything reaching this point is a
+    // real change request and counts.
     const limit = await gateNextRevision(user);
     if (!limit.ok) return STATES.SALES_CHAT;
     const revisionCount = limit.count;
+    const paidTier = limit.paid;
     await updateUserMetadata(user.id, { revisionCount });
 
     try {
@@ -4169,6 +4232,7 @@ async function handleRevisions(user, message) {
           image: newImage,
           revisionCount,
           additionalUpdates: Object.keys(additionalUpdates).length ? additionalUpdates : null,
+          paid: paidTier,
         });
         return STATES.WEB_REVISIONS;
       }
@@ -4232,9 +4296,21 @@ async function handleRevisions(user, message) {
             `new version is live:\n${previewUrl}`,
             `redeploy's done — have a look:\n${previewUrl}`,
           ];
+      // Append a revision-status tail so the user always knows where
+      // they stand: paid users see "unlimited", free users see how
+      // many they have left + the activation upgrade nudge.
+      let revisionTail;
+      if (paidTier) {
+        revisionTail = '\n\n_Unlimited revisions on this site — keep tweaking._';
+      } else {
+        const remaining = Math.max(0, FREE_REVISIONS - revisionCount);
+        revisionTail = remaining > 0
+          ? `\n\n_${remaining} revision${remaining === 1 ? '' : 's'} left — or activate to unlock unlimited._`
+          : `\n\n_That was your last free revision. Activate the site to unlock unlimited tweaks._`;
+      }
       await sendTextMessage(
         user.phone_number,
-        doneVariants[Math.floor(Math.random() * doneVariants.length)]
+        doneVariants[Math.floor(Math.random() * doneVariants.length)] + revisionTail
       );
 
       await logMessage(user.id, `Revision applied, redeployed: ${previewUrl}`, 'assistant');
