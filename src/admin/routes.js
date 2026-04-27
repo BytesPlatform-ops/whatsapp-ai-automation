@@ -669,7 +669,7 @@ const SETTINGS_SCHEMA = [
     type: 'number',
     min: 1,
     fallback: 200,
-    help: 'Quoted to users who exceed 2 free revisions or ask about minimum custom work. Used in chat and the cap pitch.',
+    help: 'Quoted to users who exceed 3 free revisions (without activating) or ask about minimum custom work. Activated users get unlimited revisions and never see this.',
   },
   {
     key: 'seo_floor_price',
