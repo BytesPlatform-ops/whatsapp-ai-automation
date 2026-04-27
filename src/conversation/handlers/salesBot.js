@@ -531,6 +531,34 @@ async function handleSalesBot(user, message) {
     await sendTextMessage(user.phone_number, formatted);
   }
 
+  // Negative-sentiment nudge — when the user's message reads as
+  // frustrated ("this is annoying", "ugh", "are you serious", etc.),
+  // append a one-time feedback channel pointer so they can vent
+  // structured-ly instead of trailing off into silent abandonment.
+  // Gated on `feedbackNudgedAt` so we don't repeat it every turn the
+  // user is venting; one nudge per user per project lifecycle is
+  // enough to plant the keyword. Skipped for testers (their feedback
+  // doesn't get logged anyway) and humanTakeover (operator is driving).
+  try {
+    const { detectFrustratedPhrasing, isTester } = require('../../feedback/feedback');
+    const alreadyNudged = !!user.metadata?.feedbackNudgedAt;
+    if (
+      !skipLlmResponse &&
+      !alreadyNudged &&
+      !isTester(user) &&
+      !user.metadata?.humanTakeover &&
+      detectFrustratedPhrasing(text || '')
+    ) {
+      const nudge = "_btw — if you wanna flag what's bugging you so the team sees it, just type *feedback* and i'll capture a note._";
+      await sendTextMessage(user.phone_number, nudge);
+      await updateUserMetadata(user.id, { feedbackNudgedAt: new Date().toISOString() });
+      user.metadata = { ...(user.metadata || {}), feedbackNudgedAt: new Date().toISOString() };
+      logger.info(`[FEEDBACK] Frustration nudge sent to ${user.phone_number}`);
+    }
+  } catch (err) {
+    logger.warn(`[FEEDBACK] Frustration-nudge hook failed: ${err.message}`);
+  }
+
   // GDPR / first-contact disclosure: send a one-line privacy notice as
   // a follow-up message on the user's very first turn. Kept separate
   // from the LLM-generated greeting so the wording is deterministic

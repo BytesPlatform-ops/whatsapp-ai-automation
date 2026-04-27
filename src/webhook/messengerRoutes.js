@@ -93,11 +93,25 @@ router.post('/msg-webhook', async (req, res) => {
     return;
   }
 
+  // Resolve the user's display name from Meta's Graph API. The webhook
+  // payload only carries the PSID/IGSID; the name has to be fetched
+  // separately. Cached per-process for 24h. Best-effort — failures
+  // never block the message route, name just stays empty for this
+  // turn and the next webhook gets a fresh shot.
+  try {
+    const { fetchMessengerProfile } = require('../messages/messengerProfile');
+    const name = await fetchMessengerProfile(message.from, message.channel);
+    if (name) message.contactName = name;
+  } catch (err) {
+    logger.warn(`[MSG-PROFILE] Profile-fetch hook failed: ${err.message}`);
+  }
+
   logger.info('Incoming Messenger/IG message', {
     from: message.from,
     channel: message.channel,
     type: message.type,
     text: message.text?.slice(0, 100),
+    contactName: message.contactName || '(none)',
   });
 
   try {

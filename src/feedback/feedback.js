@@ -342,6 +342,71 @@ async function handlePendingComment(user, message) {
   return { handled: true };
 }
 
+// ── Manual feedback trigger ─────────────────────────────────────────
+// User-typed entry point so customers can leave feedback any time, not
+// just at the post-delivery 3-button prompt. Detected on the WHOLE
+// message so a customer name "Feedback Cafe" or a sentence containing
+// the word "feedback" doesn't accidentally trip it. Also accepts the
+// /feedback slash command for admin / dev convenience.
+const MANUAL_FEEDBACK_RX = /^\/?(?:feedback|give\s+feedback|i\s+(?:have|got|wanna\s+leave|want\s+to\s+leave)\s+feedback|leave\s+feedback|share\s+(?:some\s+)?feedback)\s*[!.?]?$/i;
+
+function isFeedbackTrigger(text) {
+  const t = String(text || '').trim();
+  if (!t || t.length > 40) return false;
+  return MANUAL_FEEDBACK_RX.test(t);
+}
+
+/**
+ * Entry handler for a user-typed feedback request. Creates a pending
+ * feedback row (no rating yet — they're being proactive, not rating a
+ * specific delivery), sets `awaitingFeedbackComment` so the existing
+ * `handlePendingComment` path captures their next message as the body.
+ * Returns { handled: true } so the router stops processing this turn.
+ */
+async function startManualFeedback(user) {
+  if (!user?.id) return { handled: false };
+  // Tester bypass — same as every other feedback path. Don't pollute
+  // metrics with dev traffic.
+  if (isTester(user)) {
+    await sendTextMessage(
+      user.phone_number,
+      "noted — but you're on the tester list so this won't get logged. just so you know."
+    );
+    return { handled: true };
+  }
+
+  // humanTakeover — operator is driving; don't capture feedback automatically.
+  if (user.metadata?.humanTakeover) {
+    return { handled: false };
+  }
+
+  // Create a pending row so the comment can attach when the user's
+  // next message lands. Use 'admin-requested' trigger type — closest
+  // existing fit for "user proactively volunteered feedback"; keeps
+  // the admin filters consistent without adding a new enum value.
+  const flow = user.metadata?.lastCompletedProjectType || FLOW.GENERAL;
+  const feedbackId = await logFeedback({
+    user,
+    source: SOURCE.EXPLICIT,
+    triggerType: TRIGGER.ADMIN_REQUESTED,
+    flow,
+    rating: null,
+    comment: null,
+    state: user.state,
+  });
+
+  await updateUserMetadata(user.id, {
+    awaitingFeedbackComment: feedbackId || true,
+  });
+
+  await sendTextMessage(
+    user.phone_number,
+    "go for it — what's on your mind? a sentence or two is plenty. i'll pass it to the team."
+  );
+  logger.info(`[FEEDBACK] Manual feedback initiated by ${user.phone_number} (flow=${flow})`);
+  return { handled: true };
+}
+
 // ── Implicit detectors ──────────────────────────────────────────────
 
 // Frustrated-phrasing detector. Cheap regex, per-message.
@@ -557,6 +622,8 @@ module.exports = {
   detectFrustratedPhrasing,
   detectHelpEscape,
   looksLikeCorrection,
+  isFeedbackTrigger,
+  startManualFeedback,
   FEEDBACK_BUTTON_IDS,
   TRIGGER,
   SOURCE,

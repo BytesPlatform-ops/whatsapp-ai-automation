@@ -2669,6 +2669,53 @@ async function handleCollectLogo(user, message) {
   // a mediaId. downloadMedia pulls the bytes from WhatsApp's CDN.
   const hasImage = message.type === 'image' && (message.mediaId || message.mediaUrl);
   if (!hasImage) {
+    // Detect "make a logo for me" / "create one" / "you design it" /
+    // "surprise me with a logo" — the user is asking us to GENERATE
+    // a logo inline, which this step doesn't do (it's upload-or-skip).
+    // Without this branch the user gets the same "I didn't catch an
+    // image" reply as if they'd typed gibberish — no clue why their
+    // perfectly reasonable request was ignored.
+    let wantsGeneration = false;
+    if (text && text.length <= 80) {
+      // Cheap regex first: covers the obvious phrasings without an
+      // LLM call. We deliberately require a logo-related noun so a
+      // bare "make me one" / "you do it" doesn't trigger here when
+      // the user might mean something else.
+      if (/\b(make|create|generate|design|build|do|whip\s+up)\b[^.\n]{0,30}\blogo\b/i.test(text)) {
+        wantsGeneration = true;
+      }
+      // LLM fallback for natural prose ("you pick something for me",
+      // "surprise me", any-language equivalents). classifyDelegation
+      // uses the question context to decide whether the user is
+      // delegating the answer to us.
+      if (!wantsGeneration) {
+        try {
+          wantsGeneration = await classifyDelegation(
+            text,
+            'Do you have a logo? Send it as an image, or reply skip to use a text logo with your brand initial.'
+          );
+        } catch (err) {
+          logger.warn(`[WEBDEV-LOGO] classifyDelegation threw: ${err.message}`);
+        }
+      }
+    }
+
+    if (wantsGeneration) {
+      await sendTextMessage(
+        user.phone_number,
+        await localize(
+          "I can't auto-generate the logo here — this step is upload-or-skip only.\n\n" +
+            "• Reply *skip* and I'll use a clean text logo with your brand initial (looks great on most sites, and you can swap it later)\n" +
+            "• Or send your logo as an image (JPG or PNG)\n\n" +
+            "_If you want a real designed logo after your site is live, just message me later and I'll spin one up for you separately._",
+          user,
+          text
+        )
+      );
+      await logMessage(user.id, 'Logo: explained no auto-generation, offered upload/skip', 'assistant');
+      return STATES.WEB_COLLECT_LOGO;
+    }
+
     await sendTextMessage(
       user.phone_number,
       await localize(

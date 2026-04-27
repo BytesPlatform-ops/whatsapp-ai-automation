@@ -646,6 +646,8 @@ async function _routeMessage(message) {
       handleFeedbackButton,
       handlePendingComment,
       handleHandoffButton,
+      isFeedbackTrigger,
+      startManualFeedback,
     } = require('../feedback/feedback');
 
     // Post-delivery rating buttons (🔥/👍/🤔)
@@ -664,9 +666,27 @@ async function _routeMessage(message) {
     // to the standard takeover drop with zero LLM spend.
 
     // Free-text reply to "what happened?" after the user tapped
-    // Had issues on a previous delivery prompt.
+    // Had issues on a previous delivery prompt. Runs BEFORE the
+    // manual-feedback trigger so a user typing "feedback" mid-pending-
+    // comment lands as the comment text rather than starting a new
+    // feedback session.
     const pc = await handlePendingComment(user, message);
     if (pc?.handled) return;
+
+    // User-typed "feedback" / "i have feedback" / "/feedback" — entry
+    // point so customers can leave feedback any time, not just on the
+    // post-delivery 3-button row. Detected on the WHOLE message (regex
+    // anchored ^...$) so a sentence containing the word "feedback"
+    // doesn't trip it. Skip when the user is mid-collection of a
+    // SPECIFIC field (state expects a typed answer like a phone number
+    // or a domain name) so they can still type "feedback" as a literal
+    // value if some weird flow needs it — those states already gate
+    // free text. Today this is purely safe because the trigger requires
+    // an exact phrase match.
+    if (isFeedbackTrigger(message?.text || '')) {
+      const mf = await startManualFeedback(user);
+      if (mf?.handled) return;
+    }
   } catch (err) {
     logger.warn(`[FEEDBACK] Router hook failed: ${err.message}`);
   }

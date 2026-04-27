@@ -150,6 +150,10 @@ async function handleConfirmedPayment(payment, paidSession) {
             `Now let's point *${selectedDomain}* at it 👇`
         );
         await sendTextMessage(targetPhone, instructions);
+        await sendTextMessage(
+          targetPhone,
+          `_If anything's off later or you've got thoughts on the site, just type *feedback* any time and i'll capture it for the team._`
+        );
       });
       await logMessage(
         p.user_id,
@@ -241,7 +245,8 @@ async function handleConfirmedPayment(payment, paidSession) {
                 `✅ *${selectedDomain}* is registered and configured!\n\n` +
                 `DNS is propagating now — your site will be live at *${selectedDomain}* within 5-60 minutes. ` +
                 `HTTPS is set up automatically.\n\n` +
-                `I'll send you a message once it's fully live! 🚀`
+                `I'll send you a message once it's fully live! 🚀\n\n` +
+                `_If anything's off later or you've got thoughts, just type *feedback* any time and i'll capture it for the team._`
               )
             );
             await logMessage(p.user_id, `Domain purchased and configured: ${selectedDomain}`, 'assistant');
@@ -377,7 +382,7 @@ async function handleConfirmedPayment(payment, paidSession) {
         targetPhone,
         `Payment of *${amountDisplay}* received! 🎉\n\n` +
           `*Package:* ${p.description || p.service_type}\n\n` +
-          `Your site is fully yours — watermark gone, contact form live. I'm here if you need anything.`
+          `Your site is fully yours — watermark gone, contact form live. I'm here if you need anything — and if anything's off later or you've got thoughts, just type *feedback* any time and i'll capture it for the team.`
       ));
       await logMessage(p.user_id, `Payment confirmed: ${amountDisplay} (no domain)`, 'assistant');
 
