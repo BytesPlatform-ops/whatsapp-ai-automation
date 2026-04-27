@@ -154,35 +154,6 @@ async function handleSalesBot(user, message) {
     afterTimestamp: user.metadata?.lastResetAt || null,
   });
 
-  // GDPR / first-contact disclosure: send the privacy notice once per
-  // user, ever. We track a `privacyNoticeShownAt` flag in metadata so
-  // /reset (which DOES clear most metadata but intentionally preserves
-  // a few fields, see router.js#L1004-L1009) leaves this in place too —
-  // a returning user who has already been disclosed to doesn't need
-  // a fresh disclosure each time they restart. We can't use
-  // `history.length === 0` because the inbound message has already
-  // been logged by the router by the time we reach here.
-  //
-  // Existing-user guard: anyone who has been here before this code
-  // shipped has `privacyNoticeShownAt` unset AND meaningful prior
-  // history. Without the guard they'd get a surprise privacy notice
-  // mid-conversation (or worse, post-delivery). Treat them as already
-  // disclosed and stamp the flag silently so this branch doesn't
-  // re-fire on every following message either. Signals that mark a
-  // user as not-first-contact: more than the just-logged inbound in
-  // post-reset history, OR any sign of completed work / lifetime
-  // engagement.
-  const isLikelyFirstEverContact =
-    history.length <= 1 &&
-    !user.metadata?.lastCompletedProjectType &&
-    !user.metadata?.lastBusinessName &&
-    !user.metadata?.paymentConfirmed &&
-    (user.metadata?.userMessageCount || 0) <= 1;
-  const shouldSendPrivacyNotice =
-    !user.metadata?.privacyNoticeShownAt && isLikelyFirstEverContact;
-  const shouldSilentlyMarkAsDisclosed =
-    !user.metadata?.privacyNoticeShownAt && !isLikelyFirstEverContact;
-
   // First message ever - let the LLM generate the greeting so it matches
   // the user's language and tone from their very first message.
   // (No hardcoded English greeting - the system prompt instructs the LLM
@@ -559,45 +530,13 @@ async function handleSalesBot(user, message) {
     logger.warn(`[FEEDBACK] Frustration-nudge hook failed: ${err.message}`);
   }
 
-  // GDPR / first-contact disclosure: send a one-line privacy notice as
-  // a follow-up message on the user's very first turn. Kept separate
-  // from the LLM-generated greeting so the wording is deterministic
-  // and the link can never be paraphrased away. Sent regardless of
-  // skipLlmResponse — even if a demo trigger took over the greeting,
-  // first-contact still deserves the disclosure. Idempotent via the
-  // privacyNoticeShownAt flag persisted below — never fires twice for
-  // the same user, even across /reset.
-  if (shouldSendPrivacyNotice) {
-    try {
-      const { getPrivacyUrl } = require('../../privacy/routes');
-      const url = getPrivacyUrl();
-      if (url) {
-        const notice = `_By the way — I keep our chat and any details you share so I can help with your project. Full privacy notice: ${url}_`;
-        // sendTextMessage auto-logs (sender.js); avoid duplicate row.
-        await sendTextMessage(user.phone_number, notice);
-        const shownAt = new Date().toISOString();
-        await updateUserMetadata(user.id, { privacyNoticeShownAt: shownAt });
-        user.metadata = { ...(user.metadata || {}), privacyNoticeShownAt: shownAt };
-      } else {
-        logger.warn('[PRIVACY] No PRIVACY_POLICY_URL or PUBLIC_API_BASE_URL configured — skipping first-contact notice');
-      }
-    } catch (err) {
-      // Never let the privacy notice break the greeting — log and move on.
-      logger.warn(`[PRIVACY] First-contact notice send failed: ${err.message}`);
-    }
-  } else if (shouldSilentlyMarkAsDisclosed) {
-    // Existing user with no flag yet — backfill silently so future
-    // turns short-circuit on `!user.metadata?.privacyNoticeShownAt`
-    // instead of re-running this gate every message.
-    try {
-      const shownAt = new Date().toISOString();
-      await updateUserMetadata(user.id, { privacyNoticeShownAt: shownAt });
-      user.metadata = { ...(user.metadata || {}), privacyNoticeShownAt: shownAt };
-      logger.info(`[PRIVACY] Backfilled privacyNoticeShownAt for existing user ${user.phone_number} (no notice sent — pre-existing relationship)`);
-    } catch (err) {
-      logger.warn(`[PRIVACY] Backfill flag failed: ${err.message}`);
-    }
-  }
+  // GDPR / first-contact disclosure DISABLED for now — to be re-enabled
+  // later once the privacy policy copy and timing are finalized. The
+  // /privacy page itself (src/privacy/routes.js) and the env config
+  // (env.privacy.*) stay in place; only the WhatsApp-side notice send
+  // is removed. To bring it back: restore the shouldSendPrivacyNotice /
+  // shouldSilentlyMarkAsDisclosed gating block above and the
+  // sendTextMessage block here.
 
   // Send the ByteScart pitch + CTA button for ecommerce leads
   if (bytescartTrigger && !user.metadata?.bytescartPitched) {

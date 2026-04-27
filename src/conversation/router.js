@@ -609,6 +609,26 @@ async function _routeMessage(message) {
   // because handlers used to have to call logMessage manually after each send.
   setUserId(user.id);
 
+  // Backfill display name on EVERY turn, not just on the WELCOME state.
+  // Messenger / Instagram resolve the name via Graph API in the route
+  // before this handler runs (see messengerRoutes.js); WhatsApp gets it
+  // from the contacts.profile.name field on the webhook itself. The old
+  // welcome-handler-only path missed Messenger users who got created
+  // pre-fix and were already past WELCOME — they'd keep showing as
+  // their numeric PSID forever even after the Graph API fetch resolved
+  // their real name. Updating here means a user's next inbound message
+  // is enough to populate user.name so the admin dashboard, lead
+  // summaries, and recap context all stop showing the raw ID.
+  if (message.contactName && !user.name) {
+    try {
+      const { updateUser } = require('../db/users');
+      await updateUser(user.id, { name: message.contactName });
+      user.name = message.contactName;
+    } catch (err) {
+      logger.warn(`[USER] Failed to backfill name for ${user.id}: ${err.message}`);
+    }
+  }
+
   // ── Quoted-reply resolution ────────────────────────────────────────────
   // If the user used WhatsApp/Messenger's "Reply" affordance, parser sets
   // message.replyTo = { id }. Look up that id in our conversations table
