@@ -48,15 +48,13 @@ async function autoLogOutbound(text, messageType = 'text', platformMessageId = n
 }
 
 async function sendTextMessage(to, text, options = {}) {
-  // The 2-4s "human typing" delay is great for AI replies, but useless for
-  // operator-sent messages from the admin dashboard — the operator clicks
-  // Send and expects it to go out immediately. Pass `{ instant: true }` to
-  // bypass the typing indicator + delay entirely.
-  if (!options.instant) {
-    try { await getSender().showTyping(to); } catch {}
-    const delay = 2000 + Math.floor(Math.random() * 2000);
-    await new Promise(r => setTimeout(r, delay));
-  }
+  // We used to show a typing indicator + sleep 2-4s before every reply
+  // to feel "human", but the latency made the bot feel slow on simple
+  // questions and stacked badly when a turn produced multiple sends.
+  // Replies now go out as soon as the LLM result is ready. The
+  // `options.instant` flag is kept as a no-op so existing call sites
+  // (admin operator sends) don't need to change.
+  void options;
   const result = await getSender().sendTextMessage(to, text);
   noteSendSucceeded();
   autoLogOutbound(text, 'text', extractPlatformMessageId(result)).catch(() => {});
