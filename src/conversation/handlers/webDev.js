@@ -3348,6 +3348,49 @@ async function classifyImageCaption(caption, targets, userId) {
 }
 
 /**
+ * Hard cap pitch — fired any time the user tries to apply a 3rd or later
+ * revision. Replaces the older LIGHT/MEDIUM/HEAVY classifier where LIGHT
+ * changes silently went through past revision 2.
+ */
+async function pitchRevisionUpgrade(user, count) {
+  await sendTextMessage(
+    user.phone_number,
+    "You've already used your 2 free revisions for this site. Anything more is custom work — it starts at $200, or we can scope it on a quick call."
+  );
+  try {
+    const calendlyUrl = require('../../config/env').env.calendlyUrl;
+    if (calendlyUrl) {
+      await sendCTAButton(
+        user.phone_number,
+        'Tap below to book a call with our team 👇',
+        '📅 Book a Call',
+        calendlyUrl
+      );
+    }
+  } catch {
+    /* CTA is optional — pitch text already went out */
+  }
+  await logMessage(user.id, `Revision ${count} blocked — 2-revision cap reached`, 'assistant');
+}
+
+/**
+ * Single gate that every revision-applying path must pass through. Returns
+ * { ok, count } where count is the projected revision number (current+1).
+ * On `ok=false` the upgrade pitch has already been sent — caller just
+ * returns the appropriate state. The caller is responsible for incrementing
+ * `metadata.revisionCount` AFTER receiving ok=true (we don't write here so
+ * a later failure can refund without an extra DB hit).
+ */
+async function gateNextRevision(user) {
+  const projected = (user.metadata?.revisionCount || 0) + 1;
+  if (projected > 2) {
+    await pitchRevisionUpgrade(user, projected);
+    return { ok: false, count: projected };
+  }
+  return { ok: true, count: projected };
+}
+
+/**
  * Shared deploy-and-ack path for any image revision (user-uploaded OR
  * Pexels-fetched). Refunds the revision count if the redeploy fails so
  * the user doesn't burn one of their two free revisions on something
@@ -3355,10 +3398,20 @@ async function classifyImageCaption(caption, targets, userId) {
  *
  * `image` shape: { url, photographer?, dominantColor?, source? }. For
  * the logo target, only image.url is read (logo is stored as a string).
+ *
+ * `additionalUpdates` (optional): a flat object of non-special parser
+ * fields like { headline, primaryColor, services } that should be
+ * applied IN THE SAME deploy. The user often mixes asks in one
+ * message ("change headline AND swap the hero photo") — without this,
+ * the image-swap branch returned early and the text changes vanished.
  */
-async function applyImageRevision({ user, site, currentConfig, targetId, image, revisionCount }) {
+async function applyImageRevision({ user, site, currentConfig, targetId, image, revisionCount, additionalUpdates = null }) {
   const { applyImageToTarget, describeTarget } = require('../../website-gen/imageTargets');
-  const updatedConfig = applyImageToTarget(currentConfig, targetId, image);
+  let updatedConfig = applyImageToTarget(currentConfig, targetId, image);
+  const hasExtras = additionalUpdates && Object.keys(additionalUpdates).length > 0;
+  if (hasExtras) {
+    updatedConfig = { ...updatedConfig, ...additionalUpdates };
+  }
   const where = (describeTarget(targetId, updatedConfig) || targetId).toLowerCase();
 
   const workingVariants = [
@@ -3386,13 +3439,16 @@ async function applyImageRevision({ user, site, currentConfig, targetId, image, 
     const note = remaining > 0
       ? `You have *${remaining}* revision${remaining === 1 ? '' : 's'} left.`
       : `That was your last free revision — further changes start at $200 or get scoped on a call.`;
+    const headline = hasExtras
+      ? `Done — ${where} updated, plus your other changes are in.`
+      : `Done — ${where} updated.`;
     await sendTextMessage(
       user.phone_number,
-      `Done — ${where} updated. Take another look:\n\n${previewUrl}\n\n${note}\n\nWant to tweak anything else, or are we good?`
+      `${headline} Take another look:\n\n${previewUrl}\n\n${note}\n\nWant to tweak anything else, or are we good?`
     );
     await logMessage(
       user.id,
-      `Image revision applied (target=${targetId}, source=${image.source || 'pexels'}, revision ${revisionCount})`,
+      `Image revision applied (target=${targetId}, source=${image.source || 'pexels'}, revision ${revisionCount}${hasExtras ? `, +${Object.keys(additionalUpdates).length} field updates` : ''})`,
       'assistant'
     );
     return true;
@@ -3473,7 +3529,12 @@ async function handleRevisions(user, message) {
     const pending = user.metadata.pendingImageUpload;
     await updateUserMetadata(user.id, { pendingImageUpload: null });
 
-    const revisionCount = (user.metadata?.revisionCount || 0) + 1;
+    // Hard cap at 2 revisions — block before applying. The upload itself
+    // already happened in a prior turn (Supabase) but that's harmless;
+    // the user just won't see it on the site.
+    const limit = await gateNextRevision(user);
+    if (!limit.ok) return STATES.SALES_CHAT;
+    const revisionCount = limit.count;
     await updateUserMetadata(user.id, { revisionCount });
 
     await applyImageRevision({
@@ -3598,8 +3659,12 @@ async function handleRevisions(user, message) {
       return STATES.WEB_REVISIONS;
     }
 
-    // Paths 1 & 2: apply directly.
-    const revisionCount = (user.metadata?.revisionCount || 0) + 1;
+    // Paths 1 & 2: apply directly. Hard cap at 2 revisions — block the
+    // 3rd attempt before consuming any state. The uploaded image still
+    // sits in Supabase storage but that's fine; it's just a stale URL.
+    const limit = await gateNextRevision(user);
+    if (!limit.ok) return STATES.SALES_CHAT;
+    const revisionCount = limit.count;
     await updateUserMetadata(user.id, { revisionCount });
 
     await applyImageRevision({
@@ -3720,63 +3785,17 @@ async function handleRevisions(user, message) {
       return STATES.WEB_REVISIONS;
     }
 
-    // Process the revision request — track revision count
-    const revisionCount = (user.metadata?.revisionCount || 0) + 1;
+    // Hard cap at 2 free revisions. The earlier LIGHT/MEDIUM/HEAVY
+    // classifier was too lenient — LIGHT-classified asks (color tweaks,
+    // small text edits) silently went through past revision 2, so a
+    // user could keep iterating on small things forever. Now: any 3rd
+    // revision is custom work and gets the upgrade pitch. Approval was
+    // already short-circuited above (classifyConfirmIntent), so anything
+    // reaching this point is a real change request.
+    const limit = await gateNextRevision(user);
+    if (!limit.ok) return STATES.SALES_CHAT;
+    const revisionCount = limit.count;
     await updateUserMetadata(user.id, { revisionCount });
-
-    // After 2 free revisions, assess complexity before proceeding
-    if (revisionCount > 2) {
-      try {
-        const { generateResponse: classifyLLM } = require('../../llm/provider');
-        const classifyResponse = await classifyLLM(
-          `Classify this website revision request as LIGHT, MEDIUM, or HEAVY.\nLIGHT: color change, text edit, small tweaks\nMEDIUM: new section, layout change, significant content rewrite, font changes\nHEAVY: completely different design, major restructure, complex features, booking systems, e-commerce\nReturn ONLY one word: LIGHT, MEDIUM, or HEAVY.`,
-          [{ role: 'user', content: revisionText }],
-          { userId: user.id, operation: 'webdev_revision_complexity' }
-        );
-        const complexity = (classifyResponse || '').trim().toUpperCase();
-        await updateUserMetadata(user.id, { lastRevisionComplexity: complexity });
-
-        if (complexity === 'HEAVY') {
-          await sendTextMessage(
-            user.phone_number,
-            "This sounds like a custom project — let me set you up with our design team so we can scope it out properly. Pricing is determined on the call based on what you need."
-          );
-          await sendCTAButton(
-            user.phone_number,
-            'Tap below to book a call with our team 👇',
-            '📅 Book a Call',
-            require('../../config/env').env.calendlyUrl
-          );
-          await logMessage(user.id, `Revision ${revisionCount} classified as HEAVY — sent to Calendly`, 'assistant');
-          return STATES.SALES_CHAT;
-        }
-
-        if (complexity === 'MEDIUM' && !user.metadata?.bonusRevisionUsed) {
-          // Allow one more free regeneration for medium changes
-          await updateUserMetadata(user.id, { bonusRevisionUsed: true });
-          await sendTextMessage(user.phone_number, "Let me apply those changes — this will be the last free revision round. After this, customization work starts at $200.");
-          await logMessage(user.id, `Revision ${revisionCount} classified as MEDIUM — bonus revision used`, 'assistant');
-          // Fall through to normal revision processing below
-        } else if (complexity === 'MEDIUM' && user.metadata?.bonusRevisionUsed) {
-          await sendTextMessage(
-            user.phone_number,
-            "For these kinds of changes, we'd need to do a custom build — that starts at $200 on top of the base price. Would you like to proceed, or would you prefer to hop on a call to discuss?"
-          );
-          await sendCTAButton(
-            user.phone_number,
-            'Or book a call to discuss the customization 👇',
-            '📅 Book a Call',
-            require('../../config/env').env.calendlyUrl
-          );
-          await logMessage(user.id, `Revision ${revisionCount} — bonus already used, pitched $200+ customization`, 'assistant');
-          return STATES.SALES_CHAT;
-        }
-        // LIGHT changes continue to normal processing
-      } catch (classifyErr) {
-        logger.error('Revision classification failed:', classifyErr.message);
-        // Fall through to normal processing on error
-      }
-    }
 
     try {
       const { generateResponse } = require('../../llm/provider');
@@ -3846,9 +3865,13 @@ async function handleRevisions(user, message) {
       }
 
       // ── User asked to upload their own image but didn't attach one ─────
-      // ("I want to use my own logo, let me send it"). Stash the target on
-      // the user so the next inbound image gets routed straight to it,
-      // and don't burn a revision on just the clarifying ask.
+      // ("I want to use my own logo, let me send it" — possibly mixed
+      // with text changes in the same message: "change headline AND let
+      // me send my logo"). Stash the target so the next inbound image
+      // routes to it. If the user ALSO included text-field changes,
+      // apply those now (using this revision); otherwise refund — they
+      // shouldn't burn a revision on just the upload-request prompt.
+      // The eventual image upload counts as its own revision.
       if (updates._imageRequest && updates._imageTarget) {
         const { getAvailableTargets, describeTarget } = require('../../website-gen/imageTargets');
         const targets = getAvailableTargets(currentConfig);
@@ -3861,13 +3884,64 @@ async function handleRevisions(user, message) {
           await updateUserMetadata(user.id, { revisionCount: Math.max(0, revisionCount - 1) });
           return STATES.WEB_REVISIONS;
         }
+
+        const SPECIAL_KEYS = new Set([
+          '_imageQuery', '_imageTarget', '_imageRequest',
+          '_approved', '_unclear', '_message',
+        ]);
+        const textUpdates = {};
+        for (const k of Object.keys(updates)) {
+          if (!SPECIAL_KEYS.has(k)) textUpdates[k] = updates[k];
+        }
+        const hasText = Object.keys(textUpdates).length > 0;
+
         await updateUserMetadata(user.id, { awaitingImageUpload: { target } });
-        await updateUserMetadata(user.id, { revisionCount: Math.max(0, revisionCount - 1) });
+
         const where = (describeTarget(target, currentConfig) || target).toLowerCase();
-        await sendTextMessage(
-          user.phone_number,
-          `Sure — send me the image you'd like for the ${where}, and I'll put it up.`
-        );
+
+        if (hasText) {
+          // Deploy the text changes immediately. The revision was already
+          // counted; the queued image upload will count as a separate one
+          // when it arrives.
+          try {
+            const updatedConfig = { ...currentConfig, ...textUpdates };
+            const existingSiteId = site?.netlify_site_id || null;
+            const { previewUrl, netlifySiteId, netlifySubdomain } =
+              await deployToNetlify(updatedConfig, existingSiteId);
+            if (site) {
+              await updateSite(site.id, {
+                site_data: updatedConfig,
+                preview_url: previewUrl,
+                netlify_site_id: netlifySiteId,
+                netlify_subdomain: netlifySubdomain,
+              });
+            }
+            await sendTextMessage(
+              user.phone_number,
+              `Got it — applied your changes. Take a look:\n\n${previewUrl}\n\nNow send me the image you'd like for the ${where} and I'll put it up.`
+            );
+            await logMessage(
+              user.id,
+              `Revision ${revisionCount} text changes applied; awaiting upload for ${target}`,
+              'assistant'
+            );
+          } catch (deployErr) {
+            logger.error(`[WEB_REVISIONS] _imageRequest pre-deploy failed: ${deployErr.message}`);
+            await updateUserMetadata(user.id, { revisionCount: Math.max(0, revisionCount - 1) });
+            await sendTextMessage(
+              user.phone_number,
+              `Trouble applying those changes — could you try again? In the meantime, you can also send me the image for the ${where}.`
+            );
+          }
+        } else {
+          // Pure upload-request — refund the revision (counts only when
+          // the image actually lands).
+          await updateUserMetadata(user.id, { revisionCount: Math.max(0, revisionCount - 1) });
+          await sendTextMessage(
+            user.phone_number,
+            `Sure — send me the image you'd like for the ${where}, and I'll put it up.`
+          );
+        }
         return STATES.WEB_REVISIONS;
       }
 
@@ -3928,9 +4002,21 @@ async function handleRevisions(user, message) {
           return STATES.WEB_REVISIONS;
         }
 
-        // Apply via the targeted helper and skip the generic merge below.
-        // Hero is special-cased in applyImageToTarget so it still writes
-        // c.heroImage = newImage exactly like the legacy path did.
+        // Strip parser-control keys; everything else is a real field
+        // update the user asked for in the same message ("change headline
+        // to X AND swap the hero photo to coffee beans"). Pass them
+        // through so they land in the same deploy as the image swap —
+        // previously they were silently dropped because this branch
+        // returned before hitting the generic merge below.
+        const SPECIAL_KEYS = new Set([
+          '_imageQuery', '_imageTarget', '_imageRequest',
+          '_approved', '_unclear', '_message',
+        ]);
+        const additionalUpdates = {};
+        for (const k of Object.keys(updates)) {
+          if (!SPECIAL_KEYS.has(k)) additionalUpdates[k] = updates[k];
+        }
+
         await applyImageRevision({
           user,
           site,
@@ -3938,6 +4024,7 @@ async function handleRevisions(user, message) {
           targetId,
           image: newImage,
           revisionCount,
+          additionalUpdates: Object.keys(additionalUpdates).length ? additionalUpdates : null,
         });
         return STATES.WEB_REVISIONS;
       }
