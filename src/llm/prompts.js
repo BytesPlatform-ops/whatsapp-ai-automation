@@ -205,9 +205,10 @@ const REVISION_PARSER_PROMPT = `You are a website configuration assistant. The u
 
 First, classify the message intent:
 1. APPROVAL  - The user is happy/satisfied and wants to keep the site as-is (e.g. "looks good", "it's fine", "perfect", "I love it", "that works", "great", "yes", "ok", "no changes needed", "ship it")
-2. IMAGE_SWAP - The user wants to replace the hero/banner/background image with a different photo. Triggers include: "hero image", "banner", "background image", "main image", "header image", "the photo at the top", "that picture", "change the image", "different image". Only classify as IMAGE_SWAP when the request is about the HERO/top image specifically — requests to change a service image or logo are REVISION, not IMAGE_SWAP.
-3. REVISION  - The user wants specific changes to the website (text, colors, sections, layout — anything except swapping the hero photo).
-4. UNCLEAR  - You can't determine what the user wants
+2. IMAGE_SWAP - The user wants to change ANY image on the site (hero, logo, a service photo, listing photo, agent headshot, neighborhood card). Triggers: "hero image", "banner", "background", "main image", "the photo at the top", "logo", "logo change", "use my own logo", "service N picture", "the plumbing service photo", "agent photo", "headshot", "listing photo", "downtown neighborhood image", "this picture", "that picture", "change the image", "different photo", "swap the photo".
+3. IMAGE_UPLOAD_REQUEST - The user wants to upload THEIR OWN image (not have us search for one). Triggers: "use my own", "let me send you", "I have a photo", "I'll send a picture", "I want to upload", "use this photo I'm sending", "yeh photo lagao" (when they haven't actually attached it yet).
+4. REVISION  - The user wants specific changes to the website (text, colors, sections, layout — anything except images).
+5. UNCLEAR  - You can't determine what the user wants
 
 For APPROVAL, return: {"_approved": true}
 For UNCLEAR, return: {"_unclear": true, "_message": "Could you clarify what you'd like to change? Or if you're happy with the site, just say 'approve'."}
@@ -218,16 +219,30 @@ If the user clearly wants to change a color but does NOT name a target color (e.
 
 Only return a REVISION with primaryColor when the user names or clearly implies a specific target color.
 
-For IMAGE_SWAP, return: {"_imageQuery": "<short visual description, 2-6 words>"}
-Extract the visual subject the user wants the new image to show and put it in _imageQuery. Keep it concrete and photographable (nouns + adjectives, no noise words like "nice", "professional", "modern" unless genuinely descriptive). If the user just says "change the image" / "different hero" with NO description of what it should show, return {"_imageQuery": ""} and the system will ask them what they want.
+## IMAGE TARGETS
+Sites can have many image slots. Resolve which one the user means using the **Available image targets** list provided in the user message (each line is "id — label"). Match by intent:
+- "hero", "banner", "header", "main image", "background photo at the top" → hero
+- "logo" → logo
+- "service N", "first/second/third service", or a service named in the targets list → service:<index from the list>
+- "listing N", listing address/title → listing:<index>
+- "agent", "headshot", "agent photo" → agent
+- "neighborhood NAME", area name → neighborhood:<NAME exactly as in the targets list>
+- ambiguous "change the picture" / "different image" with no clue → return UNCLEAR with a question listing the top 2-3 likely targets
 
-IMAGE_SWAP examples:
-- "change the hero image to coffee beans" → {"_imageQuery": "coffee beans"}
-- "I don't like the banner, use something with a city skyline at night" → {"_imageQuery": "city skyline at night"}
-- "the photo at the top should show happy dentists" → {"_imageQuery": "happy dentists"}
-- "use a different hero image" → {"_imageQuery": ""}
-- "swap the background photo for a beach sunset" → {"_imageQuery": "beach sunset"}
-- "change the image to a close-up of pizza" → {"_imageQuery": "close-up pizza"}
+For IMAGE_SWAP, return: {"_imageQuery": "<2-6 word visual description, or empty>", "_imageTarget": "<target id from the available list>"}
+Extract the visual subject the user wants the new image to show and put it in _imageQuery. Keep it concrete and photographable (nouns + adjectives, no noise words). If the user only said WHICH image to change but not what it should show, return {"_imageQuery": "", "_imageTarget": "<id>"} — the system will ask them what they want.
+
+For IMAGE_UPLOAD_REQUEST (user said they want to send their own photo but hasn't attached one yet), return: {"_imageRequest": true, "_imageTarget": "<target id>"}. If the target is unclear, fall back to UNCLEAR.
+
+IMAGE examples (assume the targets list contains hero, logo, service:0=Plumbing, service:1=Drain Cleaning, service:2=Water Heaters):
+- "change the hero image to coffee beans" → {"_imageQuery": "coffee beans", "_imageTarget": "hero"}
+- "I don't like the banner, use a city skyline at night" → {"_imageQuery": "city skyline at night", "_imageTarget": "hero"}
+- "use a different hero image" → {"_imageQuery": "", "_imageTarget": "hero"}
+- "change the plumbing service photo to a leaky pipe" → {"_imageQuery": "leaky pipe close-up", "_imageTarget": "service:0"}
+- "second service picture should show drain cleaning" → {"_imageQuery": "drain cleaning", "_imageTarget": "service:1"}
+- "I want to use my own logo, let me send it" → {"_imageRequest": true, "_imageTarget": "logo"}
+- "logo change kr do" → {"_imageRequest": true, "_imageTarget": "logo"}
+- "change the picture" (no other context) → {"_unclear": true, "_message": "Which image — the hero photo, your logo, or one of your service tiles?"}
 
 For REVISION, return ONLY a JSON object with the fields that need to change.
 The site configuration has these fields:

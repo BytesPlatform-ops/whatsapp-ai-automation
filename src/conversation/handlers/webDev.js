@@ -1,6 +1,7 @@
 const {
   sendTextMessage,
   sendInteractiveButtons,
+  sendInteractiveList,
   sendCTAButton,
   sendWithMenuButton,
 } = require('../../messages/sender');
@@ -3293,8 +3294,124 @@ async function acknowledgeApprovalAfterDomainChoice(user) {
   return STATES.WEB_REVISIONS;
 }
 
+/**
+ * Sanitize a target id for use as a WhatsApp button/list-row id. The id we
+ * store on the row is `target_<sanitized>` so we can route the reply back.
+ * WhatsApp list-row ids accept up to 200 chars and allow letters/digits/
+ * `_`/`-`; we play safe by replacing anything else (colons, spaces, dots,
+ * etc.) with `__` so neighborhood names like "Downtown Seattle" survive.
+ * Reverse with restoreTargetId().
+ *
+ * The roundtrip isn't lossless when the original target id contained `__`
+ * — we don't, so this is fine in practice. Document so a future
+ * neighborhood named "Foo__Bar" doesn't surprise anyone.
+ */
+function targetIdToRowId(targetId) {
+  return `target_${String(targetId).replace(/[^a-zA-Z0-9_-]/g, '__')}`;
+}
+function restoreTargetId(rowId, availableTargets = []) {
+  const tail = String(rowId).replace(/^target_/, '');
+  // Direct match first (covers most ids: "hero", "logo", "service__0").
+  const direct = tail.replace(/__/g, ':');
+  if (availableTargets.find((t) => t.id === direct)) return direct;
+  // Fallback: scan available targets and find the one whose sanitized form
+  // matches. Necessary for neighborhood names with spaces / punctuation
+  // where the encoding is lossy.
+  const found = availableTargets.find((t) => targetIdToRowId(t.id) === rowId);
+  return found ? found.id : direct;
+}
+
+/**
+ * Ask a small LLM call to map an image-upload caption to one of the
+ * available target ids. Returns the target id (e.g. "service:0") or null
+ * if the caption is empty/ambiguous. Cheap and side-effect-free.
+ */
+async function classifyImageCaption(caption, targets, userId) {
+  const text = String(caption || '').trim();
+  if (!text || text === '[Image]' || !targets?.length) return null;
+  const targetsText = targets.map((t) => `- ${t.id} — ${t.label}`).join('\n');
+  const sys = `You route a single image upload to ONE slot on a small business website.\n\nAvailable slots:\n${targetsText}\n\nReply with ONLY the slot id (e.g. "hero", "logo", "service:0"). If the caption doesn't clearly point at a single slot, reply with the literal word "unclear".`;
+  try {
+    const { generateResponse } = require('../../llm/provider');
+    const resp = await generateResponse(
+      sys,
+      [{ role: 'user', content: text }],
+      { userId, operation: 'webdev_image_target_classify' }
+    );
+    const guess = String(resp || '').trim().toLowerCase().split(/[\s\n,.;]/)[0];
+    if (!guess || guess === 'unclear') return null;
+    return targets.find((t) => t.id.toLowerCase() === guess) ? guess : null;
+  } catch (err) {
+    logger.warn(`[WEB_REVISIONS] Caption classifier failed: ${err.message}`);
+    return null;
+  }
+}
+
+/**
+ * Shared deploy-and-ack path for any image revision (user-uploaded OR
+ * Pexels-fetched). Refunds the revision count if the redeploy fails so
+ * the user doesn't burn one of their two free revisions on something
+ * they can't see.
+ *
+ * `image` shape: { url, photographer?, dominantColor?, source? }. For
+ * the logo target, only image.url is read (logo is stored as a string).
+ */
+async function applyImageRevision({ user, site, currentConfig, targetId, image, revisionCount }) {
+  const { applyImageToTarget, describeTarget } = require('../../website-gen/imageTargets');
+  const updatedConfig = applyImageToTarget(currentConfig, targetId, image);
+  const where = (describeTarget(targetId, updatedConfig) || targetId).toLowerCase();
+
+  const workingVariants = [
+    `on it — putting that on the ${where}...`,
+    `got it, updating the ${where}...`,
+    `sure, redeploying with the new ${where}...`,
+    `one sec, applying that to the ${where}...`,
+  ];
+  await sendTextMessage(user.phone_number, workingVariants[Math.floor(Math.random() * workingVariants.length)]);
+
+  try {
+    const { deployToNetlify } = require('../../website-gen/deployer');
+    const { previewUrl, netlifySiteId, netlifySubdomain } =
+      await deployToNetlify(updatedConfig, site?.netlify_site_id || null);
+    if (site) {
+      await updateSite(site.id, {
+        site_data: updatedConfig,
+        preview_url: previewUrl,
+        netlify_site_id: netlifySiteId,
+        netlify_subdomain: netlifySubdomain,
+      });
+    }
+
+    const remaining = Math.max(0, 2 - revisionCount);
+    const note = remaining > 0
+      ? `You have *${remaining}* revision${remaining === 1 ? '' : 's'} left.`
+      : `That was your last free revision — further changes start at $200 or get scoped on a call.`;
+    await sendTextMessage(
+      user.phone_number,
+      `Done — ${where} updated. Take another look:\n\n${previewUrl}\n\n${note}\n\nWant to tweak anything else, or are we good?`
+    );
+    await logMessage(
+      user.id,
+      `Image revision applied (target=${targetId}, source=${image.source || 'pexels'}, revision ${revisionCount})`,
+      'assistant'
+    );
+    return true;
+  } catch (err) {
+    logger.error(`[WEB_REVISIONS] Deploy failed for ${targetId}: ${err.message}`);
+    await updateUserMetadata(user.id, { revisionCount: Math.max(0, revisionCount - 1) });
+    await sendTextMessage(
+      user.phone_number,
+      "I uploaded the image but the redeploy failed. Try once more, or tell me to retry?"
+    );
+    return false;
+  }
+}
+
 async function handleRevisions(user, message) {
-  const buttonId = message.buttonId || '';
+  // Accept list-reply (listId) the same way as button-reply (buttonId) —
+  // some interactive prompts (image-target picker) use lists because we
+  // need more than 3 options.
+  const buttonId = message.buttonId || message.listId || '';
 
   // Route svc_general to general chat (from error retry menu)
   if (buttonId === 'svc_general') {
@@ -3333,13 +3450,54 @@ async function handleRevisions(user, message) {
     return generateWebsite(user);
   }
 
-  // Image-as-revision: user sent a photo while in revisions instead of
-  // a Pexels-search description ("change hero to coffee shop"). Reuse
-  // the existing logo-upload pipeline to push their image into Supabase
-  // storage, then redeploy with c.heroImage = { url: theirUploadUrl }.
-  // Layer 1 scope: hero only — disambiguating "which image?" (about,
-  // gallery, services) is a follow-up. The caption, if any, is logged
-  // for context but not interpreted yet.
+  // ── Image-target picker reply ──────────────────────────────────────────
+  // User sent us a photo earlier without a clear caption, so we asked
+  // "where should this go?" via an interactive list. Their list-reply id
+  // is `target_<sanitized>`. Look up the pending upload, apply it.
+  if (buttonId.startsWith('target_') && user.metadata?.pendingImageUpload?.url) {
+    const site = await getLatestSite(user.id);
+    if (!site?.preview_url) {
+      await sendTextMessage(user.phone_number, "Hm — I lost track of your site. Tell me what to do?");
+      await updateUserMetadata(user.id, { pendingImageUpload: null });
+      return STATES.WEB_REVISIONS;
+    }
+    const currentConfig = site.site_data || user.metadata?.websiteData || {};
+    const { getAvailableTargets } = require('../../website-gen/imageTargets');
+    const targets = getAvailableTargets(currentConfig);
+    const targetId = restoreTargetId(buttonId, targets);
+    if (!targets.find((t) => t.id === targetId)) {
+      await sendTextMessage(user.phone_number, "That slot isn't on your site — try picking another option.");
+      return STATES.WEB_REVISIONS;
+    }
+
+    const pending = user.metadata.pendingImageUpload;
+    await updateUserMetadata(user.id, { pendingImageUpload: null });
+
+    const revisionCount = (user.metadata?.revisionCount || 0) + 1;
+    await updateUserMetadata(user.id, { revisionCount });
+
+    await applyImageRevision({
+      user,
+      site,
+      currentConfig,
+      targetId,
+      image: { url: pending.url, source: pending.source || 'user_upload' },
+      revisionCount,
+    });
+    return STATES.WEB_REVISIONS;
+  }
+
+  // ── Inbound image during revisions ─────────────────────────────────────
+  // Three paths:
+  //   1. We previously asked for an upload to a specific slot
+  //      (metadata.awaitingImageUpload.target). Route there.
+  //   2. The image carries a caption that maps to a slot via the LLM
+  //      classifier ("yeh hero pe lagao" / "make this my logo").
+  //   3. Otherwise stash the upload and ask "where should I put this?"
+  //      via an interactive list.
+  // For the logo target we run the existing remove.bg pipeline so the
+  // logo lands transparent. Everything else gets a raw upload — services,
+  // listings, neighborhoods, agent headshots are usually fine as-is.
   if (message.type === 'image' && (message.mediaId || message.mediaUrl)) {
     const site = await getLatestSite(user.id);
     if (!site?.preview_url) {
@@ -3350,9 +3508,6 @@ async function handleRevisions(user, message) {
       return STATES.WEB_REVISIONS;
     }
 
-    await sendTextMessage(user.phone_number, await localize("Got the image — let me put it on your site...", user, message.text || ''));
-
-    // Download from WhatsApp/Messenger CDN
     let buffer = null;
     let mime = 'image/jpeg';
     try {
@@ -3366,71 +3521,95 @@ async function handleRevisions(user, message) {
       logger.error(`[WEB_REVISIONS] Image download failed: ${err.message}`);
     }
     if (!buffer) {
-      await sendTextMessage(
+      await sendTextMessage(user.phone_number, "I couldn't download that image. Mind sending it again?");
+      return STATES.WEB_REVISIONS;
+    }
+
+    const currentConfig = site.site_data || user.metadata?.websiteData || {};
+    const { getAvailableTargets } = require('../../website-gen/imageTargets');
+    const targets = getAvailableTargets(currentConfig);
+
+    // Path 1: pre-asked target
+    let targetId = null;
+    if (user.metadata?.awaitingImageUpload?.target) {
+      const asked = user.metadata.awaitingImageUpload.target;
+      if (targets.find((t) => t.id === asked)) targetId = asked;
+      await updateUserMetadata(user.id, { awaitingImageUpload: null });
+    }
+
+    // Path 2: caption-driven target
+    if (!targetId) {
+      const caption = (message.caption || message.text || '').trim();
+      if (caption && caption !== '[Image]') {
+        targetId = await classifyImageCaption(caption, targets, user.id);
+      }
+    }
+
+    // Upload now. Logo target gets remove.bg + transparent-PNG output;
+    // everything else takes the raw upload via the same Supabase bucket.
+    let uploadedImage = null;
+    if (targetId === 'logo') {
+      try {
+        const { processLogo } = require('../../website-gen/logoProcessor');
+        const result = await processLogo(buffer, mime);
+        if (result?.url) uploadedImage = { url: result.url, source: 'user_upload' };
+      } catch (err) {
+        logger.error(`[WEB_REVISIONS] processLogo failed: ${err.message}`);
+      }
+    }
+    if (!uploadedImage) {
+      try {
+        const { uploadLogoImage } = require('../../logoGeneration/imageUploader');
+        const url = await uploadLogoImage(buffer.toString('base64'), mime);
+        uploadedImage = { url, source: 'user_upload' };
+      } catch (err) {
+        logger.error(`[WEB_REVISIONS] Image upload failed: ${err.message}`);
+        await sendTextMessage(user.phone_number, "Something went wrong uploading that image — try sending it again in a moment?");
+        return STATES.WEB_REVISIONS;
+      }
+    }
+
+    // Path 3: target still unknown → ask via interactive list. We stash
+    // the upload URL so the next list-reply can route it.
+    if (!targetId) {
+      await updateUserMetadata(user.id, {
+        pendingImageUpload: { url: uploadedImage.url, source: 'user_upload' },
+      });
+
+      // Order targets so empty slots come first (most-likely intent), cap
+      // to 10 because that's WhatsApp's list-row hard limit.
+      const ordered = targets
+        .slice()
+        .sort((a, b) => Number(!!a.currentUrl) - Number(!!b.currentUrl))
+        .slice(0, 10);
+
+      const rows = ordered.map((t) => ({
+        id: targetIdToRowId(t.id),
+        title: t.label.length > 24 ? `${t.label.slice(0, 23)}…` : t.label,
+        description: t.currentUrl ? 'Replace current image' : 'Currently empty',
+      }));
+
+      await sendInteractiveList(
         user.phone_number,
-        "I couldn't download that image. Mind sending it again?"
+        'Got the image — where should I put it?',
+        'Pick a slot',
+        [{ title: 'Image targets', rows }]
       );
       return STATES.WEB_REVISIONS;
     }
 
-    // Upload to Supabase Storage. We reuse the logo bucket — it accepts
-    // PNG/JPEG/WebP up to 10MB which covers any phone-camera photo.
-    let publicUrl;
-    try {
-      const { uploadLogoImage } = require('../../logoGeneration/imageUploader');
-      publicUrl = await uploadLogoImage(buffer.toString('base64'), mime);
-    } catch (err) {
-      logger.error(`[WEB_REVISIONS] Image upload failed: ${err.message}`);
-      await sendTextMessage(
-        user.phone_number,
-        "Something went wrong uploading that image — try sending it again in a moment?"
-      );
-      return STATES.WEB_REVISIONS;
-    }
-
-    // Consume one revision only AFTER upload succeeded. If it fails
-    // mid-flow we don't want to burn a revision the user can't see.
+    // Paths 1 & 2: apply directly.
     const revisionCount = (user.metadata?.revisionCount || 0) + 1;
     await updateUserMetadata(user.id, { revisionCount });
 
-    const currentConfig = site.site_data || user.metadata?.websiteData || {};
-    const updatedConfig = {
-      ...currentConfig,
-      heroImage: { url: publicUrl, source: 'user_upload' },
-    };
-
-    try {
-      const { deployToNetlify } = require('../../website-gen/deployer');
-      const { previewUrl, netlifySiteId, netlifySubdomain } = await deployToNetlify(updatedConfig, site.netlify_site_id || null);
-      await updateSite(site.id, {
-        site_data: updatedConfig,
-        preview_url: previewUrl,
-        netlify_site_id: netlifySiteId,
-        netlify_subdomain: netlifySubdomain,
-      });
-
-      const remaining = Math.max(0, 2 - revisionCount);
-      const note = remaining > 0
-        ? `You have *${remaining}* revision${remaining === 1 ? '' : 's'} left.`
-        : `That was your last free revision — further changes start at $200 or get scoped on a call.`;
-      await sendTextMessage(
-        user.phone_number,
-        await localize(
-          `Done — your image is live on the homepage.\n\n${previewUrl}\n\n${note}\n\nWant to tweak anything else, or are we good?`,
-          user,
-          ''
-        )
-      );
-      await logMessage(user.id, `Image revision applied (revision ${revisionCount}, hero swap from user upload)`, 'assistant');
-    } catch (err) {
-      logger.error(`[WEB_REVISIONS] Image revision deploy failed: ${err.message}`);
-      // Refund the revision — the user got nothing visible.
-      await updateUserMetadata(user.id, { revisionCount: Math.max(0, revisionCount - 1) });
-      await sendTextMessage(
-        user.phone_number,
-        "I uploaded the image but the redeploy failed. Try once more, or tell me to retry?"
-      );
-    }
+    await applyImageRevision({
+      user,
+      site,
+      currentConfig,
+      targetId,
+      image: uploadedImage,
+      revisionCount,
+    });
     return STATES.WEB_REVISIONS;
   }
 
@@ -3609,9 +3788,16 @@ async function handleRevisions(user, message) {
       const site = await getLatestSite(user.id);
       const currentConfig = site?.site_data || freshUser.metadata?.websiteData || {};
 
+      // Build the image-targets list the parser will use to resolve which
+      // slot the user is referring to ("first service", "logo", etc.).
+      // Without this, the parser can't pick a slot for non-hero targets.
+      const { getAvailableTargets } = require('../../website-gen/imageTargets');
+      const availableTargets = getAvailableTargets(currentConfig);
+      const targetsList = availableTargets.map((t) => `${t.id} — ${t.label}`).join('\n');
+
       const response = await generateResponse(
         REVISION_PARSER_PROMPT,
-        [{ role: 'user', content: `Current config: ${JSON.stringify(currentConfig)}\n\nUser request: ${revisionText}` }],
+        [{ role: 'user', content: `Current config: ${JSON.stringify(currentConfig)}\n\nAvailable image targets:\n${targetsList}\n\nUser request: ${revisionText}` }],
         { userId: user.id, operation: 'webdev_revision_parse' }
       );
 
@@ -3659,42 +3845,101 @@ async function handleRevisions(user, message) {
         return STATES.WEB_REVISIONS;
       }
 
-      // Hero-image swap: intercept before the normal merge flow so we can
-      // fetch a fresh Unsplash photo for the user's query and then fall
-      // through to the standard deploy path with the new heroImage.
+      // ── User asked to upload their own image but didn't attach one ─────
+      // ("I want to use my own logo, let me send it"). Stash the target on
+      // the user so the next inbound image gets routed straight to it,
+      // and don't burn a revision on just the clarifying ask.
+      if (updates._imageRequest && updates._imageTarget) {
+        const { getAvailableTargets, describeTarget } = require('../../website-gen/imageTargets');
+        const targets = getAvailableTargets(currentConfig);
+        const target = String(updates._imageTarget);
+        if (!targets.find((t) => t.id === target)) {
+          await sendTextMessage(
+            user.phone_number,
+            `That slot doesn't exist on your site. You can change: ${targets.map((t) => t.label).slice(0, 6).join(', ')}.`
+          );
+          await updateUserMetadata(user.id, { revisionCount: Math.max(0, revisionCount - 1) });
+          return STATES.WEB_REVISIONS;
+        }
+        await updateUserMetadata(user.id, { awaitingImageUpload: { target } });
+        await updateUserMetadata(user.id, { revisionCount: Math.max(0, revisionCount - 1) });
+        const where = (describeTarget(target, currentConfig) || target).toLowerCase();
+        await sendTextMessage(
+          user.phone_number,
+          `Sure — send me the image you'd like for the ${where}, and I'll put it up.`
+        );
+        return STATES.WEB_REVISIONS;
+      }
+
+      // ── Image swap (Pexels search) for ANY target ──────────────────────
+      // Hero is the back-compat default when the parser only gave us a
+      // query but no target. Non-hero targets bypass the generic shallow
+      // merge below and apply via applyImageRevision (which uses the
+      // imageTargets helper to write into nested array slots).
       if (updates._imageQuery !== undefined) {
         const query = String(updates._imageQuery || '').trim();
-        if (!query) {
+        const targetId = String(updates._imageTarget || 'hero');
+
+        const { getAvailableTargets, describeTarget } = require('../../website-gen/imageTargets');
+        const targets = getAvailableTargets(currentConfig);
+        if (!targets.find((t) => t.id === targetId)) {
           await sendTextMessage(
             user.phone_number,
-            "Sure — what should the new hero image show? A short description works best (e.g. *coffee shop interior*, *city skyline at night*, *happy dentist*)."
+            `That image slot doesn't exist on your site. You can change: ${targets.map((t) => t.label).slice(0, 6).join(', ')}.`
           );
-          // Don't consume a revision for just asking the clarifying question
+          await updateUserMetadata(user.id, { revisionCount: Math.max(0, revisionCount - 1) });
+          return STATES.WEB_REVISIONS;
+        }
+        const where = (describeTarget(targetId, currentConfig) || targetId).toLowerCase();
+
+        if (!query) {
+          // No description — the user said WHICH image but not what it
+          // should show. Set the awaiting flag so a follow-up image
+          // upload lands on this target, AND prompt for a description in
+          // case they'd rather Pexels-search for one.
+          await updateUserMetadata(user.id, { awaitingImageUpload: { target: targetId } });
+          await sendTextMessage(
+            user.phone_number,
+            `Sure — what should the new ${where} show? A short description works (e.g. *coffee shop interior*, *team in workshop*, *dental clinic exam room*). Or send me your own photo.`
+          );
           await updateUserMetadata(user.id, { revisionCount: Math.max(0, revisionCount - 1) });
           return STATES.WEB_REVISIONS;
         }
 
-        await sendTextMessage(user.phone_number, `Looking for a hero image of *${query}*...`);
+        await sendTextMessage(user.phone_number, `Looking for a ${where} of *${query}*...`);
 
         const { getHeroImage } = require('../../website-gen/heroImage');
-        let newHero = null;
+        let newImage = null;
         try {
-          newHero = await getHeroImage(query);
+          newImage = await getHeroImage(query);
         } catch (imgErr) {
-          logger.warn(`[WEB_REVISIONS] Hero image fetch threw for "${query}": ${imgErr.message}`);
+          logger.warn(`[WEB_REVISIONS] Image fetch threw for "${query}" (${targetId}): ${imgErr.message}`);
         }
 
-        if (!newHero || !newHero.url) {
+        if (!newImage || !newImage.url) {
           await sendTextMessage(
             user.phone_number,
-            `Couldn't find a good image for *${query}*. Try a different description — something specific like a scene, object, or setting.`
+            `Couldn't find a good image for *${query}*. Try a different description, or send me your own photo for the ${where}.`
           );
-          // Don't consume a revision on a failed lookup
+          // Set the awaiting flag so an immediate follow-up upload lands
+          // on the right slot.
+          await updateUserMetadata(user.id, { awaitingImageUpload: { target: targetId } });
           await updateUserMetadata(user.id, { revisionCount: Math.max(0, revisionCount - 1) });
           return STATES.WEB_REVISIONS;
         }
 
-        updates = { heroImage: newHero };
+        // Apply via the targeted helper and skip the generic merge below.
+        // Hero is special-cased in applyImageToTarget so it still writes
+        // c.heroImage = newImage exactly like the legacy path did.
+        await applyImageRevision({
+          user,
+          site,
+          currentConfig,
+          targetId,
+          image: newImage,
+          revisionCount,
+        });
+        return STATES.WEB_REVISIONS;
       }
 
       // Merge updates and redeploy to the SAME site
