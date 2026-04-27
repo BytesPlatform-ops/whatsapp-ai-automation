@@ -412,9 +412,29 @@ async function handleCollectName(user, message) {
 async function handleCollectEmail(user, message) {
   const text = (message.text || '').trim();
   const emailMatch = text.match(/[\w.-]+@[\w.-]+\.\w+/);
-  const skipWords = /^(skip|no|none|nah|later|n\/a|na|don'?t have|dont have)$/i;
+  // Narrow regex catches the obvious cases without an LLM call. For
+  // anything else short and not-an-email ("skip it", "i want to skip",
+  // "rehne do", "salta este", etc.) we fall through to the LLM-backed
+  // classifyDelegation below, which handles arbitrary phrasing in any
+  // language without us hand-enumerating it.
+  const skipWords = /^(skip|no|none|nah|later|n\/a|na|don'?t have|dont have)\s*\.?$/i;
+  let isSkip = skipWords.test(text);
 
-  if (skipWords.test(text)) {
+  // LLM fallback for skip phrasings the regex doesn't catch. Gated on
+  // "no email AND short reply that isn't already a clear skip" so we
+  // don't fire an LLM call when the user actually typed an email.
+  if (!isSkip && !emailMatch && text && text.length <= 60) {
+    try {
+      isSkip = await classifyDelegation(
+        text,
+        "What's your email address? (or reply skip)"
+      );
+    } catch (err) {
+      logger.warn(`[WEBDEV-EMAIL] classifyDelegation threw: ${err.message}`);
+    }
+  }
+
+  if (isSkip) {
     await updateUserMetadata(user.id, { emailSkipped: true });
     user.metadata = { ...(user.metadata || {}), emailSkipped: true };
     await logMessage(user.id, 'Email skipped', 'assistant');
@@ -446,7 +466,7 @@ async function handleCollectEmail(user, message) {
 
   const ackPrefix = emailMatch
     ? `Got it, saved *${emailMatch[0]}*!`
-    : skipWords.test(text)
+    : isSkip
     ? 'No worries — we can add it later.'
     : null;
   return smartAdvance(user, message, ackPrefix);
@@ -1323,6 +1343,80 @@ Respond with ONLY one word: confirm, edit, or unclear.`;
 }
 
 /**
+ * LLM-based field-edit detector for the WEB_CONFIRM step. Replaces the
+ * prior regex layer which had natural-language footguns like the `to`
+ * inside "too" being consumed as a field-edit separator (capturing
+ * "o nails, makeup, hairs" instead of "nails, makeup, hairs"). The
+ * LLM sees the current website data + the user's message and returns
+ * an array of {field, value} edits — supports MULTI-field edits in one
+ * message ("name: X, services: Y"), handles typos, works in any
+ * language. Returns [] on LLM failure or when no edit intent detected.
+ */
+async function detectFieldEditsLLM(originalText, wd, userId) {
+  const t = String(originalText || '').trim();
+  if (!t) return [];
+
+  // Build a snapshot of current values so the LLM can disambiguate
+  // ("change services to nails" vs "services include nails" — the
+  // latter is conversational, not a replacement).
+  const present = [];
+  if (wd.businessName) present.push(`businessName: "${wd.businessName}"`);
+  if (wd.industry) present.push(`industry: "${wd.industry}"`);
+  if (Array.isArray(wd.services) && wd.services.length) {
+    present.push(`services: [${wd.services.join(', ')}]`);
+  }
+  if (Array.isArray(wd.serviceAreas) && wd.serviceAreas.length) {
+    present.push(`serviceAreas: [${wd.serviceAreas.join(', ')}]`);
+  }
+  if (wd.contactEmail) present.push(`contactEmail: "${wd.contactEmail}"`);
+  if (wd.contactPhone) present.push(`contactPhone: "${wd.contactPhone}"`);
+  if (wd.contactAddress) present.push(`contactAddress: "${wd.contactAddress}"`);
+
+  const prompt = `The user is reviewing a website-setup summary and may want to change one or more fields. Identify which field(s) (if any) and the exact new value(s) they provided.
+
+Available fields: businessName, industry, services, areas, email, phone, address, contact
+
+Current values:
+${present.length ? present.map((f) => '- ' + f).join('\n') : '(none yet)'}
+
+Rules:
+1. Extract ONLY when the user is clearly asking to change / update / set / write / replace a field.
+2. Understand typos and casual language — "write services too nails, makeup, hairs" → field=services, value="nails, makeup, hairs" (the "too" is a typo for "to"; do NOT include "o" or "too" in the value).
+3. Multi-field edits are supported: a single message can contain multiple edits — return ALL of them.
+4. Distinguish "services" (what the business DOES — e.g. haircuts, plumbing) from "areas" (WHERE it operates — neighborhoods, cities). "Service areas" = areas, NOT services.
+5. For lists (services / areas), keep the comma/and-separated list AS-IS as the value (e.g. "nails, makeup, hairs"). Do NOT trim items.
+6. Preserve emails / phone numbers / URLs / addresses exactly as written.
+7. Understand any language: English, Roman Urdu, Urdu, Hindi, Spanish, French, Arabic, etc. ("address ko Gulshan Iqbal kr do", "cambia el email a foo@bar.com").
+8. If the user is NOT trying to change anything (saying "yes", "looks good", "cancel", "build it", a question, off-topic), return {"edits": []}.
+
+User said: "${t}"
+
+Return JSON ONLY. No prose. Examples:
+{"edits": [{"field": "address", "value": "Gulshan Iqbal, Karachi"}]}
+{"edits": [{"field": "businessName", "value": "MyCo"}, {"field": "services", "value": "design, SEO"}]}
+{"edits": [{"field": "services", "value": "nails, makeup, hairs"}]}
+{"edits": []}`;
+
+  try {
+    const response = await generateResponse(
+      prompt,
+      [{ role: 'user', content: t }],
+      { userId, operation: 'confirm_edit_classify' }
+    );
+    const m = (response || '').match(/\{[\s\S]*\}/);
+    if (!m) return [];
+    const parsed = JSON.parse(m[0]);
+    if (!Array.isArray(parsed.edits)) return [];
+    return parsed.edits.filter(
+      (e) => e && typeof e.field === 'string' && e.field && (typeof e.value === 'string' || Array.isArray(e.value)) && String(e.value).trim()
+    );
+  } catch (err) {
+    logger.warn(`[WEBDEV-CONFIRM] detectFieldEditsLLM threw: ${err.message}`);
+    return [];
+  }
+}
+
+/**
  * Detect whether the user is asking to see a summary of what the bot has
  * collected so far ("what are my current details?", "mere details kya hain",
  * "show me the summary", "¿qué tienes de mí?", etc.). LLM-based so it works
@@ -1471,7 +1565,23 @@ async function handleCollectListingsDetails(user, message) {
   const doneWords = /^(done|finished|that'?s (it|all)|stop|enough|no more|bas|khatam)$/i;
   const skipWords = /^(skip|cancel)$/i;
 
-  if (skipWords.test(raw)) {
+  // LLM fallback for skip phrasings the narrow regex doesn't catch
+  // ("skip it", "i want to skip these", "salta esto", "rehne do", etc.).
+  // Gated to short replies that aren't already a clear done-signal so we
+  // don't fire LLM calls on every listing description.
+  let isSkip = skipWords.test(raw);
+  if (!isSkip && raw && raw.length <= 60 && !doneWords.test(raw)) {
+    try {
+      isSkip = await classifyDelegation(
+        raw,
+        'Send your listing details, or skip to use placeholder listings.'
+      );
+    } catch (err) {
+      logger.warn(`[WEBDEV-LISTINGS] classifyDelegation threw: ${err.message}`);
+    }
+  }
+
+  if (isSkip) {
     // Skip mid-flow — keep what we have (if any), fall back for the rest.
     const merged = { ...wd, listings, listingsDetailsDone: true, listingsFlowDone: true };
     await updateUserMetadata(user.id, { websiteData: merged });
@@ -1546,6 +1656,21 @@ async function handleCollectListingsPhotos(user, message) {
   const wd = { ...(user.metadata?.websiteData || {}) };
   const listings = Array.isArray(wd.listings) ? [...wd.listings] : [];
   const skipWords = /^(skip|done|no more|bas|khatam|stock|use stock|placeholder)$/i;
+  // LLM fallback for skip phrasings the narrow regex doesn't catch
+  // ("skip it", "i want to skip the photos", "use stock photos please",
+  // any-language equivalents). Computed once up front so the existing
+  // `skipWords.test(raw)` site below uses the LLM-aware result.
+  let isSkip = skipWords.test(raw);
+  if (!isSkip && raw && raw.length <= 60 && !message.mediaId) {
+    try {
+      isSkip = await classifyDelegation(
+        raw,
+        'Send a listing photo, or reply skip / done for stock photos.'
+      );
+    } catch (err) {
+      logger.warn(`[WEBDEV-LISTINGS-PHOTOS] classifyDelegation threw: ${err.message}`);
+    }
+  }
   const pendingIdx = wd.pendingPhotoAssign; // null when waiting for next image
 
   // If we're waiting for an assignment number ("1", "2", "3", or skip)
@@ -1621,7 +1746,7 @@ async function handleCollectListingsPhotos(user, message) {
     return STATES.WEB_COLLECT_LISTINGS_PHOTOS;
   }
 
-  if (skipWords.test(raw)) {
+  if (isSkip) {
     const merged = { ...wd, listingsFlowDone: true, pendingPhotoAssign: null, pendingPhotoMediaId: null };
     await updateUserMetadata(user.id, { websiteData: merged });
     user.metadata = { ...(user.metadata || {}), websiteData: merged };
@@ -1743,18 +1868,40 @@ async function handleSalonInstagram(user, message) {
   const text = (message.text || '').trim();
   const wd = { ...(user.metadata?.websiteData || {}) };
 
+  // Detect explicit skip BEFORE the handle parser. Without this, a bare
+  // "skip" / "Skip" / "none" / "no" matches the bare-handle regex below
+  // and gets saved verbatim as the Instagram handle, which then links
+  // the Follow button on the live site to instagram.com/Skip. Match
+  // case-insensitive — a capitalised "Skip" was the original report.
+  const skipWords = /^(skip|no|none|nah|nope|na|n\/a|later)$/i;
+  let isExplicitSkip = skipWords.test(text);
+  // LLM fallback for natural phrasings ("skip it", "i don't have one",
+  // "no instagram", "rehne do", any other language) without us trying
+  // to enumerate them. Gated on length so we don't fire LLM calls on
+  // long handle URLs.
+  if (!isExplicitSkip && text && text.length <= 60) {
+    try {
+      isExplicitSkip = await classifyDelegation(
+        text,
+        "What's your Instagram handle? (or reply skip)"
+      );
+    } catch (err) {
+      logger.warn(`[WEBDEV-INSTAGRAM] classifyDelegation threw: ${err.message}`);
+    }
+  }
+
   // Only accept an obvious handle shape: an instagram.com URL, a @-prefixed
   // token (either standalone or embedded in a sentence like "han, X kar do
   // @asnhbukharu"), or a single bare handle-shaped word. Anything else
   // (delegation, prose, "i dont have one") is treated as skip.
-  const urlHandle = text.match(/instagram\.com\/([\w.]+)/i);
-  const inlineAt = text.match(/@([\w.]{3,30})\b/);
+  const urlHandle = !isExplicitSkip ? text.match(/instagram\.com\/([\w.]+)/i) : null;
+  const inlineAt = !isExplicitSkip ? text.match(/@([\w.]{3,30})\b/) : null;
   let candidate = null;
   if (urlHandle) {
     candidate = urlHandle[1];
   } else if (inlineAt) {
     candidate = inlineAt[1];
-  } else if (/^[\w.]{3,30}$/.test(text)) {
+  } else if (!isExplicitSkip && /^[\w.]{3,30}$/.test(text)) {
     candidate = text;
   }
   if (candidate && /^[\w.]{3,30}$/.test(candidate)) {
@@ -1816,7 +1963,20 @@ async function handleSalonHours(user, message) {
     : `Got it:\n${formatHoursForDisplay(hours)}\n\n`;
   const services = (wd.services || []);
   if (services.length === 0) {
-    // No services to price/tag — wrap up the salon flow.
+    // No services known — that's a contract violation: the salon sub-flow
+    // assumes services were collected upstream (handleCollectServices →
+    // startSalonFlow is the canonical entry, and the salesBot trigger
+    // detours through WEB_COLLECT_SERVICES first when missing). Log
+    // loudly so we catch any new code path that drops a user here with
+    // empty services, instead of silently shipping a salon site with
+    // no services page. We still finishSalonFlow rather than block the
+    // user — finishing with empty services is recoverable; getting
+    // stuck on a hours-step error is not.
+    logger.warn(
+      `[SALON-FLOW] handleSalonHours reached with empty services for user ${user.phone_number} ` +
+        `(state=${user.state}, businessName=${wd.businessName || '?'}, industry=${wd.industry || '?'}). ` +
+        `Some upstream path bypassed services collection — investigate.`
+    );
     await sendTextMessage(user.phone_number, await localize(prefix.trim(), user, text));
     return finishSalonFlow(user);
   }
@@ -2045,16 +2205,35 @@ async function handleCollectContact(user, message) {
   const contactText = (message.text || '').trim();
   const skipWords = /^(nothing|none|no|skip|n\/a|na|nah|nope|don'?t|dont|no thanks)$/i;
 
+  // Compute once with a regex fast-path + LLM fallback so all four
+  // downstream sites that used to test `skipWords.test(contactText)`
+  // benefit. The LLM catches "skip it", "i want to skip", "rehne do",
+  // "saltar esto", any-language equivalents — without us hand-listing
+  // them. Skipped when the message obviously contains real contact
+  // info (email, long digit run, or long prose) so we don't waste an
+  // LLM call on a clear answer.
+  const looksLikeRealContact =
+    /@/.test(contactText) ||
+    /\d{5,}/.test(contactText) ||
+    contactText.length > 80;
+  let isExplicitSkip = !!contactText && skipWords.test(contactText);
+  if (!isExplicitSkip && contactText && !looksLikeRealContact && contactText.length <= 60) {
+    try {
+      isExplicitSkip = await classifyDelegation(
+        contactText,
+        'What contact info do you want on the site? (email, phone, and/or address) — or reply skip.'
+      );
+    } catch (err) {
+      logger.warn(`[WEBDEV-CONTACT] classifyDelegation threw: ${err.message}`);
+    }
+  }
+
   // "Use my WhatsApp / current / this number" intent — save the number they're
   // messaging from as contactPhone without making them type it out. LLM-based
   // so it works in any language ("use my whatsapp number", "mera yahi
   // number use kar lo", "usa mi número de whatsapp", "cet numéro", etc.).
   // Gated by length + no @ / no multi-digit run so we don't waste a call
   // when the user is clearly pasting a real email/phone/address.
-  const looksLikeRealContact =
-    /@/.test(contactText) ||
-    /\d{5,}/.test(contactText) ||
-    contactText.length > 80;
   if (contactText && !looksLikeRealContact && user.phone_number) {
     const wantsOwnNumber = await classifyUseOwnNumber(contactText, user.id);
     if (wantsOwnNumber) {
@@ -2153,7 +2332,7 @@ async function handleCollectContact(user, message) {
   // So the guard only fires for edits to businessName / industry /
   // services — genuine corrections to fields collected upstream.
   const EDIT_ALLOWED_AT_CONTACT_STEP = new Set(['businessName', 'industry', 'services']);
-  if (contactText && contactText.length >= 3 && !skipWords.test(contactText) && labelCount < 2) {
+  if (contactText && contactText.length >= 3 && !isExplicitSkip && labelCount < 2) {
     const edit = detectFieldEdit(contactText);
     if (edit && EDIT_ALLOWED_AT_CONTACT_STEP.has(edit.field)) {
       const wd = { ...(user.metadata?.websiteData || {}) };
@@ -2187,7 +2366,7 @@ async function handleCollectContact(user, message) {
   }
 
   let contactData;
-  if (!contactText || contactText.length < 3 || skipWords.test(contactText)) {
+  if (!contactText || contactText.length < 3 || isExplicitSkip) {
     contactData = { contactEmail: '', contactPhone: '', contactAddress: '' };
   } else {
     contactData = parseContactFields(contactText);
@@ -2232,7 +2411,7 @@ async function handleCollectContact(user, message) {
     !contactData.contactEmail &&
     !contactData.contactPhone &&
     !contactData.contactAddress &&
-    (!contactText || contactText.length < 3 || skipWords.test(contactText))
+    (!contactText || contactText.length < 3 || isExplicitSkip)
   );
   const effectiveContact = userExplicitlySkipped ? contactData : mergedContact;
   const mergedWebsiteData = { ...prevWd, ...effectiveContact };
@@ -2597,24 +2776,17 @@ async function handleConfirm(user, message) {
     return showConfirmSummary(user, ackPrefix);
   };
 
-  // Try regex first (fast path, covers English "address to X" / "name: X" etc).
-  // If nothing matches, fall through to the LLM classifier below for natural
-  // prose in any language — "address ko Gulshan Iqbal kr do" / "cambia el
-  // email a foo@bar.com" / "change name please to MyCo".
-  //
-  // Areas MUST be matched before services, because "Service areas: tariq"
-  // otherwise fell into the services regex (the `are` in `areas` matched
-  // the `are` alternation) and dumped the area list into services.
-  const areasChange = originalText.match(/(?:service\s+)?areas?\s*(?:to|:|should be|are|change)\s*(.+)/i);
-  // Services regex now requires a word boundary + non-"area" lookahead so
-  // "Service areas" stops being mis-parsed as "Service" + "are" + "as...".
-  const servicesChange = originalText.match(/\bservices?\b(?!\s+areas?)\s*(?:to|:|should be|are|change)\s*(.+)/i);
-  const nameChange = originalText.match(/(?:business\s*)?name\s*(?:to|:|should be|is)\s*(.+)/i);
-  const industryChange = originalText.match(/industry\s*(?:to|:|should be|is)\s*(.+)/i);
-  const emailChange = originalText.match(/e-?mail\s*(?:to|:|should be|is)\s*(.+)/i);
-  const phoneChange = originalText.match(/(?:phone|tel|mobile|number)\s*(?:to|:|should be|is)\s*(.+)/i);
-  const addressChange = originalText.match(/(?:address|location|addr)\s*(?:to|:|should be|is)\s*(.+)/i);
-  const contactChange = originalText.match(/contact\s*(?:to|:|should be|is)\s*(.+)/i);
+  // Field-edit detection is LLM-only — the prior regex layer kept
+  // mis-handling natural-language phrasings (e.g. "to" inside "too",
+  // "is" inside "isle", `are` chewing into "area"). Even with word
+  // boundaries the regexes were brittle. The LLM call below sees the
+  // current website data plus the user's message and returns an array
+  // of edits in any language, with typos handled, multi-field edits
+  // supported. Cost: one LLM call per non-confirm WEB_CONFIRM turn —
+  // acceptable since `classifyConfirmIntent` above already short-
+  // circuits "yes" / "build it" / "looks good" without hitting this
+  // path.
+  const llmEdits = await detectFieldEditsLLM(originalText, wd, user.id);
 
   // Mutates wd in place for one field. Returns a short ack string like
   // "business name → *MyCo*" or null if the value wasn't applicable. Shared
@@ -2699,37 +2871,26 @@ async function handleConfirm(user, message) {
     return applyAndReshow(label.charAt(0).toUpperCase() + label.slice(1));
   };
 
-  // Collect ALL regex matches on the user's message, then apply them as a
-  // batch. Previously each matcher `return`ed early on first hit, so a user
-  // who wrote "Business name: X\nServices: Y" only got the name changed —
-  // the services line was silently dropped. Dispatch order still matters
-  // for disambiguation (areas before services so "Service areas:" doesn't
-  // fall into the services matcher).
-  const matches = [];
-  if (areasChange) matches.push({ field: 'areas', value: areasChange[1] });
-  if (nameChange) matches.push({ field: 'businessName', value: nameChange[1] });
-  if (industryChange) matches.push({ field: 'industry', value: industryChange[1] });
-  if (servicesChange) matches.push({ field: 'services', value: servicesChange[1] });
-  if (emailChange) matches.push({ field: 'email', value: emailChange[1] });
-  if (phoneChange) matches.push({ field: 'phone', value: phoneChange[1] });
-  if (addressChange) matches.push({ field: 'address', value: addressChange[1] });
-  if (contactChange) matches.push({ field: 'contact', value: contactChange[1] });
+  // Apply LLM-detected edits as a batch. Supports multi-field replies
+  // ("name: X, services: Y") in one go — same UX the prior regex
+  // pipeline gave us, but with the LLM doing the parsing instead.
+  if (llmEdits.length > 0) {
+    // Industry-to-salon edge case (side-effect flow transition): only fires
+    // when industry is the SOLE edit AND moves to a salon-y industry that
+    // needs the salon-specific sub-flow.
+    const singleIndustrySalon =
+      llmEdits.length === 1 &&
+      llmEdits[0].field === 'industry' &&
+      isSalonIndustry(llmEdits[0].value) &&
+      !wd.bookingMode &&
+      (!Array.isArray(wd.salonServices) || wd.salonServices.length === 0);
+    if (singleIndustrySalon) {
+      const r = await applyFieldEdit(llmEdits[0].field, llmEdits[0].value);
+      if (r !== null) return r;
+    }
 
-  // Industry-to-salon edge case (side-effect flow transition): only single-edit.
-  const singleIndustrySalon =
-    matches.length === 1 &&
-    matches[0].field === 'industry' &&
-    isSalonIndustry(matches[0].value) &&
-    !wd.bookingMode &&
-    (!Array.isArray(wd.salonServices) || wd.salonServices.length === 0);
-  if (singleIndustrySalon) {
-    const r = await applyFieldEdit(matches[0].field, matches[0].value);
-    if (r !== null) return r;
-  }
-
-  if (matches.length > 0) {
     const labels = [];
-    for (const m of matches) {
+    for (const m of llmEdits) {
       const label = mutateWdForField(m.field, m.value);
       if (label) labels.push(label);
     }
@@ -2741,49 +2902,6 @@ async function handleConfirm(user, message) {
       user.metadata = { ...(user.metadata || {}), websiteData: wd };
       return showConfirmSummary(user, ackPrefix);
     }
-  }
-
-  // Regex didn't match. Try the LLM — catches natural prose in any language:
-  // "address ko Gulshan Iqbal kr do" (Urdu), "cambia el email a X" (Spanish),
-  // "change the name please to MyCo", etc.
-  try {
-    const prompt = `The user is reviewing a website-setup summary and may want to change ONE specific field. Identify which field (if any) and the exact new value they provided.
-
-Fields: businessName, industry, services, areas, email, phone, address, contact
-
-Rules:
-- Extract only if the user is clearly asking to change/update/set a field.
-- Understand any language: English, Roman Urdu, Urdu, Hindi, Spanish, Arabic, etc.
-- Preserve emails / phone numbers / URLs / addresses exactly as written.
-- Distinguish "services" (what the business DOES — e.g. plumbing, haircuts) from "areas" (where it operates — neighborhoods or cities). "Service areas" = areas, NOT services.
-- For areas with multiple items, keep the whole comma/and-separated list as the value.
-- If the user is NOT asking to change a field (e.g. they're saying "yes", "looks good", "cancel", a question, or something unrelated), return {"field": null}.
-
-User said: "${originalText}"
-
-Return JSON ONLY. Examples:
-{"field": "address", "value": "Gulshan Iqbal, Karachi"}
-{"field": "businessName", "value": "MyCo"}
-{"field": "email", "value": "test@example.com"}
-{"field": "services", "value": "Web design, SEO, Branding"}
-{"field": "areas", "value": "Tariq Road, PECHS"}
-{"field": null}`;
-
-    const response = await generateResponse(
-      prompt,
-      [{ role: 'user', content: originalText }],
-      { userId: user.id, operation: 'confirm_edit_classify' }
-    );
-    const m = (response || '').match(/\{[\s\S]*?\}/);
-    if (m) {
-      const parsed = JSON.parse(m[0]);
-      if (parsed.field && parsed.value) {
-        const r = await applyFieldEdit(parsed.field, parsed.value);
-        if (r !== null) return r;
-      }
-    }
-  } catch (err) {
-    logger.warn(`[WEBDEV-CONFIRM] Edit-intent LLM classify failed: ${err.message}`);
   }
 
   // Phase 12/13: before falling back to the edit-hint, check if the user
@@ -2978,6 +3096,22 @@ async function generateWebsite(user) {
     }
     const paymentLinkUrl = bannerPaymentUrl; // backwards-compat alias for the banner
 
+    // Resolve the user's chat language and pass it explicitly to the
+    // generator. Without this, the website-content prompt's "same
+    // language as the user" instruction has nothing to anchor on (the
+    // generator only sees the structured business-data block, not the
+    // conversation history) — the LLM has been observed picking French
+    // for businesses with words like "salon" in the name even when the
+    // entire WhatsApp chat was in English. Best-effort: failure falls
+    // back to 'english' inside resolveLanguage.
+    let userLanguage = 'english';
+    try {
+      const { resolveLanguage } = require('../../utils/localizer');
+      userLanguage = await resolveLanguage(freshUser, null);
+    } catch (err) {
+      logger.warn(`[WEBGEN] Language resolution failed, defaulting to english: ${err.message}`);
+    }
+
     // Banner shows the same dollar figure the chat CTA charges. At initial
     // build there's no discount yet — originalAmount matches activationAmount
     // and discountPct is 0 until the 22h discount job fires.
@@ -2985,6 +3119,7 @@ async function generateWebsite(user) {
       templateId,
       siteId,
       userId: user.id,
+      userLanguage,
       paymentStatus: 'preview',
       paymentLinkUrl,
       activationAmount: activationTotal,
@@ -4938,4 +5073,9 @@ module.exports = {
   startSalonFlow,
   startWebdevFlow,
   showConfirmSummary,
+  // Exposed so router's intent classifier can fast-path paid-claim
+  // phrasings as 'answer' — otherwise the LLM classifier sometimes
+  // reads them as 'menu' and routes the user to service-selection
+  // instead of the paid-claim handler inside handleRevisions.
+  PAID_CLAIM_RX,
 };

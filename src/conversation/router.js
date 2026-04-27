@@ -85,7 +85,7 @@ function identifyProduct(adBody) {
 const { handleWelcome } = require('./handlers/welcome');
 const { handleServiceSelection } = require('./handlers/serviceSelection');
 const { handleSeoAudit } = require('./handlers/seoAudit');
-const { handleWebDev, handleGenerationFailed } = require('./handlers/webDev');
+const { handleWebDev, handleGenerationFailed, PAID_CLAIM_RX } = require('./handlers/webDev');
 const { handleAppDev } = require('./handlers/appDev');
 const { handleMarketing } = require('./handlers/marketing');
 const { handleGeneralChat } = require('./handlers/generalChat');
@@ -395,7 +395,7 @@ Return ONLY one word: pivot or continue.`;
   }
 }
 
-async function classifyIntent(state, text, userId) {
+async function classifyIntent(state, text, userId, opts = {}) {
   const currentQuestion = STATE_QUESTION[state];
   if (!currentQuestion) return 'answer';
 
@@ -420,9 +420,25 @@ async function classifyIntent(state, text, userId) {
   // misroutes them as "question" or "exit" and the user gets dumped out of
   // their flow mid-step.
   if (isDelegation(t)) return 'answer';
+  // Paid-claim phrasings ("made the payment", "i paid", "payment sent"
+  // etc.) are ALWAYS an answer — the user is talking about Stripe, not
+  // asking for the menu. Without this fast-path the LLM classifier has
+  // been known to read "made the payment" as 'menu' because of its
+  // "new subject, new service" pattern match, which dumps the user
+  // back into SERVICE_SELECTION instead of letting the handleRevisions
+  // paid-claim handler poll Stripe.
+  if (PAID_CLAIM_RX && PAID_CLAIM_RX.test(t)) return 'answer';
 
   try {
-    const prompt = INTENT_CLASSIFIER_PROMPT.replace('{{CURRENT_QUESTION}}', currentQuestion);
+    // Recent context lets the LLM disambiguate echoes ("make a booking
+    // system" right after the bot promised one) from real flow-switches.
+    // Empty placeholder keeps the prompt clean when no context available.
+    const recentContextBlock = opts.recentContext
+      ? `\nRECENT CONVERSATION (so you can disambiguate echoes from switches):\n${opts.recentContext}\n`
+      : '';
+    const prompt = INTENT_CLASSIFIER_PROMPT
+      .replace('{{CURRENT_QUESTION}}', currentQuestion)
+      .replace('{{RECENT_CONTEXT}}', recentContextBlock);
     const response = await generateResponse(prompt, [{ role: 'user', content: text }], {
       userId,
       operation: 'intent_classifier',
@@ -1267,7 +1283,29 @@ async function _routeMessage(message) {
     message.type === 'text' &&
     COLLECTION_STATES.has(user.state)
   ) {
-    const intent = await classifyIntent(user.state, text, user.id);
+    // Pull the last 2-3 assistant messages so the classifier can tell an
+    // echo ("make a booking system" right after we promised one) from a
+    // real flow-switch. Best-effort — failure here just means the
+    // classifier runs without context (its prior behavior).
+    let recentContext = '';
+    try {
+      const { getConversationHistory } = require('../db/conversations');
+      const hist = await getConversationHistory(user.id, 6, {
+        afterTimestamp: user.metadata?.lastResetAt || null,
+      });
+      const recentAssistant = (hist || [])
+        .filter((m) => m.role === 'assistant')
+        .slice(-3);
+      if (recentAssistant.length) {
+        recentContext = recentAssistant
+          .map((m) => `Bot just said: "${String(m.message_text || '').replace(/\s+/g, ' ').slice(0, 220)}"`)
+          .join('\n');
+      }
+    } catch (err) {
+      logger.warn(`[INTENT-CTX] Recent-context fetch failed: ${err.message}`);
+    }
+
+    const intent = await classifyIntent(user.state, text, user.id, { recentContext });
     logger.debug(`Intent classified for ${from} in state ${user.state}: ${intent}`);
 
     if (intent === 'menu' || intent === 'exit') {

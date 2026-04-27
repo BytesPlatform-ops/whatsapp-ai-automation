@@ -125,6 +125,20 @@ async function generateWebsiteContent(businessData, extras = {}) {
   const effectiveServicesList = hvacMode ? hvacSeededServices : services;
   const effectiveHasServices = Array.isArray(effectiveServicesList) && effectiveServicesList.length > 0;
 
+  // Language directive for the LLM. Without an explicit anchor here,
+  // the WEBSITE_CONTENT_PROMPT's "same language as user" instruction
+  // has nothing to detect from — the LLM only sees a structured
+  // business-data block and has been observed free-associating to
+  // French / Spanish based on industry keywords (e.g. "salon"). The
+  // caller (generateWebsite in webDev.js) resolves the user's actual
+  // chat language via the localizer and passes it via extras.
+  // Defaults to English when not provided so older callers don't
+  // regress to the buggy "guess the language" behavior.
+  const userLanguage = String(extras.userLanguage || 'english').trim().toLowerCase();
+  const languageDirective = userLanguage === 'english'
+    ? '\n\nLANGUAGE: Write ALL website copy in English. Even if the business name or industry contains words from another language (e.g. "Salon" is a French word but commonly used in English business names), the user has been chatting in ENGLISH — write the entire site in ENGLISH.'
+    : `\n\nLANGUAGE: Write ALL website copy in ${userLanguage}. The user has been chatting in ${userLanguage} so all hero copy, headings, body paragraphs, service descriptions, FAQs, testimonials, CTAs, and labels MUST be written in ${userLanguage}. Proper nouns (business name, city names) stay as given. If the language label starts with "roman-" (e.g. roman-urdu), write in Latin/Roman script — do NOT use the native script.`;
+
   let prompt;
   let systemPrompt;
   let promptLabel;
@@ -144,7 +158,7 @@ ${contactEmail ? `Email: ${contactEmail}` : ''}
 ${contactPhone ? `Phone: ${contactPhone}` : ''}
 ${contactAddress ? `Address: ${contactAddress}` : ''}
 
-Generate ${tradeLabelUpper} website copy. Return ONLY valid JSON matching the schema in the system prompt.`;
+Generate ${tradeLabelUpper} website copy. Return ONLY valid JSON matching the schema in the system prompt.${languageDirective}`;
   } else if (realEstateMode) {
     promptLabel = 'real-estate';
     systemPrompt = REAL_ESTATE_CONTENT_PROMPT;
@@ -164,7 +178,7 @@ ${contactPhone ? `Phone: ${contactPhone}` : ''}
 ${contactAddress ? `Address: ${contactAddress}` : ''}
 ${hasServices ? `How I help: ${services.join(', ')}` : ''}
 
-Generate real-estate-agent website copy. Return ONLY valid JSON matching the schema in the system prompt.`;
+Generate real-estate-agent website copy. Return ONLY valid JSON matching the schema in the system prompt.${languageDirective}`;
   } else {
     promptLabel = 'generic';
     systemPrompt = WEBSITE_CONTENT_PROMPT;
@@ -176,7 +190,7 @@ ${contactEmail ? `Email: ${contactEmail}` : ''}
 ${contactPhone ? `Phone: ${contactPhone}` : ''}
 ${contactAddress ? `Address: ${contactAddress}` : ''}
 
-Generate compelling website copy for this business. Return ONLY valid JSON.`;
+Generate compelling website copy for this business. Return ONLY valid JSON.${languageDirective}`;
   }
 
   logger.info(`[WEBGEN] Sending ${promptLabel} content prompt to LLM for "${businessName}"`);

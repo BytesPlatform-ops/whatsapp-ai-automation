@@ -174,9 +174,21 @@ async function buildConversationExcerpt(userId, n = 8, afterTimestamp = null) {
  *     mid-stack when Phase 12 queue will start another service next)
  */
 async function scheduleDeliveryPrompt(user, flow) {
-  if (!user?.id) return;
-  if (isTester(user)) return;
-  if (user.metadata?.humanTakeover) return;
+  if (!user?.id) {
+    logger.warn(`[FEEDBACK] scheduleDeliveryPrompt called without user.id — skipping`);
+    return;
+  }
+  if (isTester(user)) {
+    logger.info(
+      `[FEEDBACK] Skipping prompt for ${user.phone_number} (flow=${flow}) — phone matches TESTER_PHONES. ` +
+        `If you changed .env, restart the Node process — tester list is snapshotted at startup.`
+    );
+    return;
+  }
+  if (user.metadata?.humanTakeover) {
+    logger.info(`[FEEDBACK] Skipping prompt for ${user.phone_number} (flow=${flow}) — humanTakeover is active`);
+    return;
+  }
 
   // Queue-aware: if the user has more services queued, don't fire the
   // prompt yet — the next service will start any second. Each flow
@@ -184,9 +196,13 @@ async function scheduleDeliveryPrompt(user, flow) {
   // an empty queue and fire.
   const queue = Array.isArray(user.metadata?.serviceQueue) ? user.metadata.serviceQueue : [];
   if (queue.length > 0) {
-    logger.debug(`[FEEDBACK] Skipping prompt for ${user.phone_number} — ${queue.length} more queued service(s)`);
+    logger.info(
+      `[FEEDBACK] Skipping prompt for ${user.phone_number} (flow=${flow}) — ${queue.length} more queued service(s): ` +
+        queue.map((q) => q.service || q).join(', ')
+    );
     return;
   }
+  logger.info(`[FEEDBACK] Scheduling prompt for ${user.phone_number} (flow=${flow}) in ${DELIVERY_PROMPT_DELAY_MS / 1000}s`);
 
   // Capture channel context NOW so the delayed send still routes to
   // the right WhatsApp business number. setTimeout loses async

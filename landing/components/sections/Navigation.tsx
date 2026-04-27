@@ -32,7 +32,7 @@ export function Navigation() {
       }`}
     >
       <div className="container-page flex h-20 items-center justify-between">
-        <a href="#" className="flex items-center text-white" aria-label={siteConfig.brand}>
+        <a href="/" className="flex items-center text-white" aria-label={siteConfig.brand}>
           <img
             src="/pixie-logo-white.png"
             alt={siteConfig.brand}

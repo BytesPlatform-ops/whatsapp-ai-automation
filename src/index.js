@@ -13,6 +13,7 @@ const chatbotPageRoutes = require('./chatbot/pages/routes');
 const leadRoutes = require('./leads/routes');
 const stripeWebhookRoutes = require('./payments/stripeWebhook');
 const paymentRedirectRoutes = require('./payments/redirectRoute');
+const { router: privacyRoutes } = require('./privacy/routes');
 const { startChatbotScheduler } = require('./chatbot/jobs/scheduler');
 const { startInstagramTokenRefreshScheduler } = require('./jobs/instagramTokenRefresh');
 const { startUpsellScheduler } = require('./jobs/upsellScheduler');
@@ -41,9 +42,11 @@ const app = express();
 // Trust the first proxy (ngrok / reverse proxy) so rate-limiter reads the real IP
 app.set('trust proxy', 1);
 
-// Security middleware (skip helmet on /admin — it uses Tailwind CDN + inline scripts)
+// Security middleware (skip helmet on /admin — it uses Tailwind CDN + inline scripts;
+// also skip /privacy because the static policy page uses an inline <style> block
+// that helmet's default CSP would otherwise block).
 app.use((req, res, next) => {
-  if (req.path === '/' || req.path.startsWith('/_next/') || req.path.startsWith('/admin') || req.path === '/widget.js' || req.path.startsWith('/chat/') || req.path.startsWith('/demo/')) return next();
+  if (req.path === '/' || req.path.startsWith('/_next/') || req.path.startsWith('/admin') || req.path === '/widget.js' || req.path.startsWith('/chat/') || req.path.startsWith('/demo/') || req.path === '/privacy') return next();
   helmet()(req, res, next);
 });
 
@@ -105,6 +108,11 @@ app.get('/debug/outbound-ip', async (_req, res) => {
 // Webhook routes
 app.use('/', webhookRoutes);
 app.use('/', calendlyRoutes);
+
+// Privacy policy page (GET /privacy) — public, linked from the
+// first-time WhatsApp greeting. Mounted before /admin so it's
+// reachable without auth.
+app.use('/', privacyRoutes);
 
 // Payment redirect — intercepts activation-banner clicks so paid users
 // see an "already paid" page instead of being asked to pay again.

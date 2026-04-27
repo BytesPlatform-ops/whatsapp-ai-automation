@@ -25,6 +25,7 @@ const { localize } = require('../../utils/localizer');
  */
 function buildKnownContext(user) {
   const wd = user?.metadata?.websiteData || {};
+  const md = user?.metadata || {};
   const entries = [];
   if (wd.businessName) entries.push(`- Business name: ${wd.businessName}`);
   if (wd.industry) entries.push(`- Industry: ${wd.industry}`);
@@ -36,7 +37,36 @@ function buildKnownContext(user) {
   if (wd.contactPhone) entries.push(`- Phone: ${wd.contactPhone}`);
   if (wd.contactAddress) entries.push(`- Address: ${wd.contactAddress}`);
 
-  if (!entries.length) return '';
+  if (!entries.length && !md.paymentConfirmed) return '';
+
+  // Surface delivered/paid state so the LLM stops re-pitching the same
+  // service on a returning post-payment user. Without this, it has been
+  // observed responding to a generic returning "hi" with "love it! i'll
+  // activate your site now and send the live link..." — a hallucinated
+  // flow we don't even run.
+  let deliveredBlock = '';
+  if (md.paymentConfirmed) {
+    const bits = [];
+    if (md.lastCompletedProjectType) bits.push(`Project type: ${md.lastCompletedProjectType}`);
+    if (md.lastBusinessName) bits.push(`Business: ${md.lastBusinessName}`);
+    if (md.paidAt) bits.push(`Paid at: ${md.paidAt}`);
+    if (md.lastPaymentAmount) bits.push(`Amount: $${Math.round(md.lastPaymentAmount / 100)}`);
+    deliveredBlock = `\n\n---\n\n## ⚠️ PROJECT ALREADY DELIVERED — DO NOT RE-PITCH
+This customer has ALREADY paid for and received their project. The site is live, the banner is gone, the work is done.
+${bits.map((b) => `- ${b}`).join('\n')}
+
+Hard rules for this turn:
+- Do NOT say things like "I'll activate your site now", "I'll send the live link", or any phrasing that implies the project is still being delivered.
+- Do NOT ask for any details that would re-trigger the same flow they already completed.
+- Do NOT emit [TRIGGER_WEBSITE_DEMO] / [TRIGGER_LOGO_MAKER] / [TRIGGER_AD_GENERATOR] / [TRIGGER_CHATBOT_DEMO] for the SAME service they already paid for.
+- DO acknowledge the delivered project briefly if it's natural to do so.
+- DO offer a complementary service (logo, ad, SEO audit, chatbot — but NOT the one they already bought) if they seem open to more work.
+- DO answer questions or accept tweak requests for the existing project.
+---
+`;
+  }
+
+  if (!entries.length) return deliveredBlock;
 
   return `\n\n---\n\n## KNOWN FACTS ABOUT THIS CUSTOMER
 The user has already shared these details in-conversation. Do NOT re-ask for any of them. Treat them as authoritative for triggering flows:
@@ -44,7 +74,7 @@ ${entries.join('\n')}
 
 When emitting [TRIGGER_WEBSITE_DEMO], fill the structured tag from these facts so the wizard skips the corresponding steps.
 ---
-`;
+${deliveredBlock}`;
 }
 
 function extractLeadBrief(text) {
@@ -123,6 +153,35 @@ async function handleSalesBot(user, message) {
   const history = await getConversationHistory(user.id, 40, {
     afterTimestamp: user.metadata?.lastResetAt || null,
   });
+
+  // GDPR / first-contact disclosure: send the privacy notice once per
+  // user, ever. We track a `privacyNoticeShownAt` flag in metadata so
+  // /reset (which DOES clear most metadata but intentionally preserves
+  // a few fields, see router.js#L1004-L1009) leaves this in place too —
+  // a returning user who has already been disclosed to doesn't need
+  // a fresh disclosure each time they restart. We can't use
+  // `history.length === 0` because the inbound message has already
+  // been logged by the router by the time we reach here.
+  //
+  // Existing-user guard: anyone who has been here before this code
+  // shipped has `privacyNoticeShownAt` unset AND meaningful prior
+  // history. Without the guard they'd get a surprise privacy notice
+  // mid-conversation (or worse, post-delivery). Treat them as already
+  // disclosed and stamp the flag silently so this branch doesn't
+  // re-fire on every following message either. Signals that mark a
+  // user as not-first-contact: more than the just-logged inbound in
+  // post-reset history, OR any sign of completed work / lifetime
+  // engagement.
+  const isLikelyFirstEverContact =
+    history.length <= 1 &&
+    !user.metadata?.lastCompletedProjectType &&
+    !user.metadata?.lastBusinessName &&
+    !user.metadata?.paymentConfirmed &&
+    (user.metadata?.userMessageCount || 0) <= 1;
+  const shouldSendPrivacyNotice =
+    !user.metadata?.privacyNoticeShownAt && isLikelyFirstEverContact;
+  const shouldSilentlyMarkAsDisclosed =
+    !user.metadata?.privacyNoticeShownAt && !isLikelyFirstEverContact;
 
   // First message ever - let the LLM generate the greeting so it matches
   // the user's language and tone from their very first message.
@@ -469,6 +528,46 @@ async function handleSalesBot(user, message) {
     await logMessage(user.id, formatted, 'assistant');
   }
 
+  // GDPR / first-contact disclosure: send a one-line privacy notice as
+  // a follow-up message on the user's very first turn. Kept separate
+  // from the LLM-generated greeting so the wording is deterministic
+  // and the link can never be paraphrased away. Sent regardless of
+  // skipLlmResponse — even if a demo trigger took over the greeting,
+  // first-contact still deserves the disclosure. Idempotent via the
+  // privacyNoticeShownAt flag persisted below — never fires twice for
+  // the same user, even across /reset.
+  if (shouldSendPrivacyNotice) {
+    try {
+      const { getPrivacyUrl } = require('../../privacy/routes');
+      const url = getPrivacyUrl();
+      if (url) {
+        const notice = `_By the way — I keep our chat and any details you share so I can help with your project. Full privacy notice: ${url}_`;
+        await sendTextMessage(user.phone_number, notice);
+        await logMessage(user.id, notice, 'assistant');
+        const shownAt = new Date().toISOString();
+        await updateUserMetadata(user.id, { privacyNoticeShownAt: shownAt });
+        user.metadata = { ...(user.metadata || {}), privacyNoticeShownAt: shownAt };
+      } else {
+        logger.warn('[PRIVACY] No PRIVACY_POLICY_URL or PUBLIC_API_BASE_URL configured — skipping first-contact notice');
+      }
+    } catch (err) {
+      // Never let the privacy notice break the greeting — log and move on.
+      logger.warn(`[PRIVACY] First-contact notice send failed: ${err.message}`);
+    }
+  } else if (shouldSilentlyMarkAsDisclosed) {
+    // Existing user with no flag yet — backfill silently so future
+    // turns short-circuit on `!user.metadata?.privacyNoticeShownAt`
+    // instead of re-running this gate every message.
+    try {
+      const shownAt = new Date().toISOString();
+      await updateUserMetadata(user.id, { privacyNoticeShownAt: shownAt });
+      user.metadata = { ...(user.metadata || {}), privacyNoticeShownAt: shownAt };
+      logger.info(`[PRIVACY] Backfilled privacyNoticeShownAt for existing user ${user.phone_number} (no notice sent — pre-existing relationship)`);
+    } catch (err) {
+      logger.warn(`[PRIVACY] Backfill flag failed: ${err.message}`);
+    }
+  }
+
   // Send the ByteScart pitch + CTA button for ecommerce leads
   if (bytescartTrigger && !user.metadata?.bytescartPitched) {
     const pitch =
@@ -708,6 +807,31 @@ async function handleSalesBot(user, message) {
     // instagram) that isn't covered by nextMissingWebDevState's generic
     // ladder. Route to startSalonFlow so those questions get asked.
     if (industry && isSalonIndustry(industry)) {
+      // Services must be collected BEFORE entering the salon sub-flow.
+      // The salon flow's hours step assumes a services list exists, and
+      // when missing it silently skips SALON_SERVICE_DURATIONS via
+      // finishSalonFlow — shipping a salon site with no services page.
+      // The normal ladder (handleCollectServices) calls startSalonFlow
+      // itself once services are saved, so detouring through
+      // WEB_COLLECT_SERVICES here is the same path users take when they
+      // answer industry first and services next.
+      const haveServices = Array.isArray(services) && services.length > 0;
+      if (!haveServices) {
+        await sendTextMessage(
+          user.phone_number,
+          await localize(
+            `Nice, *${businessName}* — let's get you set up. First, what services do you offer? List them separated by commas (e.g. *waxing, facials, nails, haircuts*).`,
+            user,
+            text
+          )
+        );
+        await logMessage(
+          user.id,
+          'Website demo → salon flow (need services first; deferred startSalonFlow)',
+          'assistant'
+        );
+        return STATES.WEB_COLLECT_SERVICES;
+      }
       await sendTextMessage(
         user.phone_number,
         await localize(

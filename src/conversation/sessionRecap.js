@@ -94,6 +94,22 @@ function buildContextLines(user) {
   if (md.seoTopFix) lines.push(`SEO top fix flagged: ${md.seoTopFix}`);
   if (md.adSource) lines.push(`Arrived from ad: ${md.adSource}`);
   if (md.previewUrl) lines.push(`Preview site already generated: ${md.previewUrl}`);
+
+  // Surface PAID / DELIVERED state so the LLM doesn't recap as if the
+  // project is still in progress. Without these the recap would happily
+  // invent a fictitious in-flight task ("we were lining up gigs") just
+  // because the business industry sounds adjacent — which it has done
+  // when a music-business owner returned post-payment.
+  if (md.paymentConfirmed) {
+    const paidBits = [];
+    if (md.lastCompletedProjectType) paidBits.push(`type=${md.lastCompletedProjectType}`);
+    if (md.lastBusinessName) paidBits.push(`for=${md.lastBusinessName}`);
+    if (md.paidAt) paidBits.push(`paid_at=${md.paidAt}`);
+    lines.push(
+      `*PROJECT ALREADY DELIVERED & PAID*${paidBits.length ? ' (' + paidBits.join(', ') + ')' : ''} — site is live and the activation banner is gone. Do NOT recap as if work is in progress; do NOT pitch the same service again.`
+    );
+  }
+
   if (md.conversationSummary) {
     // Keep it short — the summary can be multiple paragraphs.
     lines.push(`Recent conversation summary: ${String(md.conversationSummary).slice(0, 400)}`);
@@ -106,8 +122,16 @@ function buildContextLines(user) {
  * Build the next-step hint from the current state. Used as an extra nudge
  * inside the LLM prompt so the recap reliably names what comes next
  * instead of just describing the past.
+ *
+ * Special-cases SALES_CHAT for users with a delivered project — the
+ * default "continue the sales conversation naturally" hint plus a
+ * tempting business name (Ansh Singer / Music) was enough to make the
+ * LLM hallucinate an unrelated in-flight flow on returning customers.
  */
-function nextStepHint(state) {
+function nextStepHint(state, user) {
+  if (state === STATES.SALES_CHAT && user?.metadata?.paymentConfirmed) {
+    return 'next step: acknowledge the delivered project, then ask if they want a tweak to the existing site, a different service entirely, or just have a question. Do NOT pitch the same service again.';
+  }
   const hints = {
     [STATES.WEB_COLLECT_NAME]: 'next step: ask for the business name',
     [STATES.WEB_COLLECT_EMAIL]: 'next step: ask for contact email',
@@ -207,7 +231,7 @@ Rules:
 
 Context about this user:
 ${contextLines}
-${nextStepHint(user.state)}
+${nextStepHint(user.state, user)}
 
 Return just the recap text. No quotes, no preamble.`;
 

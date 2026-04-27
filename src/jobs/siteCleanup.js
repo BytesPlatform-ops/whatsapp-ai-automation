@@ -15,12 +15,14 @@
  * customer with three businesses on one phone who pays for only one
  * gets exactly one site spared; the other two are eligible for cleanup.
  *
- * A short race-window safeguard also runs before any delete: if this user
- * has a 'paid' payment row in the last 10 minutes, we assume the Stripe
- * webhook's post-processing (redeployAsPaid + site_data write) may still
- * be mid-flight and skip the site for this pass. Covers the rare case
- * where a user finishes checkout at t=21:59 and cleanup fires at t=22:00
- * before redeployAsPaid has finished writing the 'paid' flag.
+ * Payment-row safeguard also runs before any delete: if the user has any
+ * 'paid' payment with paid_at >= this site's created_at, we skip. That
+ * cleanly excludes payments for OTHER, prior sites (their paid_at is
+ * before this site existed) while protecting any paid site whose
+ * site_data.paymentStatus failed to flip to 'paid' — e.g. when the
+ * fire-and-forget redeployAsPaid hit a Netlify outage and never wrote
+ * the in-row flag. Without this safeguard a paid customer's site could
+ * silently get deleted at the 23h mark.
  *
  * Previously this job also redeployed a "Preview Only" watermark after
  * an hour — removed because the activation banner (injected into every
@@ -35,7 +37,6 @@ const { logger } = require('../utils/logger');
 
 const NETLIFY_API = 'https://api.netlify.com/api/v1';
 const DELETE_AFTER_HOURS = 23;
-const RECENT_PAYMENT_WINDOW_MS = 10 * 60 * 1000;
 
 async function runSiteCleanup() {
   if (!env.netlify.token) return;
@@ -61,19 +62,28 @@ async function runSiteCleanup() {
       // Per-site check: this specific site is in paid state.
       if (site.site_data?.paymentStatus === 'paid') continue;
 
-      // Race-window safeguard — if this user just paid, redeployAsPaid
-      // may still be writing the 'paid' flag onto this site. One-query
-      // check: any 'paid' payment in the last 10 min for this user.
-      const sinceIso = new Date(now - RECENT_PAYMENT_WINDOW_MS).toISOString();
-      const { data: recentPaid } = await supabase
+      // Payment-row safeguard — second line of defense if redeployAsPaid
+      // never wrote site_data.paymentStatus='paid' (Netlify outage,
+      // token rotation, etc.). Look for any paid payment for this user
+      // with paid_at >= this site's created_at; if one exists, the
+      // payment is either for this site or for a later site, but a
+      // *prior* paid site would have been created BEFORE its paid_at,
+      // so the timestamp comparison cleanly excludes that case.
+      // Replaces the prior 10-minute race window with a broader check
+      // so a paid customer's site is never deleted just because the
+      // banner-removal redeploy failed to write the in-row flag.
+      const { data: paidForThisOrLater } = await supabase
         .from('payments')
-        .select('id')
+        .select('id, paid_at')
         .eq('user_id', site.user_id)
         .eq('status', 'paid')
-        .gte('paid_at', sinceIso)
+        .gte('paid_at', site.created_at)
         .limit(1);
-      if (recentPaid && recentPaid.length > 0) {
-        logger.info(`[CLEANUP] Skipping site ${site.id} — user has a paid payment in the last 10min (webhook may be in flight)`);
+      if (paidForThisOrLater && paidForThisOrLater.length > 0) {
+        logger.info(
+          `[CLEANUP] Skipping site ${site.id} — user has a paid payment ` +
+            `at ${paidForThisOrLater[0].paid_at} ≥ site created_at ${site.created_at}`
+        );
         continue;
       }
 

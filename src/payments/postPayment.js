@@ -355,6 +355,24 @@ async function handleConfirmedPayment(payment, paidSession) {
       // during WEB_DOMAIN_CHOICE). Just confirm — do NOT re-offer a domain.
       // In the new flow, domain selection is always resolved pre-preview,
       // so asking again here would be redundant and dilute the close.
+
+      // Move the row to a terminal status so the 23h siteCleanup query
+      // doesn't include it. Domain branches already do this implicitly
+      // by transitioning to 'domain_setup_complete' / 'domain_dns_pending';
+      // the no-domain branch was previously the only paid path that
+      // left status='approved', leaving the row in the cleanup query and
+      // protected only by the (fire-and-forget) redeployAsPaid writing
+      // site_data.paymentStatus='paid'. Setting the column directly is
+      // belt-and-suspenders.
+      try {
+        const paidSite = await getLatestSite(p.user_id);
+        if (paidSite?.id) {
+          await updateSite(paidSite.id, { status: 'paid' });
+        }
+      } catch (err) {
+        logger.warn(`[PAY] Failed to mark no-domain site status='paid': ${err.message}`);
+      }
+
       await runWithContext({ channel: targetChannel, phoneNumberId: targetVia }, () => sendTextMessage(
         targetPhone,
         `Payment of *${amountDisplay}* received! 🎉\n\n` +

@@ -302,11 +302,17 @@ Return ONLY valid JSON. No explanation outside the JSON.`;
 const INTENT_CLASSIFIER_PROMPT = `You are a WhatsApp chatbot assistant. The user is in the middle of a guided flow and has sent a free-text message. Determine their intent.
 
 The bot is currently asking: "{{CURRENT_QUESTION}}"
-
+{{RECENT_CONTEXT}}
 Classify the user's message into ONE of these intents:
 - "answer"  - The message is a genuine answer to the question being asked, OR the user is telling the bot to figure it out / use context / derive it from previous messages. Treat these as answers - the handler will deal with inferring the value.
 - "question"  - The user is asking something clearly unrelated (about services, pricing, other topics)
-- "menu"  - Pick this when EITHER (A) the user is flow-switching to a different Pixie service ("forget the website, do a logo instead", "scrap this, can you do ads?", "wait, can you also build a chatbot?"), OR (B) the user is explicitly asking to SKIP the current step / advance to the next queued item ("nevermind, skip this, lets go with the next one", "forget this, do the rest", "skip this, whats next", "move on to the next one"). Case (A) requires a clear VERB OF INTENT ("do", "build", "make", "create", "switch", "forget", "scrap") directed at a different service. Case (B) requires an explicit skip/next phrase ("skip this", "nevermind skip", "forget this + rest/next/others", "move on", "next one", "continue with the next"). Merely containing a trade word (plumbing, dental, bakery, salon, etc.) as part of an ANSWER is NOT a flow-switch — business names, industries, and service descriptions routinely include those words. "Hasnain Plumbing" when asked for a business name is an ANSWER, not a menu request.
+- "menu"  - Pick this ONLY when EITHER (A) the user is EXPLICITLY flow-switching to a different Pixie service ("forget the website, do a logo instead", "scrap this, can you do ads?", "actually let's do a chatbot", "instead of this, build me an app"), OR (B) the user is EXPLICITLY asking to advance to the NEXT QUEUED service ("forget this, do the rest", "skip this, whats next", "move on to the next one", "lets go with the next one"). Case (A) requires an EXPLICIT SWITCH SIGNAL — words like "instead", "actually", "wait", "forget", "scrap", "scrap this", "drop this", "nevermind" — combined with a different service name. Case (B) requires an explicit advance-the-queue phrase ("rest", "next one", "others", "remaining", "continue with the next"). Merely containing a trade word (plumbing, dental, bakery, salon, etc.) as part of an ANSWER is NOT a flow-switch — business names, industries, and service descriptions routinely include those words. "Hasnain Plumbing" when asked for a business name is an ANSWER, not a menu request.
+
+  CRITICAL: a bare imperative like "make a booking system", "build me a website", "create a logo" — WITHOUT a switch signal ("instead"/"actually"/"forget") — is NOT a menu intent. Especially when RECENT CONTEXT shows the bot just OFFERED that exact thing. The user is echoing / confirming, not switching flows. Default to ANSWER in these cases.
+
+  CRITICAL: a BARE skip ("skip", "skip it", "skip this", "i want to skip", "let's skip", "just skip", "please skip") with no following "next/rest/others/queue" phrase is an ANSWER, NOT a menu. The user is skipping the CURRENT field (which the handler accepts), not switching flows. Only escalate to menu if the message ALSO names another service or explicitly says "next/rest/others".
+
+  CRITICAL: if RECENT CONTEXT is provided and the user's message echoes / confirms / restates something the bot just said or offered, classify as ANSWER. The user is replying in context, not switching flows.
 - "exit"  - The user wants to stop the current flow entirely
 - "objection"  - The user is pushing back on the PROCESS ITSELF — expressing doubt about value, price, trust, or stalling ("too expensive", "I'll just use Wix", "not sure this is worth it", "let me think about it"). This is NOT an answer to the current question; it's a concern that needs to be addressed before the flow can continue. Only use this when the pushback is clearly about buying/continuing, not when they're complaining about one specific ask.
 
@@ -332,6 +338,16 @@ Examples:
 - Current question: "What contact info do you want on the site?" / Message: "forget this, do the rest" → {"intent": "menu"}
 - Current question: "What are your brand colors?" / Message: "skip this, whats next" → {"intent": "menu"}
 - Current question: "What industry are you in?" / Message: "move on to the next" → {"intent": "menu"}
+- Current question: "What's your email address? (or reply skip)" / Message: "skip" → {"intent": "answer"}
+- Current question: "What's your email address? (or reply skip)" / Message: "skip it" → {"intent": "answer"}
+- Current question: "What's your email address? (or reply skip)" / Message: "i want to skip it" → {"intent": "answer"}
+- Current question: "What's your email address? (or reply skip)" / Message: "let's skip this" → {"intent": "answer"}
+- Current question: "What's your Instagram handle? (or reply skip)" / Message: "just skip" → {"intent": "answer"}
+- Current question: "What are your brand colors?" / Message: "skip this one" → {"intent": "answer"}
+- Current question: "What's your Instagram handle? (or reply skip)" / Recent context: bot said "we'll build you a booking system" / Message: "make a booking system" → {"intent": "answer"}  (echo/confirmation, NOT a flow switch)
+- Current question: "What's your Instagram handle? (or reply skip)" / Recent context: bot said "we'll build you a booking system" / Message: "build the booking system" → {"intent": "answer"}  (echo/confirmation)
+- Current question: "What's your Instagram handle? (or reply skip)" / Message: "actually scrap this, build me an app instead" → {"intent": "menu"}  (explicit switch signal: "scrap this", "instead")
+- Current question: "What services do you offer?" / Message: "make a chatbot for me instead" → {"intent": "menu"}  (explicit switch signal: "instead")
 - Current question: "What industry are you in?" / Message: "figure it out from the idea" → {"intent": "answer"}
 - Current question: "What industry are you in?" / Message: "I can't figure out, you tell me" → {"intent": "answer"}
 - Current question: "What services do you offer?" / Message: "I already told you" → {"intent": "answer"}

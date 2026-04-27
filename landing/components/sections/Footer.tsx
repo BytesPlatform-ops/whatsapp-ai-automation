@@ -18,7 +18,7 @@ export function Footer() {
           <a href="mailto:{siteConfig.supportEmail}" className="text-ink-500 transition hover:text-ink-900">
             {siteConfig.supportEmail}
           </a>
-          <a href="#" className="text-ink-500 transition hover:text-ink-900">
+          <a href="/privacy" className="text-ink-500 transition hover:text-ink-900">
             Privacy
           </a>
           <a href="#" className="text-ink-500 transition hover:text-ink-900">

@@ -147,6 +147,17 @@ const env = {
   removeBg: {
     apiKey: process.env.REMOVE_BG_API_KEY || '',
   },
+  // Privacy / GDPR — used by the privacy policy page rendered at
+  // GET /privacy and the one-line notice tacked onto first-time
+  // greetings. PRIVACY_POLICY_URL overrides the URL the bot links
+  // to; if unset we compute it from PUBLIC_API_BASE_URL + '/privacy'.
+  privacy: {
+    policyUrl: process.env.PRIVACY_POLICY_URL || '',
+    companyName: process.env.PRIVACY_COMPANY_NAME || 'BytesPlatform',
+    companyLegalName: process.env.PRIVACY_COMPANY_LEGAL_NAME || '',
+    contactEmail: process.env.PRIVACY_CONTACT_EMAIL || 'privacy@bytesplatform.com',
+    lastUpdated: process.env.PRIVACY_LAST_UPDATED || '',
+  },
   agentPhone: process.env.AGENT_PHONE_NUMBER || '',
   // Comma-separated phone numbers (no + prefix needed, normalization is
   // applied in the isTester helper) whose conversations should be
