@@ -98,6 +98,13 @@
           <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
           Meetings
         </a>
+        <div class="pt-3 mt-3 border-t border-gray-800">
+          <p class="px-3 text-xs text-gray-600 uppercase tracking-wider mb-2">Admin</p>
+        </div>
+        <a href="#" class="sidebar-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm" data-section="settings">
+          <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+          Pricing &amp; Settings
+        </a>
       </nav>
       <div class="p-4 border-t border-gray-800">
         <a href="/admin/logout" class="flex items-center gap-2 text-sm text-gray-500 hover:text-red-400 transition-colors">
@@ -270,6 +277,7 @@ function loadSection(section) {
     case 'feedback':
       promise = api('feedback?' + new URLSearchParams(fbFilters).toString()).then(renderFeedback);
       break;
+    case 'settings': promise = api('settings').then(renderSettings); break;
   }
   promise.catch(function(err) {
     document.getElementById('content').innerHTML = '<div class="bg-red-50 text-red-700 rounded-xl p-6"><b>Error loading data:</b> ' + esc(err.message) + '</div>';
@@ -2344,6 +2352,94 @@ function regenerateSummary(userId, btn) {
       }
     })
     .catch(function() { btn.textContent = 'Failed - Try Again'; btn.disabled = false; });
+}
+
+// ─── Settings (admin-managed pricing) ──────────
+// Form-driven editor over /api/settings. Each row is one key from the
+// schema returned by the backend; we render label + input + help text
+// + a save button per row so the admin can edit one price without
+// touching others. Inline status (Saved / Failed) replaces a toast
+// because we don't have a toast system here.
+function renderSettings(data) {
+  var schema = (data && data.schema) || [];
+  var values = (data && data.values) || {};
+
+  var rows = schema.map(function(s) {
+    var current = values[s.key];
+    if (current === undefined || current === null) current = s.fallback;
+    var inputAttrs =
+      'data-key="' + esc(s.key) + '" ' +
+      'class="px-3 py-2 border rounded-lg text-sm w-32 focus:outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100" ' +
+      (s.type === 'number' ? 'type="number" step="1"' : 'type="text"') +
+      (s.min != null ? ' min="' + s.min + '"' : '') +
+      (s.max != null ? ' max="' + s.max + '"' : '');
+
+    return '' +
+      '<div class="bg-white rounded-xl border p-5 mb-3 fade-in">' +
+        '<div class="flex flex-col md:flex-row md:items-start md:justify-between gap-3">' +
+          '<div class="flex-1">' +
+            '<label class="block font-semibold text-gray-900">' + esc(s.label) + '</label>' +
+            '<p class="text-xs text-gray-500 mt-1">' + esc(s.help || '') + '</p>' +
+            '<p class="text-[10px] text-gray-400 mt-1 font-mono">key: ' + esc(s.key) + ' · default: ' + esc(String(s.fallback)) + '</p>' +
+          '</div>' +
+          '<div class="flex items-center gap-2">' +
+            '<input ' + inputAttrs + ' value="' + esc(String(current)) + '">' +
+            '<button onclick="saveSetting(this, \'' + esc(s.key) + '\')" ' +
+              'class="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition disabled:opacity-50">Save</button>' +
+            '<span class="text-xs text-gray-500" data-status-for="' + esc(s.key) + '"></span>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+  }).join('');
+
+  document.getElementById('content').innerHTML = '<div class="fade-in">' +
+    '<div class="flex items-center justify-between mb-6">' +
+      '<div>' +
+        '<h2 class="text-2xl font-bold">Pricing &amp; Settings</h2>' +
+        '<p class="text-sm text-gray-500 mt-1">Edit a price here and it reflects across chat copy, Stripe links, follow-up messages, and emails. Changes go live immediately — no redeploy.</p>' +
+      '</div>' +
+      '<button onclick="loadSection(\'settings\')" class="text-sm text-indigo-600 hover:text-indigo-800">Refresh</button>' +
+    '</div>' +
+    (rows || '<div class="text-gray-500 text-sm">No settings configured.</div>') +
+  '</div>';
+}
+
+function saveSetting(buttonEl, key) {
+  var input = document.querySelector('input[data-key="' + key + '"]');
+  var status = document.querySelector('span[data-status-for="' + key + '"]');
+  if (!input) return;
+  var raw = input.value;
+  var num = Number(raw);
+  // The schema enforces this on the backend too; we mirror it client-side
+  // for instant feedback rather than waiting on the round-trip.
+  if (raw === '' || !Number.isFinite(num)) {
+    if (status) { status.textContent = 'Enter a valid number'; status.className = 'text-xs text-red-600'; }
+    return;
+  }
+  buttonEl.disabled = true;
+  buttonEl.textContent = 'Saving...';
+  if (status) { status.textContent = ''; }
+  fetch('/admin/api/settings', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ key: key, value: num }),
+  })
+    .then(function(res) { return res.json().then(function(j) { return { ok: res.ok, body: j }; }); })
+    .then(function(r) {
+      if (!r.ok) {
+        if (status) { status.textContent = (r.body && r.body.error) || 'Failed'; status.className = 'text-xs text-red-600'; }
+      } else {
+        if (status) { status.textContent = 'Saved ✓'; status.className = 'text-xs text-emerald-600'; }
+        setTimeout(function() { if (status) status.textContent = ''; }, 3000);
+      }
+    })
+    .catch(function(err) {
+      if (status) { status.textContent = err.message || 'Failed'; status.className = 'text-xs text-red-600'; }
+    })
+    .finally(function() {
+      buttonEl.disabled = false;
+      buttonEl.textContent = 'Save';
+    });
 }
 
 // ─── Init ──────────────────────────────────────

@@ -27,8 +27,10 @@ const FOLLOWUP_LADDER = [
   { step: 'followup_22h_discount', afterHours: 22 },
 ];
 
-// 20% off the website portion — domain price is fixed by Namecheap.
-const WEBSITE_DISCOUNT_PCT = 20;
+// ${discountPct}% off the website portion — domain price is fixed by Namecheap. The
+// percentage is admin-managed (admin_settings.website_discount_pct);
+// the constant below is the cold-cache fallback.
+const WEBSITE_DISCOUNT_PCT_DEFAULT = 20;
 
 // SEO-audit leads get their own ladder. The existing website ladder pitches a
 // $100 payment / domain — wrong message for someone who only ran an audit.
@@ -43,11 +45,11 @@ const SEO_FOLLOWUP_LADDER = [
 // split payment offers. Amount placeholders (${newTotal}, ${originalTotal})
 // get filled in at send time once we compute the per-user discount.
 const DISCOUNT_MESSAGES = {
-  COOL: "preview expires in 1 hour — i got 20% off the website for you. new total: *$${newTotal}* (was *$${originalTotal}*). link 👇",
-  PROFESSIONAL: "Your preview expires in 1 hour. I can offer 20% off the website: *$${newTotal}* (from *$${originalTotal}*). New link below.",
-  UNSURE: "hey! your preview expires in 1 hour — got approved to do 20% off the website. new total is *$${newTotal}* (was *$${originalTotal}*) 😊",
-  NEGOTIATOR: "preview dies in 1h. 20% off website. new total *$${newTotal}*. link below.",
-  DEFAULT: "Heads up — your preview expires in 1 hour. Taking 20% off the website: *$${newTotal}* (was *$${originalTotal}*). New link below.",
+  COOL: "preview expires in 1 hour — i got ${discountPct}% off the website for you. new total: *$${newTotal}* (was *$${originalTotal}*). link 👇",
+  PROFESSIONAL: "Your preview expires in 1 hour. I can offer ${discountPct}% off the website: *$${newTotal}* (from *$${originalTotal}*). New link below.",
+  UNSURE: "hey! your preview expires in 1 hour — got approved to do ${discountPct}% off the website. new total is *$${newTotal}* (was *$${originalTotal}*) 😊",
+  NEGOTIATOR: "preview dies in 1h. ${discountPct}% off website. new total *$${newTotal}*. link below.",
+  DEFAULT: "Heads up — your preview expires in 1 hour. Taking ${discountPct}% off the website: *$${newTotal}* (was *$${originalTotal}*). New link below.",
 };
 
 /**
@@ -77,47 +79,49 @@ function getNextFollowup(lastMessageAt, completedSteps, leadTemp = 'WARM', ladde
  * audit's top-fix item if we have one on file. When the top fix is missing
  * (older audits, extraction failure) we fall back to a generic pitch.
  */
-function renderSeoFollowupMessage(personalityMode, topFix, url) {
+function renderSeoFollowupMessage(personalityMode, topFix, url, seoFloor = 200) {
   const mode = (personalityMode || '').toUpperCase();
   const hasFix = Boolean(topFix && topFix.trim());
   const fix = hasFix ? topFix.trim() : '';
   const site = url ? ` for ${url}` : '';
+  const px = `$${seoFloor}`;
 
   if (mode === 'COOL') {
     return hasFix
-      ? `yo — you saw that audit${site} right? biggest thing was *${fix}*. i can knock out the top 5 fixes from the report for $200 if you wanna ship them fast 🔧`
-      : `yo — you saw that audit${site} right? i can handle the top 5 fixes from the report for $200 if you wanna ship them fast 🔧`;
+      ? `yo — you saw that audit${site} right? biggest thing was *${fix}*. i can knock out the top 5 fixes from the report for ${px} if you wanna ship them fast 🔧`
+      : `yo — you saw that audit${site} right? i can handle the top 5 fixes from the report for ${px} if you wanna ship them fast 🔧`;
   }
   if (mode === 'PROFESSIONAL') {
     return hasFix
-      ? `Quick follow-up on your SEO audit${site}. The biggest opportunity I flagged was *${fix}*. I can handle the top 5 fixes from the report for $200 — want me to put the details together?`
-      : `Quick follow-up on your SEO audit${site}. I can handle the top 5 fixes from the report for $200 — want me to put the details together?`;
+      ? `Quick follow-up on your SEO audit${site}. The biggest opportunity I flagged was *${fix}*. I can handle the top 5 fixes from the report for ${px} — want me to put the details together?`
+      : `Quick follow-up on your SEO audit${site}. I can handle the top 5 fixes from the report for ${px} — want me to put the details together?`;
   }
   if (mode === 'UNSURE') {
     return hasFix
-      ? `hey! following up on your audit${site} — the main thing that stood out was *${fix}*. happy to handle the top 5 fixes for $200 if you'd like. no pressure at all 😊`
-      : `hey! following up on your audit${site} — happy to handle the top 5 fixes from the report for $200 if you'd like. no pressure at all 😊`;
+      ? `hey! following up on your audit${site} — the main thing that stood out was *${fix}*. happy to handle the top 5 fixes for ${px} if you'd like. no pressure at all 😊`
+      : `hey! following up on your audit${site} — happy to handle the top 5 fixes from the report for ${px} if you'd like. no pressure at all 😊`;
   }
   if (mode === 'NEGOTIATOR') {
     return hasFix
-      ? `audit follow-up${site}. biggest fix: *${fix}*. $200 for the top 5 from the report. yes or no?`
-      : `audit follow-up${site}. $200 for the top 5 fixes from the report. yes or no?`;
+      ? `audit follow-up${site}. biggest fix: *${fix}*. ${px} for the top 5 from the report. yes or no?`
+      : `audit follow-up${site}. ${px} for the top 5 fixes from the report. yes or no?`;
   }
   return hasFix
-    ? `Following up on your SEO audit${site} — *${fix}* was the biggest opportunity I flagged. Want me to handle the top 5 fixes from the report for $200?`
-    : `Following up on your SEO audit${site} — want me to handle the top 5 fixes from the report for $200?`;
+    ? `Following up on your SEO audit${site} — *${fix}* was the biggest opportunity I flagged. Want me to handle the top 5 fixes from the report for ${px}?`
+    : `Following up on your SEO audit${site} — want me to handle the top 5 fixes from the report for ${px}?`;
 }
 
 /**
  * Render the 22h discount message for a personality. Substitutes
  * ${newTotal} and ${originalTotal} placeholders at call time.
  */
-function renderDiscountMessage(personalityMode, newTotal, originalTotal) {
+function renderDiscountMessage(personalityMode, newTotal, originalTotal, discountPct) {
   const mode = (personalityMode || '').toUpperCase();
   const template = DISCOUNT_MESSAGES[mode] || DISCOUNT_MESSAGES.DEFAULT;
   return template
     .replace(/\$\{newTotal\}/g, String(newTotal))
-    .replace(/\$\{originalTotal\}/g, String(originalTotal));
+    .replace(/\$\{originalTotal\}/g, String(originalTotal))
+    .replace(/\$\{discountPct\}/g, String(discountPct));
 }
 
 /**
@@ -163,7 +167,9 @@ async function applyWebsiteDiscount(user) {
   const domainCents = pending.domain_amount || 0;
   const originalCents = pending.original_amount || pending.amount;
 
-  const newWebsiteCents = Math.floor(websiteCents * (100 - WEBSITE_DISCOUNT_PCT) / 100);
+  const { getNumberSetting } = require('../db/settings');
+  const discountPct = await getNumberSetting('website_discount_pct', WEBSITE_DISCOUNT_PCT_DEFAULT);
+  const newWebsiteCents = Math.floor(websiteCents * (100 - discountPct) / 100);
   const newTotalCents = newWebsiteCents + domainCents;
   const newWebsite = Math.round(newWebsiteCents / 100);
   const newDomain = Math.round(domainCents / 100);
@@ -172,8 +178,8 @@ async function applyWebsiteDiscount(user) {
 
   const selectedDomain = pending.selected_domain || null;
   const description = selectedDomain && newDomain > 0
-    ? `Website activation + domain ${selectedDomain} — 20% off website`
-    : `Website activation — 20% off`;
+    ? `Website activation + domain ${selectedDomain} — ${discountPct}% off website`
+    : `Website activation — ${discountPct}% off`;
 
   let newLinkUrl = null;
   let newPaymentId = null;
@@ -205,12 +211,12 @@ async function applyWebsiteDiscount(user) {
   if (newPaymentId) {
     await supabase
       .from('payments')
-      .update({ discount_applied: true, discount_pct: WEBSITE_DISCOUNT_PCT })
+      .update({ discount_applied: true, discount_pct: discountPct })
       .eq('id', newPaymentId);
   }
 
   // Redeploy the preview site with the discounted banner (strikethrough +
-  // 20% off badge). Fire-and-forget — the chat message already has the new
+  // ${discountPct}% off badge). Fire-and-forget — the chat message already has the new
   // link, so a redeploy failure doesn't block the sale.
   try {
     const { updateSiteBannerPricing } = require('../website-gen/redeployer');
@@ -218,7 +224,7 @@ async function applyWebsiteDiscount(user) {
       paymentLinkUrl: newLinkUrl,
       activationAmount: newTotal,
       originalAmount: originalTotal,
-      discountPct: WEBSITE_DISCOUNT_PCT,
+      discountPct,
     }).catch((err) =>
       logger.warn(`[DISCOUNT] Banner pricing redeploy failed for user ${user.id}: ${err.message}`)
     );
@@ -231,7 +237,7 @@ async function applyWebsiteDiscount(user) {
       `(website $${Math.round(websiteCents / 100)} → $${newWebsite}, domain $${newDomain} unchanged)`
   );
 
-  return { newLinkUrl, newTotal, originalTotal };
+  return { newLinkUrl, newTotal, originalTotal, discountPct };
 }
 
 /**
@@ -317,7 +323,8 @@ async function processUserFollowup(user) {
       ? extractPersonalityFromBrief(metadata.leadBrief)
       : (metadata.personalityMode || 'DEFAULT');
 
-    const message = renderSeoFollowupMessage(personality, metadata.seoTopFix, metadata.lastSeoUrl);
+    const seoFloor = await require('../db/settings').getNumberSetting('seo_floor_price', 200);
+    const message = renderSeoFollowupMessage(personality, metadata.seoTopFix, metadata.lastSeoUrl, seoFloor);
 
     logger.info(`Followup: sending ${nextSeoStep.step} to ${user.phone_number} (mode: ${personality}, temp: ${leadTemp}, topFix: "${metadata.seoTopFix || ''}")`);
 
@@ -380,7 +387,7 @@ async function processUserFollowup(user) {
       ? extractPersonalityFromBrief(metadata.leadBrief)
       : (metadata.personalityMode || 'DEFAULT');
 
-    const message = renderDiscountMessage(personality, discount.newTotal, discount.originalTotal);
+    const message = renderDiscountMessage(personality, discount.newTotal, discount.originalTotal, discount.discountPct);
 
     logger.info(`Followup: sending 22h discount to ${user.phone_number} (mode: ${personality}, new: $${discount.newTotal})`);
 

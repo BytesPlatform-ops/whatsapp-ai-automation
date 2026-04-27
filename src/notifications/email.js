@@ -252,6 +252,9 @@ async function sendDomainRequestNotification({ userName, userPhone, userEmail, s
  * Send a post-sale upsell email to the customer.
  */
 async function sendUpsellEmail({ toEmail, userName, type }) {
+  // SEO floor price is admin-managed (admin_settings.seo_floor_price);
+  // 200 is the cold-cache fallback for fresh installs.
+  const seoFloor = await require('../db/settings').getNumberSetting('seo_floor_price', 200);
   const templates = {
     day7: {
       subject: `${userName || 'Hey'}, let's get you found on Google! 🔍`,
@@ -271,7 +274,7 @@ async function sendUpsellEmail({ toEmail, userName, type }) {
         <p>Hi ${userName || 'there'},</p>
         <p>Your website has been live for a month! Want to get more visitors from Google?</p>
         <p>Our <strong>SEO packages</strong> help your business rank higher in search results so customers find you first. We'll handle keyword research, on-page optimization, and monthly reporting.</p>
-        <p>Reply to learn more about our SEO packages — they start from just $200.</p>
+        <p>Reply to learn more about our SEO packages — they start from just $${seoFloor}.</p>
         <p>—Pixie</p>
       `,
     },

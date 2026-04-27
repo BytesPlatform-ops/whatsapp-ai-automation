@@ -2921,7 +2921,11 @@ async function generateWebsite(user) {
     // domain price was locked in during the WEB_DOMAIN_CHOICE step (stored
     // in user.metadata). A prior pending link (if any) gets auto-superseded
     // by createPaymentLink so the new combined link is the only one live.
-    const websitePrice = parseFloat(process.env.DEFAULT_ACTIVATION_PRICE || '199');
+    // Website price is admin-managed (admin_settings.website_price). Env
+    // var DEFAULT_ACTIVATION_PRICE is now just the cold-cache fallback.
+    const { getNumberSetting } = require('../../db/settings');
+    const envDefaultWebsitePrice = parseFloat(process.env.DEFAULT_ACTIVATION_PRICE || '199');
+    const websitePrice = await getNumberSetting('website_price', envDefaultWebsitePrice);
     // Exact NameSilo price — preserve cents. parseFloat keeps $17.29 as 17.29
     // instead of truncating to 17.
     const domainPrice = parseFloat(freshUser.metadata?.domainPrice || 0);
@@ -3068,9 +3072,10 @@ async function generateWebsite(user) {
     // Tell them upfront how many free rounds of changes they get — surfacing
     // the cap here avoids the trust-breaking moment of discovering it only
     // after they've already hit the wall on revision #3.
+    const revisionFloor = await require('../../db/settings').getNumberSetting('revision_price', 200);
     await sendTextMessage(
       user.phone_number,
-      "There you go! Have a look and let me know what you think — want any changes, or are you happy with it?\n\n_You get *2 free rounds of revisions*; anything beyond that we'd handle as custom work from $200._"
+      `There you go! Have a look and let me know what you think — want any changes, or are you happy with it?\n\n_You get *2 free rounds of revisions*; anything beyond that we'd handle as custom work from $${revisionFloor}._`
     );
     await logMessage(user.id, 'Website preview sent, asking for feedback (with revision cap note)', 'assistant');
 
@@ -3253,7 +3258,9 @@ async function handlePaidClaim(user) {
 // Handles both the "domain locked in" and "skipped, site-only" shapes.
 async function acknowledgeApprovalAfterDomainChoice(user) {
   const selectedDomain = user.metadata?.selectedDomain || null;
-  const websitePrice = parseInt(process.env.DEFAULT_ACTIVATION_PRICE || '199', 10);
+  const { getNumberSetting } = require('../../db/settings');
+  const envDefaultWebsitePrice = parseInt(process.env.DEFAULT_ACTIVATION_PRICE || '199', 10);
+  const websitePrice = await getNumberSetting('website_price', envDefaultWebsitePrice);
   const domainPrice = parseInt(user.metadata?.domainPrice || 0, 10);
   const total = websitePrice + domainPrice;
 
@@ -3353,9 +3360,10 @@ async function classifyImageCaption(caption, targets, userId) {
  * changes silently went through past revision 2.
  */
 async function pitchRevisionUpgrade(user, count) {
+  const revisionFloor = await require('../../db/settings').getNumberSetting('revision_price', 200);
   await sendTextMessage(
     user.phone_number,
-    "You've already used your 2 free revisions for this site. Anything more is custom work — it starts at $200, or we can scope it on a quick call."
+    `You've already used your 2 free revisions for this site. Anything more is custom work — it starts at $${revisionFloor}, or we can scope it on a quick call.`
   );
   try {
     const calendlyUrl = require('../../config/env').env.calendlyUrl;
@@ -3436,9 +3444,10 @@ async function applyImageRevision({ user, site, currentConfig, targetId, image, 
     }
 
     const remaining = Math.max(0, 2 - revisionCount);
+    const revisionFloor = await require('../../db/settings').getNumberSetting('revision_price', 200);
     const note = remaining > 0
       ? `You have *${remaining}* revision${remaining === 1 ? '' : 's'} left.`
-      : `That was your last free revision — further changes start at $200 or get scoped on a call.`;
+      : `That was your last free revision — further changes start at $${revisionFloor} or get scoped on a call.`;
     const headline = hasExtras
       ? `Done — ${where} updated, plus your other changes are in.`
       : `Done — ${where} updated.`;

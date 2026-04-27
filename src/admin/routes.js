@@ -641,4 +641,91 @@ router.get('/api/chatbot/global', async (req, res) => {
   }
 });
 
+// ─── Settings (admin-managed pricing & flags) ─────────────────
+// Read all rows from admin_settings + the schema describing what each
+// key is for. The UI uses the schema to render labels, types, and
+// help text without having to hardcode them.
+const SETTINGS_SCHEMA = [
+  {
+    key: 'website_price',
+    label: 'Website activation price (USD)',
+    type: 'number',
+    min: 1,
+    fallback: 199,
+    help: 'Base charge for activating a generated site. Stripe link, banner, and chat copy all read this.',
+  },
+  {
+    key: 'website_discount_pct',
+    label: 'Auto 22h discount (%)',
+    type: 'number',
+    min: 0,
+    max: 90,
+    fallback: 20,
+    help: 'Percentage off the website portion automatically applied at 22h if still unpaid. Banner and follow-up message both use this.',
+  },
+  {
+    key: 'revision_price',
+    label: 'Custom-work / 3rd-revision floor (USD)',
+    type: 'number',
+    min: 1,
+    fallback: 200,
+    help: 'Quoted to users who exceed 2 free revisions or ask about minimum custom work. Used in chat and the cap pitch.',
+  },
+  {
+    key: 'seo_floor_price',
+    label: 'SEO / SMM floor (USD)',
+    type: 'number',
+    min: 1,
+    fallback: 200,
+    help: 'Lowest tier we sell for SEO and social-media work. Used in sales prompts, follow-up messages, and the day-30 upsell email.',
+  },
+];
+
+router.get('/api/settings', async (req, res) => {
+  try {
+    const { listSettings } = require('../db/settings');
+    const values = await listSettings();
+    res.json({ schema: SETTINGS_SCHEMA, values });
+  } catch (err) {
+    logger.error('[ADMIN] Settings GET error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/api/settings', express.json(), async (req, res) => {
+  try {
+    const { key, value } = req.body || {};
+    if (!key || value === undefined) {
+      return res.status(400).json({ error: 'key and value are required' });
+    }
+    const schema = SETTINGS_SCHEMA.find((s) => s.key === key);
+    if (!schema) {
+      // Unknown key — refuse rather than persist garbage. If a new
+      // setting is added to the codebase, it goes in the schema first.
+      return res.status(400).json({ error: `Unknown setting key: ${key}` });
+    }
+    let coerced = value;
+    if (schema.type === 'number') {
+      coerced = Number(value);
+      if (!Number.isFinite(coerced)) {
+        return res.status(400).json({ error: `${key} must be a number` });
+      }
+      if (schema.min != null && coerced < schema.min) {
+        return res.status(400).json({ error: `${key} must be >= ${schema.min}` });
+      }
+      if (schema.max != null && coerced > schema.max) {
+        return res.status(400).json({ error: `${key} must be <= ${schema.max}` });
+      }
+    }
+
+    const { setSetting } = require('../db/settings');
+    await setSetting(key, coerced, 'admin-panel');
+    logger.info(`[ADMIN] Setting updated: ${key} = ${JSON.stringify(coerced)}`);
+    res.json({ ok: true, key, value: coerced });
+  } catch (err) {
+    logger.error('[ADMIN] Settings POST error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;

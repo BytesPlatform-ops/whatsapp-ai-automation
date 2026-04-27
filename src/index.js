@@ -187,6 +187,13 @@ app.listen(env.port, () => {
   logger.info(`Server running on port ${env.port} (${env.nodeEnv})`);
   logger.info('Webhook URL: https://your-domain.com/webhook');
 
+  // Warm the admin_settings cache so price interpolation in LLM prompts
+  // doesn't fall back to defaults on the first chat of the day. Failure
+  // to load isn't fatal — settings.js logs and serves fallbacks.
+  require('./db/settings').loadAllSettings().catch((err) => {
+    logger.warn(`[BOOT] admin_settings warmup failed: ${err.message}`);
+  });
+
   // Start the follow-up scheduler (checks every 30 minutes)
   startFollowupScheduler();
 

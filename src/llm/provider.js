@@ -30,9 +30,21 @@ async function generateResponse(systemPrompt, messages, options = {}) {
   const impl = provider === 'openai' ? openai : claude;
   const start = Date.now();
 
+  // Replace {{WEBSITE_PRICE}} / {{REVISION_PRICE}} / etc. in the prompt
+  // with the admin-managed values from settings cache. Doing it here
+  // (single chokepoint) means every prompt that wants live pricing just
+  // needs the token; no call site needs to know.
+  let renderedSystemPrompt = systemPrompt;
+  try {
+    const { applyPricingTokens } = require('../db/settings');
+    renderedSystemPrompt = applyPricingTokens(systemPrompt);
+  } catch (_) {
+    /* settings module missing → ship the prompt as-is */
+  }
+
   const timeoutMs = options.timeoutMs || DEFAULT_LLM_TIMEOUT_MS;
   const result = await Promise.race([
-    impl.generateResponseWithUsage(systemPrompt, messages),
+    impl.generateResponseWithUsage(renderedSystemPrompt, messages),
     new Promise((_, reject) =>
       setTimeout(
         () => reject(new Error(`LLM call timed out after ${timeoutMs}ms (operation=${options.operation || 'unknown'})`)),

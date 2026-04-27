@@ -10,9 +10,11 @@ const { STATES } = require('../states');
 // Legacy handler — only reached by in-flight users in DOMAIN_OFFER /
 // DOMAIN_SEARCH states. New flow routes domain selection BEFORE preview
 // generation via the WEB_DOMAIN_* states in webDev.js, with a single
-// combined Stripe link. SITE_COST is read from env so it matches the
-// current activation default ($199) instead of a stale hardcoded value.
-const SITE_COST = parseInt(process.env.DEFAULT_ACTIVATION_PRICE || '199', 10);
+// combined Stripe link. The base website price is admin-managed via
+// the admin_settings table (key=`website_price`); env var still acts
+// as the fallback default for fresh installs / before the cache warms.
+const { getNumberSetting } = require('../../db/settings');
+const SITE_COST_DEFAULT = parseInt(process.env.DEFAULT_ACTIVATION_PRICE || '199', 10);
 
 async function handleCustomDomain(user, message) {
   // Defensive guard: if a user somehow lands in DOMAIN_OFFER or
@@ -292,11 +294,12 @@ async function processDomainSelection(user, domain) {
   const match = domainOptions.find(d => d.domain.toLowerCase() === domain.toLowerCase());
   const rawDomainCost = match?.price ? parseFloat(match.price) : 0;
   const domainCharge = Math.ceil(rawDomainCost);
-  const fullAmount = SITE_COST + domainCharge;
+  const siteCost = await getNumberSetting('website_price', SITE_COST_DEFAULT);
+  const fullAmount = siteCost + domainCharge;
   const tld = domain.split('.').pop();
 
   const totalLine = domainCharge > 0
-    ? `The total is *$${fullAmount}* — $${SITE_COST} for the website plus $${domainCharge} for the *.${tld}* domain registration.`
+    ? `The total is *$${fullAmount}* — $${siteCost} for the website plus $${domainCharge} for the *.${tld}* domain registration.`
     : `The total is *$${fullAmount}* for the website (domain registration billed separately once confirmed).`;
 
   // No split payments — the activation price is low enough that splitting
