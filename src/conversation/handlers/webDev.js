@@ -632,29 +632,66 @@ async function handleCollectAreas(user, message) {
     }
   }
 
-  // If parsing clearly failed (primaryCity looks like a sentence — too long,
-  // too many words, or contains non-English connectives we don't split on
-  // like Urdu "aur", Spanish "y", Hindi "aur/या"), ask LLM to extract
-  // structured fields. Regex-based splitting can't cover every language.
-  const primaryWordCount = primaryCity ? primaryCity.trim().split(/\s+/).length : 0;
-  const looksLikeSentence = primaryWordCount >= 3;
-  if (!primaryCity || primaryCity.length > 40 || looksLikeSentence) {
-    try {
-      const extracted = await generateResponse(
-        `Extract the primary city and list of service areas from the user's message. The user may write in ANY language (English, Roman Urdu, Urdu, Hindi, Spanish, Arabic, etc.) and use connectors like "and", "aur" (Urdu), "y" (Spanish), "و" (Arabic), etc. Return ONLY JSON: {"primaryCity":"<city>","serviceAreas":["<city or neighborhood>", ...]}. Rules: (1) primaryCity is the single main city they're based in — a short proper noun like "Karachi", NEVER a full phrase like "pakistan k andar karachi". (2) serviceAreas is an array of cities/neighborhoods they serve. If they named multiple cities (e.g. Karachi and Lahore), include all of them; the first becomes primaryCity and the rest go into serviceAreas. (3) Strip filler words like "based in", "pakistan k andar", "in the city of", etc. (4) If genuinely unclear, make a reasonable guess from place-name tokens you recognize.`,
-        [{ role: 'user', content: raw }],
-        { userId: user.id, operation: 'webdev_areas_extract' }
-      );
-      const m = extracted.match(/\{[\s\S]*\}/);
-      if (m) {
-        const parsed = JSON.parse(m[0]);
-        if (parsed.primaryCity) primaryCity = String(parsed.primaryCity).trim();
-        if (Array.isArray(parsed.serviceAreas)) serviceAreas = parsed.serviceAreas.map((s) => String(s).trim()).filter(Boolean);
+  // Always run LLM extraction in the no-existing-city path. Regex split
+  // is fragile across languages and can't tell a real place name from a
+  // deflection (e.g. "us main kartay han bhai" — Roman Urdu for "we work
+  // in those" — looks like a 5-word "city" to a regex but is actually a
+  // non-answer). Letting the LLM judge means we ask again instead of
+  // saving garbage as the city.
+  let extractionUnclear = false;
+  let extractionReason = '';
+  try {
+    const extracted = await generateResponse(
+      `Extract the primary city and list of service areas from the user's message. They may write in ANY language (English, Roman Urdu, Urdu, Hindi, Spanish, Arabic, etc.).
+
+Return ONLY JSON in this exact shape:
+{"primaryCity": "<city>" | null, "serviceAreas": ["<city or neighborhood>", ...], "unclear": <true|false>, "reason": "<short>"}
+
+Rules:
+1. primaryCity is the single main city they're based in — a short proper noun like "Karachi", NEVER a full phrase like "pakistan k andar karachi".
+2. serviceAreas is an array of cities/neighborhoods they serve. If they named multiple cities (e.g. Karachi and Lahore), the first becomes primaryCity and the rest go into serviceAreas.
+3. Strip filler words like "based in", "pakistan k andar", "in the city of", etc.
+4. CRITICAL — if the user did NOT name an actual place, return {"primaryCity": null, "serviceAreas": [], "unclear": true, "reason": "..."}. Treat these as non-answers, NOT as places:
+   - Deflections / generic affirmations: "us main kartay han bhai" (Roman Urdu: "we work in those"), "wahan", "udhar", "in those", "in that", "in your example", "in the areas you mentioned", "everywhere you said", "wherever", "jahan aap ne kaha", "haan bhai", "yes we do", "ji haan", "ok", "sure", "anywhere"
+   - Pure verbs / sentences with no place name: "we operate", "we serve clients", "ham kaam karte hain", "hum service dete hain"
+   - Vague geography: "all over", "everywhere", "the whole city", "globally", "nationwide", "outside" — set unclear:true and ask again, do NOT invent a city.
+5. If you DO recognize an actual place name, even buried in filler ("we work in karachi mostly" → primaryCity "Karachi"), extract it normally with unclear:false.`,
+      [{ role: 'user', content: raw }],
+      { userId: user.id, operation: 'webdev_areas_extract' }
+    );
+    const m = extracted.match(/\{[\s\S]*\}/);
+    if (m) {
+      const parsed = JSON.parse(m[0]);
+      // Trust the LLM's judgement on whether a place was actually named.
+      // If it flagged unclear OR returned null/empty city, drop the regex
+      // guess (it'll be deflection garbage) and force a re-ask below.
+      if (parsed.unclear === true || !parsed.primaryCity) {
+        primaryCity = '';
+        serviceAreas = [];
+        extractionUnclear = true;
+        extractionReason = String(parsed.reason || '').slice(0, 200);
+      } else {
+        primaryCity = String(parsed.primaryCity).trim();
+        if (Array.isArray(parsed.serviceAreas)) {
+          serviceAreas = parsed.serviceAreas.map((s) => String(s).trim()).filter(Boolean);
+        }
         if (!serviceAreas.length && primaryCity) serviceAreas = [primaryCity];
       }
-    } catch (err) {
-      logger.warn(`[AREAS] LLM extraction failed: ${err.message}`);
     }
+  } catch (err) {
+    logger.warn(`[AREAS] LLM extraction failed: ${err.message}`);
+  }
+
+  // Re-ask if the LLM couldn't find a real place. We stay in
+  // WEB_COLLECT_AREAS without writing anything to metadata, so the user's
+  // next reply gets parsed fresh against an empty city.
+  if (extractionUnclear || !primaryCity) {
+    logger.info(`[AREAS] Re-asking — no real place detected. raw="${raw.slice(0, 80)}" reason="${extractionReason}"`);
+    await sendTextMessage(
+      user.phone_number,
+      `Hmm — mujhe shehar ka naam nahi mila uss reply mein. *Kis shehar* mein kaam karte ho? Like *Karachi*, *Lahore*, *Austin* — bas shehar ka naam likh do, aur agar specific neighborhoods serve karte ho toh comma-separated likho (e.g. *Karachi: Clifton, DHA, Gulshan*).`
+    );
+    return STATES.WEB_COLLECT_AREAS;
   }
 
   const websiteData = {
