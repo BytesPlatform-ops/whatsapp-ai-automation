@@ -20,6 +20,7 @@ const {
 const { isDelegation, classifyDelegation } = require('../../config/smartDefaults');
 const { localize } = require('../../utils/localizer');
 const { classifyIntent } = require('../../llm/intentClassifier');
+const { extractFields } = require('../../llm/extractFields');
 
 
 // Walk the website-dev checklist and return the first state whose field
@@ -492,16 +493,31 @@ async function handleCollectIndustry(user, message) {
     return smartAdvance(user, message);
   }
 
-  // Edit-intent fast path: "the name should be X" / "change name to X" —
-  // user corrected business name, not an industry reply.
-  const nameCorrection = rawInput.match(/(?:name\s*(?:should be|is|to)|change.*name.*to|actually.*called|it'?s\s+called)\s*["']?(.+?)["']?\s*$/i);
-  if (nameCorrection) {
-    const newName = nameCorrection[1].trim();
-    await updateUserMetadata(user.id, {
-      websiteData: { ...(user.metadata?.websiteData || {}), businessName: newName },
+  // Edit-intent fast path: catch "the name should be X" / "change name to X"
+  // / "actually we're called X" / "naam X karna chahiye" / etc. before we
+  // try to interpret the message as an industry. Cheap keyword gate first
+  // so short industry replies ("plumber", "café") don't pay for an LLM
+  // call here — only messages that mention a name-correction-ish word OR
+  // are long enough to be prose go to extractFields.
+  const looksLikeNameCorrection =
+    /\b(name|called|naam|nombre|nom)\b/i.test(rawInput) || rawInput.length > 25;
+  if (looksLikeNameCorrection) {
+    const { correctedName } = await extractFields(rawInput, {
+      correctedName: {
+        type: 'string',
+        description: 'New business name the user is asking to change to. Examples: "the name should be Glow Salon" → "Glow Salon"; "actually we\'re called Acme Co" → "Acme Co"; "change name to MyBiz" → "MyBiz"; "naam Glow Salon karna chahiye" → "Glow Salon". Strip surrounding quotes and trailing punctuation. Omit if the user is NOT asking to change the business name (e.g. they\'re just answering the industry question).',
+      },
+    }, {
+      userId: user.id,
+      operation: 'webdev_industry_name_correction',
     });
-    await sendTextMessage(user.phone_number, `Updated to *${newName}*! Now, what industry are you in?`);
-    return STATES.WEB_COLLECT_INDUSTRY;
+    if (correctedName) {
+      await updateUserMetadata(user.id, {
+        websiteData: { ...(user.metadata?.websiteData || {}), businessName: correctedName },
+      });
+      await sendTextMessage(user.phone_number, `Updated to *${correctedName}*! Now, what industry are you in?`);
+      return STATES.WEB_COLLECT_INDUSTRY;
+    }
   }
 
   // LLM-first extraction. The extractor fast-paths clean 1-3 word answers
@@ -579,121 +595,54 @@ async function handleCollectAreas(user, message) {
     return smartAdvance(user, message, 'No problem, we can add more areas later.');
   }
 
-  let primaryCity;
-  let serviceAreas;
+  // Single LLM pass: city + service-areas + an "unclear" flag for non-answers.
+  // The regex split we used to do here was fragile across languages (Roman
+  // Urdu, Spanish, Arabic, ...) and couldn't tell a real place name from a
+  // deflection like "us main kartay han bhai" ("we work in those"). Passing
+  // existingCity as context lets the LLM treat a neighborhoods-only reply
+  // as additions to the known city instead of trying to overwrite it.
+  const extracted = await extractFields(raw, {
+    primaryCity: {
+      type: 'string',
+      description: 'Single main city the business is based in — a short proper noun like "Karachi", "Austin", "Lahore". NEVER a full phrase ("pakistan k andar karachi"). Strip filler ("based in", "we operate in", "pakistan k andar"). Omit if the user only named neighborhoods and a city was already provided in context.',
+    },
+    serviceAreas: {
+      type: 'array',
+      description: 'Array of cities or neighborhoods the business serves. Strip lead-ins ("we serve in", "we cover", "ham serve karte hain", "based in", "around"). If multiple cities are named, the first goes to primaryCity and the rest go here.',
+    },
+    unclear: {
+      type: 'boolean',
+      description: 'TRUE if the user did NOT name an actual place — only deflections ("us main kartay han", "wahan", "udhar", "in those"), pure verbs ("we operate", "ham kaam karte hain"), or vague geography ("everywhere", "all over", "globally", "nationwide"). FALSE if any real place name was given. CRITICAL: never invent a city — set unclear=true instead.',
+    },
+  }, {
+    context: existingCity
+      ? `User's primary city is already known: "${existingCity}". Treat the reply as additions to its service-areas list unless the user explicitly names a different city.`
+      : '',
+    userId: user.id,
+    operation: 'webdev_areas_extract',
+  });
 
-  if (existingCity) {
-    // City already known from sales-chat hydration. Treat the user's reply
-    // as a plain list of neighborhoods. Preserve the existing city.
-    primaryCity = existingCity;
-    // Strip conversational lead-ins so "we serve in X and Y" → ["X", "Y"]
-    // instead of ["we serve in X", "Y"]. Covers the common English +
-    // Roman Urdu prefixes users actually type here.
-    const stripAreaPrefix = (s) =>
-      s
-        .replace(/^[—\-–:|]+/, '')
-        .replace(/^\s*(?:(?:we\s+(?:serve|cover|operate|work|are|'re))(?:\s+(?:in|across|around|throughout))?|serving(?:\s+(?:in|across|around))?|cover(?:ing)?(?:\s+(?:in|across))?|based\s+in|operate\s+in|mostly(?:\s+(?:in|around))?|around|in|ham\s+(?:serve|kaam)\s+karte\s+(?:hain|hai))\s+/i, '')
-        .replace(/^(?:the|a|an)\s+/i, '')
-        .trim();
-    serviceAreas = raw
-      .split(/[,;\n]|\band\b/i)
-      .map((s) => stripAreaPrefix(s.trim()))
-      .filter(Boolean);
-    if (!serviceAreas.length) serviceAreas = [existingCity];
-  } else {
-    // No city yet — parse the reply as "City: Area1, Area2, ..." or
-    // "City - Area1, Area2" or a bare comma/and-separated list.
-    const parts = raw
-      .split(/\r?\n+|\s*[—\-–:|]\s+|\s+serving\s+/i)
-      .map((p) => p.trim())
-      .filter(Boolean);
-    primaryCity = (parts[0] || '').replace(/[,.]$/, '');
-    const areasStr = parts.slice(1).join(', ').trim();
-    serviceAreas = areasStr
-      ? areasStr.split(/\s*[,;]\s*|\s+and\s+|\s+&\s+/i).map((s) => s.trim()).filter(Boolean)
-      : [];
+  let primaryCity = (extracted.primaryCity || existingCity || '').trim();
+  let serviceAreas = Array.isArray(extracted.serviceAreas)
+    ? extracted.serviceAreas.map((s) => String(s).trim()).filter(Boolean)
+    : [];
 
-    // Single value — could be just a city OR a bare "A, B and C" list.
-    if (!serviceAreas.length && primaryCity) {
-      // Split on commas AND natural " and " / " & " connectors so
-      // "Austin, New York and Texas" becomes three tokens, not two.
-      const tokens = primaryCity
-        .split(/\s*,\s*|\s+and\s+|\s+&\s+/i)
-        .map((s) => s.trim())
-        .filter(Boolean);
-      if (tokens.length > 1) {
-        primaryCity = tokens[0];
-        // Service areas are the OTHER tokens — don't repeat the primary
-        // city inside its own areas list. If the user only named one
-        // place, we'll fall through to the single-value branch below.
-        serviceAreas = tokens.slice(1);
-      } else {
-        serviceAreas = [primaryCity];
-      }
-    }
-  }
-
-  // Always run LLM extraction in the no-existing-city path. Regex split
-  // is fragile across languages and can't tell a real place name from a
-  // deflection (e.g. "us main kartay han bhai" — Roman Urdu for "we work
-  // in those" — looks like a 5-word "city" to a regex but is actually a
-  // non-answer). Letting the LLM judge means we ask again instead of
-  // saving garbage as the city.
-  let extractionUnclear = false;
-  let extractionReason = '';
-  try {
-    const extracted = await generateResponse(
-      `Extract the primary city and list of service areas from the user's message. They may write in ANY language (English, Roman Urdu, Urdu, Hindi, Spanish, Arabic, etc.).
-
-Return ONLY JSON in this exact shape:
-{"primaryCity": "<city>" | null, "serviceAreas": ["<city or neighborhood>", ...], "unclear": <true|false>, "reason": "<short>"}
-
-Rules:
-1. primaryCity is the single main city they're based in — a short proper noun like "Karachi", NEVER a full phrase like "pakistan k andar karachi".
-2. serviceAreas is an array of cities/neighborhoods they serve. If they named multiple cities (e.g. Karachi and Lahore), the first becomes primaryCity and the rest go into serviceAreas.
-3. Strip filler words like "based in", "pakistan k andar", "in the city of", etc.
-4. CRITICAL — if the user did NOT name an actual place, return {"primaryCity": null, "serviceAreas": [], "unclear": true, "reason": "..."}. Treat these as non-answers, NOT as places:
-   - Deflections / generic affirmations: "us main kartay han bhai" (Roman Urdu: "we work in those"), "wahan", "udhar", "in those", "in that", "in your example", "in the areas you mentioned", "everywhere you said", "wherever", "jahan aap ne kaha", "haan bhai", "yes we do", "ji haan", "ok", "sure", "anywhere"
-   - Pure verbs / sentences with no place name: "we operate", "we serve clients", "ham kaam karte hain", "hum service dete hain"
-   - Vague geography: "all over", "everywhere", "the whole city", "globally", "nationwide", "outside" — set unclear:true and ask again, do NOT invent a city.
-5. If you DO recognize an actual place name, even buried in filler ("we work in karachi mostly" → primaryCity "Karachi"), extract it normally with unclear:false.`,
-      [{ role: 'user', content: raw }],
-      { userId: user.id, operation: 'webdev_areas_extract' }
-    );
-    const m = extracted.match(/\{[\s\S]*\}/);
-    if (m) {
-      const parsed = JSON.parse(m[0]);
-      // Trust the LLM's judgement on whether a place was actually named.
-      // If it flagged unclear OR returned null/empty city, drop the regex
-      // guess (it'll be deflection garbage) and force a re-ask below.
-      if (parsed.unclear === true || !parsed.primaryCity) {
-        primaryCity = '';
-        serviceAreas = [];
-        extractionUnclear = true;
-        extractionReason = String(parsed.reason || '').slice(0, 200);
-      } else {
-        primaryCity = String(parsed.primaryCity).trim();
-        if (Array.isArray(parsed.serviceAreas)) {
-          serviceAreas = parsed.serviceAreas.map((s) => String(s).trim()).filter(Boolean);
-        }
-        if (!serviceAreas.length && primaryCity) serviceAreas = [primaryCity];
-      }
-    }
-  } catch (err) {
-    logger.warn(`[AREAS] LLM extraction failed: ${err.message}`);
-  }
-
-  // Re-ask if the LLM couldn't find a real place. We stay in
-  // WEB_COLLECT_AREAS without writing anything to metadata, so the user's
-  // next reply gets parsed fresh against an empty city.
-  if (extractionUnclear || !primaryCity) {
-    logger.info(`[AREAS] Re-asking — no real place detected. raw="${raw.slice(0, 80)}" reason="${extractionReason}"`);
+  // Re-ask when the LLM said the user didn't actually name a place, or when
+  // we ended up with no city at all. We stay in WEB_COLLECT_AREAS without
+  // writing anything to metadata, so the next reply parses fresh.
+  if (extracted.unclear || !primaryCity) {
+    logger.info(`[AREAS] Re-asking — no real place detected. raw="${raw.slice(0, 80)}" unclear=${!!extracted.unclear}`);
     await sendTextMessage(
       user.phone_number,
       `Hmm — mujhe shehar ka naam nahi mila uss reply mein. *Kis shehar* mein kaam karte ho? Like *Karachi*, *Lahore*, *Austin* — bas shehar ka naam likh do, aur agar specific neighborhoods serve karte ho toh comma-separated likho (e.g. *Karachi: Clifton, DHA, Gulshan*).`
     );
     return STATES.WEB_COLLECT_AREAS;
   }
+
+  // Single-location reply ("Karachi") — repeat the city as its own
+  // service-area list so downstream code that iterates serviceAreas (HVAC
+  // coverage page, real-estate listings) has at least one entry.
+  if (!serviceAreas.length) serviceAreas = [primaryCity];
 
   const websiteData = {
     ...(user.metadata?.websiteData || {}),
@@ -1000,78 +949,58 @@ async function handleCollectAgentProfile(user, message) {
     return smartAdvance(user, message, "No problem, we'll go with solo / no designations. You can add details from the summary later.");
   }
 
-  // Regex pre-pass for years (common patterns: "10 years", "10+ years").
-  // Phrasings like "a decade", "two decades", "since 2010" deliberately fall
-  // through to the LLM fallback below — hand-coding them here mis-parsed
-  // "two decades" as 10 because the regex couldn't see the multiplier.
-  let yearsExperience = null;
-  const yrsMatch = raw.match(/(\d{1,2})\s*\+?\s*(?:years?|yrs?|y\b)/i);
-  if (yrsMatch) {
-    const n = parseInt(yrsMatch[1], 10);
-    if (n > 0 && n < 80) yearsExperience = n;
-  }
+  // One LLM pass for brokerage + years + designations + solo flag. Handles
+  // numeric ("10 years"), prose ("a decade", "two decades", "since 2010"),
+  // and multilingual phrasings without us hand-listing each form.
+  const extracted = await extractFields(raw, {
+    brokerageName: {
+      type: 'string',
+      description: 'Name of the brokerage/firm the agent works at. Real firm names only (e.g. "Coldwell Banker", "Engel & Völkers"). Omit if the agent said solo, independent, by myself, freelance, self-employed — or if no firm was mentioned. Keep under 60 characters.',
+    },
+    yearsExperience: {
+      type: 'integer',
+      description: 'Years the agent has been in real estate. "10 years", "10+ years", "a decade" → 10. "two decades" → 20. "since 2014" → current year minus 2014. Range 1-79. Omit if unclear.',
+    },
+    designations: {
+      type: 'array',
+      description: 'Array of professional designation acronyms the agent holds, uppercase, e.g. ["CRS", "ABR", "SRES"]. Common ones: CRS, ABR, SRS, GRI, SRES, RENE, EPRO, CIPS, SFR, MRP, ABRM, CCIM, AHWD, CPM, CRB. Return [] if the agent said none / no designations. Omit the field entirely if not mentioned.',
+    },
+    isSolo: {
+      type: 'boolean',
+      description: 'TRUE if the agent explicitly said they work alone — "solo", "independent", "by myself", "on my own", "no brokerage", "freelance", "self-employed". FALSE otherwise.',
+    },
+  }, {
+    userId: user.id,
+    operation: 'webdev_agent_profile',
+  });
 
-  // Regex pre-pass for well-known designation tokens.
-  const DESIGNATION_RX = /\b(CRS|ABR|SRS|GRI|SRES|RENE|e-?Pro|CIPS|SFR|MRP|ABRM|CCIM|AHWD|CPM|CRB)\b/gi;
-  let designations = [];
-  const designMatches = raw.match(DESIGNATION_RX);
-  if (designMatches) {
-    designations = Array.from(new Set(designMatches.map((d) => d.toUpperCase().replace('-', ''))));
-  } else if (/\b(no|none)\s+(?:designations?|creds?|certifications?)?\b/i.test(raw) || /^none\b/i.test(raw)) {
-    designations = [];
-  }
-
-  // Brokerage: solo vs named. Look for "solo", "independent", "by myself", or a
-  // quoted/clear name. Fallback: LLM extraction.
   let brokerageName = null;
-  if (/\b(solo|independent|by myself|on my own|no brokerage|freelance|self[- ]employed)\b/i.test(raw)) {
-    brokerageName = null; // explicit solo — keep null
+  if (
+    typeof extracted.brokerageName === 'string' &&
+    extracted.brokerageName.length < 60 &&
+    !/^(solo|independent|null|none)$/i.test(extracted.brokerageName.trim())
+  ) {
+    brokerageName = extracted.brokerageName.trim();
   }
 
-  // LLM extraction for anything missing (especially brokerageName which is hard
-  // to pattern-match reliably).
-  const needsLlm = brokerageName === null && !/\b(solo|independent)\b/i.test(raw);
-  if (needsLlm || yearsExperience == null || (!designations.length && !/\bnone\b/i.test(raw))) {
-    try {
-      const extractPrompt = `You are a structured-data extractor for a real-estate agent onboarding flow. Read the agent's message and return ONLY JSON with these fields:
+  const yearsExperience =
+    Number.isInteger(extracted.yearsExperience) &&
+    extracted.yearsExperience > 0 &&
+    extracted.yearsExperience < 80
+      ? extracted.yearsExperience
+      : null;
 
-{
-  "brokerageName": "<the brokerage/firm name they work at, or null if they said solo/independent, or null if not mentioned>",
-  "yearsExperience": <integer if clearly stated, otherwise null>,
-  "designations": ["CRS", "ABR", ...] (common ones: CRS, ABR, SRS, GRI, SRES, RENE, ePro, CIPS, SFR, MRP, ABRM, CCIM). Return [] if they said none. Omit the field if not mentioned at all.
-}
-
-Rules:
-- brokerageName: real firm names only. "solo", "independent", "by myself" → null.
-- Never invent data. Omit unknown fields.
-- Keep brokerageName under 60 chars.`;
-      const response = await generateResponse(
-        extractPrompt,
-        [{ role: 'user', content: raw }],
-        { userId: user.id, operation: 'webdev_agent_profile' }
-      );
-      const m = response.match(/\{[\s\S]*\}/);
-      if (m) {
-        const parsed = JSON.parse(m[0]);
-        if (parsed.brokerageName && typeof parsed.brokerageName === 'string') {
-          const bn = parsed.brokerageName.trim();
-          if (bn && bn.length < 60 && !/^(solo|independent|null|none)$/i.test(bn)) {
-            brokerageName = bn;
-          }
-        }
-        if (yearsExperience == null && Number.isInteger(parsed.yearsExperience) && parsed.yearsExperience > 0 && parsed.yearsExperience < 80) {
-          yearsExperience = parsed.yearsExperience;
-        }
-        if (!designations.length && Array.isArray(parsed.designations)) {
-          designations = parsed.designations
+  // Designations: uppercase, drop anything non-letter, 2-8 chars long. The
+  // LLM is told to return uppercase already; this defends against drift.
+  const designations = Array.isArray(extracted.designations)
+    ? Array.from(
+        new Set(
+          extracted.designations
             .map((d) => String(d || '').trim().toUpperCase().replace(/[^A-Z]/g, ''))
-            .filter((d) => d.length >= 2 && d.length <= 8);
-        }
-      }
-    } catch (err) {
-      logger.warn(`[WEBDEV-AGENT] LLM extraction failed: ${err.message}`);
-    }
-  }
+            .filter((d) => d.length >= 2 && d.length <= 8)
+        )
+      )
+    : [];
 
   const merged = {
     ...wd,
@@ -1093,7 +1022,7 @@ Rules:
 
   const ackBits = [];
   if (brokerageName) ackBits.push(`at *${brokerageName}*`);
-  else if (/\b(solo|independent)\b/i.test(raw)) ackBits.push('*solo agent*');
+  else if (extracted.isSolo) ackBits.push('*solo agent*');
   if (yearsExperience != null) ackBits.push(`*${yearsExperience} years* in real estate`);
   if (designations.length) ackBits.push(`designations: *${designations.join(', ')}*`);
   const ackPrefix = ackBits.length ? `Got it — ${ackBits.join(', ')}.` : 'Thanks for the details.';
@@ -1194,106 +1123,58 @@ async function parseListingText(raw, user) {
   if (!text) return {};
   const out = {};
 
-  // Currency detection — explicit mention wins, then infer from primaryCity,
-  // then default USD. We try this BEFORE price so validator ranges can scale
-  // to the currency (PKR rent is ~100k; USD rent is ~1k; a single int range
-  // can't cover both honestly).
-  out.currency = detectCurrency(text, user?.metadata?.websiteData?.primaryCity);
+  const extracted = await extractFields(text, {
+    address: {
+      type: 'string',
+      description: 'Street address only, e.g. "45 Elm Street". Do NOT include city or state unless clearly part of the address. Omit if no street address is given.',
+    },
+    price: {
+      type: 'integer',
+      description: 'Numeric listing price as a plain integer. "$525k" → 525000. "1.2M" → 1200000. "45L" (South Asian lakh) → 4500000. "100000pkr" → 100000. Omit if no price is mentioned or it\'s unclear.',
+    },
+    currency: {
+      type: 'enum',
+      values: ['USD', 'PKR', 'INR', 'GBP', 'EUR', 'AED', 'SAR', 'QAR', 'CAD', 'AUD', 'BDT', 'LKR'],
+      description: 'ISO currency code of the listing. Detect from explicit markers ("pkr", "rs", "rupees", "₹", "£", "€", "$", "AED", "dirhams", etc.). Omit if genuinely indeterminable from the message.',
+    },
+    beds: {
+      type: 'integer',
+      description: 'Number of bedrooms. "4 bed", "4bd", "4 br", "4/3" (first number) all → 4.',
+    },
+    baths: {
+      type: 'number',
+      description: 'Number of bathrooms; can be a half (2.5). "3 bath", "2.5 ba", "4/3" (second number) all map.',
+    },
+    sqft: {
+      type: 'integer',
+      description: 'Square footage as an integer. "1,800 sqft", "1800 sf", "2200 square feet" → 1800/2200.',
+    },
+    status: {
+      type: 'enum',
+      values: ['For Sale', 'Just Listed', 'Pending', 'Sold'],
+      description: 'Listing status. Use "Just Listed" for new listings, "Pending" for under-contract, "Sold" for closed sales. Default to "For Sale" only when the message clearly implies an active listing.',
+    },
+  }, {
+    userId: user?.id,
+    operation: 'webdev_listing_parse',
+  });
 
-  // Price — accept both sale ($525k, PKR 1.2M, ₹45L) and rental figures
-  // (100000pkr, 85k rent). The numeric extractor is currency-agnostic; the
-  // validator range is widened when a non-USD currency was detected since
-  // rentals in PKR/INR/etc. are a valid much-smaller number.
-  const priceMatch = text.match(/\$?\s*([\d,]+(?:\.\d+)?)\s*([kKmMlL])?/);
-  if (priceMatch) {
-    let n = parseFloat(priceMatch[1].replace(/,/g, ''));
-    const suffix = (priceMatch[2] || '').toLowerCase();
-    if (suffix === 'k') n *= 1000;
-    else if (suffix === 'm') n *= 1000000;
-    // South Asian "lakh" (1L = 100,000) — common in PKR/INR listings
-    else if (suffix === 'l') n *= 100000;
-    else if (n < 1000 && !suffix) n = null; // probably beds/sqft, not price
+  // Currency: prefer the LLM's read of the message, fall back to inference
+  // from the user's primary city, finally to USD. Resolved BEFORE price so
+  // the validator range scales correctly (PKR rent ~100k; USD rent ~1k).
+  out.currency = extracted.currency || detectCurrency(text, user?.metadata?.websiteData?.primaryCity);
+
+  if (extracted.address && extracted.address.length >= 4 && extracted.address.length < 100) {
+    out.address = extracted.address;
+  }
+  if (extracted.price != null) {
     const { min, max } = priceRangeFor(out.currency);
-    if (n && n >= min && n <= max) out.price = Math.round(n);
+    if (extracted.price >= min && extracted.price <= max) out.price = extracted.price;
   }
-  // Beds/baths: "4 bed 3 bath", "4bd/3ba", "4/3"
-  const bbMatch = text.match(/(\d+)\s*\/\s*(\d+(?:\.\d+)?)/);
-  if (bbMatch) {
-    out.beds = parseInt(bbMatch[1], 10);
-    out.baths = parseFloat(bbMatch[2]);
-  } else {
-    const bedMatch = text.match(/(\d+)\s*(?:bed|bd|br)\b/i);
-    if (bedMatch) out.beds = parseInt(bedMatch[1], 10);
-    const bathMatch = text.match(/(\d+(?:\.\d+)?)\s*(?:bath|ba|bth)\b/i);
-    if (bathMatch) out.baths = parseFloat(bathMatch[1]);
-  }
-  // Sqft: "1800 sqft", "1,800 sf", "2200 square feet"
-  const sqftMatch = text.match(/([\d,]+)\s*(?:sqft|sf|sq\s*ft|square\s*feet)\b/i);
-  if (sqftMatch) {
-    const n = parseInt(sqftMatch[1].replace(/,/g, ''), 10);
-    if (n >= 200 && n <= 20000) out.sqft = n;
-  }
-  // Status
-  if (/\bpending\b/i.test(text)) out.status = 'Pending';
-  else if (/\b(just\s*listed|new\s*listing)\b/i.test(text)) out.status = 'Just Listed';
-  else if (/\bsold\b/i.test(text)) out.status = 'Sold';
-  else if (/\bfor\s*sale\b/i.test(text)) out.status = 'For Sale';
-
-  // LLM pass for address (and anything missing). Always run — regex can't
-  // reliably find street addresses.
-  try {
-    const missingList = [];
-    if (!out.address) missingList.push('address');
-    if (!out.price) missingList.push('price');
-    if (out.beds == null) missingList.push('beds');
-    if (out.baths == null) missingList.push('baths');
-    if (out.sqft == null) missingList.push('sqft');
-    if (!out.status) missingList.push('status');
-    if (!missingList.length) return out;
-
-    const prompt = `Extract real-estate listing fields from the message. Return ONLY JSON with the requested fields. Omit fields you can't confidently extract. Never guess.
-
-Requested: ${missingList.join(', ')}
-
-Rules:
-- address: street address only (e.g. "45 Elm Street"). No city/state unless clearly part of address.
-- price: integer numeric amount. "$525k" → 525000. "1.2M" → 1200000. "45L" (lakh) → 4500000. Omit if unclear.
-- currency: ISO currency code the listing is in — USD, PKR, INR, GBP, EUR, AED, SAR, CAD, AUD, etc. Detect from explicit markers in the message ("pkr", "rs", "rupees", "₹", "£", "€", "$", "AED", ...) OR infer from the business location context. Omit only if genuinely indeterminable.
-- beds, baths: numbers. baths can be .5.
-- sqft: integer square feet.
-- status: one of "For Sale", "Just Listed", "Pending", "Sold". Default "For Sale" only if message implies active listing.
-
-Return like {"address":"45 Elm St","price":525000,"currency":"USD","beds":4,"baths":3} or {} if nothing usable.`;
-    const resp = await generateResponse(prompt, [{ role: 'user', content: text }], {
-      userId: user?.id,
-      operation: 'webdev_listing_parse',
-    });
-    const m = resp.match(/\{[\s\S]*\}/);
-    if (m) {
-      const parsed = JSON.parse(m[0]);
-      // Accept an LLM-supplied currency before validating price, so the
-      // price range is scaled to the right currency.
-      if (parsed.currency && typeof parsed.currency === 'string') {
-        const code = parsed.currency.trim().toUpperCase();
-        if (/^[A-Z]{3}$/.test(code)) out.currency = code;
-      }
-      const { min, max } = priceRangeFor(out.currency);
-      for (const k of missingList) {
-        const v = parsed[k];
-        if (v == null) continue;
-        if (k === 'address' && typeof v === 'string' && v.trim().length >= 4 && v.trim().length < 100) out.address = v.trim();
-        else if (k === 'price' && Number.isFinite(v) && v >= min && v <= max) out.price = Math.round(v);
-        else if (k === 'beds' && Number.isInteger(v) && v >= 0 && v < 20) out.beds = v;
-        else if (k === 'baths' && Number.isFinite(v) && v >= 0 && v < 20) out.baths = v;
-        else if (k === 'sqft' && Number.isInteger(v) && v >= 200 && v <= 20000) out.sqft = v;
-        else if (k === 'status' && typeof v === 'string' && /^(For Sale|Just Listed|Pending|Sold)$/i.test(v.trim())) {
-          out.status = v.trim().replace(/\b\w/g, (c) => c.toUpperCase()).replace(/For sale/i, 'For Sale').replace(/Just listed/i, 'Just Listed');
-        }
-      }
-    }
-  } catch (err) {
-    logger.warn(`[WEBDEV-LISTING] LLM parse failed: ${err.message}`);
-  }
+  if (extracted.beds != null && extracted.beds >= 0 && extracted.beds < 20) out.beds = extracted.beds;
+  if (extracted.baths != null && extracted.baths >= 0 && extracted.baths < 20) out.baths = extracted.baths;
+  if (extracted.sqft != null && extracted.sqft >= 200 && extracted.sqft <= 20000) out.sqft = extracted.sqft;
+  if (extracted.status) out.status = extracted.status;
 
   return out;
 }
@@ -1862,13 +1743,25 @@ async function finishSalonFlow(user) {
 async function handleSalonBookingTool(user, message) {
   const text = (message.text || '').trim();
   const wd = { ...(user.metadata?.websiteData || {}) };
-  const urlMatch = text.match(/https?:\/\/\S+/i);
 
   const igExample = instagramHandleExampleFor(wd.businessName);
 
-  if (urlMatch) {
+  // LLM-extract a booking URL if one is present in the message. Catches
+  // pasted https:// URLs, bare-domain references ("booking.fresha.com/foo"),
+  // and prose like "we use this — https://book.example.com/me — already".
+  const { bookingUrl } = await extractFields(text, {
+    bookingUrl: {
+      type: 'string',
+      description: 'A URL the user pasted to a booking / appointment tool such as Fresha, Booksy, Vagaro, Calendly, Square Appointments, Acuity, Setmore, or any similar service. Return the full URL with "https://" prefix — add it if the user pasted a bare domain like "booking.example.com/foo". Strip trailing punctuation (".", ",", ")", "]"). Omit if no URL is present.',
+    },
+  }, {
+    userId: user.id,
+    operation: 'webdev_booking_tool',
+  });
+
+  if (bookingUrl) {
     wd.bookingMode = 'embed';
-    wd.bookingUrl = urlMatch[0].replace(/[)\]]+$/, '');
+    wd.bookingUrl = bookingUrl;
     await updateUserMetadata(user.id, { websiteData: wd });
     await logMessage(user.id, `Booking mode: embed (${wd.bookingUrl})`, 'assistant');
     const msg = `Got it, we'll embed *${wd.bookingUrl}* on your booking page.\n\nWhat's your Instagram handle? (e.g. ${igExample}). Just skip if you don't have one.`;
@@ -1929,21 +1822,28 @@ async function handleSalonInstagram(user, message) {
     }
   }
 
-  // Only accept an obvious handle shape: an instagram.com URL, a @-prefixed
-  // token (either standalone or embedded in a sentence like "han, X kar do
-  // @asnhbukharu"), or a single bare handle-shaped word. Anything else
-  // (delegation, prose, "i dont have one") is treated as skip.
-  const urlHandle = !isExplicitSkip ? text.match(/instagram\.com\/([\w.]+)/i) : null;
-  const inlineAt = !isExplicitSkip ? text.match(/@([\w.]{3,30})\b/) : null;
+  // LLM-extract the handle from any phrasing the user comes up with —
+  // pasted URL, @-prefixed inline ("han, X kar do @asnhbukharu"), bare
+  // word, or prose ("the handle is asnhbukharu"). The schema-level
+  // contract trims @ / instagram.com/ for us; we still re-check the
+  // shape afterwards so junk like "Skip" / a sentence fragment can't
+  // sneak in even if the LLM misclassifies the message.
   let candidate = null;
-  if (urlHandle) {
-    candidate = urlHandle[1];
-  } else if (inlineAt) {
-    candidate = inlineAt[1];
-  } else if (!isExplicitSkip && /^[\w.]{3,30}$/.test(text)) {
-    candidate = text;
+  if (!isExplicitSkip && text) {
+    const { handle } = await extractFields(text, {
+      handle: {
+        type: 'string',
+        description: 'Instagram username from the message. Return the bare handle (3–30 chars, letters/digits/dots/underscores only) — strip the leading @, strip "instagram.com/", strip the URL host. Examples: "instagram.com/asnh.bukhari" → "asnh.bukhari"; "@coffee_co" → "coffee_co"; "han bro X handle hai @asnhbukharu" → "asnhbukharu"; "the handle is glow.salon" → "glow.salon". Omit if the user is declining ("skip", "no instagram", "rehne do").',
+      },
+    }, {
+      userId: user.id,
+      operation: 'webdev_instagram_handle',
+    });
+    if (typeof handle === 'string' && /^[\w.]{3,30}$/.test(handle)) {
+      candidate = handle;
+    }
   }
-  if (candidate && /^[\w.]{3,30}$/.test(candidate)) {
+  if (candidate) {
     wd.instagramHandle = candidate;
   }
   await updateUserMetadata(user.id, { websiteData: wd });
@@ -2028,45 +1928,50 @@ async function handleSalonHours(user, message) {
   return STATES.SALON_SERVICE_DURATIONS;
 }
 
-// Extract optional currency-prefixed or suffixed prices from the remainder of
-// a parsed service chunk. Accepts €25, $30, £40, ₹500, "25 euro", "from €20".
-const PRICE_RE = /(from\s*)?([€$£₹]\s*\d{1,5}(?:\.\d{1,2})?|\d{1,5}(?:\.\d{1,2})?\s*(?:eur|usd|gbp|inr|aed|euros?|dollars?|pounds?|rupees?))/i;
-
-function parseServiceDurations(text, servicesList) {
-  // Split the message into chunks by comma or newline and try to extract
-  // duration + price per chunk. Each chunk is matched back to a service name
-  // by lowercased exact/partial match.
-  const chunks = String(text || '')
-    .split(/[,;\n]+|\s+\|\s+/)
-    .map((c) => c.trim())
-    .filter(Boolean);
-
-  const byName = {}; // { loweredName: { duration, price } }
-
-  for (const chunk of chunks) {
-    const durMatch = chunk.match(/(\d{1,3})\s*(?:mins?|minutes|m)\b/i);
-    const priceMatch = chunk.match(PRICE_RE);
-
-    // The "name" is whatever precedes the duration or, failing that, the price.
-    let name = chunk;
-    const firstMeta = [durMatch?.index, priceMatch?.index].filter((x) => typeof x === 'number').sort((a, b) => a - b)[0];
-    if (typeof firstMeta === 'number') name = chunk.slice(0, firstMeta);
-    name = name.replace(/[:\-—]\s*$/, '').trim().toLowerCase();
-    if (!name) continue;
-
-    const entry = {};
-    if (durMatch) {
-      const mins = parseInt(durMatch[1], 10);
-      if (mins > 0 && mins <= 600) entry.duration = mins;
-    }
-    if (priceMatch) {
-      // Normalise: keep the raw symbol+number, strip trailing comma/period.
-      entry.price = priceMatch[0].trim().replace(/[,.]$/, '');
-    }
-    if (Object.keys(entry).length > 0) byName[name] = entry;
+async function parseServiceDurations(text, servicesList, userId) {
+  // One LLM pass: turn free-text like "Haircut 30min €25, Colour 90min €85"
+  // into an array of {name, durationMinutes, priceText} entries. The LLM
+  // does the chunking, currency-format normalization, and partial-name
+  // matching to servicesList — all things the prior regex pipeline did
+  // brittly and only in English.
+  const safeText = String(text || '').trim();
+  const known = (servicesList || []).filter(Boolean);
+  if (!safeText || !known.length) {
+    return known.map((s) => ({ name: s, durationMinutes: 30, priceText: '' }));
   }
 
-  return servicesList.map((s) => {
+  const extracted = await extractFields(safeText, {
+    serviceDetails: {
+      type: 'array',
+      description: `Array of objects, one per service the user described. Each object has shape: {"name": <one of the known services>, "durationMinutes": <integer minutes or null>, "priceText": <string or null>}.
+- "name" MUST exactly match one of these known services (case-insensitive): ${known.join(', ')}.
+- "durationMinutes" is an integer count of minutes. "30min" → 30, "1 hour" → 60, "1.5 hr" → 90, "45 mins" → 45. Set to null if no duration given.
+- "priceText" preserves the user's original currency formatting: "€25", "$30", "£40", "Rs 500", "PKR 1500", "25 euros". Set to null if no price.
+- Skip services the user didn't describe; do NOT pad with placeholders. The output array can be shorter than the known list.`,
+    },
+  }, {
+    userId,
+    operation: 'webdev_service_durations',
+  });
+
+  // Build a lookup keyed by lowercased service name for quick matching against
+  // the canonical servicesList. The LLM is told to use known names verbatim
+  // but defends against case drift / extra whitespace just in case.
+  const byName = {};
+  if (Array.isArray(extracted.serviceDetails)) {
+    for (const entry of extracted.serviceDetails) {
+      if (!entry || typeof entry !== 'object') continue;
+      const name = String(entry.name || '').trim().toLowerCase();
+      if (!name) continue;
+      const out = {};
+      const dur = entry.durationMinutes;
+      if (Number.isFinite(dur) && dur > 0 && dur <= 600) out.duration = Math.round(dur);
+      if (typeof entry.priceText === 'string' && entry.priceText.trim()) out.price = entry.priceText.trim();
+      if (Object.keys(out).length) byName[name] = out;
+    }
+  }
+
+  return known.map((s) => {
     const key = s.toLowerCase();
     let hit = byName[key];
     if (!hit) {
@@ -2090,7 +1995,7 @@ async function handleSalonServiceDurations(user, message) {
   const useDefault = isDelegation(text) || /^30$/.test(text);
   const salonServices = useDefault
     ? services.map((s) => ({ name: s, durationMinutes: 30, priceText: '' }))
-    : parseServiceDurations(text, services);
+    : await parseServiceDurations(text, services, user.id);
   wd.salonServices = salonServices;
   await updateUserMetadata(user.id, { websiteData: wd });
   await logMessage(
@@ -2116,126 +2021,48 @@ async function handleSalonServiceDurations(user, message) {
 }
 
 /**
- * Detect an edit-intent message targeting a specific previously-collected
- * field (business name, industry, services, email, phone, address). Returns
- * { field, value } if one was detected, or null otherwise.
- *
- * Permissive enough to catch phrasings like
- *   "actually the business name is wrong, it should be Glow Salon"
- *   "change the name to Glow Salon"
- *   "name: Glow Salon"
- *   "the industry is actually food"
- * without stealing plain contact-info entries.
- */
-function detectFieldEdit(text) {
-  if (!text) return null;
-  const t = String(text).trim();
-
-  // Field anchor — must match somewhere in the message. If no field keyword
-  // appears at all, it's not an edit. We require the anchor to either start
-  // the line or follow an edit verb / "the|my" so plain contact input like
-  // "address: 123 Main" still matches but arbitrary mentions don't.
-  const fieldAnchor = (fieldRegex) =>
-    new RegExp(
-      `^\\s*(?:actually[,\\s]+|change\\s+|update\\s+|fix\\s+|correct\\s+|set\\s+|make\\s+|the\\s+|my\\s+)*${fieldRegex}\\b`,
-      'i'
-    );
-
-  // Separator (greedy left → rightmost match) picks the LAST "should be|is|
-  // are|to|:" so "name is wrong, it should be X" captures "X" not
-  // "wrong, it should be X".
-  const tailPattern = /.*(?:should\s+be|are|is|to|:)\s+(.+)$/i;
-
-  const fields = [
-    { field: 'businessName',   re: fieldAnchor('(?:business\\s*)?name') },
-    { field: 'industry',       re: fieldAnchor('industry') },
-    { field: 'services',       re: fieldAnchor('services?') },
-    { field: 'contactEmail',   re: fieldAnchor('e-?mail') },
-    { field: 'contactPhone',   re: fieldAnchor('(?:phone|tel|mobile|number)') },
-    { field: 'contactAddress', re: fieldAnchor('(?:address|location|addr)') },
-  ];
-
-  for (const { field, re } of fields) {
-    if (!re.test(t)) continue;
-    const m = t.match(tailPattern);
-    if (!m) continue;
-    let value = m[1].trim().replace(/^["']|["'\.]$/g, '');
-    // Strip a leading "actually" if it leaked through into the value
-    // (e.g. "industry is actually food" → "food", not "actually food").
-    value = value.replace(/^(?:actually|really|now|just)[,\s]+/i, '').trim();
-    if (!value) continue;
-    return { field, value };
-  }
-  return null;
-}
-
-/**
  * Parse a free-text contact blob into { contactEmail, contactPhone, contactAddress }.
- * Handles both labeled input ("email: x, phone: y, address: z") and unlabeled input.
+ * Handles labeled input ("email: x, phone: y, address: z"), unlabeled input,
+ * and multilingual prose ("email hai X, number es Y, l'adresse est Z").
  */
-function parseContactFields(text) {
-  const emailMatch = text.match(/[\w.-]+@[\w.-]+\.\w+/);
-  const phoneMatch = text.match(/[\+]?[\d][\d\s\-()]{6,}/);
+async function parseContactFields(text, userId) {
+  const safeText = String(text || '').trim();
+  if (!safeText) return { contactEmail: '', contactPhone: '', contactAddress: '' };
 
-  // Try labeled address first — handles "address: 123 Main St" on its own line or inline.
-  // Stops at the next known label word (with OR without a colon) or end of
-  // string, so prose like "address is X email Y@Z.com phone 555" splits
-  // cleanly into the three fields instead of collapsing into the address.
-  const labeledAddressMatch = text.match(
-    /(?:address|location|addr)\s*[:\-=]?\s*([^\n]+?)(?=\s*(?:email|e-?mail|phone|tel|mobile|contact)\b|$)/i
-  );
+  const extracted = await extractFields(safeText, {
+    email: {
+      type: 'string',
+      description: 'Email address mentioned in the message (e.g. "user@example.com"). Omit if no valid email.',
+    },
+    phone: {
+      type: 'string',
+      description: 'Phone number mentioned in the message — keep the user\'s formatting, including + and dashes/spaces. Omit if no phone number is given. Bare 1-3 digit numbers are not phones.',
+    },
+    address: {
+      type: 'string',
+      description: 'Street address only (e.g. "45 Elm Street, Apt 3B" or "Block 5, DHA Phase 6"). Do NOT include the city alone, country, ZIP, or coordinates. Omit if no street address is given. Strip leading filler words like "is", "hai", "es", "est" — return the address itself.',
+    },
+  }, {
+    userId,
+    operation: 'webdev_contact_parse',
+  });
 
-  // Clean a captured address: strip a leading copula/separator that sneaks in
-  // when the user writes prose ("the address is ABC, Street" captures "is
-  // ABC, Street" without this), plus trailing punctuation and stray "and"
-  // connectors ("123 Main St, and" → "123 Main St"). Covers common copulas
-  // from Roman Urdu / Hindi / Spanish / French too so "address hai X" /
-  // "direccion es X" / "l'adresse est X" don't leak the verb into the value.
-  const stripAddressSeparator = (v) =>
-    v
-      .replace(/^(?:is|are|=|:|-|at|of|for|hai|hain|ka|ki|ke|ye|yeh|es|son|est|sont|ist|sind)\s+/i, '')
-      .replace(/\s+(?:and|plus|aur|y|et|und)\s*$/i, '')
-      .replace(/[,;.\s=:\-]+$/, '')
-      .trim();
-
-  // Reject addresses that look like leftover junk from a labeled message
-  // (e.g. "contact =", "email", "phone") or filler-word residue after the
-  // parser stripped out matched email/phone values ("yeah the is and
-  // number is" left over from "yeah the email is X and number is Y"). An
-  // address worth keeping must have EITHER a digit OR a recognizable
-  // street keyword — pure-prose strings have neither and are almost
-  // always residue.
-  const isPlausibleAddress = (v) => {
-    if (!v) return false;
-    if (/\d/.test(v)) return true;
-    if (/\b(?:st|street|ave|avenue|road|rd|blvd|boulevard|lane|ln|drive|dr|way|plaza|suite|apt|floor|block|sector|phase|building|tower|mall|market|colony|bazaar|bazar|nagar|society|square|sq)\b/i.test(v)) return true;
-    return false;
-  };
-
+  // Sanity check on the LLM-supplied address: an address worth keeping has
+  // EITHER a digit OR a recognizable street keyword. Pure-prose strings
+  // ("the usual one", "you know it") sometimes leak through and land as
+  // "contact =" garbage in the summary. Drops those without losing real
+  // addresses.
   let addressValue = '';
-  if (labeledAddressMatch) {
-    addressValue = stripAddressSeparator(labeledAddressMatch[1].trim());
-  } else {
-    // Fallback: strip the matched email/phone and any leftover label words, return the rest.
-    // Expanded label list includes "contact" (common when users write
-    // "contact = 555-1234" to mean phone) and accepts = as a separator too.
-    addressValue = text
-      .replace(emailMatch?.[0] || '', '')
-      .replace(phoneMatch?.[0] || '', '')
-      .replace(/\b(email|e-?mail|phone|tel|mobile|contact|contact\s*number|address|location|addr)\s*[:\-=]?/gi, '')
-      .replace(/[,\n\r]+/g, ' ')
-      .replace(/\s{2,}/g, ' ')
-      .trim();
-    addressValue = stripAddressSeparator(addressValue);
+  if (extracted.address) {
+    const a = extracted.address;
+    const hasDigit = /\d/.test(a);
+    const hasStreetKeyword = /\b(?:st|street|ave|avenue|road|rd|blvd|boulevard|lane|ln|drive|dr|way|plaza|suite|apt|floor|block|sector|phase|building|tower|mall|market|colony|bazaar|bazar|nagar|society|square|sq)\b/i.test(a);
+    if (hasDigit || hasStreetKeyword) addressValue = a;
   }
-
-  // Final junk filter: if what we captured doesn't look like a real address,
-  // discard it rather than showing "contact =" in the summary.
-  if (!isPlausibleAddress(addressValue)) addressValue = '';
 
   return {
-    contactEmail: emailMatch?.[0] || '',
-    contactPhone: phoneMatch?.[0]?.trim() || '',
+    contactEmail: extracted.email || '',
+    contactPhone: extracted.phone || '',
     contactAddress: addressValue,
   };
 }
@@ -2308,19 +2135,12 @@ async function handleCollectContact(user, message) {
     }
   }
 
-  // If the input is a multi-field contact blob (2+ labeled fields like
-  // "address: X, email: Y, phone: Z" OR "email is X and phone is Y"), skip
-  // the single-field edit detector — otherwise the greedy tail regex
-  // inside detectFieldEdit picks the LAST "is|:" in the message and
-  // misreads "phone is 09876544567" as the email value. The regex below
-  // counts labels followed by ANY of (colon, hyphen, "is", "are") so
-  // prose-style multi-field input is caught too.
-  // Expanded label list: users commonly write "contact is X" and
-  // "number is Y" to mean phone. Without those in the list, an input
-  // like "email is test@gmail.com and contact is 02928373993" counts
-  // as only 1 label, detectFieldEdit runs, its greedy tail-match
-  // picks the LAST "is" value (the phone) as the email, and we
-  // misroute a two-field input into a single-field edit.
+  // Cheap routing gate: if the input is clearly a multi-field contact blob
+  // (2+ labeled fields like "address: X, email: Y, phone: Z" OR "email is
+  // X and phone is Y"), skip the LLM edit-detector below — multi-field
+  // contact input is the user's first-time answer to the contact prompt,
+  // not an edit of a prior field. Counts labels followed by colon/hyphen
+  // or "is"/"are" so prose-style multi-field input is caught too.
   const labelCount = (contactText.match(/\b(?:email|e-?mail|phone|tel|mobile|contact|number|address|location|addr)\s+(?:is|are)\b|\b(?:email|e-?mail|phone|tel|mobile|contact|number|address|location|addr)\s*[:\-]/gi) || []).length;
 
   // Delegation path: the user doesn't want to provide contact info and is
@@ -2372,8 +2192,9 @@ async function handleCollectContact(user, message) {
   // services — genuine corrections to fields collected upstream.
   const EDIT_ALLOWED_AT_CONTACT_STEP = new Set(['businessName', 'industry', 'services']);
   if (contactText && contactText.length >= 3 && !isExplicitSkip && labelCount < 2) {
-    const edit = detectFieldEdit(contactText);
-    if (edit && EDIT_ALLOWED_AT_CONTACT_STEP.has(edit.field)) {
+    const edits = await detectFieldEditsLLM(contactText, user.metadata?.websiteData || {}, user.id);
+    const edit = edits.find((e) => EDIT_ALLOWED_AT_CONTACT_STEP.has(e.field));
+    if (edit) {
       const wd = { ...(user.metadata?.websiteData || {}) };
       let ackValue = edit.value;
       if (edit.field === 'services') {
@@ -2408,7 +2229,7 @@ async function handleCollectContact(user, message) {
   if (!contactText || contactText.length < 3 || isExplicitSkip) {
     contactData = { contactEmail: '', contactPhone: '', contactAddress: '' };
   } else {
-    contactData = parseContactFields(contactText);
+    contactData = await parseContactFields(contactText, user.id);
 
     // Reject junk / stray replies like "hello?", "?", "im waiting". If we
     // got no email, no phone, and the "address" we parsed looks like
@@ -2877,7 +2698,7 @@ async function handleConfirm(user, message) {
   // Mutates wd in place for one field. Returns a short ack string like
   // "business name → *MyCo*" or null if the value wasn't applicable. Shared
   // by the single-edit and multi-edit paths below.
-  const mutateWdForField = (field, value) => {
+  const mutateWdForField = async (field, value) => {
     const v = String(value || '').trim();
     if (!v) return null;
     switch (field) {
@@ -2916,7 +2737,7 @@ async function handleConfirm(user, message) {
         wd.contactAddress = v;
         return `address → *${wd.contactAddress}*`;
       case 'contact': {
-        const parsed = parseContactFields(v);
+        const parsed = await parseContactFields(v, user.id);
         const applied = [];
         if (parsed.contactEmail) { wd.contactEmail = parsed.contactEmail; applied.push(`email → *${wd.contactEmail}*`); }
         if (parsed.contactPhone) { wd.contactPhone = parsed.contactPhone; applied.push(`phone → *${wd.contactPhone}*`); }
@@ -2952,7 +2773,7 @@ async function handleConfirm(user, message) {
       }
       return applyAndReshow(`Industry updated to *${wd.industry}*`);
     }
-    const label = mutateWdForField(field, value);
+    const label = await mutateWdForField(field, value);
     if (!label) return null;
     return applyAndReshow(label.charAt(0).toUpperCase() + label.slice(1));
   };
@@ -2977,7 +2798,7 @@ async function handleConfirm(user, message) {
 
     const labels = [];
     for (const m of llmEdits) {
-      const label = mutateWdForField(m.field, m.value);
+      const label = await mutateWdForField(m.field, m.value);
       if (label) labels.push(label);
     }
     if (labels.length > 0) {
@@ -4799,12 +4620,36 @@ async function handleDomainSearch(user, message) {
 
   const domainOptions = user.metadata?.domainOptions || [];
 
-  // Pick by number.
-  const numMatch = text.match(/^(\d+)$/);
-  if (numMatch && domainOptions.length > 0) {
-    const idx = parseInt(numMatch[1], 10) - 1;
-    if (idx >= 0 && idx < domainOptions.length &&
-        domainOptions[idx].available && !domainOptions[idx].premium) {
+  // One LLM pass classifies the reply into one of three actions: pick from
+  // the list (by number, ordinal, or prose like "the second one"), pick a
+  // specific domain by name, or search again with a new base name. The
+  // prior regex pipeline missed prose phrasings ("option 3", "give me the
+  // second one", "I'll take .ai") and any non-English equivalents.
+  const optionList = domainOptions.length
+    ? domainOptions.map((d, i) => `${i + 1}. ${d.domain}`).join('\n')
+    : '(no current options)';
+  const { selectionIndex, fullDomain, newSearchBase } = await extractFields(raw, {
+    selectionIndex: {
+      type: 'integer',
+      description: `1-based position the user is picking from this numbered list of domain suggestions:\n${optionList}\n\nMatch plain numbers ("1", "2"), ordinals ("first", "1st", "second", "2nd", "third", ...), prose ("the second one", "option 3", "give me #2", "I'll go with the third"), and direct mentions of one of the listed domains (return its position). Range 1-${Math.max(domainOptions.length, 1)}. Omit if the user is not picking from the list.`,
+    },
+    fullDomain: {
+      type: 'string',
+      description: 'A specific domain in dot-notation that the user typed and wants to use, e.g. "mybiz.ai", "shop.example.com". Lowercase, no protocol. Omit when the user is picking from the numbered list (use selectionIndex for that) or asking to search a new base name.',
+    },
+    newSearchBase: {
+      type: 'string',
+      description: 'A new business-name base the user wants to re-search domains for — letters, digits, and hyphens only (2-30 chars, no spaces, no dots). Examples: "glowsalon", "mybiz", "acme-co". Omit if the user is picking from the list or naming a specific full domain.',
+    },
+  }, {
+    userId: user.id,
+    operation: 'webdev_domain_pick',
+  });
+
+  // Pick from the numbered list.
+  if (Number.isInteger(selectionIndex) && selectionIndex >= 1 && domainOptions.length > 0) {
+    const idx = selectionIndex - 1;
+    if (idx < domainOptions.length && domainOptions[idx].available && !domainOptions[idx].premium) {
       return selectDomainInline(user, domainOptions[idx]);
     }
     await sendTextMessage(
@@ -4814,37 +4659,27 @@ async function handleDomainSearch(user, message) {
     return STATES.WEB_DOMAIN_SEARCH;
   }
 
-  // Pick by ordinal word.
-  const ordinalMap = { first: 0, '1st': 0, second: 1, '2nd': 1, third: 2, '3rd': 2, fourth: 3, '4th': 3, fifth: 4, '5th': 4 };
-  const ordMatch = text.match(/\b(first|1st|second|2nd|third|3rd|fourth|4th|fifth|5th)\b/);
-  if (ordMatch && domainOptions.length > 0) {
-    const idx = ordinalMap[ordMatch[1]];
-    if (idx !== undefined && idx < domainOptions.length &&
-        domainOptions[idx].available && !domainOptions[idx].premium) {
-      return selectDomainInline(user, domainOptions[idx]);
-    }
-  }
-
-  // Full domain typed (e.g. "mybiz.ai"). Two sub-cases:
+  // Specific full domain typed (e.g. "mybiz.ai"). Two sub-cases:
   //   1. Already in the current options list → pick it.
   //   2. Not in options → do a targeted single-domain lookup so we can
   //      show the real price for the exact TLD they asked for (previously
   //      we stripped the TLD and re-searched the default list, which was
   //      the "user typed .ai, got same .com/.co/.io list again" bug).
-  const fullMatch = raw.match(/([a-z0-9-]+\.[a-z]{2,})/i);
-  if (fullMatch) {
-    const typedDomain = fullMatch[1].toLowerCase();
-    const fromOptions = domainOptions.find(d => d.domain.toLowerCase() === typedDomain);
+  if (typeof fullDomain === 'string' && fullDomain.includes('.')) {
+    const typedDomain = fullDomain.toLowerCase();
+    const fromOptions = domainOptions.find((d) => d.domain.toLowerCase() === typedDomain);
     if (fromOptions && fromOptions.available && !fromOptions.premium) {
       return selectDomainInline(user, fromOptions);
     }
     return runSpecificDomainLookup(user, typedDomain);
   }
 
-  // New base name for search.
-  const cleaned = text.replace(/[^a-z0-9-]/g, '');
-  if (cleaned.length >= 2 && cleaned.length <= 30 && !/\s/.test(raw)) {
-    return runDomainSearchInline(user, cleaned);
+  // New base name for re-search.
+  if (typeof newSearchBase === 'string') {
+    const cleaned = newSearchBase.toLowerCase().replace(/[^a-z0-9-]/g, '');
+    if (cleaned.length >= 2 && cleaned.length <= 30) {
+      return runDomainSearchInline(user, cleaned);
+    }
   }
 
   await sendTextMessage(
