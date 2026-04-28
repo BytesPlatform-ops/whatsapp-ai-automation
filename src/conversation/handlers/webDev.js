@@ -999,14 +999,15 @@ async function handleCollectAgentProfile(user, message) {
     return smartAdvance(user, message, "No problem, we'll go with solo / no designations. You can add details from the summary later.");
   }
 
-  // Regex pre-pass for years (common patterns: "10 years", "10+ years", "a decade").
+  // Regex pre-pass for years (common patterns: "10 years", "10+ years").
+  // Phrasings like "a decade", "two decades", "since 2010" deliberately fall
+  // through to the LLM fallback below — hand-coding them here mis-parsed
+  // "two decades" as 10 because the regex couldn't see the multiplier.
   let yearsExperience = null;
   const yrsMatch = raw.match(/(\d{1,2})\s*\+?\s*(?:years?|yrs?|y\b)/i);
   if (yrsMatch) {
     const n = parseInt(yrsMatch[1], 10);
     if (n > 0 && n < 80) yearsExperience = n;
-  } else if (/\bdecade\b/i.test(raw)) {
-    yearsExperience = 10;
   }
 
   // Regex pre-pass for well-known designation tokens.
