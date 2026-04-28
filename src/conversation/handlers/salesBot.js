@@ -116,14 +116,20 @@ async function handleSalesBot(user, message) {
     }
   }
 
-  // Classify the user's message intent up-front. Single LLM call returns
-  // both opt-out and agreement signals; we use opt-out here for the
-  // early-return, and pass `agreed` through to the post-LLM trigger
-  // fallbacks so we don't pay for a second classification.
-  const userIntents = await classifyIntent(text, {
-    notInterested: 'User is opting out of further contact: wants follow-ups stopped, doesn\'t want to be messaged, or is firmly declining the service ("not interested", "stop messaging", "I\'m good thanks", "no need", "leave me alone", "don\'t contact me", "unsubscribe", "maybe later but stop bugging me"). Do NOT match if the user is just asking on behalf of someone else, declining one specific suggestion while still engaged, or simply unsure.',
-    agreed: 'User is affirming or agreeing to proceed with what was just offered or asked. Match liberally: "yes", "yeah", "sure", "ok", "sounds good", "let\'s do it", "I\'m in", "go ahead", "deal", "perfect", "alright", and equivalents in any language including Roman Urdu/Hindi ("haan", "theek hai", "chalo"). Do NOT match plain greetings or unrelated answers.',
-  }, { userId: user.id, operation: 'sales_user_intent' });
+  // The router already classified the user's message via
+  // classifyFeedbackSignals(... { includeSales: true }) and stashed the
+  // result on user._classifiedIntents — so we pick up notInterested /
+  // agreed without paying for a second LLM round-trip. Defensive fallback
+  // for the rare path that bypasses the router (tester accounts, manual
+  // invocations) — it self-classifies in that case so behavior is
+  // identical, just one call slower.
+  let userIntents = user._classifiedIntents;
+  if (!userIntents || typeof userIntents.notInterested !== 'boolean') {
+    userIntents = await classifyIntent(text, {
+      notInterested: 'User is opting out of further contact: wants follow-ups stopped, doesn\'t want to be messaged, or is firmly declining the service ("not interested", "stop messaging", "I\'m good thanks", "no need", "leave me alone", "don\'t contact me", "unsubscribe", "maybe later but stop bugging me"). Do NOT match if the user is just asking on behalf of someone else, declining one specific suggestion while still engaged, or simply unsure.',
+      agreed: 'User is affirming or agreeing to proceed with what was just offered or asked. Match liberally: "yes", "yeah", "sure", "ok", "sounds good", "let\'s do it", "I\'m in", "go ahead", "deal", "perfect", "alright", and equivalents in any language including Roman Urdu/Hindi ("haan", "theek hai", "chalo"). Do NOT match plain greetings or unrelated answers.',
+    }, { userId: user.id, operation: 'sales_user_intent' });
+  }
 
   if (userIntents.notInterested && !user.metadata?.followupOptOut) {
     await updateUserMetadata(user.id, { followupOptOut: true });

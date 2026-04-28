@@ -425,23 +425,39 @@ function isTrivialMessage(text) {
 }
 
 /**
- * One LLM round-trip that classifies all three implicit feedback signals
- * at once. The router calls this once per inbound message and passes the
- * results down to the individual handlers — three separate classifier
- * calls per message would triple the latency on the hot path.
+ * One LLM round-trip that classifies the feedback signals (and optionally
+ * the salesBot user intents) at once. The router calls this exactly once
+ * per inbound text message and stashes the result on the user object so
+ * downstream handlers (salesBot) can read without paying for a second
+ * classifier call.
  *
- * Returns { frustrated, helpEscape, correction } booleans. Always returns
- * all-false on trivial messages or on classifier failure (fail-closed).
+ * Always returns frustrated / helpEscape / correction. With
+ * `opts.includeSales`, also returns notInterested / agreed — the two
+ * intents salesBot needs up front. Fail-closed (all-false) on trivial
+ * input or classifier failure.
  */
-async function classifyFeedbackSignals(text) {
+async function classifyFeedbackSignals(text, opts = {}) {
+  const baseDefaults = { frustrated: false, helpEscape: false, correction: false };
+  const salesDefaults = opts.includeSales ? { notInterested: false, agreed: false } : {};
   if (isTrivialMessage(text)) {
-    return { frustrated: false, helpEscape: false, correction: false };
+    return { ...baseDefaults, ...salesDefaults };
   }
-  return classifyIntent(text, {
+
+  const intents = {
     frustrated: 'User sounds frustrated, irritated, fed up, or angry at the bot/conversation. Includes: complaints about the bot being broken/useless/stupid/dumb, profanity directed at the situation, "ugh", "wtf", "come on", "are you serious", "this isn\'t working", repeating that they already answered, or expressing exhaustion ("I\'m tired of this", "this is pointless"). Do NOT match neutral disagreement or polite "no thanks".',
     helpEscape: 'User is explicitly asking to be connected to a human, real person, agent, or to stop talking to the bot. Includes: "talk to a human", "speak to someone", "real person", "connect me to an agent", "I need actual help", "get me a real person", "stop the bot", "is there a human I can talk to". Match liberally — any indirect request to escalate to a person counts.',
     correction: 'User is correcting or rejecting the previous bot turn — saying the bot got something wrong, misheard, or used the wrong value. Includes: "no", "nope", "nah", "wrong", "that\'s not it", "that\'s incorrect", "actually it\'s X", "I said Y not Z". Do NOT match a "no" that\'s declining a new offer (e.g. "no I don\'t need that") — only when the user is fixing/rejecting what the bot just produced.',
-  }, { operation: 'feedback_signals' });
+  };
+
+  if (opts.includeSales) {
+    intents.notInterested = 'User is opting out of further contact: wants follow-ups stopped, doesn\'t want to be messaged, or is firmly declining the service ("not interested", "stop messaging", "I\'m good thanks", "no need", "leave me alone", "don\'t contact me", "unsubscribe", "maybe later but stop bugging me"). Do NOT match if the user is just asking on behalf of someone else, declining one specific suggestion while still engaged, or simply unsure.';
+    intents.agreed = 'User is affirming or agreeing to proceed with what was just offered or asked. Match liberally: "yes", "yeah", "sure", "ok", "sounds good", "let\'s do it", "I\'m in", "go ahead", "deal", "perfect", "alright", and equivalents in any language including Roman Urdu/Hindi ("haan", "theek hai", "chalo"). Do NOT match plain greetings or unrelated answers.';
+  }
+
+  return classifyIntent(text, intents, {
+    operation: opts.includeSales ? 'inbound_signals_sales' : 'feedback_signals',
+    userId: opts.userId,
+  });
 }
 
 async function detectFrustratedPhrasing(text) {

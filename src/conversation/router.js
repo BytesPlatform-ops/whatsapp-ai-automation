@@ -1272,11 +1272,18 @@ async function _routeMessage(message) {
       } = require('../feedback/feedback');
 
       if (!isTester(user)) {
-        // Single classifier call returns all three implicit feedback signals
-        // (frustrated / helpEscape / correction). Passing the flags into
-        // the handlers below avoids three separate LLM round-trips per
-        // inbound message on the hot path.
-        const signals = await classifyFeedbackSignals(text);
+        // Single classifier call returns all the inbound-message intents
+        // we'll need this turn — feedback signals always, plus the salesBot
+        // user-intent pair (notInterested / agreed) when we're heading
+        // into salesBot. Stashing on user._classifiedIntents lets salesBot
+        // read the same result instead of issuing its own classifier call,
+        // saving one round-trip on the hot path.
+        const includeSales = user.state === STATES.SALES_CHAT;
+        const signals = await classifyFeedbackSignals(text, {
+          userId: user.id,
+          includeSales,
+        });
+        user._classifiedIntents = signals;
 
         // Frustrated phrasing (silent log, no user-facing action)
         await maybeLogFrustration(user, text, signals.frustrated);
