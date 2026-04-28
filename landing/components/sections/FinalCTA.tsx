@@ -60,7 +60,7 @@ export function FinalCTA() {
               <WhatsAppButton
                 size="xl"
                 label="Start on WhatsApp"
-                prefill="Hi! I saw your landing page CTA and want to get started."
+                prefill="Hi! I want to build a website for my business — saw your landing page."
               />
               <a
                 href="/examples"

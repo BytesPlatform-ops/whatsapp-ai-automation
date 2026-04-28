@@ -54,7 +54,7 @@ export function Navigation() {
 
         <div className="flex items-center gap-2">
           <div className="hidden sm:block">
-            <WhatsAppButton size="md" label="Chat now" prefill="Hi! Coming from your site." />
+            <WhatsAppButton size="md" label="Chat now" prefill="Hi! I want to build a website for my business." />
           </div>
           <button
             aria-label="Toggle menu"
@@ -83,7 +83,7 @@ export function Navigation() {
               </a>
             ))}
             <div className="pt-2">
-              <WhatsAppButton size="md" label="Chat on WhatsApp" className="w-full" />
+              <WhatsAppButton size="md" label="Chat on WhatsApp" className="w-full" prefill="Hi! I want to build a website for my business." />
             </div>
           </div>
         </div>

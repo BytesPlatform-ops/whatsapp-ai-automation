@@ -72,8 +72,8 @@ export function HowItWorks() {
           <div className="pt-2 pl-16">
             <WhatsAppButton
               size="lg"
-              label="Try it — send 'hi' now"
-              prefill="hi"
+              label="Start your website on WhatsApp"
+              prefill="Hi! I want to build a website for my business."
             />
           </div>
         </ol>

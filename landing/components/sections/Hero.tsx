@@ -122,7 +122,7 @@ export function Hero() {
               <WhatsAppButton
                 size="xl"
                 label="Start on WhatsApp"
-                prefill="Hi! I saw your landing page and want to try the bot."
+                prefill="Hi! I saw your landing page — I want to build a website for my business."
               />
               <a
                 href="/examples"
