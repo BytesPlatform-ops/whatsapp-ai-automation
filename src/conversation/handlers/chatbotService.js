@@ -7,6 +7,7 @@ const { createClient } = require('../../chatbot/db/clients');
 const { generateUniqueSlug } = require('../../chatbot/services/slug-generator');
 const { env } = require('../../config/env');
 const { generateResponse } = require('../../llm/provider');
+const { classifyIntent } = require('../../llm/intentClassifier');
 
 // Base URL for demo/chat pages
 const BASE_URL = env.chatbot.baseUrl;
@@ -167,10 +168,24 @@ async function handleCollectFaqs(user, message) {
   const existing = user.metadata?.chatbotData || {};
   const faqs = existing.faqs || [];
 
-  // "Done" detection — exact word, common variants, or short phrase with
-  // "done" as the only content word.
+  // "Done" detection — anchored regex catches the obvious one-word
+  // answers ("done", "finished", "no more") instantly. Anything off-keyword
+  // ("ok that's all I can think of", "khatam", "we're good let's move on",
+  // "I'm finished thanks") falls through to the classifier so the user
+  // doesn't have to type literally "done" to advance.
   const lower = text.toLowerCase().trim();
-  const isDone = /^(done|that'?s (it|all)|no more|thats all|nothing else|im done|i'?m done|no thanks|that is all|all done|finish|finished)$/i.test(lower);
+  let isDone = /^(done|that'?s (it|all)|no more|thats all|nothing else|im done|i'?m done|no thanks|that is all|all done|finish|finished)$/i.test(lower);
+
+  // Only pay for the classifier when the user has actually submitted at
+  // least one FAQ (otherwise "done" before any input still re-prompts via
+  // the existing length-zero check below) and the message is short enough
+  // to be a meta reply rather than a long question.
+  if (!isDone && faqs.length > 0 && lower.length <= 80) {
+    const { done } = await classifyIntent(text, {
+      done: 'User is signaling they have finished adding FAQ questions and want to move to the next step. Examples: "done", "that\'s all", "no more", "I\'m finished thanks", "ok that\'s it", "we\'re good", "let\'s move on", "nothing else comes to mind", "khatam", "bas itna hi", "yeh sab hai", in any language. Do NOT match if the user is submitting another customer question (anything ending in a question mark, or shaped like "how/what/when/why/can/do you...").',
+    }, { operation: 'chatbot_collect_done', userId: user.id });
+    isDone = done;
+  }
 
   if (isDone) {
     if (faqs.length === 0) {
@@ -362,9 +377,19 @@ async function handleDemoSent(user, message) {
   const text = (message.text || '').trim().toLowerCase();
   const buttonId = message.buttonId || '';
 
-  // Check if they want to proceed
-  const wantsToProceed = buttonId === 'cb_proceed' ||
+  // Check if they want to proceed. Keyword regex is the fast path; if it
+  // misses (off-keyword agreement like "deal", "alright sign me up", "I'll
+  // take it", "haan bhejo trial") we ask the classifier rather than
+  // dropping the user back into the pricing pitch.
+  let wantsToProceed = buttonId === 'cb_proceed' ||
     /\b(yes|yeah|ready|proceed|activate|trial|start|sign up|interested|let'?s go|i want|go ahead)\b/i.test(text);
+
+  if (!wantsToProceed && !buttonId && text && text.length <= 80) {
+    const { proceed } = await classifyIntent(text, {
+      proceed: 'User wants to proceed with starting the free trial / activating the chatbot / signing up. Examples: "yes", "let\'s do it", "sign me up", "I\'ll take it", "deal", "I\'m in", "alright go for it", "haan chalo", "do it", in any language. Do NOT match if they\'re asking a question, expressing hesitation, or asking about pricing details.',
+    }, { operation: 'chatbot_demo_proceed', userId: user.id });
+    wantsToProceed = proceed;
+  }
 
   if (wantsToProceed) {
     return activateTrial(user);
@@ -397,8 +422,19 @@ async function handleFollowUp(user, message) {
   const buttonId = message.buttonId || '';
   const text = (message.text || '').trim().toLowerCase();
 
-  const wantsToProceed = buttonId === 'cb_proceed' ||
+  // Same fast-path-then-classifier pattern as handleDemoSent. The
+  // keyword set here also includes the tier names ("starter", "growth",
+  // "premium") since the user might pick a plan by name from the pricing
+  // message; off-keyword agreements still go to the classifier.
+  let wantsToProceed = buttonId === 'cb_proceed' ||
     /\b(yes|yeah|ready|proceed|starter|growth|premium|trial|start|sign up|interested|go ahead)\b/i.test(text);
+
+  if (!wantsToProceed && !buttonId && text && text.length <= 80) {
+    const { proceed } = await classifyIntent(text, {
+      proceed: 'User wants to proceed with starting the free trial / activating the chatbot / signing up after seeing the pricing tiers. Examples: "yes", "let\'s do it", "sign me up", "I\'ll take it", "deal", "I\'m in", "alright go for it", "go with starter", "the growth one", "haan chalo", "do it", in any language. Do NOT match if they\'re asking a question or expressing hesitation.',
+    }, { operation: 'chatbot_followup_proceed', userId: user.id });
+    wantsToProceed = proceed;
+  }
 
   if (wantsToProceed) {
     return activateTrial(user);
