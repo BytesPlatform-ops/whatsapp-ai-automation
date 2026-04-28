@@ -31,6 +31,7 @@ const { generateAdIdeas, expandIdeaToPrompt } = require('../../adGeneration/idea
 const { generateAdImage } = require('../../adGeneration/imageGen');
 const { uploadAdImage } = require('../../adGeneration/imageUploader');
 const { generateResponse } = require('../../llm/provider');
+const { isSkipIntent, isAffirmsSuggestedName } = require('../wizardIntents');
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -164,18 +165,11 @@ async function handleStart(user, message) {
   return STATES.AD_COLLECT_NICHE;
 }
 
-// Words that look like user confirmations, not real brand names
+// One-word filler/greeting tokens that aren't real business names. Kept
+// as a sync set — every entry is a literal exact match, so there's no
+// "slightly off" failure mode here. The fuzzy work happens in
+// isAffirmsSuggestedName / isSkipIntent (LLM-backed).
 const CONFIRMATION_WORDS = new Set(['ok', 'okay', 'yes', 'no', 'sure', 'go', 'next', 'start', 'fine', 'done', 'ready', 'yep', 'yeah', 'hi', 'hello', 'hey']);
-
-// Words that mean "use the previously suggested brand name"
-const SAME_BRAND_WORDS = new Set(['same', 'yes', 'yeah', 'yep', 'sure', 'ok', 'okay', 'continue', 'use it', 'that one', 'use that']);
-
-// Whole-message skip detector — covers "skip", "skip it", "nope", "no
-// thanks", etc. Anchored to full trimmed text so a user who actually
-// typed "skip this fee" (hypothetical brand line) isn't misread as a
-// skip intent.
-const SKIP_RX = /^(?:skip|skip\s+(?:it|this|that|for\s*now)|no|nope|nah|n\/?a|na|none|nothing|pass|no\s+thanks?|dont|don'?t|leave\s+(?:it|blank)|i'?m\s+(?:gonna\s+)?skip(?:ping)?)$/i;
-const isSkip = (text) => SKIP_RX.test(String(text || '').trim());
 
 // Shared follow-up after business name is saved. Either skip to the
 // niche question when we could infer industry from the name, or ask
@@ -214,10 +208,11 @@ async function handleCollectBusiness(user, message) {
 
   // Case 1: We have a suggested business name from a previous flow
   if (suggested) {
-    const lower = name.toLowerCase();
-
-    // 1a. User confirmed with "same/yes/sure/etc" → use the suggested name
-    if (lower && (SAME_BRAND_WORDS.has(lower) || /\b(same|yes|continue|that\s*one|use\s*(it|that))\b/i.test(lower))) {
+    // 1a. User confirmed (any phrasing — "same", "yes use that one", "go
+    // with the previous", "continue with it", etc.) → use the suggested
+    // name. LLM-backed so wording variations don't fall through to 1b
+    // and accidentally save the user's affirmation as the new name.
+    if (await isAffirmsSuggestedName(name, suggested)) {
       const inferred = await inferIndustryFromBusinessName(suggested, user.id);
       await saveAdData(user, {
         businessName: suggested,
@@ -424,7 +419,7 @@ async function handleCollectType(user, message) {
 
 async function handleCollectSlogan(user, message) {
   const text = (message.text || '').trim();
-  let slogan = isSkip(text) ? null : text || null;
+  let slogan = (await isSkipIntent(text)) ? null : text || null;
 
   // Strip leading confirmation words: "yes fresh from farm" → "fresh from farm"
   if (slogan) {
@@ -445,7 +440,7 @@ async function handleCollectSlogan(user, message) {
 
 async function handleCollectPricing(user, message) {
   const text = (message.text || '').trim();
-  const pricing = isSkip(text) ? null : text || null;
+  const pricing = (await isSkipIntent(text)) ? null : text || null;
 
   await saveAdData(user, { pricing });
 
@@ -462,7 +457,7 @@ async function handleCollectPricing(user, message) {
 
 async function handleCollectColors(user, message) {
   const text = (message.text || '').trim();
-  const brandColors = isSkip(text) ? null : text || null;
+  const brandColors = (await isSkipIntent(text)) ? null : text || null;
 
   await saveAdData(user, { brandColors });
 
