@@ -409,34 +409,68 @@ async function startManualFeedback(user) {
 
 // ── Implicit detectors ──────────────────────────────────────────────
 
-// Frustrated-phrasing detector. Cheap regex, per-message.
-const FRUSTRATED_RX = /\b(this is (?:annoying|frustrating|useless|terrible|awful|dumb|stupid)|stupid (?:bot|ai)|useless (?:bot|ai)|i (?:hate|cant stand) this|are you (?:even|serious|kidding)|come on|wtf|ugh|fucking (?:annoying|useless|broken|stupid)|what the hell|this isn'?t working|i'?ve (?:said|told you)|already (?:said|told you|answered)|do i need to (?:repeat|say))\b/i;
+const { classifyIntent } = require('../llm/intentClassifier');
 
-// Help-escape detector — user explicitly asking for a human.
-const HELP_ESCAPE_RX = /\b(talk to (?:a |an )?(?:human|person|real (?:person|human))|speak to (?:a |an )?(?:human|person|agent|someone)|real (?:person|human)|connect me (?:to|with)|(?:can i|want to|need to) (?:speak|talk) to (?:someone|anyone|human)|stop (?:the )?bot|get me a human|this isn'?t working (?:for me)?)\b/i;
+// Trivially-not-a-feedback-signal pre-filter. Skips the LLM round-trip on
+// messages that obviously aren't frustration, help-escape, or corrections —
+// short greetings, plain affirmations, single emojis, etc. ~30% of inbound
+// traffic falls in this bucket, so the saving is real.
+const TRIVIAL_RX = /^(hi|hello|hey|yo|yes|yeah|yep|yup|sure|ok|okay|k|no|nope|thanks|thank you|ty|cool|nice|great|good|fine|done|👍|👌|🙏|😊)[\s.!?]*$/i;
 
-// Correction-shaped replies. Used by the correction-loop counter.
-const CORRECTION_RX = /^(no|nope|not|wrong|incorrect|that'?s (?:wrong|not right|not what)|actually (?:no|not|i))\b/i;
-
-function detectFrustratedPhrasing(text) {
-  return FRUSTRATED_RX.test(String(text || ''));
+function isTrivialMessage(text) {
+  const t = String(text || '').trim();
+  if (!t || t.length < 3) return true;
+  if (TRIVIAL_RX.test(t)) return true;
+  return false;
 }
 
-function detectHelpEscape(text) {
-  return HELP_ESCAPE_RX.test(String(text || ''));
+/**
+ * One LLM round-trip that classifies all three implicit feedback signals
+ * at once. The router calls this once per inbound message and passes the
+ * results down to the individual handlers — three separate classifier
+ * calls per message would triple the latency on the hot path.
+ *
+ * Returns { frustrated, helpEscape, correction } booleans. Always returns
+ * all-false on trivial messages or on classifier failure (fail-closed).
+ */
+async function classifyFeedbackSignals(text) {
+  if (isTrivialMessage(text)) {
+    return { frustrated: false, helpEscape: false, correction: false };
+  }
+  return classifyIntent(text, {
+    frustrated: 'User sounds frustrated, irritated, fed up, or angry at the bot/conversation. Includes: complaints about the bot being broken/useless/stupid/dumb, profanity directed at the situation, "ugh", "wtf", "come on", "are you serious", "this isn\'t working", repeating that they already answered, or expressing exhaustion ("I\'m tired of this", "this is pointless"). Do NOT match neutral disagreement or polite "no thanks".',
+    helpEscape: 'User is explicitly asking to be connected to a human, real person, agent, or to stop talking to the bot. Includes: "talk to a human", "speak to someone", "real person", "connect me to an agent", "I need actual help", "get me a real person", "stop the bot", "is there a human I can talk to". Match liberally — any indirect request to escalate to a person counts.',
+    correction: 'User is correcting or rejecting the previous bot turn — saying the bot got something wrong, misheard, or used the wrong value. Includes: "no", "nope", "nah", "wrong", "that\'s not it", "that\'s incorrect", "actually it\'s X", "I said Y not Z". Do NOT match a "no" that\'s declining a new offer (e.g. "no I don\'t need that") — only when the user is fixing/rejecting what the bot just produced.',
+  }, { operation: 'feedback_signals' });
 }
 
-function looksLikeCorrection(text) {
-  return CORRECTION_RX.test(String(text || '').trim());
+async function detectFrustratedPhrasing(text) {
+  const { frustrated } = await classifyFeedbackSignals(text);
+  return frustrated;
+}
+
+async function detectHelpEscape(text) {
+  const { helpEscape } = await classifyFeedbackSignals(text);
+  return helpEscape;
+}
+
+async function looksLikeCorrection(text) {
+  const { correction } = await classifyFeedbackSignals(text);
+  return correction;
 }
 
 /**
  * Track correction-loop count. Called when the user sends a text in a
  * COLLECTION state. Returns the new count (0 if the message wasn't a
  * correction, or state changed since last correction).
+ *
+ * `isCorrection` may be passed in by the caller (the router does this so
+ * the four feedback signals share a single classifier call). If omitted,
+ * we'll classify here ourselves — useful for ad-hoc callers.
  */
-async function bumpCorrectionLoop(user, text) {
-  if (!looksLikeCorrection(text)) {
+async function bumpCorrectionLoop(user, text, isCorrection) {
+  const flag = typeof isCorrection === 'boolean' ? isCorrection : await looksLikeCorrection(text);
+  if (!flag) {
     // Reset counter on non-correction replies — user is making forward
     // progress, no loop active.
     if (user.metadata?.correctionLoopCount) {
@@ -499,11 +533,16 @@ async function recordResetAndMaybeFlag(user) {
 /**
  * Detect and log frustrated phrasing. Call from the router's early
  * text-message path. Silent (no user-visible action) — just records.
+ *
+ * `isFrustrated` may be passed in by the caller (the router uses a single
+ * classifier call to populate frustration / help-escape / correction
+ * flags at once). If omitted, we classify here.
  */
-async function maybeLogFrustration(user, text) {
+async function maybeLogFrustration(user, text, isFrustrated) {
   if (!user?.id || !text) return false;
   if (isTester(user)) return false;
-  if (!detectFrustratedPhrasing(text)) return false;
+  const flag = typeof isFrustrated === 'boolean' ? isFrustrated : await detectFrustratedPhrasing(text);
+  if (!flag) return false;
 
   const excerpt = await buildConversationExcerpt(user.id, 6);
   await logFeedback({
@@ -622,6 +661,7 @@ module.exports = {
   detectFrustratedPhrasing,
   detectHelpEscape,
   looksLikeCorrection,
+  classifyFeedbackSignals,
   isFeedbackTrigger,
   startManualFeedback,
   FEEDBACK_BUTTON_IDS,

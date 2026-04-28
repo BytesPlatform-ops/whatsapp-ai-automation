@@ -1264,7 +1264,7 @@ async function _routeMessage(message) {
       const {
         maybeLogFrustration,
         bumpCorrectionLoop,
-        detectHelpEscape,
+        classifyFeedbackSignals,
         offerHumanHandoff,
         isTester,
         CORRECTION_LOOP_THRESHOLD,
@@ -1272,12 +1272,18 @@ async function _routeMessage(message) {
       } = require('../feedback/feedback');
 
       if (!isTester(user)) {
+        // Single classifier call returns all three implicit feedback signals
+        // (frustrated / helpEscape / correction). Passing the flags into
+        // the handlers below avoids three separate LLM round-trips per
+        // inbound message on the hot path.
+        const signals = await classifyFeedbackSignals(text);
+
         // Frustrated phrasing (silent log, no user-facing action)
-        await maybeLogFrustration(user, text);
+        await maybeLogFrustration(user, text, signals.frustrated);
 
         // Help-escape (explicit "talk to a human") — offer handoff.
         // Pairs with humanTakeover toggle per user's design decision.
-        if (detectHelpEscape(text)) {
+        if (signals.helpEscape) {
           await offerHumanHandoff(user, TRIGGER.HELP_ESCAPE);
           return; // handoff prompt replaces the normal turn
         }
@@ -1285,7 +1291,7 @@ async function _routeMessage(message) {
         // Correction-loop counter — only meaningful in collection states
         // where the user is answering a specific question.
         if (COLLECTION_STATES.has(user.state)) {
-          const count = await bumpCorrectionLoop(user, text);
+          const count = await bumpCorrectionLoop(user, text, signals.correction);
           if (count >= CORRECTION_LOOP_THRESHOLD) {
             // Log the event + offer handoff. Reset the counter so we
             // don't keep re-offering on every subsequent message.
