@@ -19,6 +19,7 @@ const {
 } = require('../entityAccumulator');
 const { isDelegation, classifyDelegation } = require('../../config/smartDefaults');
 const { localize } = require('../../utils/localizer');
+const { classifyIntent } = require('../../llm/intentClassifier');
 
 
 // Walk the website-dev checklist and return the first state whose field
@@ -4032,6 +4033,46 @@ async function handleRevisions(user, message) {
         return handlePaidClaim(user);
       }
 
+      // Domain-intent short-circuit — "i want a domain now", "let me grab
+      // a domain", "yes set up the domain". These are NOT revision
+      // requests; without this short-circuit they used to fall through to
+      // gateNextRevision (which incremented the counter) and then to the
+      // revision parser (which returned _unclear because the message
+      // wasn't about the site itself). Net effect: each attempt to ask
+      // for a domain ate one of the user's three free revisions and
+      // produced a confused "I'm not sure what to change" reply.
+      // Now we route straight to DOMAIN_OFFER (same flow as the
+      // web_approve button) and the revision counter stays put.
+      if (revisionText && revisionText.length <= 80) {
+        const intents = await classifyIntent(revisionText, {
+          domainIntent: 'User is asking to add or set up a custom domain for their website right now. Examples: "I want a domain", "let\'s get a domain", "grab me a domain", "yes domain please", "I\'ll take a domain", "want to buy a domain", "set up the domain", "i want domain now", "let me have one", in any language. Do NOT match if the user is requesting a website CHANGE (color/text/section/image/logo), asking a question about pricing, expressing approval of the site, talking about payment, or naming a specific domain like "mybrand.com".',
+        }, { userId: user.id, operation: 'webdev_revision_domain_intent' });
+
+        if (intents.domainIntent) {
+          const siteId = user.metadata?.currentSiteId;
+          if (siteId) await updateSite(siteId, { status: 'approved' });
+
+          // Already locked in a domain decision earlier in the flow —
+          // surface that instead of re-pitching the offer prompt.
+          if (user.metadata?.selectedDomain || user.metadata?.domainChoice === 'skip') {
+            return acknowledgeApprovalAfterDomainChoice(user);
+          }
+
+          const businessName = site?.site_data?.businessName || user.metadata?.websiteData?.businessName;
+          const example = domainExampleFor(businessName);
+          await sendTextMessage(
+            user.phone_number,
+            await localize(
+              `Got it — let's set up a custom domain for your site. (e.g., ${example})\n\nReply *yes* and I'll help you find one, or *no* to skip it for now.`,
+              user,
+              revisionText
+            )
+          );
+          await logMessage(user.id, 'User asked for domain mid-revisions, routing to DOMAIN_OFFER (no revision counted)', 'assistant');
+          return STATES.DOMAIN_OFFER;
+        }
+      }
+
       // Short-circuit clear approval sentiment BEFORE running the heavy
       // REVISION_PARSER_PROMPT. "i love the website", "perfect hai", "sí
       // genial", etc. are unambiguous approvals — the revision parser has
@@ -4117,6 +4158,10 @@ async function handleRevisions(user, message) {
         const jsonMatch = response.match(/```(?:json)?\s*([\s\S]*?)\s*```/) || [null, response];
         updates = JSON.parse(jsonMatch[1]);
       } catch {
+        // Parser couldn't extract a structured change — refund the
+        // pre-incremented count so the user isn't billed a free-tier
+        // revision for a clarification round-trip.
+        await updateUserMetadata(user.id, { revisionCount: Math.max(0, revisionCount - 1) });
         await sendTextMessage(
           user.phone_number,
           'I\'m not sure what to change. Could you be more specific? For example:\n' +
@@ -4144,6 +4189,13 @@ async function handleRevisions(user, message) {
       }
 
       if (updates._unclear) {
+        // No actual change was applied — refund the revision counter
+        // so the user isn't billed for a clarification round. The next
+        // message (their answer to the clarification) will go through
+        // gateNextRevision again and increment normally if it produces
+        // a real change.
+        await updateUserMetadata(user.id, { revisionCount: Math.max(0, revisionCount - 1) });
+
         // If the clarification question is specifically about colors, set a
         // follow-up flag so the NEXT user reply — which will likely be a
         // short answer like "blue" or "#1E40AF" — gets interpreted as a
