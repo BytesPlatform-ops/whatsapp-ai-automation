@@ -94,8 +94,16 @@ async function handleServiceSelection(user, message) {
     return STATES.SERVICE_SELECTION;
   }
 
-  // Route based on selected service
-  switch (buttonId || matchServiceFromText(text)) {
+  // Route based on selected service. Regex-first for the obvious cases
+  // (instant, no API call). When the regex finds nothing — natural
+  // phrasings like "we need someone for growth" or "make me a poster" —
+  // fall through to pickServiceFromSwitch (LLM-backed) so the user gets
+  // routed instead of bounced back to the menu with "didn't catch that".
+  let svcId = buttonId || matchServiceFromText(text);
+  if (!svcId && text) {
+    svcId = await pickServiceFromSwitch(text, user.id);
+  }
+  switch (svcId) {
     case 'svc_seo':
       await sendWithMenuButton(
         user.phone_number,
