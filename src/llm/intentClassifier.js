@@ -71,7 +71,21 @@ async function classifyIntent(text, intents, opts = {}) {
   const contextHash = opts.context ? String(opts.context).slice(0, 200) : '';
   const key = cacheKey(safeText, intents, contextHash);
   const cached = cacheGet(key);
-  if (cached) return cached;
+  if (cached) {
+    // Still log the decision so the audit trail is complete. Tagged
+    // cached=true so it's distinguishable from a fresh call in the logs.
+    logger.info('[INTENT]', {
+      operation: opts.operation || 'intent_classifier',
+      userId: opts.userId,
+      result: cached,
+      truthy: Object.keys(cached).filter((k) => cached[k]),
+      textPreview: safeText.slice(0, 120),
+      textLen: safeText.length,
+      durationMs: 0,
+      cached: true,
+    });
+    return cached;
+  }
 
   const intentList = intentKeys
     .map((k) => `- "${k}": ${intents[k]}`)
@@ -134,6 +148,7 @@ ${intentKeys.map((k) => `  "${k}": boolean`).join(',\n')}`;
 
     const promptTokens = response.usage?.prompt_tokens || 0;
     const cachedInputTokens = response.usage?.prompt_tokens_details?.cached_tokens || 0;
+    const durationMs = Date.now() - start;
     recordUsage({
       userId: opts.userId,
       operation: opts.operation || 'intent_classifier',
@@ -150,7 +165,23 @@ ${intentKeys.map((k) => `  "${k}": boolean`).join(',\n')}`;
         cachedInputTokens,
         0
       ),
-      durationMs: Date.now() - start,
+      durationMs,
+    });
+
+    // Structured decision log — one line per classifier call, tagged
+    // [INTENT] so the on-call can grep "why did this trigger fire?". Logs
+    // the operation tag, every intent that came back true, the full
+    // result map, and a short text preview. In production winston ships
+    // metadata as JSON so each field is queryable in the log backend.
+    logger.info('[INTENT]', {
+      operation: opts.operation || 'intent_classifier',
+      userId: opts.userId,
+      result,
+      truthy: Object.keys(result).filter((k) => result[k]),
+      textPreview: safeText.slice(0, 120),
+      textLen: safeText.length,
+      durationMs,
+      cached: false,
     });
 
     cacheSet(key, result);
