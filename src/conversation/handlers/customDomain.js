@@ -6,6 +6,7 @@ const { checkDomainAvailability } = require('../../website-gen/domainChecker');
 const { logger } = require('../../utils/logger');
 const { env } = require('../../config/env');
 const { STATES } = require('../states');
+const { classifyIntent } = require('../../llm/intentClassifier');
 
 // Legacy handler — only reached by in-flight users in DOMAIN_OFFER /
 // DOMAIN_SEARCH states. New flow routes domain selection BEFORE preview
@@ -65,17 +66,31 @@ async function handleCustomDomain(user, message) {
 
 // ─── DOMAIN_OFFER ──────────────────────────────────────────────────
 
-// Confusion / question markers that should trigger the "what is a domain?"
-// explainer instead of stuffing the user's sentence into a domain search.
-// Covers "what is a domain", "wut is domain", "how does this work", "huh?", etc.
-const DOMAIN_CONFUSION_RE = /(?:^|\b)(what|wut|wat|whats|what'?s|how|why|explain|huh|confused|not\s*sure|no\s*idea|idk|don'?t\s*(?:know|get|understand)|tell\s*me|\?|meaning|means|mean)\b/i;
+// LLM-backed classifier for the three reply shapes we care about across
+// both DOMAIN_OFFER and DOMAIN_SEARCH:
+//   - wantsDomain: user is agreeing / proceeding ("yes", "let's do it",
+//     "set it up", "haan", "I want one")
+//   - declines:    user wants to skip or bail out of the flow ("no",
+//     "skip", "nah", "forget it", "later", "thanks I'm good", "never mind")
+//   - confused:    user is asking what a domain is or expressing
+//     uncertainty ("what is a domain?", "explain", "huh?", "I don't get it")
+//
+// Pre-filters keep the LLM out of obvious structured cases — pure digits
+// (option pick), full domain names ("brand.com"), or empty text. Anchored
+// regex fast-paths in the handlers below also skip this for the common
+// one-word "yes" / "no" answers, so this only runs on ambiguous replies.
+async function classifyDomainIntent(text) {
+  const t = String(text || '').trim();
+  if (!t) return { wantsDomain: false, declines: false, confused: false };
+  if (/^\d+$/.test(t)) return { wantsDomain: false, declines: false, confused: false };
+  if (/[\w-]+\.[\w]{2,}/.test(t)) return { wantsDomain: false, declines: false, confused: false };
+  if (t.length > 80) return { wantsDomain: false, declines: false, confused: false };
 
-function isDomainExplainer(text) {
-  if (!text) return false;
-  // Any question mark, any confusion keyword, or any text that contains
-  // the word "domain" together with a question marker.
-  if (text.includes('?')) return true;
-  return DOMAIN_CONFUSION_RE.test(text);
+  return classifyIntent(t, {
+    wantsDomain: 'User wants to set up a custom domain — affirming, agreeing to proceed, or asking to pick one. Examples: "yes", "yeah", "sure", "ok let\'s do it", "set it up", "I want one", "go ahead", in any language including Roman Urdu/Hindi ("haan", "theek hai", "chalo").',
+    declines: 'User does NOT want a domain right now or wants to bail out of this step — declining, deferring, asking to skip, "not now", "maybe later", "I\'ll pass", "forget it", "never mind", "thanks I\'m good", "let\'s come back to this", in any language. Do NOT match if the user is asking what a domain is.',
+    confused: 'User is asking what a domain is, how it works, or expressing confusion / uncertainty about the concept. Examples: "what is a domain?", "how does this work?", "I don\'t understand", "explain please", "I\'m confused", "huh?", "what does that mean?", "tell me more first".',
+  }, { operation: 'domain_intent' });
 }
 
 async function sendDomainExplainer(user) {
@@ -93,8 +108,29 @@ async function handleDomainOffer(user, message) {
   const rawText = (message.text || '').trim();
   const text = rawText.toLowerCase();
 
-  const isYes = /^(yes|yeah|yep|sure|ok|okay|y|domain|set up|set it up)$/i.test(text);
-  const isNo = /^(no|nah|nope|later|not now|n|skip|maybe later)$/i.test(text);
+  // Anchored fast-path for the obvious one-word answers — instant, no
+  // API call. These match the same shapes the regex always handled
+  // ("yes", "no", "skip", etc.), so the common case stays free.
+  let isYes = /^(yes|yeah|yep|sure|ok|okay|y|domain|set up|set it up)$/i.test(text);
+  let isNo = /^(no|nah|nope|later|not now|n|skip|maybe later)$/i.test(text);
+  let isConfused = false;
+
+  // Off-keyword reply (e.g. "let's do it please", "I want a domain plz",
+  // "haan", "actually I'll pass", "what is this thing?") — fall through
+  // to the LLM so the wording variation doesn't leave the user stuck or
+  // accidentally search for "haan.com".
+  if (!isYes && !isNo && rawText) {
+    const intents = await classifyDomainIntent(rawText);
+    isYes = intents.wantsDomain;
+    isNo = intents.declines;
+    isConfused = intents.confused;
+  }
+
+  // Confusion takes precedence over yes/no — "yes but what is a domain?"
+  // should explain first, not start a search.
+  if (isConfused) {
+    return sendDomainExplainer(user);
+  }
 
   if (isNo) {
     // No domain — the site is already priced at $199 via the activation
@@ -133,12 +169,8 @@ async function handleDomainOffer(user, message) {
     return runDomainSearch(user, sanitized);
   }
 
-  // Confused / asking a question — explain instead of auto-searching for the
-  // sentence. This protects against things like "what even is a domain" being
-  // turned into a search for *whatevenisamain.com*.
-  if (isDomainExplainer(rawText)) {
-    return sendDomainExplainer(user);
-  }
+  // (Confusion is already handled by the classifier branch above — used
+  // to be a separate regex check here, now folded into classifyDomainIntent.)
 
   // Fall-through to search ONLY if the input looks like a plausible single-word
   // domain name (no spaces, alphanumerics + hyphens, reasonable length).
@@ -157,18 +189,11 @@ async function handleDomainOffer(user, message) {
 
 // ─── DOMAIN_SEARCH ─────────────────────────────────────────────────
 
-// Phrases that mean "get me out of this domain search", so we don't go hunting
-// for *nahforgetit.com* when the user types "nah forget it".
-const DOMAIN_EXIT_KEYWORDS = /\b(?:skip|nah|nope|forget\s*(?:it|about\s*it)|never\s*mind|nvm|not\s*now|maybe\s*later|later|cancel|stop|exit|back|menu|no\s*thanks?|thx|thanks|thank\s*you|bail|drop\s*it|screw\s*it)\b/i;
-
-function isDomainExit(text) {
-  const t = (text || '').trim();
-  if (!t || t.length > 40) return false;
-  // A full domain name ("mybrand.com") is NOT an exit even if it contains
-  // a trigger word, so guard against that first.
-  if (/[\w-]+\.(?:com|co|io|net|org|app|dev|biz|info|store|shop|me|ai|xyz)\b/i.test(t)) return false;
-  return DOMAIN_EXIT_KEYWORDS.test(t);
-}
+// Anchored fast-path for the most common one-word exits — instant, no
+// API call. Anything more nuanced ("actually never mind", "thanks I'm
+// good", "let's leave it for now", "kar do skip") falls through to
+// classifyDomainIntent below.
+const FAST_EXIT_RE = /^(skip|nah|nope|cancel|stop|exit|back|menu|bail|never\s*mind|nvm|done)\.?$/i;
 
 async function exitDomainFlow(user) {
   await sendTextMessage(
@@ -182,15 +207,9 @@ async function exitDomainFlow(user) {
 async function handleDomainSearch(user, message) {
   const text = (message.text || '').trim();
 
-  // Exit path — user has bailed on the domain search.
-  if (isDomainExit(text)) {
-    return exitDomainFlow(user);
-  }
-
-  // Question / confusion — explain and bump them back to the offer state.
-  if (isDomainExplainer(text)) {
-    return sendDomainExplainer(user);
-  }
+  // Run the structured matchers (option pick by number/ordinal, full
+  // domain like "mybrand.com") FIRST — they're the dominant interaction
+  // and skipping the classifier on them keeps the common case free.
 
   const domainOptions = user.metadata?.domainOptions || [];
   const availableOptions = domainOptions.filter(d => d.available && !d.premium);
@@ -225,6 +244,23 @@ async function handleDomainSearch(user, message) {
   if (fullDomainMatch) {
     return processDomainSelection(user, fullDomainMatch[1].toLowerCase());
   }
+
+  // No structured match — figure out what the user actually meant.
+  // Anchored fast-path catches the obvious one-word exits ("skip",
+  // "cancel", "nope") with no API call. Everything else (e.g. "actually
+  // never mind", "thanks let me think about it", "what is this thing?",
+  // "kar do skip") goes to the classifier so off-keyword phrasings don't
+  // become a search for *thanksletmethink.com*.
+  let isExit = FAST_EXIT_RE.test(text);
+  let isConfused = false;
+  if (!isExit && text) {
+    const intents = await classifyDomainIntent(text);
+    isExit = intents.declines;
+    isConfused = intents.confused;
+  }
+
+  if (isConfused) return sendDomainExplainer(user);
+  if (isExit) return exitDomainFlow(user);
 
   // Don't search for random phrases — only if it looks like a domain name
   const cleaned = text.toLowerCase().replace(/[^a-z0-9-]/g, '');
