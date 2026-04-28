@@ -1,6 +1,7 @@
 const { sendTextMessage, sendCTAButton } = require('../../messages/sender');
 const { logMessage, getConversationHistory } = require('../../db/conversations');
 const { generateResponse } = require('../../llm/provider');
+const { classifyIntent } = require('../../llm/intentClassifier');
 const { buildSalesPrompt } = require('../../llm/prompts');
 const { formatWhatsApp } = require('../../utils/formatWhatsApp');
 const { updateUserMetadata } = require('../../db/users');
@@ -115,12 +116,16 @@ async function handleSalesBot(user, message) {
     }
   }
 
-  // Detect "not interested" and stop follow-ups (not a closed lead — just opted out of follow-ups).
-  // "not for me" was previously matched here but caused false positives when
-  // users were asking on behalf of someone else ("it's for a friend and not
-  // for me"). Removed — the remaining patterns still catch genuine opt-outs.
-  const notInterested = /\b(not interested|no thanks|stop messaging|leave me alone|don'?t contact|don'?t message|unsubscribe|stop contacting|i'?m good|no need|pass)\b/i.test(text);
-  if (notInterested && !user.metadata?.followupOptOut) {
+  // Classify the user's message intent up-front. Single LLM call returns
+  // both opt-out and agreement signals; we use opt-out here for the
+  // early-return, and pass `agreed` through to the post-LLM trigger
+  // fallbacks so we don't pay for a second classification.
+  const userIntents = await classifyIntent(text, {
+    notInterested: 'User is opting out of further contact: wants follow-ups stopped, doesn\'t want to be messaged, or is firmly declining the service ("not interested", "stop messaging", "I\'m good thanks", "no need", "leave me alone", "don\'t contact me", "unsubscribe", "maybe later but stop bugging me"). Do NOT match if the user is just asking on behalf of someone else, declining one specific suggestion while still engaged, or simply unsure.',
+    agreed: 'User is affirming or agreeing to proceed with what was just offered or asked. Match liberally: "yes", "yeah", "sure", "ok", "sounds good", "let\'s do it", "I\'m in", "go ahead", "deal", "perfect", "alright", and equivalents in any language including Roman Urdu/Hindi ("haan", "theek hai", "chalo"). Do NOT match plain greetings or unrelated answers.',
+  }, { userId: user.id, operation: 'sales_user_intent' });
+
+  if (userIntents.notInterested && !user.metadata?.followupOptOut) {
     await updateUserMetadata(user.id, { followupOptOut: true });
     await sendTextMessage(
       user.phone_number,
@@ -291,31 +296,49 @@ async function handleSalesBot(user, message) {
   const seoAuditMatch = cleanText.match(/\[TRIGGER_SEO_AUDIT:\s*(.+?)\]/);
   let bytescartTrigger = cleanText.includes('[TRIGGER_BYTESCART]');
 
-  // Fallback: if the conversation is clearly about ecommerce/online stores and the bot
-  // hasn't triggered ByteScart yet, force it. The sales bot should never try to sell
-  // paid ecommerce tiers - ByteScart is free and replaces that flow entirely.
-  if (!bytescartTrigger && !user.metadata?.bytescartPitched) {
-    const fullConv = (cleanText + ' ' + messages.map(m => m.content).join(' ')).toLowerCase();
-    const isEcommerceContext = /\b(ecommerce|e-commerce|online store|online shop|shopify|sell online|product catalog|dropship)\b/i.test(fullConv);
-    if (isEcommerceContext) {
-      bytescartTrigger = true;
-      logger.info(`[SALES] Fallback: ByteScart trigger detected for ${user.phone_number}`);
-    }
+  // Stitch the recent conversation + bot reply into one snippet so the
+  // topic classifier sees both sides. We trim to the last few turns —
+  // older history rarely changes the topic and just adds tokens.
+  const recentConv = messages.slice(-8).map((m) => `${m.role}: ${m.content}`).join('\n');
+  const conversationSnippet = `${recentConv}\nassistant: ${cleanText}`;
+
+  // Two parallel classifier calls:
+  //   - botSpeech: what is the bot's latest reply offering / committing to?
+  //   - convTopic: what is the conversation as a whole about?
+  // Splitting them keeps each prompt focused. The user-intent call already
+  // ran earlier (userIntents.agreed is the LLM-classified equivalent of
+  // the old `userAgreed` regex).
+  const [botSpeech, convTopic] = await Promise.all([
+    classifyIntent(cleanText, {
+      offersWebsite: 'The bot is OFFERING (not yet committing) to build, generate, create, deploy, set up, or spin up a website / site / landing page / preview for the user — phrasings like "want me to build you one?", "I can spin up a preview", "happy to put together a site". Set to false if the bot has already committed or claimed it\'s done.',
+      commitsToWebsite: 'The bot has already COMMITTED to or CLAIMED to be building/finishing a website preview without waiting for further confirmation. Examples: "building your preview now", "I\'ll spin one up", "let me put together a preview", "here\'s your preview", "the site is ready/built/live". This is the hard-commit hallucination case where the bot acts like the demo is already running.',
+      offersAdDemo: 'The bot is offering to design, generate, create, build, make, craft, or prepare a marketing ad, ad creative, ad image, ad post, or social-media ad for the user.',
+      offersLogoDemo: 'The bot is offering to design, generate, create, build, sketch, or prepare a logo, brand mark, brand identity, or brand concept for the user.',
+      mentionsPayment: 'The bot is sending or about to send a payment link, asking the user to pay now, complete payment, lock it in, or saying "here\'s the link" in a payment context.',
+    }, { userId: user.id, operation: 'sales_bot_speech' }),
+
+    classifyIntent(conversationSnippet, {
+      aboutChatbot: 'The conversation is centered on a chatbot, AI assistant, virtual assistant, or AI chat being built for the user\'s business.',
+      aboutAds: 'The conversation is centered on creating marketing ads, ad creatives, ad images, ad posts, or social-media ads (Instagram/Facebook/TikTok ads, "ad banade", "post banade", etc.).',
+      aboutLogo: 'The conversation is centered on designing a logo, brand mark, or brand identity ("logo banade", "logo maker", etc.).',
+      aboutEcommerce: 'The conversation is centered on building an ecommerce store, online shop, product catalog, dropshipping setup, or selling online (Shopify, "online store", etc.).',
+    }, { userId: user.id, operation: 'sales_conv_topic' }),
+  ]);
+
+  if (!bytescartTrigger && !user.metadata?.bytescartPitched && convTopic.aboutEcommerce) {
+    bytescartTrigger = true;
+    logger.info(`[SALES] Fallback: ByteScart trigger detected for ${user.phone_number}`);
   }
 
   logger.debug(`[SALES] Trigger check - websiteTag: ${websiteDemoTrigger}, chatbotTag: ${chatbotDemoTrigger}, adTag: ${adGeneratorTrigger}, logoTag: ${logoMakerTrigger}, seoTag: ${!!seoAuditMatch}, websiteTriggered: ${!!user.metadata?.websiteDemoTriggered}, chatbotTriggered: ${!!user.metadata?.chatbotDemoTriggered}, adTriggered: ${!!user.metadata?.adGeneratorTriggered}, logoTriggered: ${!!user.metadata?.logoMakerTriggered}, seoTriggered: ${!!user.metadata?.seoAuditTriggered}`);
   logger.debug(`[SALES] LLM response (first 200): ${cleanText.slice(0, 200)}`);
 
-  const userAgreed = /\b(yes|yeah|sure|ok|okay|go ahead|let'?s do it|proceed|please|yep|yup|absolutely|do it|go for it|sounds good|let'?s go)\b/i.test(text);
-
-  // Check if the FULL conversation is about chatbots
-  const fullConversationText = messages.map(m => m.content).join(' ') + ' ' + cleanText;
-  const isChatbotContext = /\b(chatbot|chat ?bot|ai assistant|virtual assistant|ai chat)\b/i.test(fullConversationText);
+  const userAgreed = userIntents.agreed;
+  const isChatbotContext = convTopic.aboutChatbot;
 
   // CHATBOT DEMO: Two-phase detection.
   // Phase 1: When user agrees to the chatbot demo, mark intent in metadata.
   // Phase 2: When user sends their business name (next message), trigger the flow.
-  // This avoids fragile single-message regex matching.
   if (!chatbotDemoTrigger && !user.metadata?.chatbotDemoTriggered && isChatbotContext) {
     if (user.metadata?.chatbotDemoAgreed) {
       // Phase 2: User already agreed, this message is likely their business name - trigger now
@@ -328,80 +351,54 @@ async function handleSalesBot(user, message) {
     }
   }
 
-  // Website fallback: only if NOT in chatbot context
-  const botTalksAboutWebsite = !isChatbotContext && (
-    /\b(build|generat|creat|deploy|preview|set.{0,10}up|get.{0,10}started|spin.{0,10}up).{0,30}(website|site|page|landing|preview|for you|right now)\b/i.test(cleanText)
-    || /\b(let me|let's|i'll|going to).{0,30}(build|generat|creat|set up|get started|spin up|make).{0,30}(website|site|page|landing)\b/i.test(cleanText)
-  );
+  // Website fallback (two-gate, matching the old regex pair):
+  //   Gate A — bot OFFERED a website AND the user agreed.
+  //   Gate B — bot COMMITTED/CLAIMED a preview is happening (no agreement needed —
+  //            the bot already locked in, otherwise the user stalls staring at
+  //            a "preview" that was never actually generated).
+  // Skipped entirely if the conversation is about a chatbot, to avoid stealing
+  // chatbot leads.
+  const botTalksAboutWebsite = !isChatbotContext && botSpeech.offersWebsite;
+  const botCommittedWebsite = !isChatbotContext && botSpeech.commitsToWebsite;
 
-  logger.debug(`[SALES] Fallback check - isChatbotContext: ${isChatbotContext}, chatbotAgreed: ${!!user.metadata?.chatbotDemoAgreed}, botTalksAboutWebsite: ${botTalksAboutWebsite}, userAgreed: ${userAgreed}`);
+  logger.debug(`[SALES] Fallback check - isChatbotContext: ${isChatbotContext}, chatbotAgreed: ${!!user.metadata?.chatbotDemoAgreed}, botOffersWebsite: ${botTalksAboutWebsite}, botCommittedWebsite: ${botCommittedWebsite}, userAgreed: ${userAgreed}`);
 
   if (
     !websiteDemoTrigger &&
     !user.metadata?.websiteDemoTriggered &&
     !chatbotDemoTrigger &&
-    botTalksAboutWebsite &&
-    userAgreed
+    ((botTalksAboutWebsite && userAgreed) || botCommittedWebsite)
   ) {
     websiteDemoTrigger = true;
-    logger.info(`[SALES] Fallback: website demo trigger detected for ${user.phone_number}`);
+    if (botCommittedWebsite) {
+      logger.info(`[SALES] Hard-commit fallback: LLM promised/claimed a preview without emitting trigger tag`);
+    } else {
+      logger.info(`[SALES] Fallback: website demo trigger detected for ${user.phone_number}`);
+    }
   }
 
-  // Hard-commit fallback: catches the case where the bot says it's building
-  // / about to build / has built a preview but forgets to emit the
-  // [TRIGGER_WEBSITE_DEMO] tag. Covers three commitment shapes:
-  //   1. Present-tense active: "Building a preview for X", "spinning up now"
-  //   2. Near-future commit:   "I'll build a preview", "let me spin one up"
-  //   3. Past-tense claim:     "here's your preview" (LLM hallucinating done)
-  // Without catching all three the user can stall silently while the LLM
-  // just narrates a site that was never actually generated.
-  const commitPatterns = [
-    /\b(building|creating|generating|spinning\s*up|preparing|prepping|setting\s*up|making|putting\s*together)\s.{0,50}\b(website|site|page|landing|preview)\b/i,
-    /\b(?:i'?ll|let\s*me|going\s*to|gonna|let'?s)\s+(?:build|create|make|spin\s*up|put\s*together|generate|set\s*up)\s.{0,50}\b(?:website|site|page|landing|preview)\b/i,
-    /\bhere(?:'?s|\s+is)\s+(?:your|the)\s+(?:\w+\s+){0,4}(?:preview|site|website|landing)\b/i,
-    /\b(?:preview|site|website)\s+is\s+(?:ready|built|done|live)\b/i,
-  ];
-  if (
-    !websiteDemoTrigger &&
-    !user.metadata?.websiteDemoTriggered &&
-    !chatbotDemoTrigger &&
-    !isChatbotContext &&
-    commitPatterns.some((re) => re.test(cleanText))
-  ) {
-    websiteDemoTrigger = true;
-    logger.info(`[SALES] Hard-commit fallback: LLM promised/claimed a preview without emitting trigger tag`);
-  }
-
-  // Ad generator fallback: detect ad intent in conversation and trigger when user agrees
-  const fullAdConvText = messages.map(m => m.content).join(' ') + ' ' + cleanText + ' ' + text;
-  const isAdContext = /\b(marketing\s*ad|social\s*media\s*ad|ad\s*creative|ad\s*design|create\s*ad|design\s*ad|make\s*ad|generate\s*ad|ad\s*image|ad\s*post|insta\s*ad|facebook\s*ad|tiktok\s*ad|ad\s*banade|ad\s*banwana|post\s*banade|make\s*(a|an)\s*ad|want.{0,15}ad|need.{0,15}ad)\b/i.test(fullAdConvText);
-  const botOffersAdDemo = /\b(design|generat|creat|build|make|craft|prepar|get).{0,40}(ad|marketing\s*ad|ad\s*image|ad\s*post|creative|ready)\b/i.test(cleanText);
-
+  // Ad generator fallback: bot offered an ad demo OR user agreed in an ad-context conversation.
   if (
     !adGeneratorTrigger &&
     !user.metadata?.adGeneratorTriggered &&
     !websiteDemoTrigger &&
     !chatbotDemoTrigger &&
-    isAdContext &&
-    (botOffersAdDemo || userAgreed)
+    convTopic.aboutAds &&
+    (botSpeech.offersAdDemo || userAgreed)
   ) {
     adGeneratorTrigger = true;
     logger.info(`[SALES] Fallback: ad generator trigger detected for ${user.phone_number}`);
   }
 
-  // Logo maker fallback: detect logo intent in conversation and trigger when user agrees
-  const fullLogoConvText = messages.map(m => m.content).join(' ') + ' ' + cleanText + ' ' + text;
-  const isLogoContext = /\b(logo|brand\s*mark|brand\s*identity|brand\s*design|design\s*logo|create\s*logo|make\s*logo|logo\s*banade|logo\s*banwana|logo\s*maker|want.{0,15}logo|need.{0,15}logo)\b/i.test(fullLogoConvText);
-  const botOffersLogoDemo = /\b(design|generat|creat|build|make|craft|prepar|get|sketch).{0,40}(logo|brand\s*mark|brand\s*identity|concept|ready)\b/i.test(cleanText);
-
+  // Logo maker fallback: bot offered a logo demo OR user agreed in a logo-context conversation.
   if (
     !logoMakerTrigger &&
     !user.metadata?.logoMakerTriggered &&
     !websiteDemoTrigger &&
     !chatbotDemoTrigger &&
     !adGeneratorTrigger &&
-    isLogoContext &&
-    (botOffersLogoDemo || userAgreed)
+    convTopic.aboutLogo &&
+    (botSpeech.offersLogoDemo || userAgreed)
   ) {
     logoMakerTrigger = true;
     logger.info(`[SALES] Fallback: logo maker trigger detected for ${user.phone_number}`);
@@ -429,13 +426,13 @@ async function handleSalesBot(user, message) {
   // Check for payment trigger tag
   let paymentMatch = cleanText.match(/\[SEND_PAYMENT:\s*amount=(\d+),\s*service=(\w+),\s*tier=(\w+),\s*description=([^\]]+)\]/i);
 
-  // Fallback: if the LLM mentions payment/link/pay but forgot the tag, try to extract price info
+  // Fallback: if the LLM mentions payment/link/pay but forgot the tag, try to extract price info.
+  // botSpeech.mentionsPayment + userIntents.agreed reuse the classifier results above.
+  // Price extraction stays as a regex — "$<digits>" is a structured token, not natural language.
   if (!paymentMatch && !user.metadata?.lastPaymentLinkId) {
-    const botMentionsPayment = /\b(payment|pay now|complete.{0,15}payment|here'?s the link|sending.{0,15}link|lock it in)\b/i.test(cleanText);
     const priceInResponse = cleanText.match(/\$(\d{2,4})\b/);
-    const agreedToPrice = /\b(yes|yeah|sure|ok|okay|go ahead|let'?s do it|proceed|absolutely|sounds good|interested|i'?m in|deal|perfect)\b/i.test(text);
 
-    if (botMentionsPayment && priceInResponse && agreedToPrice) {
+    if (botSpeech.mentionsPayment && priceInResponse && userIntents.agreed) {
       const amount = priceInResponse[1];
       // Try to detect service type from conversation
       const convText = (cleanText + ' ' + messages.map(m => m.content).join(' ')).toLowerCase();
@@ -513,13 +510,16 @@ async function handleSalesBot(user, message) {
   try {
     const { detectFrustratedPhrasing, isTester } = require('../../feedback/feedback');
     const alreadyNudged = !!user.metadata?.feedbackNudgedAt;
-    if (
+    // Gate the (now async) frustration check behind the cheap synchronous
+    // conditions first — no point paying for a classifier call if we'd
+    // skip the nudge anyway because the user is a tester / already nudged
+    // / on humanTakeover.
+    const eligibleForNudge =
       !skipLlmResponse &&
       !alreadyNudged &&
       !isTester(user) &&
-      !user.metadata?.humanTakeover &&
-      detectFrustratedPhrasing(text || '')
-    ) {
+      !user.metadata?.humanTakeover;
+    if (eligibleForNudge && (await detectFrustratedPhrasing(text || ''))) {
       const nudge = "_btw — if you wanna flag what's bugging you so the team sees it, just type *feedback* and i'll capture a note._";
       await sendTextMessage(user.phone_number, nudge);
       await updateUserMetadata(user.id, { feedbackNudgedAt: new Date().toISOString() });
