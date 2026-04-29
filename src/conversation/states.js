@@ -39,6 +39,12 @@ const STATES = {
   // setup steps post-payment.
   WEB_DOMAIN_OWN_REGISTRAR: 'WEB_DOMAIN_OWN_REGISTRAR',
   WEB_DOMAIN_SEARCH: 'WEB_DOMAIN_SEARCH',
+  // Same domain-search UX, but entered AFTER the site is already live —
+  // user originally skipped or didn't select a domain, then changed their
+  // mind. Picking a domain here either supersedes the existing pending
+  // payment (pre-paid scenario: new combined link) or creates a separate
+  // domain-add-on charge (already-paid scenario: $domain only).
+  WEB_DOMAIN_LATE_SEARCH: 'WEB_DOMAIN_LATE_SEARCH',
   WEB_CONFIRM: 'WEB_CONFIRM',
   WEB_GENERATING: 'WEB_GENERATING',
   WEB_GENERATION_FAILED: 'WEB_GENERATION_FAILED',

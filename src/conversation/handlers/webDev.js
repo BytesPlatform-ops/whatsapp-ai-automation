@@ -19,8 +19,6 @@ const {
 } = require('../entityAccumulator');
 const { isDelegation, classifyDelegation } = require('../../config/smartDefaults');
 const { localize } = require('../../utils/localizer');
-const { classifyIntent } = require('../../llm/intentClassifier');
-const { extractFields } = require('../../llm/extractFields');
 
 
 // Walk the website-dev checklist and return the first state whose field
@@ -366,6 +364,8 @@ async function handleWebDev(user, message) {
       return handleDomainOwnRegistrar(user, message);
     case STATES.WEB_DOMAIN_SEARCH:
       return handleDomainSearch(user, message);
+    case STATES.WEB_DOMAIN_LATE_SEARCH:
+      return handleLateDomainSearch(user, message);
     case STATES.WEB_GENERATING:
       return handleGenerating(user, message);
     case STATES.WEB_PREVIEW:
@@ -413,19 +413,13 @@ async function handleCollectName(user, message) {
 
 async function handleCollectEmail(user, message) {
   const text = (message.text || '').trim();
+  // Email shape stays a regex — it's a deterministic format check, no
+  // language nuance needed. But skip detection is now LLM-only so we
+  // catch every dialect / phrasing without maintaining a keyword list
+  // ("nope", "no thanks", "rehne do", "abhi nahi", "salta este", etc.).
   const emailMatch = text.match(/[\w.-]+@[\w.-]+\.\w+/);
-  // Narrow regex catches the obvious cases without an LLM call. For
-  // anything else short and not-an-email ("skip it", "i want to skip",
-  // "rehne do", "salta este", etc.) we fall through to the LLM-backed
-  // classifyDelegation below, which handles arbitrary phrasing in any
-  // language without us hand-enumerating it.
-  const skipWords = /^(skip|no|none|nah|later|n\/a|na|don'?t have|dont have)\s*\.?$/i;
-  let isSkip = skipWords.test(text);
-
-  // LLM fallback for skip phrasings the regex doesn't catch. Gated on
-  // "no email AND short reply that isn't already a clear skip" so we
-  // don't fire an LLM call when the user actually typed an email.
-  if (!isSkip && !emailMatch && text && text.length <= 60) {
+  let isSkip = false;
+  if (!emailMatch && text && text.length <= 60) {
     try {
       isSkip = await classifyDelegation(
         text,
@@ -493,31 +487,16 @@ async function handleCollectIndustry(user, message) {
     return smartAdvance(user, message);
   }
 
-  // Edit-intent fast path: catch "the name should be X" / "change name to X"
-  // / "actually we're called X" / "naam X karna chahiye" / etc. before we
-  // try to interpret the message as an industry. Cheap keyword gate first
-  // so short industry replies ("plumber", "café") don't pay for an LLM
-  // call here — only messages that mention a name-correction-ish word OR
-  // are long enough to be prose go to extractFields.
-  const looksLikeNameCorrection =
-    /\b(name|called|naam|nombre|nom)\b/i.test(rawInput) || rawInput.length > 25;
-  if (looksLikeNameCorrection) {
-    const { correctedName } = await extractFields(rawInput, {
-      correctedName: {
-        type: 'string',
-        description: 'New business name the user is asking to change to. Examples: "the name should be Glow Salon" → "Glow Salon"; "actually we\'re called Acme Co" → "Acme Co"; "change name to MyBiz" → "MyBiz"; "naam Glow Salon karna chahiye" → "Glow Salon". Strip surrounding quotes and trailing punctuation. Omit if the user is NOT asking to change the business name (e.g. they\'re just answering the industry question).',
-      },
-    }, {
-      userId: user.id,
-      operation: 'webdev_industry_name_correction',
+  // Edit-intent fast path: "the name should be X" / "change name to X" —
+  // user corrected business name, not an industry reply.
+  const nameCorrection = rawInput.match(/(?:name\s*(?:should be|is|to)|change.*name.*to|actually.*called|it'?s\s+called)\s*["']?(.+?)["']?\s*$/i);
+  if (nameCorrection) {
+    const newName = nameCorrection[1].trim();
+    await updateUserMetadata(user.id, {
+      websiteData: { ...(user.metadata?.websiteData || {}), businessName: newName },
     });
-    if (correctedName) {
-      await updateUserMetadata(user.id, {
-        websiteData: { ...(user.metadata?.websiteData || {}), businessName: correctedName },
-      });
-      await sendTextMessage(user.phone_number, `Updated to *${correctedName}*! Now, what industry are you in?`);
-      return STATES.WEB_COLLECT_INDUSTRY;
-    }
+    await sendTextMessage(user.phone_number, `Updated to *${newName}*! Now, what industry are you in?`);
+    return STATES.WEB_COLLECT_INDUSTRY;
   }
 
   // LLM-first extraction. The extractor fast-paths clean 1-3 word answers
@@ -582,11 +561,80 @@ async function handleCollectAreas(user, message) {
     return STATES.WEB_COLLECT_AREAS;
   }
 
-  // Allow skip — treat as "we'll fill in later".
-  if (/^(skip|later|unsure|not sure|n\/?a)$/i.test(raw)) {
+  // One LLM call does it all — skip detection + city extraction + areas
+  // extraction. Lets us handle every dialect / phrasing without a regex
+  // gauntlet that's always missing some variant. Context tells the LLM
+  // whether we already know the city (from sales-chat hydration) so it
+  // can interpret the reply as a neighborhood list rather than a city.
+  let primaryCity = existingCity || '';
+  let serviceAreas = [];
+  let skipIntent = false;
+  let extractionUnclear = false;
+  let extractionReason = '';
+
+  try {
+    const ctx = existingCity
+      ? `\n\nContext: We already know the primary city is "${existingCity}". The user's reply is most likely a list of neighborhoods within that city, OR a skip / "use just the city" intent. Do NOT change primaryCity unless the user explicitly names a different city.`
+      : `\n\nContext: We do NOT yet know the user's city. Their reply should name a city (and optionally neighborhoods).`;
+
+    const extracted = await generateResponse(
+      `Classify a user reply about their business's city + service areas. They may write in ANY language (English, Roman Urdu, Urdu, Hindi, Spanish, Arabic, etc.).${ctx}
+
+Return ONLY JSON in this exact shape:
+{"skipIntent": <true|false>, "primaryCity": "<city>" | null, "serviceAreas": ["<city or neighborhood>", ...], "unclear": <true|false>, "reason": "<short>"}
+
+Decision tree:
+1. **skipIntent: true** when the user wants to skip / defer / leave it for later. Examples: "skip", "later", "baad mein", "rehne do", "abhi nahi", "abhi waqt nahi", "i'll add later", "nope", "no thanks", "chodo bhai", "rehne dete hain", "abhi pata nahi". When skipIntent is true, primaryCity / serviceAreas can be null / empty.
+2. **unclear: true** when the user did NOT name an actual place AND did not clearly skip. Treat these as non-answers, NOT as places:
+   - Deflections: "us main kartay han bhai" (Roman Urdu: "we work in those"), "wahan", "udhar", "in those", "in that", "in your example", "everywhere you said", "wherever", "jahan aap ne kaha", "haan bhai", "yes we do", "ji haan"
+   - Pure verbs / sentences with no place name: "we operate", "ham kaam karte hain"
+   - Vague geography: "all over", "everywhere", "the whole city", "globally", "nationwide", "outside"
+3. **Otherwise extract**:
+   - primaryCity = the single main city they're based in — a short proper noun like "Karachi", NEVER a full phrase like "pakistan k andar karachi".
+   - serviceAreas = array of cities/neighborhoods they serve. If they named multiple cities (e.g. Karachi and Lahore), the first becomes primaryCity and the rest go into serviceAreas.
+   - Strip filler words like "based in", "pakistan k andar", "in the city of", "ham serve karte hain in", etc.
+   - When context says we already have a primaryCity, leave it set and put neighborhoods in serviceAreas.`,
+      [{ role: 'user', content: raw }],
+      { userId: user.id, operation: 'webdev_areas_extract' }
+    );
+    const m = extracted.match(/\{[\s\S]*\}/);
+    if (m) {
+      const parsed = JSON.parse(m[0]);
+      if (parsed.skipIntent === true) {
+        skipIntent = true;
+      } else if (parsed.unclear === true || (!parsed.primaryCity && !existingCity)) {
+        extractionUnclear = true;
+        extractionReason = String(parsed.reason || '').slice(0, 200);
+      } else {
+        if (parsed.primaryCity) primaryCity = String(parsed.primaryCity).trim();
+        if (Array.isArray(parsed.serviceAreas)) {
+          serviceAreas = parsed.serviceAreas.map((s) => String(s).trim()).filter(Boolean);
+        }
+        if (!serviceAreas.length && primaryCity) serviceAreas = [primaryCity];
+      }
+    }
+  } catch (err) {
+    logger.warn(`[AREAS] LLM extraction failed: ${err.message}`);
+    // Conservative fallback on LLM error: if we have an existing city,
+    // accept the reply as-is for areas and continue. If we don't, stay
+    // in this state and ask again.
+    if (existingCity) {
+      serviceAreas = raw
+        .split(/[,;\n]|\band\b/i)
+        .map((s) => s.trim())
+        .filter(Boolean);
+      if (!serviceAreas.length) serviceAreas = [existingCity];
+    } else {
+      extractionUnclear = true;
+    }
+  }
+
+  // Skip path — same effect as the old regex skip: mark skipped, use
+  // existing city (if any) as the sole area, advance.
+  if (skipIntent) {
     const websiteData = {
       ...(user.metadata?.websiteData || {}),
-      primaryCity: existingCity,
+      primaryCity: existingCity || null,
       serviceAreas: existingCity ? [existingCity] : [],
       areasSkipped: true,
     };
@@ -595,54 +643,17 @@ async function handleCollectAreas(user, message) {
     return smartAdvance(user, message, 'No problem, we can add more areas later.');
   }
 
-  // Single LLM pass: city + service-areas + an "unclear" flag for non-answers.
-  // The regex split we used to do here was fragile across languages (Roman
-  // Urdu, Spanish, Arabic, ...) and couldn't tell a real place name from a
-  // deflection like "us main kartay han bhai" ("we work in those"). Passing
-  // existingCity as context lets the LLM treat a neighborhoods-only reply
-  // as additions to the known city instead of trying to overwrite it.
-  const extracted = await extractFields(raw, {
-    primaryCity: {
-      type: 'string',
-      description: 'Single main city the business is based in — a short proper noun like "Karachi", "Austin", "Lahore". NEVER a full phrase ("pakistan k andar karachi"). Strip filler ("based in", "we operate in", "pakistan k andar"). Omit if the user only named neighborhoods and a city was already provided in context.',
-    },
-    serviceAreas: {
-      type: 'array',
-      description: 'Array of cities or neighborhoods the business serves. Strip lead-ins ("we serve in", "we cover", "ham serve karte hain", "based in", "around"). If multiple cities are named, the first goes to primaryCity and the rest go here.',
-    },
-    unclear: {
-      type: 'boolean',
-      description: 'TRUE if the user did NOT name an actual place — only deflections ("us main kartay han", "wahan", "udhar", "in those"), pure verbs ("we operate", "ham kaam karte hain"), or vague geography ("everywhere", "all over", "globally", "nationwide"). FALSE if any real place name was given. CRITICAL: never invent a city — set unclear=true instead.',
-    },
-  }, {
-    context: existingCity
-      ? `User's primary city is already known: "${existingCity}". Treat the reply as additions to its service-areas list unless the user explicitly names a different city.`
-      : '',
-    userId: user.id,
-    operation: 'webdev_areas_extract',
-  });
-
-  let primaryCity = (extracted.primaryCity || existingCity || '').trim();
-  let serviceAreas = Array.isArray(extracted.serviceAreas)
-    ? extracted.serviceAreas.map((s) => String(s).trim()).filter(Boolean)
-    : [];
-
-  // Re-ask when the LLM said the user didn't actually name a place, or when
-  // we ended up with no city at all. We stay in WEB_COLLECT_AREAS without
-  // writing anything to metadata, so the next reply parses fresh.
-  if (extracted.unclear || !primaryCity) {
-    logger.info(`[AREAS] Re-asking — no real place detected. raw="${raw.slice(0, 80)}" unclear=${!!extracted.unclear}`);
+  // Re-ask if the LLM couldn't find a real place. We stay in
+  // WEB_COLLECT_AREAS without writing anything to metadata, so the user's
+  // next reply gets parsed fresh against an empty city.
+  if (extractionUnclear || !primaryCity) {
+    logger.info(`[AREAS] Re-asking — no real place detected. raw="${raw.slice(0, 80)}" reason="${extractionReason}"`);
     await sendTextMessage(
       user.phone_number,
       `Hmm — mujhe shehar ka naam nahi mila uss reply mein. *Kis shehar* mein kaam karte ho? Like *Karachi*, *Lahore*, *Austin* — bas shehar ka naam likh do, aur agar specific neighborhoods serve karte ho toh comma-separated likho (e.g. *Karachi: Clifton, DHA, Gulshan*).`
     );
     return STATES.WEB_COLLECT_AREAS;
   }
-
-  // Single-location reply ("Karachi") — repeat the city as its own
-  // service-area list so downstream code that iterates serviceAreas (HVAC
-  // coverage page, real-estate listings) has at least one entry.
-  if (!serviceAreas.length) serviceAreas = [primaryCity];
 
   const websiteData = {
     ...(user.metadata?.websiteData || {}),
@@ -949,58 +960,77 @@ async function handleCollectAgentProfile(user, message) {
     return smartAdvance(user, message, "No problem, we'll go with solo / no designations. You can add details from the summary later.");
   }
 
-  // One LLM pass for brokerage + years + designations + solo flag. Handles
-  // numeric ("10 years"), prose ("a decade", "two decades", "since 2010"),
-  // and multilingual phrasings without us hand-listing each form.
-  const extracted = await extractFields(raw, {
-    brokerageName: {
-      type: 'string',
-      description: 'Name of the brokerage/firm the agent works at. Real firm names only (e.g. "Coldwell Banker", "Engel & Völkers"). Omit if the agent said solo, independent, by myself, freelance, self-employed — or if no firm was mentioned. Keep under 60 characters.',
-    },
-    yearsExperience: {
-      type: 'integer',
-      description: 'Years the agent has been in real estate. "10 years", "10+ years", "a decade" → 10. "two decades" → 20. "since 2014" → current year minus 2014. Range 1-79. Omit if unclear.',
-    },
-    designations: {
-      type: 'array',
-      description: 'Array of professional designation acronyms the agent holds, uppercase, e.g. ["CRS", "ABR", "SRES"]. Common ones: CRS, ABR, SRS, GRI, SRES, RENE, EPRO, CIPS, SFR, MRP, ABRM, CCIM, AHWD, CPM, CRB. Return [] if the agent said none / no designations. Omit the field entirely if not mentioned.',
-    },
-    isSolo: {
-      type: 'boolean',
-      description: 'TRUE if the agent explicitly said they work alone — "solo", "independent", "by myself", "on my own", "no brokerage", "freelance", "self-employed". FALSE otherwise.',
-    },
-  }, {
-    userId: user.id,
-    operation: 'webdev_agent_profile',
-  });
-
-  let brokerageName = null;
-  if (
-    typeof extracted.brokerageName === 'string' &&
-    extracted.brokerageName.length < 60 &&
-    !/^(solo|independent|null|none)$/i.test(extracted.brokerageName.trim())
-  ) {
-    brokerageName = extracted.brokerageName.trim();
+  // Regex pre-pass for years (common patterns: "10 years", "10+ years", "a decade").
+  let yearsExperience = null;
+  const yrsMatch = raw.match(/(\d{1,2})\s*\+?\s*(?:years?|yrs?|y\b)/i);
+  if (yrsMatch) {
+    const n = parseInt(yrsMatch[1], 10);
+    if (n > 0 && n < 80) yearsExperience = n;
+  } else if (/\bdecade\b/i.test(raw)) {
+    yearsExperience = 10;
   }
 
-  const yearsExperience =
-    Number.isInteger(extracted.yearsExperience) &&
-    extracted.yearsExperience > 0 &&
-    extracted.yearsExperience < 80
-      ? extracted.yearsExperience
-      : null;
+  // Regex pre-pass for well-known designation tokens.
+  const DESIGNATION_RX = /\b(CRS|ABR|SRS|GRI|SRES|RENE|e-?Pro|CIPS|SFR|MRP|ABRM|CCIM|AHWD|CPM|CRB)\b/gi;
+  let designations = [];
+  const designMatches = raw.match(DESIGNATION_RX);
+  if (designMatches) {
+    designations = Array.from(new Set(designMatches.map((d) => d.toUpperCase().replace('-', ''))));
+  } else if (/\b(no|none)\s+(?:designations?|creds?|certifications?)?\b/i.test(raw) || /^none\b/i.test(raw)) {
+    designations = [];
+  }
 
-  // Designations: uppercase, drop anything non-letter, 2-8 chars long. The
-  // LLM is told to return uppercase already; this defends against drift.
-  const designations = Array.isArray(extracted.designations)
-    ? Array.from(
-        new Set(
-          extracted.designations
+  // Brokerage: solo vs named. Look for "solo", "independent", "by myself", or a
+  // quoted/clear name. Fallback: LLM extraction.
+  let brokerageName = null;
+  if (/\b(solo|independent|by myself|on my own|no brokerage|freelance|self[- ]employed)\b/i.test(raw)) {
+    brokerageName = null; // explicit solo — keep null
+  }
+
+  // LLM extraction for anything missing (especially brokerageName which is hard
+  // to pattern-match reliably).
+  const needsLlm = brokerageName === null && !/\b(solo|independent)\b/i.test(raw);
+  if (needsLlm || yearsExperience == null || (!designations.length && !/\bnone\b/i.test(raw))) {
+    try {
+      const extractPrompt = `You are a structured-data extractor for a real-estate agent onboarding flow. Read the agent's message and return ONLY JSON with these fields:
+
+{
+  "brokerageName": "<the brokerage/firm name they work at, or null if they said solo/independent, or null if not mentioned>",
+  "yearsExperience": <integer if clearly stated, otherwise null>,
+  "designations": ["CRS", "ABR", ...] (common ones: CRS, ABR, SRS, GRI, SRES, RENE, ePro, CIPS, SFR, MRP, ABRM, CCIM). Return [] if they said none. Omit the field if not mentioned at all.
+}
+
+Rules:
+- brokerageName: real firm names only. "solo", "independent", "by myself" → null.
+- Never invent data. Omit unknown fields.
+- Keep brokerageName under 60 chars.`;
+      const response = await generateResponse(
+        extractPrompt,
+        [{ role: 'user', content: raw }],
+        { userId: user.id, operation: 'webdev_agent_profile' }
+      );
+      const m = response.match(/\{[\s\S]*\}/);
+      if (m) {
+        const parsed = JSON.parse(m[0]);
+        if (parsed.brokerageName && typeof parsed.brokerageName === 'string') {
+          const bn = parsed.brokerageName.trim();
+          if (bn && bn.length < 60 && !/^(solo|independent|null|none)$/i.test(bn)) {
+            brokerageName = bn;
+          }
+        }
+        if (yearsExperience == null && Number.isInteger(parsed.yearsExperience) && parsed.yearsExperience > 0 && parsed.yearsExperience < 80) {
+          yearsExperience = parsed.yearsExperience;
+        }
+        if (!designations.length && Array.isArray(parsed.designations)) {
+          designations = parsed.designations
             .map((d) => String(d || '').trim().toUpperCase().replace(/[^A-Z]/g, ''))
-            .filter((d) => d.length >= 2 && d.length <= 8)
-        )
-      )
-    : [];
+            .filter((d) => d.length >= 2 && d.length <= 8);
+        }
+      }
+    } catch (err) {
+      logger.warn(`[WEBDEV-AGENT] LLM extraction failed: ${err.message}`);
+    }
+  }
 
   const merged = {
     ...wd,
@@ -1022,7 +1052,7 @@ async function handleCollectAgentProfile(user, message) {
 
   const ackBits = [];
   if (brokerageName) ackBits.push(`at *${brokerageName}*`);
-  else if (extracted.isSolo) ackBits.push('*solo agent*');
+  else if (/\b(solo|independent)\b/i.test(raw)) ackBits.push('*solo agent*');
   if (yearsExperience != null) ackBits.push(`*${yearsExperience} years* in real estate`);
   if (designations.length) ackBits.push(`designations: *${designations.join(', ')}*`);
   const ackPrefix = ackBits.length ? `Got it — ${ackBits.join(', ')}.` : 'Thanks for the details.';
@@ -1123,58 +1153,106 @@ async function parseListingText(raw, user) {
   if (!text) return {};
   const out = {};
 
-  const extracted = await extractFields(text, {
-    address: {
-      type: 'string',
-      description: 'Street address only, e.g. "45 Elm Street". Do NOT include city or state unless clearly part of the address. Omit if no street address is given.',
-    },
-    price: {
-      type: 'integer',
-      description: 'Numeric listing price as a plain integer. "$525k" → 525000. "1.2M" → 1200000. "45L" (South Asian lakh) → 4500000. "100000pkr" → 100000. Omit if no price is mentioned or it\'s unclear.',
-    },
-    currency: {
-      type: 'enum',
-      values: ['USD', 'PKR', 'INR', 'GBP', 'EUR', 'AED', 'SAR', 'QAR', 'CAD', 'AUD', 'BDT', 'LKR'],
-      description: 'ISO currency code of the listing. Detect from explicit markers ("pkr", "rs", "rupees", "₹", "£", "€", "$", "AED", "dirhams", etc.). Omit if genuinely indeterminable from the message.',
-    },
-    beds: {
-      type: 'integer',
-      description: 'Number of bedrooms. "4 bed", "4bd", "4 br", "4/3" (first number) all → 4.',
-    },
-    baths: {
-      type: 'number',
-      description: 'Number of bathrooms; can be a half (2.5). "3 bath", "2.5 ba", "4/3" (second number) all map.',
-    },
-    sqft: {
-      type: 'integer',
-      description: 'Square footage as an integer. "1,800 sqft", "1800 sf", "2200 square feet" → 1800/2200.',
-    },
-    status: {
-      type: 'enum',
-      values: ['For Sale', 'Just Listed', 'Pending', 'Sold'],
-      description: 'Listing status. Use "Just Listed" for new listings, "Pending" for under-contract, "Sold" for closed sales. Default to "For Sale" only when the message clearly implies an active listing.',
-    },
-  }, {
-    userId: user?.id,
-    operation: 'webdev_listing_parse',
-  });
+  // Currency detection — explicit mention wins, then infer from primaryCity,
+  // then default USD. We try this BEFORE price so validator ranges can scale
+  // to the currency (PKR rent is ~100k; USD rent is ~1k; a single int range
+  // can't cover both honestly).
+  out.currency = detectCurrency(text, user?.metadata?.websiteData?.primaryCity);
 
-  // Currency: prefer the LLM's read of the message, fall back to inference
-  // from the user's primary city, finally to USD. Resolved BEFORE price so
-  // the validator range scales correctly (PKR rent ~100k; USD rent ~1k).
-  out.currency = extracted.currency || detectCurrency(text, user?.metadata?.websiteData?.primaryCity);
-
-  if (extracted.address && extracted.address.length >= 4 && extracted.address.length < 100) {
-    out.address = extracted.address;
-  }
-  if (extracted.price != null) {
+  // Price — accept both sale ($525k, PKR 1.2M, ₹45L) and rental figures
+  // (100000pkr, 85k rent). The numeric extractor is currency-agnostic; the
+  // validator range is widened when a non-USD currency was detected since
+  // rentals in PKR/INR/etc. are a valid much-smaller number.
+  const priceMatch = text.match(/\$?\s*([\d,]+(?:\.\d+)?)\s*([kKmMlL])?/);
+  if (priceMatch) {
+    let n = parseFloat(priceMatch[1].replace(/,/g, ''));
+    const suffix = (priceMatch[2] || '').toLowerCase();
+    if (suffix === 'k') n *= 1000;
+    else if (suffix === 'm') n *= 1000000;
+    // South Asian "lakh" (1L = 100,000) — common in PKR/INR listings
+    else if (suffix === 'l') n *= 100000;
+    else if (n < 1000 && !suffix) n = null; // probably beds/sqft, not price
     const { min, max } = priceRangeFor(out.currency);
-    if (extracted.price >= min && extracted.price <= max) out.price = extracted.price;
+    if (n && n >= min && n <= max) out.price = Math.round(n);
   }
-  if (extracted.beds != null && extracted.beds >= 0 && extracted.beds < 20) out.beds = extracted.beds;
-  if (extracted.baths != null && extracted.baths >= 0 && extracted.baths < 20) out.baths = extracted.baths;
-  if (extracted.sqft != null && extracted.sqft >= 200 && extracted.sqft <= 20000) out.sqft = extracted.sqft;
-  if (extracted.status) out.status = extracted.status;
+  // Beds/baths: "4 bed 3 bath", "4bd/3ba", "4/3"
+  const bbMatch = text.match(/(\d+)\s*\/\s*(\d+(?:\.\d+)?)/);
+  if (bbMatch) {
+    out.beds = parseInt(bbMatch[1], 10);
+    out.baths = parseFloat(bbMatch[2]);
+  } else {
+    const bedMatch = text.match(/(\d+)\s*(?:bed|bd|br)\b/i);
+    if (bedMatch) out.beds = parseInt(bedMatch[1], 10);
+    const bathMatch = text.match(/(\d+(?:\.\d+)?)\s*(?:bath|ba|bth)\b/i);
+    if (bathMatch) out.baths = parseFloat(bathMatch[1]);
+  }
+  // Sqft: "1800 sqft", "1,800 sf", "2200 square feet"
+  const sqftMatch = text.match(/([\d,]+)\s*(?:sqft|sf|sq\s*ft|square\s*feet)\b/i);
+  if (sqftMatch) {
+    const n = parseInt(sqftMatch[1].replace(/,/g, ''), 10);
+    if (n >= 200 && n <= 20000) out.sqft = n;
+  }
+  // Status
+  if (/\bpending\b/i.test(text)) out.status = 'Pending';
+  else if (/\b(just\s*listed|new\s*listing)\b/i.test(text)) out.status = 'Just Listed';
+  else if (/\bsold\b/i.test(text)) out.status = 'Sold';
+  else if (/\bfor\s*sale\b/i.test(text)) out.status = 'For Sale';
+
+  // LLM pass for address (and anything missing). Always run — regex can't
+  // reliably find street addresses.
+  try {
+    const missingList = [];
+    if (!out.address) missingList.push('address');
+    if (!out.price) missingList.push('price');
+    if (out.beds == null) missingList.push('beds');
+    if (out.baths == null) missingList.push('baths');
+    if (out.sqft == null) missingList.push('sqft');
+    if (!out.status) missingList.push('status');
+    if (!missingList.length) return out;
+
+    const prompt = `Extract real-estate listing fields from the message. Return ONLY JSON with the requested fields. Omit fields you can't confidently extract. Never guess.
+
+Requested: ${missingList.join(', ')}
+
+Rules:
+- address: street address only (e.g. "45 Elm Street"). No city/state unless clearly part of address.
+- price: integer numeric amount. "$525k" → 525000. "1.2M" → 1200000. "45L" (lakh) → 4500000. Omit if unclear.
+- currency: ISO currency code the listing is in — USD, PKR, INR, GBP, EUR, AED, SAR, CAD, AUD, etc. Detect from explicit markers in the message ("pkr", "rs", "rupees", "₹", "£", "€", "$", "AED", ...) OR infer from the business location context. Omit only if genuinely indeterminable.
+- beds, baths: numbers. baths can be .5.
+- sqft: integer square feet.
+- status: one of "For Sale", "Just Listed", "Pending", "Sold". Default "For Sale" only if message implies active listing.
+
+Return like {"address":"45 Elm St","price":525000,"currency":"USD","beds":4,"baths":3} or {} if nothing usable.`;
+    const resp = await generateResponse(prompt, [{ role: 'user', content: text }], {
+      userId: user?.id,
+      operation: 'webdev_listing_parse',
+    });
+    const m = resp.match(/\{[\s\S]*\}/);
+    if (m) {
+      const parsed = JSON.parse(m[0]);
+      // Accept an LLM-supplied currency before validating price, so the
+      // price range is scaled to the right currency.
+      if (parsed.currency && typeof parsed.currency === 'string') {
+        const code = parsed.currency.trim().toUpperCase();
+        if (/^[A-Z]{3}$/.test(code)) out.currency = code;
+      }
+      const { min, max } = priceRangeFor(out.currency);
+      for (const k of missingList) {
+        const v = parsed[k];
+        if (v == null) continue;
+        if (k === 'address' && typeof v === 'string' && v.trim().length >= 4 && v.trim().length < 100) out.address = v.trim();
+        else if (k === 'price' && Number.isFinite(v) && v >= min && v <= max) out.price = Math.round(v);
+        else if (k === 'beds' && Number.isInteger(v) && v >= 0 && v < 20) out.beds = v;
+        else if (k === 'baths' && Number.isFinite(v) && v >= 0 && v < 20) out.baths = v;
+        else if (k === 'sqft' && Number.isInteger(v) && v >= 200 && v <= 20000) out.sqft = v;
+        else if (k === 'status' && typeof v === 'string' && /^(For Sale|Just Listed|Pending|Sold)$/i.test(v.trim())) {
+          out.status = v.trim().replace(/\b\w/g, (c) => c.toUpperCase()).replace(/For sale/i, 'For Sale').replace(/Just listed/i, 'Just Listed');
+        }
+      }
+    }
+  } catch (err) {
+    logger.warn(`[WEBDEV-LISTING] LLM parse failed: ${err.message}`);
+  }
 
   return out;
 }
@@ -1743,25 +1821,13 @@ async function finishSalonFlow(user) {
 async function handleSalonBookingTool(user, message) {
   const text = (message.text || '').trim();
   const wd = { ...(user.metadata?.websiteData || {}) };
+  const urlMatch = text.match(/https?:\/\/\S+/i);
 
   const igExample = instagramHandleExampleFor(wd.businessName);
 
-  // LLM-extract a booking URL if one is present in the message. Catches
-  // pasted https:// URLs, bare-domain references ("booking.fresha.com/foo"),
-  // and prose like "we use this — https://book.example.com/me — already".
-  const { bookingUrl } = await extractFields(text, {
-    bookingUrl: {
-      type: 'string',
-      description: 'A URL the user pasted to a booking / appointment tool such as Fresha, Booksy, Vagaro, Calendly, Square Appointments, Acuity, Setmore, or any similar service. Return the full URL with "https://" prefix — add it if the user pasted a bare domain like "booking.example.com/foo". Strip trailing punctuation (".", ",", ")", "]"). Omit if no URL is present.',
-    },
-  }, {
-    userId: user.id,
-    operation: 'webdev_booking_tool',
-  });
-
-  if (bookingUrl) {
+  if (urlMatch) {
     wd.bookingMode = 'embed';
-    wd.bookingUrl = bookingUrl;
+    wd.bookingUrl = urlMatch[0].replace(/[)\]]+$/, '');
     await updateUserMetadata(user.id, { websiteData: wd });
     await logMessage(user.id, `Booking mode: embed (${wd.bookingUrl})`, 'assistant');
     const msg = `Got it, we'll embed *${wd.bookingUrl}* on your booking page.\n\nWhat's your Instagram handle? (e.g. ${igExample}). Just skip if you don't have one.`;
@@ -1822,28 +1888,21 @@ async function handleSalonInstagram(user, message) {
     }
   }
 
-  // LLM-extract the handle from any phrasing the user comes up with —
-  // pasted URL, @-prefixed inline ("han, X kar do @asnhbukharu"), bare
-  // word, or prose ("the handle is asnhbukharu"). The schema-level
-  // contract trims @ / instagram.com/ for us; we still re-check the
-  // shape afterwards so junk like "Skip" / a sentence fragment can't
-  // sneak in even if the LLM misclassifies the message.
+  // Only accept an obvious handle shape: an instagram.com URL, a @-prefixed
+  // token (either standalone or embedded in a sentence like "han, X kar do
+  // @asnhbukharu"), or a single bare handle-shaped word. Anything else
+  // (delegation, prose, "i dont have one") is treated as skip.
+  const urlHandle = !isExplicitSkip ? text.match(/instagram\.com\/([\w.]+)/i) : null;
+  const inlineAt = !isExplicitSkip ? text.match(/@([\w.]{3,30})\b/) : null;
   let candidate = null;
-  if (!isExplicitSkip && text) {
-    const { handle } = await extractFields(text, {
-      handle: {
-        type: 'string',
-        description: 'Instagram username from the message. Return the bare handle (3–30 chars, letters/digits/dots/underscores only) — strip the leading @, strip "instagram.com/", strip the URL host. Examples: "instagram.com/asnh.bukhari" → "asnh.bukhari"; "@coffee_co" → "coffee_co"; "han bro X handle hai @asnhbukharu" → "asnhbukharu"; "the handle is glow.salon" → "glow.salon". Omit if the user is declining ("skip", "no instagram", "rehne do").',
-      },
-    }, {
-      userId: user.id,
-      operation: 'webdev_instagram_handle',
-    });
-    if (typeof handle === 'string' && /^[\w.]{3,30}$/.test(handle)) {
-      candidate = handle;
-    }
+  if (urlHandle) {
+    candidate = urlHandle[1];
+  } else if (inlineAt) {
+    candidate = inlineAt[1];
+  } else if (!isExplicitSkip && /^[\w.]{3,30}$/.test(text)) {
+    candidate = text;
   }
-  if (candidate) {
+  if (candidate && /^[\w.]{3,30}$/.test(candidate)) {
     wd.instagramHandle = candidate;
   }
   await updateUserMetadata(user.id, { websiteData: wd });
@@ -1928,50 +1987,45 @@ async function handleSalonHours(user, message) {
   return STATES.SALON_SERVICE_DURATIONS;
 }
 
-async function parseServiceDurations(text, servicesList, userId) {
-  // One LLM pass: turn free-text like "Haircut 30min €25, Colour 90min €85"
-  // into an array of {name, durationMinutes, priceText} entries. The LLM
-  // does the chunking, currency-format normalization, and partial-name
-  // matching to servicesList — all things the prior regex pipeline did
-  // brittly and only in English.
-  const safeText = String(text || '').trim();
-  const known = (servicesList || []).filter(Boolean);
-  if (!safeText || !known.length) {
-    return known.map((s) => ({ name: s, durationMinutes: 30, priceText: '' }));
-  }
+// Extract optional currency-prefixed or suffixed prices from the remainder of
+// a parsed service chunk. Accepts €25, $30, £40, ₹500, "25 euro", "from €20".
+const PRICE_RE = /(from\s*)?([€$£₹]\s*\d{1,5}(?:\.\d{1,2})?|\d{1,5}(?:\.\d{1,2})?\s*(?:eur|usd|gbp|inr|aed|euros?|dollars?|pounds?|rupees?))/i;
 
-  const extracted = await extractFields(safeText, {
-    serviceDetails: {
-      type: 'array',
-      description: `Array of objects, one per service the user described. Each object has shape: {"name": <one of the known services>, "durationMinutes": <integer minutes or null>, "priceText": <string or null>}.
-- "name" MUST exactly match one of these known services (case-insensitive): ${known.join(', ')}.
-- "durationMinutes" is an integer count of minutes. "30min" → 30, "1 hour" → 60, "1.5 hr" → 90, "45 mins" → 45. Set to null if no duration given.
-- "priceText" preserves the user's original currency formatting: "€25", "$30", "£40", "Rs 500", "PKR 1500", "25 euros". Set to null if no price.
-- Skip services the user didn't describe; do NOT pad with placeholders. The output array can be shorter than the known list.`,
-    },
-  }, {
-    userId,
-    operation: 'webdev_service_durations',
-  });
+function parseServiceDurations(text, servicesList) {
+  // Split the message into chunks by comma or newline and try to extract
+  // duration + price per chunk. Each chunk is matched back to a service name
+  // by lowercased exact/partial match.
+  const chunks = String(text || '')
+    .split(/[,;\n]+|\s+\|\s+/)
+    .map((c) => c.trim())
+    .filter(Boolean);
 
-  // Build a lookup keyed by lowercased service name for quick matching against
-  // the canonical servicesList. The LLM is told to use known names verbatim
-  // but defends against case drift / extra whitespace just in case.
-  const byName = {};
-  if (Array.isArray(extracted.serviceDetails)) {
-    for (const entry of extracted.serviceDetails) {
-      if (!entry || typeof entry !== 'object') continue;
-      const name = String(entry.name || '').trim().toLowerCase();
-      if (!name) continue;
-      const out = {};
-      const dur = entry.durationMinutes;
-      if (Number.isFinite(dur) && dur > 0 && dur <= 600) out.duration = Math.round(dur);
-      if (typeof entry.priceText === 'string' && entry.priceText.trim()) out.price = entry.priceText.trim();
-      if (Object.keys(out).length) byName[name] = out;
+  const byName = {}; // { loweredName: { duration, price } }
+
+  for (const chunk of chunks) {
+    const durMatch = chunk.match(/(\d{1,3})\s*(?:mins?|minutes|m)\b/i);
+    const priceMatch = chunk.match(PRICE_RE);
+
+    // The "name" is whatever precedes the duration or, failing that, the price.
+    let name = chunk;
+    const firstMeta = [durMatch?.index, priceMatch?.index].filter((x) => typeof x === 'number').sort((a, b) => a - b)[0];
+    if (typeof firstMeta === 'number') name = chunk.slice(0, firstMeta);
+    name = name.replace(/[:\-—]\s*$/, '').trim().toLowerCase();
+    if (!name) continue;
+
+    const entry = {};
+    if (durMatch) {
+      const mins = parseInt(durMatch[1], 10);
+      if (mins > 0 && mins <= 600) entry.duration = mins;
     }
+    if (priceMatch) {
+      // Normalise: keep the raw symbol+number, strip trailing comma/period.
+      entry.price = priceMatch[0].trim().replace(/[,.]$/, '');
+    }
+    if (Object.keys(entry).length > 0) byName[name] = entry;
   }
 
-  return known.map((s) => {
+  return servicesList.map((s) => {
     const key = s.toLowerCase();
     let hit = byName[key];
     if (!hit) {
@@ -1995,7 +2049,7 @@ async function handleSalonServiceDurations(user, message) {
   const useDefault = isDelegation(text) || /^30$/.test(text);
   const salonServices = useDefault
     ? services.map((s) => ({ name: s, durationMinutes: 30, priceText: '' }))
-    : await parseServiceDurations(text, services, user.id);
+    : parseServiceDurations(text, services);
   wd.salonServices = salonServices;
   await updateUserMetadata(user.id, { websiteData: wd });
   await logMessage(
@@ -2021,48 +2075,126 @@ async function handleSalonServiceDurations(user, message) {
 }
 
 /**
- * Parse a free-text contact blob into { contactEmail, contactPhone, contactAddress }.
- * Handles labeled input ("email: x, phone: y, address: z"), unlabeled input,
- * and multilingual prose ("email hai X, number es Y, l'adresse est Z").
+ * Detect an edit-intent message targeting a specific previously-collected
+ * field (business name, industry, services, email, phone, address). Returns
+ * { field, value } if one was detected, or null otherwise.
+ *
+ * Permissive enough to catch phrasings like
+ *   "actually the business name is wrong, it should be Glow Salon"
+ *   "change the name to Glow Salon"
+ *   "name: Glow Salon"
+ *   "the industry is actually food"
+ * without stealing plain contact-info entries.
  */
-async function parseContactFields(text, userId) {
-  const safeText = String(text || '').trim();
-  if (!safeText) return { contactEmail: '', contactPhone: '', contactAddress: '' };
+function detectFieldEdit(text) {
+  if (!text) return null;
+  const t = String(text).trim();
 
-  const extracted = await extractFields(safeText, {
-    email: {
-      type: 'string',
-      description: 'Email address mentioned in the message (e.g. "user@example.com"). Omit if no valid email.',
-    },
-    phone: {
-      type: 'string',
-      description: 'Phone number mentioned in the message — keep the user\'s formatting, including + and dashes/spaces. Omit if no phone number is given. Bare 1-3 digit numbers are not phones.',
-    },
-    address: {
-      type: 'string',
-      description: 'Street address only (e.g. "45 Elm Street, Apt 3B" or "Block 5, DHA Phase 6"). Do NOT include the city alone, country, ZIP, or coordinates. Omit if no street address is given. Strip leading filler words like "is", "hai", "es", "est" — return the address itself.',
-    },
-  }, {
-    userId,
-    operation: 'webdev_contact_parse',
-  });
+  // Field anchor — must match somewhere in the message. If no field keyword
+  // appears at all, it's not an edit. We require the anchor to either start
+  // the line or follow an edit verb / "the|my" so plain contact input like
+  // "address: 123 Main" still matches but arbitrary mentions don't.
+  const fieldAnchor = (fieldRegex) =>
+    new RegExp(
+      `^\\s*(?:actually[,\\s]+|change\\s+|update\\s+|fix\\s+|correct\\s+|set\\s+|make\\s+|the\\s+|my\\s+)*${fieldRegex}\\b`,
+      'i'
+    );
 
-  // Sanity check on the LLM-supplied address: an address worth keeping has
-  // EITHER a digit OR a recognizable street keyword. Pure-prose strings
-  // ("the usual one", "you know it") sometimes leak through and land as
-  // "contact =" garbage in the summary. Drops those without losing real
-  // addresses.
+  // Separator (greedy left → rightmost match) picks the LAST "should be|is|
+  // are|to|:" so "name is wrong, it should be X" captures "X" not
+  // "wrong, it should be X".
+  const tailPattern = /.*(?:should\s+be|are|is|to|:)\s+(.+)$/i;
+
+  const fields = [
+    { field: 'businessName',   re: fieldAnchor('(?:business\\s*)?name') },
+    { field: 'industry',       re: fieldAnchor('industry') },
+    { field: 'services',       re: fieldAnchor('services?') },
+    { field: 'contactEmail',   re: fieldAnchor('e-?mail') },
+    { field: 'contactPhone',   re: fieldAnchor('(?:phone|tel|mobile|number)') },
+    { field: 'contactAddress', re: fieldAnchor('(?:address|location|addr)') },
+  ];
+
+  for (const { field, re } of fields) {
+    if (!re.test(t)) continue;
+    const m = t.match(tailPattern);
+    if (!m) continue;
+    let value = m[1].trim().replace(/^["']|["'\.]$/g, '');
+    // Strip a leading "actually" if it leaked through into the value
+    // (e.g. "industry is actually food" → "food", not "actually food").
+    value = value.replace(/^(?:actually|really|now|just)[,\s]+/i, '').trim();
+    if (!value) continue;
+    return { field, value };
+  }
+  return null;
+}
+
+/**
+ * Parse a free-text contact blob into { contactEmail, contactPhone, contactAddress }.
+ * Handles both labeled input ("email: x, phone: y, address: z") and unlabeled input.
+ */
+function parseContactFields(text) {
+  const emailMatch = text.match(/[\w.-]+@[\w.-]+\.\w+/);
+  const phoneMatch = text.match(/[\+]?[\d][\d\s\-()]{6,}/);
+
+  // Try labeled address first — handles "address: 123 Main St" on its own line or inline.
+  // Stops at the next known label word (with OR without a colon) or end of
+  // string, so prose like "address is X email Y@Z.com phone 555" splits
+  // cleanly into the three fields instead of collapsing into the address.
+  const labeledAddressMatch = text.match(
+    /(?:address|location|addr)\s*[:\-=]?\s*([^\n]+?)(?=\s*(?:email|e-?mail|phone|tel|mobile|contact)\b|$)/i
+  );
+
+  // Clean a captured address: strip a leading copula/separator that sneaks in
+  // when the user writes prose ("the address is ABC, Street" captures "is
+  // ABC, Street" without this), plus trailing punctuation and stray "and"
+  // connectors ("123 Main St, and" → "123 Main St"). Covers common copulas
+  // from Roman Urdu / Hindi / Spanish / French too so "address hai X" /
+  // "direccion es X" / "l'adresse est X" don't leak the verb into the value.
+  const stripAddressSeparator = (v) =>
+    v
+      .replace(/^(?:is|are|=|:|-|at|of|for|hai|hain|ka|ki|ke|ye|yeh|es|son|est|sont|ist|sind)\s+/i, '')
+      .replace(/\s+(?:and|plus|aur|y|et|und)\s*$/i, '')
+      .replace(/[,;.\s=:\-]+$/, '')
+      .trim();
+
+  // Reject addresses that look like leftover junk from a labeled message
+  // (e.g. "contact =", "email", "phone") or filler-word residue after the
+  // parser stripped out matched email/phone values ("yeah the is and
+  // number is" left over from "yeah the email is X and number is Y"). An
+  // address worth keeping must have EITHER a digit OR a recognizable
+  // street keyword — pure-prose strings have neither and are almost
+  // always residue.
+  const isPlausibleAddress = (v) => {
+    if (!v) return false;
+    if (/\d/.test(v)) return true;
+    if (/\b(?:st|street|ave|avenue|road|rd|blvd|boulevard|lane|ln|drive|dr|way|plaza|suite|apt|floor|block|sector|phase|building|tower|mall|market|colony|bazaar|bazar|nagar|society|square|sq)\b/i.test(v)) return true;
+    return false;
+  };
+
   let addressValue = '';
-  if (extracted.address) {
-    const a = extracted.address;
-    const hasDigit = /\d/.test(a);
-    const hasStreetKeyword = /\b(?:st|street|ave|avenue|road|rd|blvd|boulevard|lane|ln|drive|dr|way|plaza|suite|apt|floor|block|sector|phase|building|tower|mall|market|colony|bazaar|bazar|nagar|society|square|sq)\b/i.test(a);
-    if (hasDigit || hasStreetKeyword) addressValue = a;
+  if (labeledAddressMatch) {
+    addressValue = stripAddressSeparator(labeledAddressMatch[1].trim());
+  } else {
+    // Fallback: strip the matched email/phone and any leftover label words, return the rest.
+    // Expanded label list includes "contact" (common when users write
+    // "contact = 555-1234" to mean phone) and accepts = as a separator too.
+    addressValue = text
+      .replace(emailMatch?.[0] || '', '')
+      .replace(phoneMatch?.[0] || '', '')
+      .replace(/\b(email|e-?mail|phone|tel|mobile|contact|contact\s*number|address|location|addr)\s*[:\-=]?/gi, '')
+      .replace(/[,\n\r]+/g, ' ')
+      .replace(/\s{2,}/g, ' ')
+      .trim();
+    addressValue = stripAddressSeparator(addressValue);
   }
 
+  // Final junk filter: if what we captured doesn't look like a real address,
+  // discard it rather than showing "contact =" in the summary.
+  if (!isPlausibleAddress(addressValue)) addressValue = '';
+
   return {
-    contactEmail: extracted.email || '',
-    contactPhone: extracted.phone || '',
+    contactEmail: emailMatch?.[0] || '',
+    contactPhone: phoneMatch?.[0]?.trim() || '',
     contactAddress: addressValue,
   };
 }
@@ -2135,12 +2267,19 @@ async function handleCollectContact(user, message) {
     }
   }
 
-  // Cheap routing gate: if the input is clearly a multi-field contact blob
-  // (2+ labeled fields like "address: X, email: Y, phone: Z" OR "email is
-  // X and phone is Y"), skip the LLM edit-detector below — multi-field
-  // contact input is the user's first-time answer to the contact prompt,
-  // not an edit of a prior field. Counts labels followed by colon/hyphen
-  // or "is"/"are" so prose-style multi-field input is caught too.
+  // If the input is a multi-field contact blob (2+ labeled fields like
+  // "address: X, email: Y, phone: Z" OR "email is X and phone is Y"), skip
+  // the single-field edit detector — otherwise the greedy tail regex
+  // inside detectFieldEdit picks the LAST "is|:" in the message and
+  // misreads "phone is 09876544567" as the email value. The regex below
+  // counts labels followed by ANY of (colon, hyphen, "is", "are") so
+  // prose-style multi-field input is caught too.
+  // Expanded label list: users commonly write "contact is X" and
+  // "number is Y" to mean phone. Without those in the list, an input
+  // like "email is test@gmail.com and contact is 02928373993" counts
+  // as only 1 label, detectFieldEdit runs, its greedy tail-match
+  // picks the LAST "is" value (the phone) as the email, and we
+  // misroute a two-field input into a single-field edit.
   const labelCount = (contactText.match(/\b(?:email|e-?mail|phone|tel|mobile|contact|number|address|location|addr)\s+(?:is|are)\b|\b(?:email|e-?mail|phone|tel|mobile|contact|number|address|location|addr)\s*[:\-]/gi) || []).length;
 
   // Delegation path: the user doesn't want to provide contact info and is
@@ -2192,9 +2331,8 @@ async function handleCollectContact(user, message) {
   // services — genuine corrections to fields collected upstream.
   const EDIT_ALLOWED_AT_CONTACT_STEP = new Set(['businessName', 'industry', 'services']);
   if (contactText && contactText.length >= 3 && !isExplicitSkip && labelCount < 2) {
-    const edits = await detectFieldEditsLLM(contactText, user.metadata?.websiteData || {}, user.id);
-    const edit = edits.find((e) => EDIT_ALLOWED_AT_CONTACT_STEP.has(e.field));
-    if (edit) {
+    const edit = detectFieldEdit(contactText);
+    if (edit && EDIT_ALLOWED_AT_CONTACT_STEP.has(edit.field)) {
       const wd = { ...(user.metadata?.websiteData || {}) };
       let ackValue = edit.value;
       if (edit.field === 'services') {
@@ -2229,7 +2367,7 @@ async function handleCollectContact(user, message) {
   if (!contactText || contactText.length < 3 || isExplicitSkip) {
     contactData = { contactEmail: '', contactPhone: '', contactAddress: '' };
   } else {
-    contactData = await parseContactFields(contactText, user.id);
+    contactData = parseContactFields(contactText);
 
     // Reject junk / stray replies like "hello?", "?", "im waiting". If we
     // got no email, no phone, and the "address" we parsed looks like
@@ -2512,55 +2650,53 @@ async function showConfirmSummary(user, prefix = '') {
 async function handleCollectLogo(user, message) {
   const text = (message.text || '').trim();
 
-  // Skip path — explicit opt-out in any language we can reasonably detect
-  // via keyword. Keeping this regex-based instead of LLM since the user
-  // is answering a very specific yes/no-ish prompt.
-  if (text && /^(skip|no|nope|nah|no thanks|don'?t have|none|n\/a|na|nahi|baad may|baad|later)$/i.test(text)) {
-    const wd = { ...(user.metadata?.websiteData || {}) };
-    wd.logoSkipped = true;
-    await updateUserMetadata(user.id, { websiteData: wd });
-    user.metadata = { ...(user.metadata || {}), websiteData: wd };
-    await sendTextMessage(user.phone_number, await localize("No problem — I'll use a clean text logo with your brand initial.", user, text));
-    await logMessage(user.id, 'User skipped logo upload', 'assistant');
-    return smartAdvance(user, message, null);
-  }
-
   // Image path — the sender captured the message with `type: 'image'` and
   // a mediaId. downloadMedia pulls the bytes from WhatsApp's CDN.
+  // Take this branch first so a caption like "here's my logo" doesn't
+  // get misclassified as text intent.
   const hasImage = message.type === 'image' && (message.mediaId || message.mediaUrl);
+
   if (!hasImage) {
-    // Detect "make a logo for me" / "create one" / "you design it" /
-    // "surprise me with a logo" — the user is asking us to GENERATE
-    // a logo inline, which this step doesn't do (it's upload-or-skip).
-    // Without this branch the user gets the same "I didn't catch an
-    // image" reply as if they'd typed gibberish — no clue why their
-    // perfectly reasonable request was ignored.
-    let wantsGeneration = false;
-    if (text && text.length <= 80) {
-      // Cheap regex first: covers the obvious phrasings without an
-      // LLM call. We deliberately require a logo-related noun so a
-      // bare "make me one" / "you do it" doesn't trigger here when
-      // the user might mean something else.
-      if (/\b(make|create|generate|design|build|do|whip\s+up)\b[^.\n]{0,30}\blogo\b/i.test(text)) {
-        wantsGeneration = true;
-      }
-      // LLM fallback for natural prose ("you pick something for me",
-      // "surprise me", any-language equivalents). classifyDelegation
-      // uses the question context to decide whether the user is
-      // delegating the answer to us.
-      if (!wantsGeneration) {
-        try {
-          wantsGeneration = await classifyDelegation(
-            text,
-            'Do you have a logo? Send it as an image, or reply skip to use a text logo with your brand initial.'
-          );
-        } catch (err) {
-          logger.warn(`[WEBDEV-LOGO] classifyDelegation threw: ${err.message}`);
-        }
+    // No image — classify the user's text into one of three intents:
+    //   skip      — they don't have a logo / want to defer
+    //   generate  — they want us to design one (we can't here)
+    //   other     — anything else, re-prompt
+    // One LLM call replaces a regex skip-list + a regex generate-pattern
+    // + a classifyDelegation call. Handles every dialect / phrasing.
+    let intent = 'other';
+    if (text && text.length <= 120) {
+      try {
+        const resp = await generateResponse(
+          `The user is replying to: "Do you have a logo? Send it as an image (JPG or PNG), or reply *skip* to use a text logo with your brand initial."
+
+Classify their reply into ONE of: skip / generate / other.
+
+- skip: they don't have a logo, want to skip, defer for later, or just use a text logo. Examples in any language: "skip", "no", "nope", "nahi hai mera logo", "logo nahi hai bhai", "rehne do", "abhi nahi", "later", "don't have one", "no thanks", "use a text logo", "skip krdo", "chodo bhai", "abhi nahi banaya", "nahi banaya hua".
+- generate: they want US to make / design / create a logo for them. Examples: "make me a logo", "design one for me", "you create it", "can you make a logo", "surprise me", "you pick", "logo bhi banao", "logo design kr do".
+- other: anything else (questions, off-topic, unclear).
+
+Return ONLY one word: skip, generate, or other.`,
+          [{ role: 'user', content: text }],
+          { userId: user.id, operation: 'logo_intent_classify' }
+        );
+        intent = String(resp || 'other').trim().toLowerCase().split(/[\s\n]/)[0];
+        if (!['skip', 'generate', 'other'].includes(intent)) intent = 'other';
+      } catch (err) {
+        logger.warn(`[WEBDEV-LOGO] intent classifier threw: ${err.message}`);
       }
     }
 
-    if (wantsGeneration) {
+    if (intent === 'skip') {
+      const wd = { ...(user.metadata?.websiteData || {}) };
+      wd.logoSkipped = true;
+      await updateUserMetadata(user.id, { websiteData: wd });
+      user.metadata = { ...(user.metadata || {}), websiteData: wd };
+      await sendTextMessage(user.phone_number, await localize("No problem — I'll use a clean text logo with your brand initial.", user, text));
+      await logMessage(user.id, 'User skipped logo upload', 'assistant');
+      return smartAdvance(user, message, null);
+    }
+
+    if (intent === 'generate') {
       await sendTextMessage(
         user.phone_number,
         await localize(
@@ -2698,7 +2834,7 @@ async function handleConfirm(user, message) {
   // Mutates wd in place for one field. Returns a short ack string like
   // "business name → *MyCo*" or null if the value wasn't applicable. Shared
   // by the single-edit and multi-edit paths below.
-  const mutateWdForField = async (field, value) => {
+  const mutateWdForField = (field, value) => {
     const v = String(value || '').trim();
     if (!v) return null;
     switch (field) {
@@ -2737,7 +2873,7 @@ async function handleConfirm(user, message) {
         wd.contactAddress = v;
         return `address → *${wd.contactAddress}*`;
       case 'contact': {
-        const parsed = await parseContactFields(v, user.id);
+        const parsed = parseContactFields(v);
         const applied = [];
         if (parsed.contactEmail) { wd.contactEmail = parsed.contactEmail; applied.push(`email → *${wd.contactEmail}*`); }
         if (parsed.contactPhone) { wd.contactPhone = parsed.contactPhone; applied.push(`phone → *${wd.contactPhone}*`); }
@@ -2773,7 +2909,7 @@ async function handleConfirm(user, message) {
       }
       return applyAndReshow(`Industry updated to *${wd.industry}*`);
     }
-    const label = await mutateWdForField(field, value);
+    const label = mutateWdForField(field, value);
     if (!label) return null;
     return applyAndReshow(label.charAt(0).toUpperCase() + label.slice(1));
   };
@@ -2798,7 +2934,7 @@ async function handleConfirm(user, message) {
 
     const labels = [];
     for (const m of llmEdits) {
-      const label = await mutateWdForField(m.field, m.value);
+      const label = mutateWdForField(m.field, m.value);
       if (label) labels.push(label);
     }
     if (labels.length > 0) {
@@ -3854,43 +3990,40 @@ async function handleRevisions(user, message) {
         return handlePaidClaim(user);
       }
 
-      // Domain-intent short-circuit — "i want a domain now", "let me grab
-      // a domain", "yes set up the domain". These are NOT revision
-      // requests; without this short-circuit they used to fall through to
-      // gateNextRevision (which incremented the counter) and then to the
-      // revision parser (which returned _unclear because the message
-      // wasn't about the site itself). Net effect: each attempt to ask
-      // for a domain ate one of the user's three free revisions and
-      // produced a confused "I'm not sure what to change" reply.
-      // Now we route straight to DOMAIN_OFFER (same flow as the
-      // web_approve button) and the revision counter stays put.
-      if (revisionText && revisionText.length <= 80) {
-        const intents = await classifyIntent(revisionText, {
-          domainIntent: 'User is asking to add or set up a custom domain for their website right now. Examples: "I want a domain", "let\'s get a domain", "grab me a domain", "yes domain please", "I\'ll take a domain", "want to buy a domain", "set up the domain", "i want domain now", "let me have one", in any language. Do NOT match if the user is requesting a website CHANGE (color/text/section/image/logo), asking a question about pricing, expressing approval of the site, talking about payment, or naming a specific domain like "mybrand.com".',
-        }, { userId: user.id, operation: 'webdev_revision_domain_intent' });
+      // Late-domain intent — user originally skipped domain (or never
+      // got a selection in) and now wants one. Two scenarios share this
+      // entry: pre-paid (we'll supersede the existing pending Stripe
+      // link with a new combined one) and already-paid (we'll create a
+      // separate domain-add-on charge). Both are handled in
+      // handleLateDomainStart based on the user's current paid state.
+      if (
+        revisionText &&
+        revisionText.length <= 120 &&
+        !user.metadata?.selectedDomain &&
+        await classifyLateDomainIntent(revisionText, user.id)
+      ) {
+        return handleLateDomainStart(user, revisionText);
+      }
 
-        if (intents.domainIntent) {
-          const siteId = user.metadata?.currentSiteId;
-          if (siteId) await updateSite(siteId, { status: 'approved' });
-
-          // Already locked in a domain decision earlier in the flow —
-          // surface that instead of re-pitching the offer prompt.
-          if (user.metadata?.selectedDomain || user.metadata?.domainChoice === 'skip') {
-            return acknowledgeApprovalAfterDomainChoice(user);
-          }
-
-          const businessName = site?.site_data?.businessName || user.metadata?.websiteData?.businessName;
-          const example = domainExampleFor(businessName);
-          await sendTextMessage(
-            user.phone_number,
-            await localize(
-              `Got it — let's set up a custom domain for your site. (e.g., ${example})\n\nReply *yes* and I'll help you find one, or *no* to skip it for now.`,
-              user,
-              revisionText
-            )
-          );
-          await logMessage(user.id, 'User asked for domain mid-revisions, routing to DOMAIN_OFFER (no revision counted)', 'assistant');
-          return STATES.DOMAIN_OFFER;
+      // Change-domain intent — user already has a domain selected (need
+      // or own) but wants something different. Same architecture as
+      // late-add but with a reset-and-re-enter step first. Covers:
+      //   - "actually pick a different domain" (change_domain)
+      //   - "actually use my own" (switch_to_own from search-selected)
+      //   - "no, find me a new one instead" (switch_to_search from
+      //     own-selected)
+      if (
+        revisionText &&
+        revisionText.length <= 140 &&
+        user.metadata?.selectedDomain
+      ) {
+        const action = await classifyDomainMutationIntent(
+          revisionText,
+          user.metadata.selectedDomain,
+          user.id
+        );
+        if (action !== 'none') {
+          return handleDomainChangeStart(user, revisionText, action);
         }
       }
 
@@ -3979,10 +4112,6 @@ async function handleRevisions(user, message) {
         const jsonMatch = response.match(/```(?:json)?\s*([\s\S]*?)\s*```/) || [null, response];
         updates = JSON.parse(jsonMatch[1]);
       } catch {
-        // Parser couldn't extract a structured change — refund the
-        // pre-incremented count so the user isn't billed a free-tier
-        // revision for a clarification round-trip.
-        await updateUserMetadata(user.id, { revisionCount: Math.max(0, revisionCount - 1) });
         await sendTextMessage(
           user.phone_number,
           'I\'m not sure what to change. Could you be more specific? For example:\n' +
@@ -4010,13 +4139,6 @@ async function handleRevisions(user, message) {
       }
 
       if (updates._unclear) {
-        // No actual change was applied — refund the revision counter
-        // so the user isn't billed for a clarification round. The next
-        // message (their answer to the clarification) will go through
-        // gateNextRevision again and increment normally if it produces
-        // a real change.
-        await updateUserMetadata(user.id, { revisionCount: Math.max(0, revisionCount - 1) });
-
         // If the clarification question is specifically about colors, set a
         // follow-up flag so the NEXT user reply — which will likely be a
         // short answer like "blue" or "#1E40AF" — gets interpreted as a
@@ -4442,28 +4564,17 @@ async function handleDomainChoice(user, message) {
   const raw = (message.text || '').trim();
   const text = raw.toLowerCase();
 
-  // Fast-path: obvious single-word answers skip the LLM call entirely.
-  // Keeps p95 latency down for the 80% case where user types exactly
-  // what the prompt asked for.
-  if (/^(skip|no|nope|nah|later|pass|not now|maybe later)$/i.test(text)) {
-    return proceedSkipDomain(user, raw);
-  }
-  if (/^(new|yes|yeah|yep|sure|ok|okay|find|search|look|help)$/i.test(text)) {
-    return proceedSearchNewDomain(user, raw, null);
-  }
-  if (/^(own|have|mine|my)$/i.test(text)) {
-    return proceedAskForOwnDomain(user, raw);
-  }
-
-  // Full domain typed directly (e.g. "glowstudio.com") → own-domain path
-  // without an extra round-trip.
+  // One deterministic shortcut survives: a fully-typed domain
+  // ("glowstudio.com") is unambiguously "I own this one already" — no
+  // amount of LLM thinking will improve on a literal regex match here.
+  // Everything else (skip / new / own / unclear / mixed-language prose)
+  // goes through the LLM classifier so we don't maintain hand-rolled
+  // keyword lists per language.
   const fullMatch = raw.match(/([a-z0-9][a-z0-9-]*\.[a-z]{2,}(?:\.[a-z]{2,})?)/i);
   if (fullMatch && !/\s/.test(raw)) {
     return saveOwnDomain(user, fullMatch[1].toLowerCase());
   }
 
-  // Natural-language reply ("yeah lets do a new one", "i have my own",
-  // "skip for now"). Route through the LLM classifier.
   const businessName = user.metadata?.websiteData?.businessName || '';
   const result = await classifyDomainIntent(raw, businessName);
 
@@ -4478,9 +4589,9 @@ async function handleDomainChoice(user, message) {
     return proceedSearchNewDomain(user, raw, result.searchBase);
   }
 
-  // Fallback — unclear. If it looks like a plausible bare search term
-  // (no spaces, alphanumeric), treat it as a new-search request;
-  // otherwise reprompt.
+  // Unclear — but the user might have typed a bare candidate name
+  // (one short token, no spaces). Treat as a new-search input so we
+  // don't bounce them when their intent was "find me one with this name".
   const cleaned = text.replace(/[^a-z0-9-]/g, '');
   if (!/\s/.test(raw) && cleaned.length >= 2 && cleaned.length <= 30) {
     return proceedSearchNewDomain(user, raw, cleaned);
@@ -4501,18 +4612,50 @@ async function handleDomainOwnInput(user, message) {
   const raw = (message.text || '').trim();
   const text = raw.toLowerCase();
 
-  // Exit — user changed their mind.
+  // Exit — user changed their mind. In late-mode (changing domain on
+  // an already-built site), don't regenerate — return to revisions
+  // with no domain change.
   if (/^(skip|cancel|back|never\s*mind|nvm|forget\s*it)$/i.test(text)) {
     await updateUserMetadata(user.id, {
       domainChoice: 'skip',
       selectedDomain: null,
       domainPrice: 0,
+      domainChangeMode: null,
     });
+    if (user.metadata?.domainChangeMode === 'late') {
+      const { updateUserState } = require('../../db/users');
+      await updateUserState(user.id, STATES.WEB_REVISIONS);
+      await sendTextMessage(
+        user.phone_number,
+        await localize("No problem — sticking with the current setup. Let me know any other tweaks!", user, raw)
+      );
+      return STATES.WEB_REVISIONS;
+    }
     await sendTextMessage(
       user.phone_number,
       await localize("All good — skipping the domain and building now.", user, raw)
     );
     return generateWebsite(user);
+  }
+
+  // Mid-flow path-switch — user is here to type their own domain but
+  // wants us to find one instead. Reuse the same intent classifier
+  // we use in revisions.
+  if (raw.length > 4) {
+    const action = await classifyDomainMutationIntent(raw, null, user.id);
+    if (action === 'switch_to_search') {
+      // Late vs pre-build: late-mode keeps the flag; pre-build is the
+      // standard search inline.
+      const businessName = user.metadata?.websiteData?.businessName || '';
+      const baseName = businessName
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '')
+        .slice(0, 30) || 'site';
+      if (user.metadata?.domainChangeMode === 'late') {
+        return runLateDomainSearchInline(user, baseName);
+      }
+      return runDomainSearchInline(user, baseName);
+    }
   }
 
   // Validate domain format.
@@ -4524,7 +4667,7 @@ async function handleDomainOwnInput(user, message) {
   await sendTextMessage(
     user.phone_number,
     await localize(
-      "Doesn't look like a domain. Try something like *glowstudio.com* — or reply *skip*.",
+      "Doesn't look like a domain. Try something like *glowstudio.com* — or reply *skip*. Or say *find me one* if you'd rather we search.",
       user,
       raw
     )
@@ -4587,6 +4730,19 @@ async function handleDomainOwnRegistrar(user, message) {
 
   const registrar = raw.slice(0, 60);
   await updateUserMetadata(user.id, { domainRegistrar: registrar });
+
+  // Late-mode: don't regenerate the site (it's already deployed). Hand
+  // off to the late-finalize path which updates the Stripe link
+  // (pre-paid) or sends DNS instructions immediately (already-paid).
+  if (user.metadata?.domainChangeMode === 'late') {
+    const domain = user.metadata?.selectedDomain;
+    if (domain) {
+      return selectLateOwnDomainInline(user, domain, registrar);
+    }
+    // No domain saved — defensive: fall back to normal build.
+    logger.warn(`[OWN-REGISTRAR] domainChangeMode='late' but no selectedDomain on user ${user.id}`);
+  }
+
   await sendTextMessage(
     user.phone_number,
     await localize(
@@ -4620,36 +4776,12 @@ async function handleDomainSearch(user, message) {
 
   const domainOptions = user.metadata?.domainOptions || [];
 
-  // One LLM pass classifies the reply into one of three actions: pick from
-  // the list (by number, ordinal, or prose like "the second one"), pick a
-  // specific domain by name, or search again with a new base name. The
-  // prior regex pipeline missed prose phrasings ("option 3", "give me the
-  // second one", "I'll take .ai") and any non-English equivalents.
-  const optionList = domainOptions.length
-    ? domainOptions.map((d, i) => `${i + 1}. ${d.domain}`).join('\n')
-    : '(no current options)';
-  const { selectionIndex, fullDomain, newSearchBase } = await extractFields(raw, {
-    selectionIndex: {
-      type: 'integer',
-      description: `1-based position the user is picking from this numbered list of domain suggestions:\n${optionList}\n\nMatch plain numbers ("1", "2"), ordinals ("first", "1st", "second", "2nd", "third", ...), prose ("the second one", "option 3", "give me #2", "I'll go with the third"), and direct mentions of one of the listed domains (return its position). Range 1-${Math.max(domainOptions.length, 1)}. Omit if the user is not picking from the list.`,
-    },
-    fullDomain: {
-      type: 'string',
-      description: 'A specific domain in dot-notation that the user typed and wants to use, e.g. "mybiz.ai", "shop.example.com". Lowercase, no protocol. Omit when the user is picking from the numbered list (use selectionIndex for that) or asking to search a new base name.',
-    },
-    newSearchBase: {
-      type: 'string',
-      description: 'A new business-name base the user wants to re-search domains for — letters, digits, and hyphens only (2-30 chars, no spaces, no dots). Examples: "glowsalon", "mybiz", "acme-co". Omit if the user is picking from the list or naming a specific full domain.',
-    },
-  }, {
-    userId: user.id,
-    operation: 'webdev_domain_pick',
-  });
-
-  // Pick from the numbered list.
-  if (Number.isInteger(selectionIndex) && selectionIndex >= 1 && domainOptions.length > 0) {
-    const idx = selectionIndex - 1;
-    if (idx < domainOptions.length && domainOptions[idx].available && !domainOptions[idx].premium) {
+  // Pick by number.
+  const numMatch = text.match(/^(\d+)$/);
+  if (numMatch && domainOptions.length > 0) {
+    const idx = parseInt(numMatch[1], 10) - 1;
+    if (idx >= 0 && idx < domainOptions.length &&
+        domainOptions[idx].available && !domainOptions[idx].premium) {
       return selectDomainInline(user, domainOptions[idx]);
     }
     await sendTextMessage(
@@ -4659,33 +4791,52 @@ async function handleDomainSearch(user, message) {
     return STATES.WEB_DOMAIN_SEARCH;
   }
 
-  // Specific full domain typed (e.g. "mybiz.ai"). Two sub-cases:
+  // Pick by ordinal word.
+  const ordinalMap = { first: 0, '1st': 0, second: 1, '2nd': 1, third: 2, '3rd': 2, fourth: 3, '4th': 3, fifth: 4, '5th': 4 };
+  const ordMatch = text.match(/\b(first|1st|second|2nd|third|3rd|fourth|4th|fifth|5th)\b/);
+  if (ordMatch && domainOptions.length > 0) {
+    const idx = ordinalMap[ordMatch[1]];
+    if (idx !== undefined && idx < domainOptions.length &&
+        domainOptions[idx].available && !domainOptions[idx].premium) {
+      return selectDomainInline(user, domainOptions[idx]);
+    }
+  }
+
+  // Full domain typed (e.g. "mybiz.ai"). Two sub-cases:
   //   1. Already in the current options list → pick it.
   //   2. Not in options → do a targeted single-domain lookup so we can
   //      show the real price for the exact TLD they asked for (previously
   //      we stripped the TLD and re-searched the default list, which was
   //      the "user typed .ai, got same .com/.co/.io list again" bug).
-  if (typeof fullDomain === 'string' && fullDomain.includes('.')) {
-    const typedDomain = fullDomain.toLowerCase();
-    const fromOptions = domainOptions.find((d) => d.domain.toLowerCase() === typedDomain);
+  const fullMatch = raw.match(/([a-z0-9-]+\.[a-z]{2,})/i);
+  if (fullMatch) {
+    const typedDomain = fullMatch[1].toLowerCase();
+    const fromOptions = domainOptions.find(d => d.domain.toLowerCase() === typedDomain);
     if (fromOptions && fromOptions.available && !fromOptions.premium) {
       return selectDomainInline(user, fromOptions);
     }
     return runSpecificDomainLookup(user, typedDomain);
   }
 
-  // New base name for re-search.
-  if (typeof newSearchBase === 'string') {
-    const cleaned = newSearchBase.toLowerCase().replace(/[^a-z0-9-]/g, '');
-    if (cleaned.length >= 2 && cleaned.length <= 30) {
-      return runDomainSearchInline(user, cleaned);
+  // New base name for search.
+  const cleaned = text.replace(/[^a-z0-9-]/g, '');
+  if (cleaned.length >= 2 && cleaned.length <= 30 && !/\s/.test(raw)) {
+    return runDomainSearchInline(user, cleaned);
+  }
+
+  // Mid-flow path-switch — user is in search but wants to use their own
+  // existing domain instead. Detected via the same mutation classifier.
+  if (raw.length > 4) {
+    const action = await classifyDomainMutationIntent(raw, null, user.id);
+    if (action === 'switch_to_own') {
+      return proceedAskForOwnDomain(user, raw);
     }
   }
 
   await sendTextMessage(
     user.phone_number,
     await localize(
-      "Reply with the *number* of a domain above, or type a new name to search again.",
+      "Reply with the *number* of a domain above, type a new name to search, or say *I have my own* if you'd rather use an existing domain.",
       user,
       raw
     )
@@ -5050,6 +5201,662 @@ async function selectDomainInline(user, option) {
     'assistant'
   );
   return generateWebsite(user);
+}
+
+// ─── LATE DOMAIN ADD ────────────────────────────────────────────────────────
+// Lets a user add a domain AFTER they've already approved the site — either
+// before paying ("oh wait, I want a domain too") or after paying ("the site
+// looks great but I want it on a real domain now"). Reuses the same domain
+// search + selection UX as the pre-build flow; only the post-selection step
+// differs: we either supersede the pending Stripe link with a combined one
+// (pre-paid) or create a separate domain-only add-on charge (already paid).
+
+/**
+ * Detects "I want a domain" intent in the revisions chat. Small targeted
+ * LLM call so the heavy REVISION_PARSER_PROMPT doesn't have to know about
+ * domain semantics — keeps the parser focused on field edits.
+ */
+async function classifyLateDomainIntent(text, userId) {
+  const t = String(text || '').trim();
+  if (!t || t.length > 120) return false;
+  try {
+    const resp = await generateResponse(
+      `Classify whether the user is asking to ADD a custom domain to their already-built website.
+
+Examples that ARE domain-add intent:
+- "actually I want a domain"
+- "domain bhi chahiye"
+- "ab domain bhi le lo"
+- "can you find me a domain"
+- "add a domain please"
+- "i want my own domain now"
+- "let's get a domain"
+- "domain bhi add krdo"
+- "kya hum domain bhi le saktay hain"
+- "yes give me a domain"
+
+NOT domain-add intent (these are revisions to the site itself):
+- "change the headline"
+- "make it darker"
+- "looks great"
+- "i need this site to be different"
+- "add a contact form"
+- "fix the about page"
+
+Reply with ONLY "yes" or "no".`,
+      [{ role: 'user', content: t }],
+      { userId, operation: 'late_domain_intent' }
+    );
+    return /^\s*yes\b/i.test(String(resp || ''));
+  } catch (err) {
+    logger.warn(`[LATE-DOMAIN] intent classifier threw: ${err.message}`);
+    return false;
+  }
+}
+
+// ─── DOMAIN MUTATION INTENT (change / switch path) ──────────────────────────
+// Catches every "I want a different domain decision" scenario:
+//   - change_domain      — user picked X, wants different domain (any state)
+//   - switch_to_own      — user is in search, wants to use their own instead
+//   - switch_to_search   — user is in own-input, wants us to find one
+// Detected via single LLM call; handlers route based on the action.
+
+/**
+ * @param {string} text         The user's reply
+ * @param {string} currentDomain User's currently-selected domain (for prompt context); pass null/empty if none
+ * @param {string|number} userId
+ * @returns {Promise<'change_domain'|'switch_to_own'|'switch_to_search'|'none'>}
+ */
+async function classifyDomainMutationIntent(text, currentDomain, userId) {
+  const t = String(text || '').trim();
+  if (!t || t.length > 140) return 'none';
+  try {
+    const ctx = currentDomain
+      ? `\nCurrent selection: "${currentDomain}". The user may want to switch away from this.`
+      : `\nNo domain currently selected.`;
+    const resp = await generateResponse(
+      `Classify the user's intent regarding their domain decision.${ctx}
+
+Possible actions:
+- change_domain: user wants a DIFFERENT domain than the one they picked. Examples: "change the domain", "different domain please", "domain change kar do", "yeh wala nahi chahiye, alag", "switch to a different one", "actually pick something else", "let's try a new domain"
+- switch_to_own: user wants to use their own existing domain instead of buying a new one. Examples: "actually I have my own", "use my existing domain", "mera khud ka domain hai", "I'll bring my own", "I already own one"
+- switch_to_search: user wants us to find/search a new one instead of using their own. Examples: "actually find me one", "you search for me", "tum dhundo", "no I don't have one", "help me pick one", "look for one"
+- none: anything unrelated to domain mutation
+
+Reply with ONLY one keyword: change_domain, switch_to_own, switch_to_search, or none.`,
+      [{ role: 'user', content: t }],
+      { userId, operation: 'domain_mutation_intent' }
+    );
+    const action = String(resp || '').trim().toLowerCase().split(/[\s\n,.;]/)[0];
+    if (['change_domain', 'switch_to_own', 'switch_to_search'].includes(action)) return action;
+    return 'none';
+  } catch (err) {
+    logger.warn(`[DOMAIN-MUTATION] classifier threw: ${err.message}`);
+    return 'none';
+  }
+}
+
+/**
+ * Entry point when user wants to change their domain (any state). Resets
+ * the previous selection, cancels any pending Stripe link, and routes to
+ * the right re-entry path based on action (search / own / unspecified).
+ *
+ * `domainChangeMode: 'late'` flag is set on metadata so downstream handlers
+ * (notably handleDomainOwnRegistrar) know to skip the pre-build
+ * generateWebsite call and instead update Stripe link / send DNS
+ * instructions directly.
+ */
+async function handleDomainChangeStart(user, originalText, action) {
+  // Reset selection + tag late-mode so own-domain handlers don't trigger
+  // generateWebsite. Keep domainChangeMode set until the new selection
+  // is finalized — cleared by selectLateOwnDomainInline / selectLateDomainInline.
+  await updateUserMetadata(user.id, {
+    selectedDomain: null,
+    domainPrice: 0,
+    domainChoice: null,
+    domainOptions: [],
+    domainSearchName: '',
+    domainChangeMode: 'late',
+  });
+
+  // Cancel any pending Stripe link — the new selection will create a
+  // fresh one. Idempotent if there's nothing pending.
+  try {
+    const { cancelPendingPaymentsForUser } = require('../../payments/stripe');
+    await cancelPendingPaymentsForUser(user.id);
+  } catch (err) {
+    logger.warn(`[DOMAIN-CHANGE] Cancel pending failed: ${err.message}`);
+  }
+
+  await sendTextMessage(
+    user.phone_number,
+    await localize(
+      `Got it — clearing the previous domain. Let me set up a new one.`,
+      user,
+      originalText
+    )
+  );
+
+  // Route based on action.
+  if (action === 'switch_to_own') {
+    const { updateUserState } = require('../../db/users');
+    await updateUserState(user.id, STATES.WEB_DOMAIN_OWN_INPUT);
+    await sendTextMessage(
+      user.phone_number,
+      await localize(
+        "What's your domain? Type it like *yourbiz.com*.",
+        user
+      )
+    );
+    await logMessage(user.id, 'Domain change → own-input', 'assistant');
+    return STATES.WEB_DOMAIN_OWN_INPUT;
+  }
+
+  // Default: search path. Use businessName as search base.
+  const businessName = user.metadata?.websiteData?.businessName || '';
+  const baseName = businessName
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '')
+    .slice(0, 30);
+  if (!baseName) {
+    const { updateUserState } = require('../../db/users');
+    await updateUserState(user.id, STATES.WEB_DOMAIN_LATE_SEARCH);
+    await updateUserMetadata(user.id, { domainOptions: [], domainSearchName: '' });
+    await sendTextMessage(
+      user.phone_number,
+      await localize(
+        "What domain name should I look up? Type something like *toorphor* or *toorphorplumbing* and I'll show you what's available.",
+        user
+      )
+    );
+    return STATES.WEB_DOMAIN_LATE_SEARCH;
+  }
+  return runLateDomainSearchInline(user, baseName);
+}
+
+/**
+ * Late-finalize for the OWN-domain path — called by handleDomainOwnRegistrar
+ * when domainChangeMode='late'. Behaves differently based on payment state:
+ *   - pre-paid: cancel old Stripe link, create new $website-only link
+ *               (own domain = no registration charge), refresh banner
+ *   - already-paid: no Stripe charge, send DNS instructions immediately
+ *                   so user can point their existing domain right away
+ *
+ * Clears domainChangeMode flag so subsequent flows behave normally.
+ */
+async function selectLateOwnDomainInline(user, domain, registrar) {
+  await updateUserMetadata(user.id, {
+    domainChoice: 'own',
+    selectedDomain: domain,
+    domainPrice: 0,
+    domainRegistrar: registrar,
+    domainChangeMode: null,
+  });
+
+  const { updateUserState } = require('../../db/users');
+  await updateUserState(user.id, STATES.WEB_REVISIONS);
+
+  const site = await getLatestSite(user.id);
+  const alreadyPaid = site?.site_data?.paymentStatus === 'paid';
+
+  if (alreadyPaid) {
+    // Already-paid: no charge needed for own domain. Send DNS
+    // instructions right now so user can point their existing domain
+    // at the live site immediately.
+    const { generateDnsInstructions } = require('../../website-gen/dnsInstructions');
+    let instructions;
+    try {
+      instructions = await generateDnsInstructions({
+        registrar,
+        domain,
+        netlifySubdomain: site?.netlify_subdomain || '',
+        userId: user.id,
+      });
+    } catch (err) {
+      logger.warn(`[LATE-OWN] DNS instructions threw: ${err.message}`);
+    }
+
+    await sendTextMessage(
+      user.phone_number,
+      `Got it — using *${domain}* (own domain on ${registrar}).\n\n` +
+        `Since your site's already activated, no extra charge — here are the DNS steps to point *${domain}* at it:`
+    );
+    if (instructions) {
+      await sendTextMessage(user.phone_number, instructions);
+    }
+    if (site) {
+      const { updateSite } = require('../../db/sites');
+      await updateSite(site.id, { custom_domain: domain, status: 'domain_dns_pending' });
+    }
+    await logMessage(
+      user.id,
+      `Late-domain (already-paid, own): ${domain} on ${registrar} — DNS instructions sent`,
+      'assistant'
+    );
+    return STATES.WEB_REVISIONS;
+  }
+
+  // Pre-paid: cancel old link, create new at website-only price.
+  try {
+    const { getNumberSetting } = require('../../db/settings');
+    const envDefault = parseInt(process.env.DEFAULT_ACTIVATION_PRICE || '199', 10);
+    const websitePrice = await getNumberSetting('website_price', envDefault);
+    const { createPaymentLink } = require('../../payments/stripe');
+    const businessName = user.metadata?.websiteData?.businessName || 'site';
+    const linkResult = await createPaymentLink({
+      userId: user.id,
+      phoneNumber: user.phone_number,
+      amount: websitePrice,
+      serviceType: 'website',
+      packageTier: 'activation',
+      description: `Website activation (own domain ${domain}) — ${businessName}`,
+      customerEmail: user.metadata?.email || user.metadata?.websiteData?.contactEmail || null,
+      customerName: businessName,
+      websiteAmount: websitePrice,
+      domainAmount: 0,
+      selectedDomain: domain,
+      originalAmount: websitePrice,
+    });
+    const newUrl = linkResult?.url || linkResult?.pixieUrl;
+
+    try {
+      const { updateSiteBannerPricing } = require('../../website-gen/redeployer');
+      updateSiteBannerPricing(user.id, {
+        paymentLinkUrl: newUrl,
+        activationAmount: websitePrice,
+        originalAmount: websitePrice,
+      }).catch((err) =>
+        logger.warn(`[LATE-OWN] Banner pricing redeploy failed: ${err.message}`)
+      );
+    } catch (err) {
+      logger.warn(`[LATE-OWN] Could not dispatch banner update: ${err.message}`);
+    }
+
+    await sendTextMessage(
+      user.phone_number,
+      `Locked in *${domain}* (own domain on ${registrar}).\n\n` +
+        `New activation total is *$${websitePrice}* (no extra charge for the domain since you own it).\n\n` +
+        `Pay below and I'll send DNS setup steps for ${registrar} after:\n\n👉 ${newUrl}`
+    );
+    await logMessage(
+      user.id,
+      `Late-domain (pre-paid, own): ${domain} on ${registrar} → new link $${websitePrice}`,
+      'assistant'
+    );
+  } catch (err) {
+    logger.error(`[LATE-OWN] Pre-paid link creation failed: ${err.message}`);
+    await sendTextMessage(
+      user.phone_number,
+      `I locked in *${domain}* but had trouble updating the payment link. Try saying "send me the new link" or message us and we'll resend.`
+    );
+  }
+  return STATES.WEB_REVISIONS;
+}
+
+/**
+ * Entry point — kicks off the domain search using the user's businessName
+ * as the search base (same as pre-build flow). State changes to
+ * WEB_DOMAIN_LATE_SEARCH so the picker handler knows to take the
+ * post-selection late-add path instead of generateWebsite.
+ */
+async function handleLateDomainStart(user, originalText) {
+  const businessName = user.metadata?.websiteData?.businessName || '';
+  const cleanedBase = businessName
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '')
+    .slice(0, 30);
+
+  if (!cleanedBase) {
+    await sendTextMessage(
+      user.phone_number,
+      await localize(
+        "Sure — what domain name should I look up? Type something like *toorphor* or *toorphorplumbing* and I'll show you what's available.",
+        user,
+        originalText
+      )
+    );
+    // Stash a flag so the next reply runs through the late-search entry
+    // even though state is still WEB_REVISIONS. We do this by setting
+    // state directly so the next message hits handleLateDomainSearch
+    // with no domainOptions yet — that branch then runs a fresh search.
+    const { updateUserState } = require('../../db/users');
+    await updateUserState(user.id, STATES.WEB_DOMAIN_LATE_SEARCH);
+    await updateUserMetadata(user.id, { domainOptions: [], domainSearchName: '' });
+    await logMessage(user.id, 'Late-domain start: asking for search base (no business name on file)', 'assistant');
+    return STATES.WEB_DOMAIN_LATE_SEARCH;
+  }
+
+  await logMessage(user.id, `Late-domain start: searching for "${cleanedBase}"`, 'assistant');
+  return runLateDomainSearchInline(user, cleanedBase);
+}
+
+/**
+ * Mirror of runDomainSearchInline but lands the user in
+ * WEB_DOMAIN_LATE_SEARCH instead of WEB_DOMAIN_SEARCH. Two functions
+ * instead of one to avoid threading a "late mode" flag through every
+ * branch of the search handler.
+ */
+async function runLateDomainSearchInline(user, baseName) {
+  const { updateUserState } = require('../../db/users');
+  await updateUserState(user.id, STATES.WEB_DOMAIN_LATE_SEARCH);
+  await sendTextMessage(
+    user.phone_number,
+    await localize(`On it — checking domain availability for *${baseName}*...`, user)
+  );
+
+  let results = [];
+  try {
+    results = await checkDomainAvailability(baseName, DEFAULT_TLD_POOL);
+  } catch (err) {
+    logger.error(`[LATE-DOMAIN] search failed: ${err.message} (code=${err.code || 'unknown'})`);
+    if (err.code === 'DOMAIN_LOOKUP_UNAVAILABLE') {
+      await sendTextMessage(
+        user.phone_number,
+        await localize(
+          "Our domain registrar is temporarily unreachable so I can't pull live prices right now. Try again in a few minutes, or stick with the preview URL for now.",
+          user
+        )
+      );
+      await updateUserState(user.id, STATES.WEB_REVISIONS);
+      return STATES.WEB_REVISIONS;
+    }
+    await sendTextMessage(
+      user.phone_number,
+      await localize(
+        "Couldn't reach the registrar right now. Try a different name, or reply *skip* to keep the site without a domain for now.",
+        user
+      )
+    );
+    return STATES.WEB_DOMAIN_LATE_SEARCH;
+  }
+
+  let top = pickTopDomains(results);
+  if (top.length === 0) {
+    await sendTextMessage(
+      user.phone_number,
+      await localize(`*${baseName}* is all taken. Let me find you something close…`, user)
+    );
+    const industry = user.metadata?.websiteData?.industry || '';
+    top = await findAlternativeDomains(baseName, industry);
+    if (top.length === 0) {
+      await sendTextMessage(
+        user.phone_number,
+        await localize(
+          `Couldn't find good alternatives either. Try typing a different base name, or reply *skip* to keep the site as-is.`,
+          user
+        )
+      );
+      await updateUserMetadata(user.id, { domainOptions: [], domainSearchName: baseName });
+      return STATES.WEB_DOMAIN_LATE_SEARCH;
+    }
+  }
+
+  let msg = '*Available domains:*\n\n';
+  top.forEach((r, i) => {
+    msg += `${i + 1}. ✅ ${r.domain} — $${r.price}/yr\n`;
+  });
+  msg += '\nReply with a *number* to pick one, or type a specific domain (e.g. *mybiz.ai*) and I\'ll look up its price. Or *skip* to keep the site as-is.';
+
+  await sendTextMessage(user.phone_number, await localize(msg, user));
+  await updateUserMetadata(user.id, { domainOptions: top, domainSearchName: baseName });
+  await logMessage(
+    user.id,
+    `Late-domain search: ${top.map((r) => r.domain + '@$' + r.price).join(', ')}`,
+    'assistant'
+  );
+  return STATES.WEB_DOMAIN_LATE_SEARCH;
+}
+
+/**
+ * Handle replies while user is in WEB_DOMAIN_LATE_SEARCH. Mirrors
+ * handleDomainSearch's selection logic but routes "skip" back to
+ * WEB_REVISIONS (the site is already approved, we're not building) and
+ * routes selections through selectLateDomainInline.
+ */
+async function handleLateDomainSearch(user, message) {
+  const raw = (message.text || '').trim();
+  const text = raw.toLowerCase();
+
+  // Exit phrases — bail out, return to revisions with no domain change.
+  if (/\b(skip|nah|nope|forget\s*it|never\s*mind|nvm|not\s*now|cancel|stop|exit|back|no\s*thanks?)\b/i.test(text) &&
+      !/[\w-]+\.[a-z]{2,}/i.test(raw)) {
+    const { updateUserState } = require('../../db/users');
+    await updateUserState(user.id, STATES.WEB_REVISIONS);
+    await sendTextMessage(
+      user.phone_number,
+      await localize("No problem — sticking with the current setup. Let me know any other tweaks!", user, raw)
+    );
+    return STATES.WEB_REVISIONS;
+  }
+
+  const domainOptions = user.metadata?.domainOptions || [];
+
+  // Pick by number.
+  const numMatch = text.match(/^(\d+)$/);
+  if (numMatch && domainOptions.length > 0) {
+    const idx = parseInt(numMatch[1], 10) - 1;
+    if (idx >= 0 && idx < domainOptions.length &&
+        domainOptions[idx].available && !domainOptions[idx].premium) {
+      return selectLateDomainInline(user, domainOptions[idx]);
+    }
+    await sendTextMessage(
+      user.phone_number,
+      await localize("That one's not available. Try another number or a new name.", user, raw)
+    );
+    return STATES.WEB_DOMAIN_LATE_SEARCH;
+  }
+
+  // Pick by ordinal word.
+  const ordinalMap = { first: 0, '1st': 0, second: 1, '2nd': 1, third: 2, '3rd': 2, fourth: 3, '4th': 3, fifth: 4, '5th': 4 };
+  const ordMatch = text.match(/\b(first|1st|second|2nd|third|3rd|fourth|4th|fifth|5th)\b/);
+  if (ordMatch && domainOptions.length > 0) {
+    const idx = ordinalMap[ordMatch[1]];
+    if (idx !== undefined && idx < domainOptions.length &&
+        domainOptions[idx].available && !domainOptions[idx].premium) {
+      return selectLateDomainInline(user, domainOptions[idx]);
+    }
+  }
+
+  // Full domain typed (e.g. "mybiz.ai") — either pick from options or
+  // run a targeted single-domain lookup. Lookup re-uses the
+  // pre-build version which lands the user in WEB_DOMAIN_SEARCH; we
+  // override state back to LATE before returning so the late-flow
+  // continues on next reply.
+  const fullMatch = raw.match(/([a-z0-9-]+\.[a-z]{2,})/i);
+  if (fullMatch) {
+    const typedDomain = fullMatch[1].toLowerCase();
+    const fromOptions = domainOptions.find(d => d.domain.toLowerCase() === typedDomain);
+    if (fromOptions && fromOptions.available && !fromOptions.premium) {
+      return selectLateDomainInline(user, fromOptions);
+    }
+    await runSpecificDomainLookup(user, typedDomain);
+    const { updateUserState } = require('../../db/users');
+    await updateUserState(user.id, STATES.WEB_DOMAIN_LATE_SEARCH);
+    return STATES.WEB_DOMAIN_LATE_SEARCH;
+  }
+
+  // New base name for search.
+  const cleaned = text.replace(/[^a-z0-9-]/g, '');
+  if (cleaned.length >= 2 && cleaned.length <= 30 && !/\s/.test(raw)) {
+    return runLateDomainSearchInline(user, cleaned);
+  }
+
+  // Mid-flow path-switch — late-search but user wants to use their own.
+  // Set the late-mode flag so the own-domain handlers route correctly
+  // (no generateWebsite at exit).
+  if (raw.length > 4) {
+    const action = await classifyDomainMutationIntent(raw, null, user.id);
+    if (action === 'switch_to_own') {
+      await updateUserMetadata(user.id, { domainChangeMode: 'late' });
+      const { updateUserState } = require('../../db/users');
+      await updateUserState(user.id, STATES.WEB_DOMAIN_OWN_INPUT);
+      await sendTextMessage(
+        user.phone_number,
+        await localize("Got it — what's the domain? Type it like *yourbiz.com*.", user, raw)
+      );
+      return STATES.WEB_DOMAIN_OWN_INPUT;
+    }
+  }
+
+  await sendTextMessage(
+    user.phone_number,
+    await localize(
+      "Reply with the *number* of a domain above, type a different name to search, say *I have my own* to use an existing domain, or *skip* to keep the site as-is.",
+      user,
+      raw
+    )
+  );
+  return STATES.WEB_DOMAIN_LATE_SEARCH;
+}
+
+/**
+ * Apply a late-domain selection. Branches on whether the user has
+ * already paid for the website:
+ *   pre-paid    → cancel the existing pending Stripe link, create a
+ *                 new combined link (website + domain), refresh banner
+ *   already-paid → create a separate domain-only Stripe link
+ *                  (service_type='domain_addon'); postPayment.js
+ *                  handles the purchase + Netlify attach without
+ *                  touching the existing paid site.
+ */
+async function selectLateDomainInline(user, option) {
+  const price = option.price ? parseFloat(option.price) : 0;
+  const domain = option.domain.toLowerCase();
+  const priceLabel = price > 0 ? `$${price.toFixed(2)}` : 'free';
+
+  const { getNumberSetting } = require('../../db/settings');
+  const envDefaultWebsitePrice = parseInt(process.env.DEFAULT_ACTIVATION_PRICE || '199', 10);
+  const websitePrice = await getNumberSetting('website_price', envDefaultWebsitePrice);
+
+  // Persist the choice in metadata so the existing post-payment domain
+  // pipeline (in postPayment.js handleConfirmedPayment) sees it on the
+  // user record when the new payment lands.
+  await updateUserMetadata(user.id, {
+    domainChoice: 'need',
+    selectedDomain: domain,
+    domainPrice: price,
+  });
+
+  // Determine paid state by checking the latest site's site_data.
+  const site = await getLatestSite(user.id);
+  const alreadyPaid = site?.site_data?.paymentStatus === 'paid';
+
+  const { updateUserState } = require('../../db/users');
+  await updateUserState(user.id, STATES.WEB_REVISIONS);
+
+  if (!alreadyPaid) {
+    // ── Scenario A: pre-paid — supersede pending link with new total ──
+    try {
+      const { createPaymentLink } = require('../../payments/stripe');
+      const businessName = user.metadata?.websiteData?.businessName || 'site';
+      const total = +(websitePrice + price).toFixed(2);
+      const linkResult = await createPaymentLink({
+        userId: user.id,
+        phoneNumber: user.phone_number,
+        amount: total,
+        serviceType: 'website',
+        packageTier: 'activation',
+        description: `Website activation + domain ${domain} — ${businessName}`,
+        customerEmail: user.metadata?.email || user.metadata?.websiteData?.contactEmail || null,
+        customerName: businessName,
+        websiteAmount: websitePrice,
+        domainAmount: price,
+        selectedDomain: domain,
+        originalAmount: total,
+      });
+      // createPaymentLink already cancels prior pending payments via
+      // cancelPendingPaymentsForUser, so we don't need to do that here.
+      const newUrl = linkResult?.url || linkResult?.pixieUrl;
+
+      // Update the live preview banner so a visitor clicking "Activate"
+      // pays the new combined total, not the old website-only amount.
+      try {
+        const { updateSiteBannerPricing } = require('../../website-gen/redeployer');
+        updateSiteBannerPricing(user.id, {
+          paymentLinkUrl: newUrl,
+          activationAmount: total,
+          originalAmount: total,
+        }).catch((err) =>
+          logger.warn(`[LATE-DOMAIN] Banner pricing redeploy failed: ${err.message}`)
+        );
+      } catch (err) {
+        logger.warn(`[LATE-DOMAIN] Could not dispatch banner update: ${err.message}`);
+      }
+
+      await sendTextMessage(
+        user.phone_number,
+        await localize(
+          `Locked in *${domain}* — ${priceLabel}/yr.\n\n` +
+            `Your new total is *$${total}* (website $${websitePrice} + domain $${price}).\n\n` +
+            `Activate to go live on *${domain}*:\n\n👉 ${newUrl}\n\n` +
+            `_The activation button on your preview site has been updated to the same link._`,
+          user
+        )
+      );
+      await logMessage(
+        user.id,
+        `Late-domain (pre-paid): ${domain} @ $${price}/yr → new combined link $${total}`,
+        'assistant'
+      );
+    } catch (err) {
+      logger.error(`[LATE-DOMAIN] Pre-paid link creation failed: ${err.message}`);
+      await sendTextMessage(
+        user.phone_number,
+        await localize(
+          `I locked in *${domain}* but had trouble updating the payment link. Try saying "send me the new link" or message us and we'll resend.`,
+          user
+        )
+      );
+    }
+    return STATES.WEB_REVISIONS;
+  }
+
+  // ── Scenario B: already paid — separate domain add-on charge ────────
+  try {
+    const { createPaymentLink } = require('../../payments/stripe');
+    const businessName = user.metadata?.websiteData?.businessName || 'site';
+    const linkResult = await createPaymentLink({
+      userId: user.id,
+      phoneNumber: user.phone_number,
+      amount: price,
+      serviceType: 'domain_addon',
+      packageTier: 'addon',
+      description: `Domain add-on: ${domain} — ${businessName}`,
+      customerEmail: user.metadata?.email || user.metadata?.websiteData?.contactEmail || null,
+      customerName: businessName,
+      websiteAmount: 0,
+      domainAmount: price,
+      selectedDomain: domain,
+      originalAmount: price,
+    });
+    const newUrl = linkResult?.url || linkResult?.pixieUrl;
+
+    await sendTextMessage(
+      user.phone_number,
+      await localize(
+        `Got it — *${domain}* (${priceLabel}/yr).\n\n` +
+          `Your website's already activated, so this is a separate charge for just the domain.\n\n` +
+          `Pay below and I'll register *${domain}* + point it at your site automatically:\n\n👉 ${newUrl}\n\n` +
+          `_DNS propagation usually takes 5–60 minutes after payment._`,
+        user
+      )
+    );
+    await logMessage(
+      user.id,
+      `Late-domain (post-paid): ${domain} @ $${price}/yr → addon link sent`,
+      'assistant'
+    );
+  } catch (err) {
+    logger.error(`[LATE-DOMAIN] Post-paid addon link failed: ${err.message}`);
+    await sendTextMessage(
+      user.phone_number,
+      await localize(
+        `I picked *${domain}* but had trouble creating the payment link. Message us and we'll resend.`,
+        user
+      )
+    );
+  }
+  return STATES.WEB_REVISIONS;
 }
 
 /**
