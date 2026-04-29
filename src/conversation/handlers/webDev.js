@@ -19,6 +19,80 @@ const {
 } = require('../entityAccumulator');
 const { isDelegation, classifyDelegation } = require('../../config/smartDefaults');
 const { localize } = require('../../utils/localizer');
+const { classifySideChannelInCollection } = require('../sideChannel');
+
+/**
+ * Shared collection-state helper: when a state-specific extractor concludes
+ * the user's reply isn't a clean answer to the current question, run the
+ * LLM side-channel classifier and apply any cross-field update it detects
+ * (service add, name change, industry change, contact update, question).
+ *
+ * Returns { ackPart, side } when an update was applied — caller should
+ * combine ackPart with a re-ask of the current question (in the user's
+ * language via localize) and stay in the current state. Returns null
+ * when no side-channel update was detected — caller should fall back to
+ * its normal "I didn't catch that" re-ask (also via localize).
+ *
+ * Centralizing this keeps every collection handler's side-channel
+ * behavior identical — appending a service ack, persisting the patch,
+ * etc. — instead of each handler reimplementing the same five branches.
+ */
+async function tryApplySideChannel(user, currentField, userText) {
+  let side;
+  try {
+    side = await classifySideChannelInCollection({
+      currentField,
+      userText,
+      websiteData: user.metadata?.websiteData || {},
+      userId: user.id,
+    });
+  } catch (err) {
+    logger.warn(`[WEBDEV-SIDECHANNEL] classify failed (${currentField}): ${err.message}`);
+    return null;
+  }
+  if (!side || !side.kind || side.kind === 'unclear') return null;
+
+  const before = user.metadata?.websiteData || {};
+  let patch = before;
+  let ackPart = null;
+
+  if (side.kind === 'service_add' && Array.isArray(side.services) && side.services.length > 0) {
+    const existing = Array.isArray(before.services) ? before.services : [];
+    patch = { ...before, services: [...existing, ...side.services] };
+    ackPart = `Got it — added *${side.services.join(', ')}* to your services.`;
+  } else if (side.kind === 'name_change' && side.value) {
+    patch = { ...before, businessName: side.value };
+    ackPart = `Updated business name to *${side.value}*.`;
+  } else if (side.kind === 'industry_change' && side.value) {
+    patch = { ...before, industry: side.value };
+    ackPart = `Updated industry to *${side.value}*.`;
+  } else if (side.kind === 'contact_update') {
+    const next = { ...before };
+    const bits = [];
+    if (side.email) { next.contactEmail = side.email; bits.push(`email *${side.email}*`); }
+    if (side.phone) { next.contactPhone = side.phone; bits.push(`phone *${side.phone}*`); }
+    if (side.address) { next.contactAddress = side.address; bits.push(`address *${side.address}*`); }
+    if (bits.length) {
+      patch = next;
+      ackPart = `Saved your ${bits.join(' / ')}.`;
+    }
+  } else if (side.kind === 'question') {
+    ackPart = `Noted, I'll come back to that — let's finish setup first.`;
+  }
+
+  if (!ackPart) return null;
+
+  if (patch !== before) {
+    try {
+      await updateUserMetadata(user.id, { websiteData: patch });
+      user.metadata = { ...(user.metadata || {}), websiteData: patch };
+    } catch (err) {
+      logger.warn(`[WEBDEV-SIDECHANNEL] persist failed: ${err.message}`);
+    }
+  }
+  logger.info(`[WEBDEV-SIDECHANNEL] applied "${side.kind}" while in ${currentField} step`);
+  return { ackPart, side };
+}
 
 
 // Walk the website-dev checklist and return the first state whose field
@@ -379,7 +453,10 @@ async function handleWebDev(user, message) {
 async function handleCollectName(user, message) {
   const text = (message.text || '').trim();
   if (!text || text.length < 2) {
-    await sendTextMessage(user.phone_number, 'Please enter your business name:');
+    await sendTextMessage(
+      user.phone_number,
+      await localize('Please enter your business name:', user, message.text)
+    );
     return STATES.WEB_COLLECT_NAME;
   }
 
@@ -452,9 +529,25 @@ async function handleCollectEmail(user, message) {
     // gibberish and we ask again.
     const looksRich = text.length >= 18 || /[,;]/.test(text) || /\n/.test(text);
     if (!looksRich) {
+      // Before re-prompting, check whether the user actually meant to
+      // update a different field ("change name to X", "we also do Y",
+      // etc.). If so, apply that update + re-ask the email question.
+      const sc = await tryApplySideChannel(user, 'contactEmail', text);
+      if (sc) {
+        const reask = "Now, what's your email address? (or reply *skip*)";
+        await sendTextMessage(
+          user.phone_number,
+          await localize(`${sc.ackPart} ${reask}`, user, text)
+        );
+        return STATES.WEB_COLLECT_EMAIL;
+      }
       await sendTextMessage(
         user.phone_number,
-        "That doesn't look like an email address. Could you double-check? Or just skip to continue without it."
+        await localize(
+          "That doesn't look like an email address. Could you double-check? Or just skip to continue without it.",
+          user,
+          text
+        )
       );
       return STATES.WEB_COLLECT_EMAIL;
     }
@@ -474,7 +567,10 @@ async function handleCollectIndustry(user, message) {
     : (message.text || '').trim();
 
   if (!rawInput) {
-    await sendTextMessage(user.phone_number, 'Please select or type your industry:');
+    await sendTextMessage(
+      user.phone_number,
+      await localize('Please select or type your industry:', user, message.text)
+    );
     return STATES.WEB_COLLECT_INDUSTRY;
   }
 
@@ -485,18 +581,6 @@ async function handleCollectIndustry(user, message) {
     user.metadata = { ...(user.metadata || {}), websiteData };
     await logMessage(user.id, `Industry: ${rawInput}`, 'assistant');
     return smartAdvance(user, message);
-  }
-
-  // Edit-intent fast path: "the name should be X" / "change name to X" —
-  // user corrected business name, not an industry reply.
-  const nameCorrection = rawInput.match(/(?:name\s*(?:should be|is|to)|change.*name.*to|actually.*called|it'?s\s+called)\s*["']?(.+?)["']?\s*$/i);
-  if (nameCorrection) {
-    const newName = nameCorrection[1].trim();
-    await updateUserMetadata(user.id, {
-      websiteData: { ...(user.metadata?.websiteData || {}), businessName: newName },
-    });
-    await sendTextMessage(user.phone_number, `Updated to *${newName}*! Now, what industry are you in?`);
-    return STATES.WEB_COLLECT_INDUSTRY;
   }
 
   // LLM-first extraction. The extractor fast-paths clean 1-3 word answers
@@ -518,14 +602,30 @@ async function handleCollectIndustry(user, message) {
     logger.error('Industry extraction error:', err.message);
   }
 
-  // Extractor returns null when the reply was delegation/nonsense AND the
-  // LLM couldn't infer from context. Fall back to a generic so the flow
-  // doesn't stall — the user can fix it from the confirmation summary.
+  // Extractor returns null when the reply was delegation / nonsense / a
+  // side-channel update (user is correcting an earlier field instead of
+  // answering the industry question). Side-channel classifier handles
+  // the cross-field-update case. If neither produces something usable,
+  // fall back to a generic so the flow doesn't stall — the user can fix
+  // it from the confirmation summary.
   if (!industry) {
+    const sc = await tryApplySideChannel(user, 'industry', rawInput);
+    if (sc) {
+      const reask = `Now, what industry are you in?`;
+      await sendTextMessage(
+        user.phone_number,
+        await localize(`${sc.ackPart} ${reask}`, user, rawInput)
+      );
+      return STATES.WEB_COLLECT_INDUSTRY;
+    }
     industry = 'General Business';
     await sendTextMessage(
       user.phone_number,
-      "No worries, I'll go with a general business setup. You can tell me the industry later from the summary if you want to change it."
+      await localize(
+        "No worries, I'll go with a general business setup. You can tell me the industry later from the summary if you want to change it.",
+        user,
+        rawInput
+      )
     );
     announcedByFallback = true;
   } else if (/^[\w\s&\-']+$/.test(rawInput.trim()) && rawInput.trim().toLowerCase() === industry.toLowerCase()) {
@@ -534,7 +634,10 @@ async function handleCollectIndustry(user, message) {
   } else if (rawInput.trim().toLowerCase() !== industry.toLowerCase()) {
     // Extractor normalized the reply — tell the user what got saved so they
     // can catch it if the normalization was off.
-    await sendTextMessage(user.phone_number, `Got it, I'll go with *${industry}*.`);
+    await sendTextMessage(
+      user.phone_number,
+      await localize(`Got it, I'll go with *${industry}*.`, user, rawInput)
+    );
     announcedByFallback = true;
   }
 
@@ -643,70 +746,20 @@ Decision tree:
     return smartAdvance(user, message, 'No problem, we can add more areas later.');
   }
 
-  // No clear city in the reply. Before falling back to a re-ask, check
-  // whether the user actually meant to update a DIFFERENT field — e.g.
-  // they said "we also do AC selling" while we asked about the city.
-  // Side-channel classifier figures out the real intent (service_add,
-  // name_change, industry_change, contact_update, etc.) so the bot
-  // applies the update + re-asks the city in the user's language,
-  // instead of pretending the user said nothing.
+  // No clear city in the reply. Before falling back to a re-ask, run the
+  // shared side-channel classifier — user might be updating a different
+  // field ("we also do AC selling" → service add, not a city answer).
   if (extractionUnclear || !primaryCity) {
     logger.info(`[AREAS] Re-asking — no real place detected. raw="${raw.slice(0, 80)}" reason="${extractionReason}"`);
 
-    const { classifySideChannelInCollection } = require('../sideChannel');
-    let side = { kind: 'unclear' };
-    try {
-      side = await classifySideChannelInCollection({
-        currentField: 'primaryCity',
-        userText: raw,
-        websiteData: user.metadata?.websiteData || {},
-        userId: user.id,
-      });
-    } catch (err) {
-      logger.warn(`[AREAS] side-channel classify failed: ${err.message}`);
-    }
-
-    if (side.kind && side.kind !== 'unclear') {
-      const before = user.metadata?.websiteData || {};
-      const patch = { ...before };
-      let ackPart = null;
-
-      if (side.kind === 'service_add' && Array.isArray(side.services) && side.services.length > 0) {
-        const existing = Array.isArray(before.services) ? before.services : [];
-        const merged = [...existing, ...side.services];
-        patch.services = merged;
-        ackPart = `Got it — added *${side.services.join(', ')}* to your services.`;
-      } else if (side.kind === 'name_change' && side.value) {
-        patch.businessName = side.value;
-        ackPart = `Updated business name to *${side.value}*.`;
-      } else if (side.kind === 'industry_change' && side.value) {
-        patch.industry = side.value;
-        ackPart = `Updated industry to *${side.value}*.`;
-      } else if (side.kind === 'contact_update') {
-        const bits = [];
-        if (side.email) { patch.contactEmail = side.email; bits.push(`email *${side.email}*`); }
-        if (side.phone) { patch.contactPhone = side.phone; bits.push(`phone *${side.phone}*`); }
-        if (side.address) { patch.contactAddress = side.address; bits.push(`address *${side.address}*`); }
-        if (bits.length) ackPart = `Saved your ${bits.join(' / ')}.`;
-      } else if (side.kind === 'question') {
-        // For now, acknowledge without trying to answer — sales bot's
-        // LLM-chat isn't wired into collection states yet. Keep them
-        // moving forward; admin can pick up nuanced questions if needed.
-        ackPart = `Noted, I'll come back to that — let's finish setup first.`;
-      }
-
-      if (ackPart) {
-        if (patch !== before) {
-          await updateUserMetadata(user.id, { websiteData: patch });
-          user.metadata = { ...(user.metadata || {}), websiteData: patch };
-        }
-        const reaskCity = `Now, *which city* are you based in? Like *Karachi*, *Lahore*, *Austin* — just the city name. If you serve specific neighborhoods, list them comma-separated (e.g. *Karachi: Clifton, DHA, Gulshan*).`;
-        await sendTextMessage(
-          user.phone_number,
-          await localize(`${ackPart} ${reaskCity}`, user, raw)
-        );
-        return STATES.WEB_COLLECT_AREAS;
-      }
+    const sc = await tryApplySideChannel(user, 'primaryCity', raw);
+    if (sc) {
+      const reaskCity = `Now, *which city* are you based in? Like *Karachi*, *Lahore*, *Austin* — just the city name. If you serve specific neighborhoods, list them comma-separated (e.g. *Karachi: Clifton, DHA, Gulshan*).`;
+      await sendTextMessage(
+        user.phone_number,
+        await localize(`${sc.ackPart} ${reaskCity}`, user, raw)
+      );
+      return STATES.WEB_COLLECT_AREAS;
     }
 
     // True fallback — user really didn't answer the city question and
@@ -949,7 +1002,11 @@ async function handleCollectServices(user, message) {
   if (!servicesText || servicesText.length < 2) {
     await sendTextMessage(
       user.phone_number,
-      'Please list your services/products separated by commas, or skip if you don\'t have specific ones:'
+      await localize(
+        "Please list your services/products separated by commas, or skip if you don't have specific ones:",
+        user,
+        message.text
+      )
     );
     return STATES.WEB_COLLECT_SERVICES;
   }
@@ -978,6 +1035,22 @@ async function handleCollectServices(user, message) {
       .split(/\s*,\s*|\s+(?:and|&)\s+/i)
       .map((s) => s.trim())
       .filter(Boolean);
+  }
+
+  // Empty services result is ambiguous: it could be a genuine skip
+  // ("none", "abhi nahi") OR a side-channel update ("actually change
+  // my name to X", "we work in Karachi"). Run the side-channel
+  // classifier to disambiguate before treating as skip.
+  if (services.length === 0) {
+    const sc = await tryApplySideChannel(user, 'services', servicesText);
+    if (sc) {
+      const reask = "Now, what services or products do you offer? (comma-separated, or *skip*)";
+      await sendTextMessage(
+        user.phone_number,
+        await localize(`${sc.ackPart} ${reask}`, user, servicesText)
+      );
+      return STATES.WEB_COLLECT_SERVICES;
+    }
   }
 
   const skipped = services.length === 0;
@@ -2193,60 +2266,6 @@ async function handleSalonServiceDurations(user, message) {
 }
 
 /**
- * Detect an edit-intent message targeting a specific previously-collected
- * field (business name, industry, services, email, phone, address). Returns
- * { field, value } if one was detected, or null otherwise.
- *
- * Permissive enough to catch phrasings like
- *   "actually the business name is wrong, it should be Glow Salon"
- *   "change the name to Glow Salon"
- *   "name: Glow Salon"
- *   "the industry is actually food"
- * without stealing plain contact-info entries.
- */
-function detectFieldEdit(text) {
-  if (!text) return null;
-  const t = String(text).trim();
-
-  // Field anchor — must match somewhere in the message. If no field keyword
-  // appears at all, it's not an edit. We require the anchor to either start
-  // the line or follow an edit verb / "the|my" so plain contact input like
-  // "address: 123 Main" still matches but arbitrary mentions don't.
-  const fieldAnchor = (fieldRegex) =>
-    new RegExp(
-      `^\\s*(?:actually[,\\s]+|change\\s+|update\\s+|fix\\s+|correct\\s+|set\\s+|make\\s+|the\\s+|my\\s+)*${fieldRegex}\\b`,
-      'i'
-    );
-
-  // Separator (greedy left → rightmost match) picks the LAST "should be|is|
-  // are|to|:" so "name is wrong, it should be X" captures "X" not
-  // "wrong, it should be X".
-  const tailPattern = /.*(?:should\s+be|are|is|to|:)\s+(.+)$/i;
-
-  const fields = [
-    { field: 'businessName',   re: fieldAnchor('(?:business\\s*)?name') },
-    { field: 'industry',       re: fieldAnchor('industry') },
-    { field: 'services',       re: fieldAnchor('services?') },
-    { field: 'contactEmail',   re: fieldAnchor('e-?mail') },
-    { field: 'contactPhone',   re: fieldAnchor('(?:phone|tel|mobile|number)') },
-    { field: 'contactAddress', re: fieldAnchor('(?:address|location|addr)') },
-  ];
-
-  for (const { field, re } of fields) {
-    if (!re.test(t)) continue;
-    const m = t.match(tailPattern);
-    if (!m) continue;
-    let value = m[1].trim().replace(/^["']|["'\.]$/g, '');
-    // Strip a leading "actually" if it leaked through into the value
-    // (e.g. "industry is actually food" → "food", not "actually food").
-    value = value.replace(/^(?:actually|really|now|just)[,\s]+/i, '').trim();
-    if (!value) continue;
-    return { field, value };
-  }
-  return null;
-}
-
-/**
  * Parse a free-text contact blob into { contactEmail, contactPhone, contactAddress }.
  * Handles both labeled input ("email: x, phone: y, address: z") and unlabeled input.
  */
@@ -2385,19 +2404,11 @@ async function handleCollectContact(user, message) {
     }
   }
 
-  // If the input is a multi-field contact blob (2+ labeled fields like
-  // "address: X, email: Y, phone: Z" OR "email is X and phone is Y"), skip
-  // the single-field edit detector — otherwise the greedy tail regex
-  // inside detectFieldEdit picks the LAST "is|:" in the message and
-  // misreads "phone is 09876544567" as the email value. The regex below
-  // counts labels followed by ANY of (colon, hyphen, "is", "are") so
-  // prose-style multi-field input is caught too.
-  // Expanded label list: users commonly write "contact is X" and
-  // "number is Y" to mean phone. Without those in the list, an input
-  // like "email is test@gmail.com and contact is 02928373993" counts
-  // as only 1 label, detectFieldEdit runs, its greedy tail-match
-  // picks the LAST "is" value (the phone) as the email, and we
-  // misroute a two-field input into a single-field edit.
+  // Count contact-field labels in the input. Used to gate the
+  // side-channel edit branch above — when the user has provided 2+
+  // labeled contact fields ("email is X and phone is Y"), the side
+  // channel doesn't run; the input is treated as primary contact
+  // input and routed to parseContactFields instead.
   const labelCount = (contactText.match(/\b(?:email|e-?mail|phone|tel|mobile|contact|number|address|location|addr)\s+(?:is|are)\b|\b(?:email|e-?mail|phone|tel|mobile|contact|number|address|location|addr)\s*[:\-]/gi) || []).length;
 
   // Delegation path: the user doesn't want to provide contact info and is
@@ -2431,52 +2442,40 @@ async function handleCollectContact(user, message) {
       user.metadata = { ...(user.metadata || {}), websiteData: wd, contactSkipped: true };
       await sendTextMessage(
         user.phone_number,
-        `No problem, I'll leave contact details off the site. You can add them later from the summary.`
+        await localize(
+          `No problem, I'll leave contact details off the site. You can add them later from the summary.`,
+          user,
+          contactText
+        )
       );
       await logMessage(user.id, 'Contact: skipped via delegation', 'assistant');
       return showConfirmSummary(user);
     }
   }
 
-  // Edit-intent guard: if the user is trying to correct an EARLIER
-  // field ("actually the name should be Glow Salon"), update that
-  // field and bounce to WEB_CONFIRM. IMPORTANT: exclude contact
-  // fields — at this step, "email is X" / "phone is Y" / "address
-  // is Z" are the user's FIRST-TIME contact input, NOT corrections
-  // of a prior value. Treating them as edits would skip the logo
-  // step entirely (showConfirmSummary transitions to WEB_CONFIRM).
-  // So the guard only fires for edits to businessName / industry /
-  // services — genuine corrections to fields collected upstream.
-  const EDIT_ALLOWED_AT_CONTACT_STEP = new Set(['businessName', 'industry', 'services']);
-  if (contactText && contactText.length >= 3 && !isExplicitSkip && labelCount < 2) {
-    const edit = detectFieldEdit(contactText);
-    if (edit && EDIT_ALLOWED_AT_CONTACT_STEP.has(edit.field)) {
-      const wd = { ...(user.metadata?.websiteData || {}) };
-      let ackValue = edit.value;
-      if (edit.field === 'services') {
-        wd.services = edit.value.split(',').map((s) => s.trim()).filter(Boolean);
-        ackValue = wd.services.join(', ');
-      } else {
-        wd[edit.field] = edit.value;
-      }
-      await updateUserMetadata(user.id, { websiteData: wd });
-      user.metadata = { ...(user.metadata || {}), websiteData: wd };
-
-      const fieldLabel = {
-        businessName: 'business name',
-        industry: 'industry',
-        services: 'services',
-      }[edit.field] || edit.field;
+  // Side-channel edit guard: if the user is trying to correct an
+  // EARLIER field instead of providing contact info ("actually the
+  // name should be X" / "we also do AC selling"), apply the update
+  // via the LLM classifier and bounce to WEB_CONFIRM. We do NOT
+  // auto-pick contact_update or unclear/question intents here — at
+  // this step, real contact info should fall through to the primary
+  // parseContactFields parser below, so the side-channel branch is
+  // restricted to genuine cross-field edits.
+  if (contactText && contactText.length >= 3 && !isExplicitSkip && labelCount < 2 && !hasContactSignal) {
+    const sc = await tryApplySideChannel(user, 'contactInfo', contactText);
+    const kind = sc?.side?.kind;
+    if (sc && kind && kind !== 'contact_update' && kind !== 'question' && kind !== 'unclear') {
       await sendTextMessage(
         user.phone_number,
-        `Got it — updated ${fieldLabel} to *${ackValue}*. Let's take one more look before we build.`
+        await localize(
+          `${sc.ackPart} Let's take one more look before we build.`,
+          user,
+          contactText
+        )
       );
-      await logMessage(user.id, `Edit at contact step: ${edit.field} → ${ackValue}`, 'assistant');
-
-      // Show the confirmation summary by re-entering WEB_CONFIRM's summary display.
-      // Re-use the summary block by calling into the same code path: bump state
-      // and let handleConfirm render on the next turn — but we also want to
-      // proactively show the summary now so the user knows where they are.
+      await logMessage(user.id, `Edit at contact step: ${kind}`, 'assistant');
+      // Re-enter WEB_CONFIRM's summary display so the user sees the
+      // updated state and can confirm before we build.
       return showConfirmSummary(user);
     }
   }
@@ -2501,9 +2500,26 @@ async function handleCollectContact(user, message) {
     const addrTooShort = addr.length < 8;
 
     if (!hasEmail && !hasPhone && (addrLooksLikeJunk || (addrTooShort && !addrHasStreetKeyword && !addrHasDigits))) {
+      // Before re-prompting, check whether the user actually meant to
+      // update a different field. Restrict to non-contact intents
+      // (real contact info would have parsed above).
+      const sc = await tryApplySideChannel(user, 'contactInfo', contactText);
+      const kind = sc?.side?.kind;
+      if (sc && kind && kind !== 'contact_update' && kind !== 'question' && kind !== 'unclear') {
+        const reask = `Now, what contact info do you want on the site? (email, phone, and/or address — or *skip*)`;
+        await sendTextMessage(
+          user.phone_number,
+          await localize(`${sc.ackPart} ${reask}`, user, contactText)
+        );
+        return STATES.WEB_COLLECT_CONTACT;
+      }
       await sendTextMessage(
         user.phone_number,
-        "Didn't catch any contact info there. Send your email, phone, and/or address — any format is fine, or just skip if you'd rather not add contact details."
+        await localize(
+          "Didn't catch any contact info there. Send your email, phone, and/or address — any format is fine, or just skip if you'd rather not add contact details.",
+          user,
+          contactText
+        )
       );
       return STATES.WEB_COLLECT_CONTACT;
     }

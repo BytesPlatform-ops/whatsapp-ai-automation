@@ -63,7 +63,7 @@ CONTEXT (do not re-add fields the user already gave):
 
 Possible classifications:
 
-1. **service_add** — the user is naming ONE OR MORE services they ALSO offer (in addition to the existing list). Phrases like "we also do X", "I also offer Y", "yahan se Z bhi karte hain", "hum X bhi karte hain". Return ONLY genuinely new services — if they're echoing services already in the existing list, do NOT classify as service_add.
+1. **service_add** — the user is naming ONE OR MORE services they ALSO offer (in addition to the existing list). Phrasing varies across languages — focus on intent, not keywords. The user is saying "we also do X" / "we also offer Y" / "X is something we provide too". Return ONLY genuinely new services — if they're echoing services already in the existing list, do NOT classify as service_add.
    Shape: {"kind":"service_add","services":["<new service 1>","<new service 2>"]}
 
 2. **name_change** — user wants to update the business name. Phrases like "actually it's called X", "name should be X", "change name to X".
