@@ -643,14 +643,82 @@ Decision tree:
     return smartAdvance(user, message, 'No problem, we can add more areas later.');
   }
 
-  // Re-ask if the LLM couldn't find a real place. We stay in
-  // WEB_COLLECT_AREAS without writing anything to metadata, so the user's
-  // next reply gets parsed fresh against an empty city.
+  // No clear city in the reply. Before falling back to a re-ask, check
+  // whether the user actually meant to update a DIFFERENT field — e.g.
+  // they said "we also do AC selling" while we asked about the city.
+  // Side-channel classifier figures out the real intent (service_add,
+  // name_change, industry_change, contact_update, etc.) so the bot
+  // applies the update + re-asks the city in the user's language,
+  // instead of pretending the user said nothing.
   if (extractionUnclear || !primaryCity) {
     logger.info(`[AREAS] Re-asking — no real place detected. raw="${raw.slice(0, 80)}" reason="${extractionReason}"`);
+
+    const { classifySideChannelInCollection } = require('../sideChannel');
+    let side = { kind: 'unclear' };
+    try {
+      side = await classifySideChannelInCollection({
+        currentField: 'primaryCity',
+        userText: raw,
+        websiteData: user.metadata?.websiteData || {},
+        userId: user.id,
+      });
+    } catch (err) {
+      logger.warn(`[AREAS] side-channel classify failed: ${err.message}`);
+    }
+
+    if (side.kind && side.kind !== 'unclear') {
+      const before = user.metadata?.websiteData || {};
+      const patch = { ...before };
+      let ackPart = null;
+
+      if (side.kind === 'service_add' && Array.isArray(side.services) && side.services.length > 0) {
+        const existing = Array.isArray(before.services) ? before.services : [];
+        const merged = [...existing, ...side.services];
+        patch.services = merged;
+        ackPart = `Got it — added *${side.services.join(', ')}* to your services.`;
+      } else if (side.kind === 'name_change' && side.value) {
+        patch.businessName = side.value;
+        ackPart = `Updated business name to *${side.value}*.`;
+      } else if (side.kind === 'industry_change' && side.value) {
+        patch.industry = side.value;
+        ackPart = `Updated industry to *${side.value}*.`;
+      } else if (side.kind === 'contact_update') {
+        const bits = [];
+        if (side.email) { patch.contactEmail = side.email; bits.push(`email *${side.email}*`); }
+        if (side.phone) { patch.contactPhone = side.phone; bits.push(`phone *${side.phone}*`); }
+        if (side.address) { patch.contactAddress = side.address; bits.push(`address *${side.address}*`); }
+        if (bits.length) ackPart = `Saved your ${bits.join(' / ')}.`;
+      } else if (side.kind === 'question') {
+        // For now, acknowledge without trying to answer — sales bot's
+        // LLM-chat isn't wired into collection states yet. Keep them
+        // moving forward; admin can pick up nuanced questions if needed.
+        ackPart = `Noted, I'll come back to that — let's finish setup first.`;
+      }
+
+      if (ackPart) {
+        if (patch !== before) {
+          await updateUserMetadata(user.id, { websiteData: patch });
+          user.metadata = { ...(user.metadata || {}), websiteData: patch };
+        }
+        const reaskCity = `Now, *which city* are you based in? Like *Karachi*, *Lahore*, *Austin* — just the city name. If you serve specific neighborhoods, list them comma-separated (e.g. *Karachi: Clifton, DHA, Gulshan*).`;
+        await sendTextMessage(
+          user.phone_number,
+          await localize(`${ackPart} ${reaskCity}`, user, raw)
+        );
+        return STATES.WEB_COLLECT_AREAS;
+      }
+    }
+
+    // True fallback — user really didn't answer the city question and
+    // we couldn't recognize a side-channel intent either. Re-ask in the
+    // user's language.
     await sendTextMessage(
       user.phone_number,
-      `Hmm — mujhe shehar ka naam nahi mila uss reply mein. *Kis shehar* mein kaam karte ho? Like *Karachi*, *Lahore*, *Austin* — bas shehar ka naam likh do, aur agar specific neighborhoods serve karte ho toh comma-separated likho (e.g. *Karachi: Clifton, DHA, Gulshan*).`
+      await localize(
+        `Hmm — I didn't catch a city name in that reply. *Which city* are you based in? Like *Karachi*, *Lahore*, *Austin* — just the city name, and if you serve specific neighborhoods list them comma-separated (e.g. *Karachi: Clifton, DHA, Gulshan*).`,
+        user,
+        raw
+      )
     );
     return STATES.WEB_COLLECT_AREAS;
   }
