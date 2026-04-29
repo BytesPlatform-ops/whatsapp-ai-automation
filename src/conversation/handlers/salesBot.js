@@ -300,7 +300,6 @@ async function handleSalesBot(user, message) {
   let adGeneratorTrigger = cleanText.includes('[TRIGGER_AD_GENERATOR]');
   let logoMakerTrigger = cleanText.includes('[TRIGGER_LOGO_MAKER]');
   const seoAuditMatch = cleanText.match(/\[TRIGGER_SEO_AUDIT:\s*(.+?)\]/);
-  let bytescartTrigger = cleanText.includes('[TRIGGER_BYTESCART]');
 
   // Stitch the recent conversation + bot reply into one snippet so the
   // topic classifier sees both sides. We trim to the last few turns —
@@ -327,14 +326,8 @@ async function handleSalesBot(user, message) {
       aboutChatbot: 'The conversation is centered on a chatbot, AI assistant, virtual assistant, or AI chat being built for the user\'s business.',
       aboutAds: 'The conversation is centered on creating marketing ads, ad creatives, ad images, ad posts, or social-media ads (Instagram/Facebook/TikTok ads, "ad banade", "post banade", etc.).',
       aboutLogo: 'The conversation is centered on designing a logo, brand mark, or brand identity ("logo banade", "logo maker", etc.).',
-      aboutEcommerce: 'The conversation is centered on building an ecommerce store, online shop, product catalog, dropshipping setup, or selling online (Shopify, "online store", etc.).',
     }, { userId: user.id, operation: 'sales_conv_topic' }),
   ]);
-
-  if (!bytescartTrigger && !user.metadata?.bytescartPitched && convTopic.aboutEcommerce) {
-    bytescartTrigger = true;
-    logger.info(`[SALES] Fallback: ByteScart trigger detected for ${user.phone_number}`);
-  }
 
   logger.debug(`[SALES] Trigger check - websiteTag: ${websiteDemoTrigger}, chatbotTag: ${chatbotDemoTrigger}, adTag: ${adGeneratorTrigger}, logoTag: ${logoMakerTrigger}, seoTag: ${!!seoAuditMatch}, websiteTriggered: ${!!user.metadata?.websiteDemoTriggered}, chatbotTriggered: ${!!user.metadata?.chatbotDemoTriggered}, adTriggered: ${!!user.metadata?.adGeneratorTriggered}, logoTriggered: ${!!user.metadata?.logoMakerTriggered}, seoTriggered: ${!!user.metadata?.seoAuditTriggered}`);
   logger.debug(`[SALES] LLM response (first 200): ${cleanText.slice(0, 200)}`);
@@ -446,7 +439,6 @@ async function handleSalesBot(user, message) {
       if (/\bseo\b|search engine|google rank/i.test(convText)) service = 'seo';
       else if (/\bsmm\b|social media|instagram|facebook/i.test(convText)) service = 'smm';
       else if (/\bapp\b|mobile app|android|ios/i.test(convText)) service = 'app';
-      // Note: ecommerce is intentionally omitted — we redirect ecommerce leads to ByteScart (free).
 
       // Detect tier from amount
       let tier = 'custom';
@@ -472,7 +464,6 @@ async function handleSalesBot(user, message) {
     .replace(/\[TRIGGER_AD_GENERATOR\]/g, '')
     .replace(/\[TRIGGER_LOGO_MAKER\]/g, '')
     .replace(/\[TRIGGER_SEO_AUDIT:[^\]]*\]/g, '')
-    .replace(/\[TRIGGER_BYTESCART\]/g, '')
     .replace(/\[SEND_PAYMENT:[^\]]*\]/g, '')
     .trim();
 
@@ -543,28 +534,6 @@ async function handleSalesBot(user, message) {
   // is removed. To bring it back: restore the shouldSendPrivacyNotice /
   // shouldSilentlyMarkAsDisclosed gating block above and the
   // sendTextMessage block here.
-
-  // Send the ByteScart pitch + CTA button for ecommerce leads
-  if (bytescartTrigger && !user.metadata?.bytescartPitched) {
-    const pitch =
-      '🛒 *Want your own online store?*\n\n' +
-      'Great news — you can launch one *today* with *ByteScart*, our done-for-you ecommerce platform. And the best part? It\'s *100% FREE* to get started!\n\n' +
-      '✨ *What you get — completely free:*\n' +
-      '• Free signup — no credit card needed\n' +
-      '• List your first few products at zero cost\n' +
-      '• Ready-to-sell storefront on mobile & desktop\n' +
-      '• Built-in checkout & secure payments\n' +
-      '• No coding, no design work — go live in minutes\n\n' +
-      'Thousands of sellers have already launched their store with ByteScart. Tap the button below to claim yours 👇';
-    await sendCTAButton(
-      user.phone_number,
-      pitch,
-      '🚀 Launch Free Store',
-      'https://www.bytescart.ai'
-    );
-    await logMessage(user.id, 'Sent ByteScart pitch with CTA link (sales bot)', 'assistant');
-    await updateUserMetadata(user.id, { bytescartPitched: true });
-  }
 
   // Send the Calendly link as a clickable CTA button so it actually works on WhatsApp
   if (hasCalendlyLink) {

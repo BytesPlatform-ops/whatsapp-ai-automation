@@ -1306,6 +1306,50 @@ Respond with ONLY one word: yes, skip, or unclear.`;
  * 'unclear' on any failure so the caller falls through to edit-parsing
  * instead of silently mis-building.
  */
+/**
+ * At the website confirmation summary, detect whether the user is asking
+ * to add / upload a logo (after previously skipping it or never being
+ * asked yet). Pure-LLM judgement so phrasings like "Sorry I want the
+ * logo on my website", "actually I do have a logo", "logo bhejna chahta
+ * hoon", "wait I have one" all route back to WEB_COLLECT_LOGO instead
+ * of falling through to the generic field-edit path.
+ */
+async function classifyLogoRevisitIntent(text, userId) {
+  const t = String(text || '').trim();
+  if (!t || t.length > 160) return false;
+  try {
+    const resp = await generateResponse(
+      `The user is at the website confirmation step (just shown a summary, asked "yes to build or tell me what to change"). Earlier they were offered the logo upload step and chose to skip it (or simply weren't ready). Now classify whether their reply is asking to ADD / UPLOAD their logo to the site after all.
+
+YES — wants to add/upload a logo now (in any language):
+- "actually I want to send my logo"
+- "Sorry, I want the logo on my website. Can I send it?"
+- "logo bhejna chahta hoon"
+- "actually I do have a logo"
+- "kya main logo bhej sakta hoon"
+- "let me send my logo"
+- "I changed my mind, I want a logo"
+- "wait I have a logo"
+- "main logo bhi add krwana chahta hoon"
+
+NO — anything else:
+- "yes" / "build it" / "perfect" — confirmation of the summary
+- "change the headline" / "different color" / "fix the email" — field edits
+- "I want a domain" — domain intent
+- "make a logo for me" — they want US to design one (this step is upload-only; treat as NOT a revisit yet, the no-image branch in WEB_COLLECT_LOGO handles "design" intent later)
+- random unrelated text or off-topic
+
+Reply with ONLY "yes" or "no".`,
+      [{ role: 'user', content: t }],
+      { userId, operation: 'logo_revisit_intent' }
+    );
+    return /^\s*yes\b/i.test(String(resp || ''));
+  } catch (err) {
+    logger.warn(`[LOGO-REVISIT] classifier threw: ${err.message}`);
+    return false;
+  }
+}
+
 async function classifyConfirmIntent(text, userId) {
   const t = String(text || '').trim();
   if (!t) return 'unclear';
@@ -2801,6 +2845,42 @@ async function handleConfirm(user, message) {
     // domain price locked in so the activation banner matches the chat link.
     await logMessage(user.id, 'Confirmed, asking about domain before build', 'assistant');
     return askDomainChoice(user);
+  }
+
+  // Logo-revisit intent — user previously skipped logo (or never got
+  // around to uploading) and is now asking to add one. Pure LLM
+  // classification so any phrasing in any language gets caught
+  // ("Sorry, I want the logo on my website", "logo bhejna chahta hoon",
+  // "actually I do have a logo", "wait I have one"). Without this the
+  // generic field-edit detection below fires and the bot replies with
+  // "What would you like to change? Name to X, Industry to Y..." which
+  // doesn't make sense for a logo request.
+  if (originalText && originalText.length <= 140) {
+    const wantsLogo = await classifyLogoRevisitIntent(originalText, user.id);
+    if (wantsLogo) {
+      const newWd = { ...(user.metadata?.websiteData || {}) };
+      // Clear logoSkipped so nextMissingState() routes back into
+      // WEB_COLLECT_LOGO. logoUrl is left unset (the upload handler
+      // will fill it). After upload, smartAdvance brings the user
+      // back to the confirm summary automatically.
+      newWd.logoSkipped = false;
+      delete newWd.logoSkipped;
+      await updateUserMetadata(user.id, { websiteData: { ...newWd, logoSkipped: false } });
+      user.metadata = { ...(user.metadata || {}), websiteData: { ...newWd, logoSkipped: false } };
+
+      const { updateUserState } = require('../../db/users');
+      await updateUserState(user.id, STATES.WEB_COLLECT_LOGO);
+      await sendTextMessage(
+        user.phone_number,
+        await localize(
+          "Sure — send your logo as an image (JPG or PNG) and I'll add it to the site. Or reply *skip* if you change your mind.",
+          user,
+          originalText
+        )
+      );
+      await logMessage(user.id, 'User wants logo after skip — routed back to WEB_COLLECT_LOGO', 'assistant');
+      return STATES.WEB_COLLECT_LOGO;
+    }
   }
 
   // User wants to change something — use originalText to preserve capitalization

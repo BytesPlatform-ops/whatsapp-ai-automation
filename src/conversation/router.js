@@ -1015,14 +1015,11 @@ async function _routeMessage(message) {
       // Other flow-state leaks found by the audit: each of these gets
       // SET mid-flow but was never cleared on reset, so a previous
       // session's state bled into the next flow.
-      // - bytescartPitched: once true, the sales bot never re-offers
-      //   ByteScart (even to a fresh user after /reset).
       // - currentMeetingId: stale pointer to a prior meeting row.
       // - salonFlowOrigin: forces salon sub-flow into CONFIRM loopback
       //   on a fresh user if set by a prior session.
       // - webGenStartedAt: the in-progress generation guard gets
       //   tripped by a stale timestamp.
-      bytescartPitched: false,
       currentMeetingId: null,
       salonFlowOrigin: null,
       webGenStartedAt: null,

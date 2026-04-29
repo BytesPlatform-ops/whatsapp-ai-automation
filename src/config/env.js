@@ -91,7 +91,6 @@ const env = {
   portfolio: {
     website1: process.env.PORTFOLIO_WEBSITE_1 || 'https://quantiva-hq.vercel.app/',
     website2: process.env.PORTFOLIO_WEBSITE_2 || 'https://bytesplatform.info',
-    ecommerce: process.env.PORTFOLIO_ECOMMERCE || 'https://bytescart.ai',
   },
   // Stripe
   stripe: {
