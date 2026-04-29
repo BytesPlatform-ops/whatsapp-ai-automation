@@ -515,8 +515,12 @@ async function handleConfirmedPayment(payment, paidSession) {
         logger.warn(`[PAY] scheduleDeliveryPrompt (no-domain) failed: ${err.message}`);
       }
 
-      const { updateUserState } = require('../db/users');
-      await updateUserState(p.user_id, 'SALES_CHAT');
+      // INTENTIONALLY DO NOT change state to SALES_CHAT here. Paid users
+      // need to stay in WEB_REVISIONS so the unlimited-revisions perk
+      // and the late-domain-add intent both keep firing through
+      // handleRevisions. Forcing them into salesBot meant "I want a
+      // domain" turned into chatty hallucination instead of running
+      // Namecheap search + creating a domain_addon Stripe link.
     }
   } else {
     // Non-website payment

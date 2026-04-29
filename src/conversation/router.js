@@ -642,15 +642,24 @@ async function _routeMessage(message) {
       const { findMessageByPlatformId } = require('../db/conversations');
       const quoted = await findMessageByPlatformId(user.id, message.replyTo.id);
       if (quoted?.message_text) {
-        const speaker = quoted.role === 'assistant' ? 'bot' : 'user';
-        const snippet = String(quoted.message_text).slice(0, 400);
-        const original = message.text || '';
-        message.quoted = { text: quoted.message_text, role: quoted.role };
-        message.text = `[Replying to ${speaker}'s earlier message: "${snippet}"]\n${original}`;
+        // Store quote context as a SEPARATE field on the message — never
+        // splice it into message.text. Earlier we prepended a "[Replying
+        // to bot's earlier message: ...]" marker which downstream LLM
+        // extractors (contact, areas, services) faithfully treated as
+        // user-supplied data. That bled the bot's own quote into things
+        // like the address field, where it then rendered on the live
+        // generated site. Now: message.text stays pristine; consumers
+        // that want the quote read message.quoted explicitly.
+        message.quoted = {
+          text: quoted.message_text,
+          role: quoted.role,
+          speaker: quoted.role === 'assistant' ? 'bot' : 'user',
+          snippet: String(quoted.message_text).slice(0, 400),
+        };
         logger.info('[REPLY-CTX] Resolved quoted message', {
           userId: user.id,
           quotedRole: quoted.role,
-          quotedSnippet: snippet.slice(0, 80),
+          quotedSnippet: message.quoted.snippet.slice(0, 80),
         });
       }
     } catch (err) {

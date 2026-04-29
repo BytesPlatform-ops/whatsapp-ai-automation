@@ -1316,28 +1316,34 @@ Respond with ONLY one word: yes, skip, or unclear.`;
  */
 async function classifyLogoRevisitIntent(text, userId) {
   const t = String(text || '').trim();
-  if (!t || t.length > 160) return false;
+  if (!t || t.length > 200) return false;
   try {
     const resp = await generateResponse(
-      `The user is at the website confirmation step (just shown a summary, asked "yes to build or tell me what to change"). Earlier they were offered the logo upload step and chose to skip it (or simply weren't ready). Now classify whether their reply is asking to ADD / UPLOAD their logo to the site after all.
+      `The user is at the website confirmation step (just shown a summary, asked "yes to build or tell me what to change"). Earlier they were offered the logo upload step and chose to skip it (or simply weren't ready). Classify whether their reply expresses an INTENT to add / upload a logo to the site now — regardless of any other content in the same message.
 
-YES — wants to add/upload a logo now (in any language):
-- "actually I want to send my logo"
-- "Sorry, I want the logo on my website. Can I send it?"
-- "logo bhejna chahta hoon"
-- "actually I do have a logo"
-- "kya main logo bhej sakta hoon"
-- "let me send my logo"
-- "I changed my mind, I want a logo"
-- "wait I have a logo"
-- "main logo bhi add krwana chahta hoon"
+GENERAL PRINCIPLE — mixed intent: people often combine sentiments + requests in one sentence ("yeah looks good, but I want X", "everything's fine, also let me add Y"). When the message contains BOTH a positive/approval sentiment AND a logo-add request, the REQUEST wins — answer YES. The approval is conversational filler relative to the underlying ask. The same applies to negation phrases like "no the rest is fine, but I want a logo" — the "no/fine" is about the rest, not the logo, so YES.
 
-NO — anything else:
-- "yes" / "build it" / "perfect" — confirmation of the summary
-- "change the headline" / "different color" / "fix the email" — field edits
-- "I want a domain" — domain intent
-- "make a logo for me" — they want US to design one (this step is upload-only; treat as NOT a revisit yet, the no-image branch in WEB_COLLECT_LOGO handles "design" intent later)
-- random unrelated text or off-topic
+Heuristic for YES (any natural phrasing in any language counts; do not match against examples literally):
+- The user is asking to attach, send, upload, add, include, give, or revisit their logo on this website
+- Or telling us they actually do have a logo / changed their mind
+- Or asking permission to share their logo ("can I add it?", "kya main bhej sakta hoon?")
+
+NO when the message contains zero logo-add request:
+- Pure approval ("yes" / "build it" / "perfect") with no other content
+- Field edits ("change the headline", "different color", "fix the email")
+- Asking for a domain / payment / contact change
+- Asking us to DESIGN a logo from scratch (different intent — not an upload, treat as NO; the upload step's no-image branch handles design intent separately)
+- Off-topic, meta, or unclear
+
+Examples (illustrative — apply the general principle, do not pattern-match):
+- "send my logo" → yes
+- "actually I have a logo" → yes
+- "yeah looks good but I want to add my logo" → yes (mixed — request wins)
+- "the rest is fine, just add my logo" → yes
+- "logo bhejna chahta hoon" → yes
+- "yes build it" → no (pure approval)
+- "change services" → no (field edit)
+- "make me a logo" → no (design request, not upload)
 
 Reply with ONLY "yes" or "no".`,
       [{ role: 'user', content: t }],
@@ -2677,9 +2683,11 @@ async function showConfirmSummary(user, prefix = '') {
   const combined = prefix ? `${prefix.trim()}\n\n${summary}` : summary;
   const localized = await localize(combined, user);
   await sendTextMessage(user.phone_number, localized);
-  // Log the ACTUAL summary text so the admin conversation page shows what
-  // the user saw on WhatsApp, not a placeholder label.
-  await logMessage(user.id, localized, 'assistant');
+  // sendTextMessage now auto-logs the outbound text via the sender
+  // facade's autoLogOutbound (channelContext + db/conversations). The
+  // earlier explicit logMessage call here was a duplicate write — the
+  // admin conversation view rendered "Here's a summary..." twice on
+  // every confirmation. Removed.
 
   return STATES.WEB_CONFIRM;
 }
@@ -3897,6 +3905,50 @@ async function handleRevisions(user, message) {
         "I don't have a generated website for you yet — tell me what kind of site you want and I'll start fresh."
       );
       return STATES.WEB_REVISIONS;
+    }
+
+    // Image-as-feedback vs image-as-swap classification. Users sometimes
+    // upload a screenshot of a problem ("on the website it's showing X
+    // — fix it") rather than an image they want placed on the site.
+    // If we go straight into the target picker, the user gets a
+    // confusing list when they wanted us to read their text and act.
+    // Skip this when an awaiting-upload flag is already set (we're
+    // waiting for the image specifically) — in that case the image is
+    // unambiguously the requested upload.
+    const caption = (message.caption || message.text || '').trim();
+    const awaiting = user.metadata?.awaitingImageUpload?.target;
+    if (caption && caption !== '[Image]' && !awaiting) {
+      try {
+        const intentResp = await generateResponse(
+          `The user just sent an image with this caption while in the website-revisions state.
+
+Decide what they're trying to do:
+
+- "swap" — they want us to place this image on the site (as the hero, logo, a service photo, etc.). Examples: "use this for the hero", "this is my logo", "put this on the about page", "yeh hero pe lagao".
+- "feedback" — they're sending us a screenshot of something on the site that they want us to NOTICE and fix. The text describes a PROBLEM, asks us to look at something, points at a bug, complains about a render, or contains words like "why is", "fix this", "look at", "yeh kya hai", "this is broken". The image itself is evidence, not a replacement.
+- "unclear" — neither obvious. Default to swap-like flow only when there's no problem-language at all.
+
+Caption: "${caption.slice(0, 300)}"
+
+Reply with ONLY one word: swap, feedback, or unclear.`,
+          [{ role: 'user', content: caption }],
+          { userId: user.id, operation: 'image_intent_classify' }
+        );
+        const intent = String(intentResp || '').trim().toLowerCase().split(/[\s\n,.;]/)[0];
+        if (intent === 'feedback') {
+          // Don't treat as a swap — surface the caption to the LLM
+          // revision parser so the user's actual ask gets handled like
+          // any other revision request.
+          logger.info(`[WEB_REVISIONS] Image classified as feedback, not swap. caption="${caption.slice(0, 80)}"`);
+          await sendTextMessage(
+            user.phone_number,
+            "Got it — I'll take that as feedback rather than a new image to drop in. Tell me what to change and I'll fix it."
+          );
+          return STATES.WEB_REVISIONS;
+        }
+      } catch (err) {
+        logger.warn(`[WEB_REVISIONS] Image intent classifier failed: ${err.message}`);
+      }
     }
 
     let buffer = null;
@@ -5298,30 +5350,34 @@ async function selectDomainInline(user, option) {
  */
 async function classifyLateDomainIntent(text, userId) {
   const t = String(text || '').trim();
-  if (!t || t.length > 120) return false;
+  if (!t || t.length > 200) return false;
   try {
     const resp = await generateResponse(
-      `Classify whether the user is asking to ADD a custom domain to their already-built website.
+      `Classify whether the user is asking to ADD a custom domain to their already-built website — regardless of any other content in the same message.
 
-Examples that ARE domain-add intent:
-- "actually I want a domain"
-- "domain bhi chahiye"
-- "ab domain bhi le lo"
-- "can you find me a domain"
-- "add a domain please"
-- "i want my own domain now"
-- "let's get a domain"
-- "domain bhi add krdo"
-- "kya hum domain bhi le saktay hain"
-- "yes give me a domain"
+GENERAL PRINCIPLE — mixed intent: people often pair sentiment with requests ("looks great, now I want a domain", "the site's good but get me a domain", "yeh sahi hai, ab domain bhi le do"). When the message contains BOTH approval/feedback AND a domain-add request, the REQUEST wins — answer YES. The approval is conversational filler relative to the underlying ask. Likewise: "I'm done with revisions, let's get a domain" → YES (the revisions sentence is preface, the domain ask is the action).
 
-NOT domain-add intent (these are revisions to the site itself):
-- "change the headline"
-- "make it darker"
-- "looks great"
-- "i need this site to be different"
-- "add a contact form"
-- "fix the about page"
+Heuristic for YES (any natural phrasing, any language):
+- The user is asking us to set up, find, register, attach, get, buy, secure, or hook up a custom domain for their site
+- Or asking permission/wondering if they can add one ("can I get a domain?", "domain bhi mil sakta hai?")
+- Or telling us "yes" / "go ahead" specifically about a domain offer that was on the table
+
+NO only when the message contains zero domain-add request:
+- Pure revisions/feedback ("change the headline", "make it darker", "looks great")
+- Site approval with no domain ask ("yes build it", "perfect")
+- Off-topic / unrelated
+- Asking about their existing already-selected domain (e.g. "what's my domain again?")
+
+Examples (illustrative — apply the principle, don't pattern-match):
+- "actually I want a domain" → yes
+- "domain bhi chahiye" → yes
+- "the website looks good, now I want to add a domain" → yes (mixed — request wins)
+- "looks great can we get a domain" → yes
+- "yes give me a domain" → yes
+- "set up the domain" → yes
+- "the site's perfect" → no (no domain ask)
+- "change the headline" → no (revision)
+- "what's the address?" → no (off-topic)
 
 Reply with ONLY "yes" or "no".`,
       [{ role: 'user', content: t }],

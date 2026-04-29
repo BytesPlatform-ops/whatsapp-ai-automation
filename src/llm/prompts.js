@@ -274,27 +274,59 @@ When the user wants to add, remove, or edit items in an array, you MUST return t
 
 **Never** return just a single service object or a partial array — always the full new array. Same rule applies to faq, testimonials, values, whyChooseUs, processSteps, heroFeatures, stats.
 
-## CRITICAL: Color choices must stay readable
-The hero section renders TEXT ON TOP OF the primaryColor (either as a gradient or a tinted photo overlay). Pick colors that keep the hero readable:
+## CRITICAL: Color choices must stay readable AND match what the user named
 
-- When the user names a color without qualifiers (e.g. "make it green", "blue theme", "red"), choose a **deep, saturated shade** in the #1e to #4a range, NOT a pastel. White hero text must stay legible.
-  - Green → #059669 or #065F46 (NOT mint/sage)
-  - Blue → #1E40AF or #1D4ED8 (NOT sky blue)
-  - Red → #B91C1C or #991B1B (NOT pink/coral)
-  - Purple → #6D28D9 or #5B21B6 (NOT lavender)
-  - Orange → #C2410C or #9A3412 (NOT peach)
-  - Teal → #0F766E or #115E59
-- When the user explicitly asks for a **light**, **pastel**, or **soft** shade (e.g. "make it mint green", "soft pink", "lighter blue"), go ahead and use that light color, BUT in the same response also update the hero text colour by setting:
-  - "heroTextOverride": "dark"  (the renderer will switch hero headline/tagline/badges to near-black so they remain readable on the light background)
-- When the user asks for a darker shade of an already-applied colour, deepen it and keep heroTextOverride as "auto" (or omit it).
+The hero section renders TEXT ON TOP OF the primaryColor. Pick a color that (a) is the SAME named color the user actually said, and (b) keeps hero text readable.
 
-The valid values for heroTextOverride are "auto" (default), "light" (white text), "dark" (near-black text). Only include this field when the user's colour ask warrants forcing a specific text palette.
+GENERAL PRINCIPLE: never substitute one named color for another. If the user said pink, the result must be pink — not red, not magenta. If they said teal, the result must be teal — not green or blue. The rules below tell you the recommended HEX for each named color and its readability mode (light text vs dark text). Pick from the right row by what the user said. Never collapse a named color into a "close enough" alternative from a different row.
+
+| Named color (user says) | HEX (no qualifier) | HEX (light/pastel qualifier) | heroTextOverride |
+|---|---|---|---|
+| Red | #B91C1C | #FCA5A5 | auto / dark for pastel |
+| Pink | #DB2777 | #F9A8D4 | auto / dark for pastel |
+| Magenta / Fuchsia | #C026D3 | #F0ABFC | auto / dark for pastel |
+| Rose | #BE123C | #FDA4AF | auto / dark for pastel |
+| Coral | #F97316 | #FDBA74 | auto / dark (always dark — light orange) |
+| Orange | #C2410C | #FDBA74 | auto / dark for pastel |
+| Amber / Yellow | #B45309 (amber) / #CA8A04 (yellow) | #FDE68A | dark (yellow always needs dark text) |
+| Lime | #4D7C0F | #D9F99D | dark (lime always needs dark text) |
+| Green | #059669 | #A7F3D0 | auto / dark for pastel |
+| Mint / Sage | #6EE7B7 (mint) / #84CC16 (sage) | — already light | dark |
+| Emerald | #047857 | #6EE7B7 | auto / dark for pastel |
+| Teal | #0F766E | #5EEAD4 | auto / dark for pastel |
+| Cyan | #0891B2 | #A5F3FC | auto / dark for pastel |
+| Sky / Light Blue | #0284C7 | #BAE6FD | auto / dark for pastel |
+| Blue | #1E40AF | #93C5FD | auto / dark for pastel |
+| Navy | #1E3A8A | — | auto |
+| Indigo | #4338CA | #A5B4FC | auto / dark for pastel |
+| Violet | #6D28D9 | #C4B5FD | auto / dark for pastel |
+| Purple | #6D28D9 | #C4B5FD | auto / dark for pastel |
+| Lavender | #C4B5FD | #DDD6FE | dark (always light family) |
+| Brown / Beige | #92400E (brown) / #D6BCFA (beige is closer to lavender, ask) | — | auto |
+| Black | #111827 | — | light |
+| Gray / Grey | #4B5563 | #D1D5DB | auto / dark for pastel |
+| White / Cream | #F9FAFB / #FEF3C7 | — | dark |
+
+How to read the table:
+1. User says a single bare color word ("make it pink", "blue please", "go green") → use the **HEX (no qualifier)** column.
+2. User says a **light / pastel / soft / muted / mint / sky / baby / pale** modifier → use the **HEX (light/pastel)** column AND set heroTextOverride to "dark" so white-on-pastel doesn't disappear.
+3. User says **dark / deep / rich / bold** → use the no-qualifier column (already saturated) and keep heroTextOverride as auto/light.
+4. User gives an exact hex (#FFC0CB) → use it verbatim. Decide heroTextOverride from luminance (light bg → dark text).
+5. If the user's named color isn't in the table (e.g. burgundy, mustard, olive), pick the closest standard CSS color hex YOU know that matches the name — never reach for the row above or below in the table just because it's nearby.
+
+heroTextOverride values:
+- "auto" (default) — renderer picks light vs dark by luminance. Omit if you don't need to override.
+- "light" — force white hero text (use on dark backgrounds).
+- "dark" — force near-black hero text (use on light/pastel backgrounds).
 
 **Examples:**
 - "change the color to green" → {"primaryColor": "#059669"}
+- "make it pink" → {"primaryColor": "#DB2777"}
+- "change it to teal" → {"primaryColor": "#0F766E"}
 - "make it mint green" → {"primaryColor": "#A7F3D0", "heroTextOverride": "dark"}
 - "go with a darker blue" (current is #1E40AF) → {"primaryColor": "#1E3A8A"}
-- "I like a softer pastel pink" → {"primaryColor": "#FBCFE8", "heroTextOverride": "dark"}
+- "I like a softer pastel pink" → {"primaryColor": "#F9A8D4", "heroTextOverride": "dark"}
+- "change to magenta" → {"primaryColor": "#C026D3"}
 
 Return ONLY valid JSON. No explanation outside the JSON.`;
 
