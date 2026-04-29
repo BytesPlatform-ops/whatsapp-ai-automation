@@ -969,11 +969,12 @@ async function _routeMessage(message) {
   // ── Disabled-service redirect ───────────────────────────────────────────
   // If the user is mid-flow on a service we've disabled (see
   // src/config/services.js — currently SEO / chatbot / ad / logo /
-  // app / marketing flows are all off-chat), gracefully hand them off
-  // to a human on their next message rather than crashing or letting
-  // them keep typing into a dormant flow. Scheduling states (book a
-  // call with our team) intentionally aren't disabled — they're always
-  // available regardless of which build-services are enabled.
+  // app / marketing flows are all off-chat), notify the team and reset
+  // the user's state to SALES_CHAT so the bot can chat normally going
+  // forward. handoffToHuman sends the English message + admin email but
+  // does NOT silence the bot — the next message from the user will be
+  // answered normally by the sales bot. Scheduling states (book a call
+  // with our team) intentionally aren't disabled.
   try {
     const { isStateOnDisabledService, findServiceByState } = require('../config/services');
     if (isStateOnDisabledService(user.state)) {
@@ -986,15 +987,16 @@ async function _routeMessage(message) {
         serviceKey: svc?.key || null,
         reason: 'in_flight_on_disabled_service',
       });
-      // handoffToHuman flips humanTakeover on; subsequent messages from
-      // this user will short-circuit at the gate above. Reset state so
-      // an admin "resume bot" later starts fresh in SALES_CHAT instead
-      // of dropping the user back into the disabled flow.
       try {
         await updateUserState(user.id, STATES.SALES_CHAT);
       } catch (err) {
         logger.warn(`[HANDOFF] Failed to reset state to SALES_CHAT: ${err.message}`);
       }
+      // End this turn after the handoff message goes out. The user's
+      // current message (likely an answer to a now-dormant question)
+      // would be confusing if salesBot tried to respond to it; better
+      // to let them re-prompt with the next message, which will flow
+      // through normally now that state is SALES_CHAT.
       return;
     }
   } catch (err) {

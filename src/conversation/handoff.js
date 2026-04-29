@@ -1,12 +1,16 @@
 // Human-handoff helper. Centralizes the "user wants something we don't
-// run through this chat — silence the bot and let a human take it from
-// here" flow so every call site (salesBot, serviceSelection, router
-// redirect for legacy in-flight users) emits the same user-facing
-// message and the same admin notification.
+// run through this chat — tell them a human will follow up by email,
+// and let the bot keep chatting" flow so every call site (salesBot,
+// serviceSelection, router redirect for legacy in-flight users) emits
+// the same user-facing message and the same admin notification.
 //
-// Reuses the existing humanTakeover infrastructure (router pipeline
-// already gates further bot replies on metadata.humanTakeover === true,
-// admin dashboard surfaces these threads under the takeover filter).
+// IMPORTANT: handoff does NOT silence the bot. Earlier we set
+// metadata.humanTakeover=true here, but that meant subsequent user
+// messages went unanswered AND the conversation disappeared from the
+// admin dashboard's "AI Only" tab — both bad UX. Now the only side
+// effects are: send a single English confirmation, fire an admin email
+// (deduplicated per service per conversation), and record the service
+// so we don't re-email if the user keeps mentioning the same service.
 
 const { sendTextMessage } = require('../messages/sender');
 const { logMessage } = require('../db/conversations');
@@ -33,14 +37,19 @@ function buildHandoffMessage(serviceLabel) {
  * service request.
  *
  * - Sends an English confirmation to the user.
- * - Sets metadata.humanTakeover so the router pipeline silences the bot.
- * - Records handoffService / handoffAt / handoffReason for admin context.
  * - Fires a fire-and-forget admin notification email.
+ * - Records the service in metadata.handoffFiredFor so subsequent calls
+ *   for the same service in the same conversation are no-ops (the user
+ *   keeps mentioning "SEO" — they get told once, the team gets emailed
+ *   once, the bot keeps chatting normally afterward).
+ *
+ * Does NOT set humanTakeover. The bot stays active so the user isn't
+ * left in silence after the handoff message. If the user starts asking
+ * about a website (or anything else the bot can handle), the bot
+ * responds normally.
  *
  * Returns STATES.SALES_CHAT so the caller can use it as a state-return
- * value. The router's humanTakeover gate will short-circuit subsequent
- * messages anyway, but returning a sane state keeps downstream code
- * (state-history push, etc.) happy.
+ * value when called as the terminal action of a handler.
  */
 async function handoffToHuman(user, { serviceKey, serviceLabel, reason } = {}) {
   // Resolve a friendly label. Prefer the catalogue's shortLabel when the
@@ -48,43 +57,58 @@ async function handoffToHuman(user, { serviceKey, serviceLabel, reason } = {}) {
   const svc = serviceKey ? findServiceByKey(serviceKey) : null;
   const label = svc?.shortLabel || serviceLabel || 'that service';
 
-  // 1. Send the user-facing confirmation BEFORE flipping takeover so they
-  //    don't sit in silence wondering what happened.
+  // Dedup key: prefer canonical service key when available, else the
+  // free-form label. Lower-cased so "SEO"/"seo" are the same fingerprint.
+  const dedupKey = String(serviceKey || label).toLowerCase().trim();
+  const alreadyFired = (Array.isArray(user.metadata?.handoffFiredFor) ? user.metadata.handoffFiredFor : [])
+    .some((k) => String(k).toLowerCase().trim() === dedupKey);
+
+  if (alreadyFired) {
+    logger.info(
+      `[HANDOFF] Skipping duplicate fire for ${user.phone_number} (service=${dedupKey}) — already handed off this conversation`
+    );
+    return STATES.SALES_CHAT;
+  }
+
+  // 1. Send the user-facing English confirmation.
   try {
     await sendTextMessage(user.phone_number, buildHandoffMessage(label));
   } catch (err) {
     logger.warn(`[HANDOFF] Sending confirmation failed for ${user.phone_number}: ${err.message}`);
   }
 
-  // 2. Persist takeover state + reason on the user.
+  // 2. Persist a marker so we don't re-fire for the same service. Bot
+  //    stays active; humanTakeover is intentionally NOT touched.
   const handoffAt = new Date().toISOString();
+  const existing = Array.isArray(user.metadata?.handoffFiredFor) ? user.metadata.handoffFiredFor : [];
+  const merged = existing.includes(dedupKey) ? existing : [...existing, dedupKey];
   try {
     await updateUserMetadata(user.id, {
-      humanTakeover: true,
-      handoffService: serviceKey || label,
-      handoffServiceLabel: label,
-      handoffReason: reason || 'service_not_chat_handled',
-      handoffAt,
+      handoffFiredFor: merged,
+      lastHandoffService: serviceKey || label,
+      lastHandoffLabel: label,
+      lastHandoffReason: reason || 'service_not_chat_handled',
+      lastHandoffAt: handoffAt,
     });
     if (user.metadata) {
-      user.metadata.humanTakeover = true;
-      user.metadata.handoffService = serviceKey || label;
-      user.metadata.handoffServiceLabel = label;
-      user.metadata.handoffReason = reason || 'service_not_chat_handled';
-      user.metadata.handoffAt = handoffAt;
+      user.metadata.handoffFiredFor = merged;
+      user.metadata.lastHandoffService = serviceKey || label;
+      user.metadata.lastHandoffLabel = label;
+      user.metadata.lastHandoffReason = reason || 'service_not_chat_handled';
+      user.metadata.lastHandoffAt = handoffAt;
     }
     logger.info(
-      `[HANDOFF] Enabled humanTakeover for ${user.phone_number} (service=${serviceKey || label}, reason=${reason || 'service_not_chat_handled'})`
+      `[HANDOFF] Recorded handoff for ${user.phone_number} (service=${serviceKey || label}, reason=${reason || 'service_not_chat_handled'})`
     );
   } catch (err) {
-    logger.error(`[HANDOFF] Failed to enable takeover for ${user.phone_number}: ${err.message}`);
+    logger.error(`[HANDOFF] Failed to persist handoff marker for ${user.phone_number}: ${err.message}`);
   }
 
   // 3. Log a marker row so admin transcript shows the moment of handoff.
   try {
     await logMessage(
       user.id,
-      `[HANDOFF] Routed to human for: ${label}${reason ? ` (${reason})` : ''}`,
+      `[HANDOFF] Notified team about: ${label}${reason ? ` (${reason})` : ''}`,
       'system'
     );
   } catch (err) {

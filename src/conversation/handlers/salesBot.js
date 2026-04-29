@@ -495,6 +495,23 @@ async function handleSalesBot(user, message) {
   // seoAuditMatch is a const (used later); we'll gate the SEO trigger
   // path on isServiceEnabled('seo') at the call site below instead.
 
+  // DEDUP: if we've already fired handoff for this service in this
+  // conversation, suppress this turn's handoff so the bot keeps chatting
+  // normally. The user already got the canned English message + the
+  // team already got the email. If they keep mentioning the same
+  // service, that's fine — let the LLM respond naturally without
+  // re-spamming the user or the admin inbox.
+  const handoffMarker = handoffServiceKey || handoffServiceLabel;
+  const handoffMarkerLower = handoffMarker ? String(handoffMarker).toLowerCase().trim() : null;
+  const alreadyHandedOff = handoffMarkerLower
+    && (Array.isArray(user.metadata?.handoffFiredFor) ? user.metadata.handoffFiredFor : [])
+        .some((k) => String(k).toLowerCase().trim() === handoffMarkerLower);
+  if (alreadyHandedOff) {
+    logger.info(`[HANDOFF] Dedup in salesBot: already handed off for "${handoffMarker}" this conversation — letting LLM continue normally`);
+    handoffServiceKey = null;
+    handoffServiceLabel = null;
+  }
+
   // Strip all trigger tags from the response
   let responseText = cleanText
     .replace(/\[TRIGGER_WEBSITE_DEMO(?::[^\]]*)?\]/gi, '')
@@ -648,25 +665,41 @@ async function handleSalesBot(user, message) {
   // Two paths:
   //   (a) Mixed-intent — website demo is ALSO firing this turn. Don't
   //       interrupt the website flow; just stash a pendingHandoffServices
-  //       note on the user so admin sees the secondary request, and the
-  //       admin email goes out so the team knows to follow up about the
-  //       extra service after the website is delivered.
-  //   (b) Pure handoff — no website demo this turn. Run the full handoff:
-  //       send the user-facing English message, set humanTakeover=true,
-  //       fire the admin email.
+  //       note on the user so admin sees the secondary request, mark the
+  //       service in handoffFiredFor so we don't re-email next turn, and
+  //       fire the admin email so the team can follow up about the extra
+  //       service after the website is delivered.
+  //   (b) Pure handoff — no website demo this turn. Run handoffToHuman:
+  //       it sends the user-facing English message, fires the admin
+  //       email, and records handoffFiredFor for dedupe. handoffToHuman
+  //       does NOT silence the bot — subsequent messages from the user
+  //       are still answered by the LLM as normal.
   if (handoffWillFire) {
     const willFireWebsite = websiteDemoTrigger && !user.metadata?.websiteDemoTriggered;
     if (willFireWebsite) {
       const note = handoffServiceKey || handoffServiceLabel || 'service';
-      const existing = Array.isArray(user.metadata?.pendingHandoffServices)
+      const dedupKey = String(note).toLowerCase().trim();
+      const existingPending = Array.isArray(user.metadata?.pendingHandoffServices)
         ? user.metadata.pendingHandoffServices
         : [];
-      const merged = existing.includes(note) ? existing : [...existing, note];
+      const mergedPending = existingPending.includes(note) ? existingPending : [...existingPending, note];
+      const existingFired = Array.isArray(user.metadata?.handoffFiredFor)
+        ? user.metadata.handoffFiredFor
+        : [];
+      const mergedFired = existingFired.some((k) => String(k).toLowerCase().trim() === dedupKey)
+        ? existingFired
+        : [...existingFired, dedupKey];
       try {
-        await updateUserMetadata(user.id, { pendingHandoffServices: merged });
-        if (user.metadata) user.metadata.pendingHandoffServices = merged;
+        await updateUserMetadata(user.id, {
+          pendingHandoffServices: mergedPending,
+          handoffFiredFor: mergedFired,
+        });
+        if (user.metadata) {
+          user.metadata.pendingHandoffServices = mergedPending;
+          user.metadata.handoffFiredFor = mergedFired;
+        }
       } catch (err) {
-        logger.warn(`[HANDOFF] Failed to persist pendingHandoffServices: ${err.message}`);
+        logger.warn(`[HANDOFF] Failed to persist pendingHandoffServices/handoffFiredFor: ${err.message}`);
       }
       // Fire the admin email so the team gets notified about the extra
       // service even though we're letting the website flow continue.
@@ -685,11 +718,17 @@ async function handleSalesBot(user, message) {
         logger.warn(`[HANDOFF] Mixed-intent admin notify failed: ${err.message}`);
       }
       logger.info(
-        `[HANDOFF] Mixed-intent: website demo firing this turn, queued handoff for "${note}" (admin notified).`
+        `[HANDOFF] Mixed-intent: website demo firing this turn, queued handoff for "${note}" (admin notified, deduped).`
       );
       // Fall through — website demo block below runs as normal.
     } else {
-      // Pure handoff — silence the bot and let the admin take over.
+      // Pure handoff — handoffToHuman sends the canned English message
+      // + admin email + records the dedupe marker. It does NOT silence
+      // the bot, so the user can keep chatting on subsequent turns.
+      // Returning here ends THIS turn (we don't also send an LLM reply
+      // — the canned handoff message is enough). Subsequent inbound
+      // messages re-enter handleSalesBot and the dedupe check above
+      // will skip re-firing handoff for the same service.
       return handoffToHuman(user, {
         serviceKey: handoffServiceKey || null,
         serviceLabel: handoffServiceLabel || null,
