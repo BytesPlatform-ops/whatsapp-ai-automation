@@ -12,6 +12,8 @@ const { saveLeadSummary } = require('../../db/leadSummaries');
 const { buildSummaryContext } = require('../summaryManager');
 const { hydrateWebsiteData } = require('../entityAccumulator');
 const { localize } = require('../../utils/localizer');
+const { isServiceEnabled, findServiceByKey } = require('../../config/services');
+const { handoffToHuman } = require('../handoff');
 
 /**
  * Extract and strip the [LEAD_BRIEF]...[/LEAD_BRIEF] block from the LLM response.
@@ -300,6 +302,10 @@ async function handleSalesBot(user, message) {
   let adGeneratorTrigger = cleanText.includes('[TRIGGER_AD_GENERATOR]');
   let logoMakerTrigger = cleanText.includes('[TRIGGER_LOGO_MAKER]');
   const seoAuditMatch = cleanText.match(/\[TRIGGER_SEO_AUDIT:\s*(.+?)\]/);
+  // New handoff trigger — emitted by the LLM when the user asks for a
+  // service this chat doesn't currently handle. Payload is a free-form
+  // service label ("chatbot", "SEO audit", "ad design", etc.).
+  const humanHandoffMatch = cleanText.match(/\[TRIGGER_HUMAN_HANDOFF:\s*([^\]]+)\]/i);
 
   // Stitch the recent conversation + bot reply into one snippet so the
   // topic classifier sees both sides. We trim to the last few turns —
@@ -457,6 +463,38 @@ async function handleSalesBot(user, message) {
 
   logger.debug(`[SALES] Payment check - tagMatch: ${!!paymentMatch}, stripeKey: ${!!env.stripe.secretKey}, alreadySent: ${!!user.metadata?.lastPaymentLinkId}`);
 
+  // Resolve which non-website service (if any) the LLM is signalling for
+  // handoff. Two paths:
+  //   1. Explicit [TRIGGER_HUMAN_HANDOFF: <label>] — the new first-class
+  //      mechanism the prompt instructs the LLM to use.
+  //   2. Legacy [TRIGGER_CHATBOT_DEMO] / [TRIGGER_AD_GENERATOR] /
+  //      [TRIGGER_LOGO_MAKER] / [TRIGGER_SEO_AUDIT: ...] — the LLM may
+  //      still emit these from older context. If the corresponding
+  //      service is currently DISABLED via src/config/services.js, route
+  //      to handoff instead of running the (now-deprecated) flow. If the
+  //      service ever gets re-enabled, these triggers fire the original
+  //      flow again with no further code changes needed.
+  let handoffServiceKey = null;
+  let handoffServiceLabel = null;
+  if (humanHandoffMatch) {
+    handoffServiceLabel = (humanHandoffMatch[1] || '').trim() || 'service';
+  } else if (chatbotDemoTrigger && !isServiceEnabled('chatbot')) {
+    handoffServiceKey = 'chatbot';
+  } else if (adGeneratorTrigger && !isServiceEnabled('ads')) {
+    handoffServiceKey = 'ads';
+  } else if (logoMakerTrigger && !isServiceEnabled('logo')) {
+    handoffServiceKey = 'logo';
+  } else if (seoAuditMatch && !isServiceEnabled('seo')) {
+    handoffServiceKey = 'seo';
+  }
+  // Drop any non-website demo triggers whose service is currently
+  // disabled — handoff handles them, the flow itself shouldn't fire.
+  if (chatbotDemoTrigger && !isServiceEnabled('chatbot')) chatbotDemoTrigger = false;
+  if (adGeneratorTrigger && !isServiceEnabled('ads')) adGeneratorTrigger = false;
+  if (logoMakerTrigger && !isServiceEnabled('logo')) logoMakerTrigger = false;
+  // seoAuditMatch is a const (used later); we'll gate the SEO trigger
+  // path on isServiceEnabled('seo') at the call site below instead.
+
   // Strip all trigger tags from the response
   let responseText = cleanText
     .replace(/\[TRIGGER_WEBSITE_DEMO(?::[^\]]*)?\]/gi, '')
@@ -464,6 +502,7 @@ async function handleSalesBot(user, message) {
     .replace(/\[TRIGGER_AD_GENERATOR\]/g, '')
     .replace(/\[TRIGGER_LOGO_MAKER\]/g, '')
     .replace(/\[TRIGGER_SEO_AUDIT:[^\]]*\]/g, '')
+    .replace(/\[TRIGGER_HUMAN_HANDOFF:[^\]]*\]/gi, '')
     .replace(/\[SEND_PAYMENT:[^\]]*\]/g, '')
     .trim();
 
@@ -481,11 +520,17 @@ async function handleSalesBot(user, message) {
     textWithoutLink = textWithoutLink.replace(/:\s*$/, '').trim();
   }
 
-  // Skip sending the LLM text if a demo trigger is about to fire - the handler sends its own message
+  // Skip sending the LLM text if a demo trigger or handoff is about to
+  // fire — the handler / handoff helper sends its own message. Website
+  // demo + handoff is the mixed-intent case: website wins this turn,
+  // handoff is queued via pendingHandoffServices below; we still skip
+  // the LLM text because the website-demo handler sends its own copy.
+  const handoffWillFire = !!(handoffServiceKey || handoffServiceLabel);
   const skipLlmResponse = (websiteDemoTrigger && !user.metadata?.websiteDemoTriggered)
     || (chatbotDemoTrigger && !user.metadata?.chatbotDemoTriggered)
     || (adGeneratorTrigger && !user.metadata?.adGeneratorTriggered)
-    || (logoMakerTrigger && !user.metadata?.logoMakerTriggered);
+    || (logoMakerTrigger && !user.metadata?.logoMakerTriggered)
+    || handoffWillFire;
 
   const formatted = formatWhatsApp(textWithoutLink);
   if (formatted && !skipLlmResponse) {
@@ -596,6 +641,60 @@ async function handleSalesBot(user, message) {
     } catch (error) {
       logger.error('[SALES] Failed to create payment link:', error.message);
       // Don't block the conversation - just log the error
+    }
+  }
+
+  // ── HUMAN HANDOFF (non-website services) ─────────────────────────────
+  // Two paths:
+  //   (a) Mixed-intent — website demo is ALSO firing this turn. Don't
+  //       interrupt the website flow; just stash a pendingHandoffServices
+  //       note on the user so admin sees the secondary request, and the
+  //       admin email goes out so the team knows to follow up about the
+  //       extra service after the website is delivered.
+  //   (b) Pure handoff — no website demo this turn. Run the full handoff:
+  //       send the user-facing English message, set humanTakeover=true,
+  //       fire the admin email.
+  if (handoffWillFire) {
+    const willFireWebsite = websiteDemoTrigger && !user.metadata?.websiteDemoTriggered;
+    if (willFireWebsite) {
+      const note = handoffServiceKey || handoffServiceLabel || 'service';
+      const existing = Array.isArray(user.metadata?.pendingHandoffServices)
+        ? user.metadata.pendingHandoffServices
+        : [];
+      const merged = existing.includes(note) ? existing : [...existing, note];
+      try {
+        await updateUserMetadata(user.id, { pendingHandoffServices: merged });
+        if (user.metadata) user.metadata.pendingHandoffServices = merged;
+      } catch (err) {
+        logger.warn(`[HANDOFF] Failed to persist pendingHandoffServices: ${err.message}`);
+      }
+      // Fire the admin email so the team gets notified about the extra
+      // service even though we're letting the website flow continue.
+      try {
+        const { sendHandoffNotification } = require('../../notifications/email');
+        await sendHandoffNotification({
+          userPhone: user.phone_number,
+          userName: user.name || null,
+          channel: user.channel || 'whatsapp',
+          userId: user.id,
+          serviceKey: handoffServiceKey || null,
+          serviceLabel: handoffServiceLabel || (findServiceByKey(handoffServiceKey)?.shortLabel) || 'service',
+          reason: 'mixed_intent_with_website',
+        });
+      } catch (err) {
+        logger.warn(`[HANDOFF] Mixed-intent admin notify failed: ${err.message}`);
+      }
+      logger.info(
+        `[HANDOFF] Mixed-intent: website demo firing this turn, queued handoff for "${note}" (admin notified).`
+      );
+      // Fall through — website demo block below runs as normal.
+    } else {
+      // Pure handoff — silence the bot and let the admin take over.
+      return handoffToHuman(user, {
+        serviceKey: handoffServiceKey || null,
+        serviceLabel: handoffServiceLabel || null,
+        reason: 'service_not_chat_handled',
+      });
     }
   }
 
@@ -939,6 +1038,13 @@ async function handleSalesBot(user, message) {
   // Trigger SEO audit flow
   const seoUrl = seoAuditMatch ? seoAuditMatch[1].trim() : seoAuditFallbackUrl;
   if (seoUrl && !user.metadata?.seoAuditTriggered) {
+    // SEO disabled → handoff. (The earlier handoff block already catches
+    // an explicit [TRIGGER_SEO_AUDIT] tag; this guards the fallback path
+    // where we infer SEO intent from a bare URL + SEO keyword in the
+    // bot's own reply.)
+    if (!isServiceEnabled('seo')) {
+      return handoffToHuman(user, { serviceKey: 'seo', reason: 'service_not_chat_handled' });
+    }
     const url = seoUrl;
     logger.info(`Triggering SEO audit for ${user.phone_number}: ${url}`);
     await updateUserMetadata(user.id, { seoAuditTriggered: true, returnToSales: true });

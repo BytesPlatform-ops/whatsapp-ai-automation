@@ -1,220 +1,141 @@
 const {
-  sendTextMessage,
   sendInteractiveButtons,
   sendInteractiveList,
   sendWithMenuButton,
-  sendCTAButton,
 } = require('../../messages/sender');
 const { logMessage } = require('../../db/conversations');
-const { updateUserMetadata } = require('../../db/users');
-const { STATES, SERVICE_IDS } = require('../states');
+const { STATES } = require('../states');
+const {
+  enabledServices,
+  isServiceEnabled,
+  findServiceByMenuButton,
+} = require('../../config/services');
+const { handoffToHuman } = require('../handoff');
+const { logger } = require('../../utils/logger');
 
-// Send the main menu (3 top-level buttons). Called from the /menu command
-// path in the router so the user sees a proper greeting instead of the
-// "hmm, didn't catch that" preface that the default case uses for truly
-// unrecognized input. Also reusable if any other handler wants to bounce
-// the user back to the menu cleanly.
-async function sendMainMenu(user) {
-  await sendInteractiveButtons(
-    user.phone_number,
-    "Here's what I can help with — pick one to get started:",
-    [
-      { id: 'svc_seo', title: '🔍 SEO Audit' },
-      { id: 'svc_webdev', title: '🌐 Website' },
-      { id: 'svc_more', title: '📋 More Services' },
-    ]
-  );
-  await logMessage(user.id, 'Showed main menu', 'assistant', 'interactive');
-  return STATES.SERVICE_SELECTION;
+// Build the menu buttons dynamically from enabled services + always-on
+// "Talk to a human" + "FAQ" entries. WhatsApp interactive buttons cap at
+// 3 — currently we have just 1 enabled service so this fits, but if more
+// services get re-enabled later we automatically fall back to the
+// interactive list (handled in sendMainMenu).
+function buildMainMenuButtons() {
+  const enabled = enabledServices();
+  const buttons = enabled.map((s) => ({
+    id: s.menuButtonId,
+    title: `${s.emoji} ${s.label}`,
+  }));
+  buttons.push({ id: 'svc_general', title: '💬 Talk to sales' });
+  buttons.push({ id: 'svc_info', title: '❓ FAQ' });
+  return buttons;
 }
 
-// Exploratory phrases that mean "show me more options" — "any other
-// services?", "what else do you have?", "show me everything". Checked
-// BEFORE matchServiceFromText so /what/ doesn't misroute these to the
-// FAQ handler.
-function looksExploratory(text) {
-  const t = String(text || '').toLowerCase();
-  return (
-    /\b(other|more|else|additional|full|all|whole|every|complete|rest|anything|available|offerings?|more services|more options)\b/i.test(t) ||
-    /\b(what else|what other|what services|whats available|what.s available|anything else|any other|show.*(all|list|everything))\b/i.test(t)
-  );
+// Send the main menu. Called from the /menu command path in the router
+// so the user sees a proper greeting instead of the "hmm, didn't catch
+// that" preface that the default case uses for truly unrecognized input.
+// Also reusable if any other handler wants to bounce the user back to
+// the menu cleanly.
+async function sendMainMenu(user) {
+  const buttons = buildMainMenuButtons();
+  // WhatsApp interactive buttons support up to 3. If we ever re-enable
+  // enough services that we exceed that, render the interactive list
+  // instead so nothing gets dropped.
+  if (buttons.length <= 3) {
+    await sendInteractiveButtons(
+      user.phone_number,
+      "Here's what I can help with — pick one to get started:",
+      buttons
+    );
+  } else {
+    await sendInteractiveList(
+      user.phone_number,
+      "Here's what I can help with — pick one to get started:",
+      'View Options',
+      [
+        {
+          title: 'Options',
+          rows: buttons.map((b) => ({ id: b.id, title: b.title })),
+        },
+      ]
+    );
+  }
+  await logMessage(user.id, 'Showed main menu', 'assistant', 'interactive');
+  return STATES.SERVICE_SELECTION;
 }
 
 async function handleServiceSelection(user, message) {
   const buttonId = message.buttonId || message.listId || '';
   const text = (message.text || '').toLowerCase().trim();
 
-  // Phase 12: multi-service intent. "I need a website, logo and some ads"
-  // → queue all three, start the first. Must run BEFORE looksExploratory /
-  // matchServiceFromText so phrasings like "website AND logo" don't get
-  // collapsed to a single regex hit. LLM-backed detector — won't fire on
-  // single-service messages or on false positives like "my friend has a
-  // website and a logo already".
-  if (!buttonId && text) {
-    const { detectServiceQueue, startServiceQueue } = require('../serviceQueue');
-    const queue = await detectServiceQueue(message.text || '', user.id);
-    if (queue.length >= 2) {
-      const newState = await startServiceQueue(user, queue);
-      return newState || STATES.SERVICE_SELECTION;
-    }
-  }
-
-  // Early: exploratory phrases ("what other services?", "more options",
-  // "whats available") should go to the full list, NOT match /what/ below
-  // and land in the FAQ handler. Pre-empts matchServiceFromText.
-  if (!buttonId && text && looksExploratory(text)) {
-    return handleServiceSelection(user, { ...message, buttonId: 'svc_more', text: '' });
-  }
-
-  // Handle "More Services" button - show full list
-  if (buttonId === 'svc_more') {
-    await sendInteractiveList(
-      user.phone_number,
-      'Here are all our services. Pick one to learn more or get started:',
-      'View Services',
-      [
-        {
-          title: 'Our Services',
-          rows: [
-            { id: 'svc_seo', title: '🔍 Free SEO Audit', description: 'Get a free analysis of your website' },
-            { id: 'svc_webdev', title: '🌐 Website Development', description: 'Get a professional website built' },
-            { id: 'svc_appdev', title: '📱 App Development', description: 'Mobile & web app development' },
-            { id: 'svc_marketing', title: '📈 Digital Marketing', description: 'SEO, ads, social media strategy' },
-            { id: 'svc_adgen', title: '🎨 Marketing Ads', description: 'Custom social media ad images for your brand' },
-            { id: 'svc_logo', title: '✨ Logo Maker', description: 'Professional brand logos in 60 seconds' },
-            { id: 'svc_chatbot', title: '🤖 AI Chatbot', description: 'Get a 24/7 AI assistant for your business' },
-            { id: 'svc_info', title: '❓ FAQ & Support', description: 'Get answers to your questions' },
-            { id: 'svc_general', title: '💬 Talk to Sales', description: 'Chat with our sales team' },
-          ],
-        },
-      ]
-    );
-    await logMessage(user.id, 'Showing full service list', 'assistant', 'interactive');
-    return STATES.SERVICE_SELECTION;
-  }
-
-  // Route based on selected service. Regex-first for the obvious cases
-  // (instant, no API call). When the regex finds nothing — natural
-  // phrasings like "we need someone for growth" or "make me a poster" —
-  // fall through to pickServiceFromSwitch (LLM-backed) so the user gets
-  // routed instead of bounced back to the menu with "didn't catch that".
+  // Resolve which service the user picked / typed:
+  //   1. Button tap → trust the buttonId.
+  //   2. Free-text → regex-first, LLM-rescue fallback.
   let svcId = buttonId || matchServiceFromText(text);
   if (!svcId && text) {
     svcId = await pickServiceFromSwitch(text, user.id);
   }
-  switch (svcId) {
-    case 'svc_seo':
-      await sendWithMenuButton(
-        user.phone_number,
-        '🔍 *Free Website SEO Audit*\n\n' +
-          'I\'ll analyze your website and provide a detailed report covering:\n' +
-          '• SEO health & meta tags\n' +
-          '• Page performance & speed\n' +
-          '• Design & usability issues\n' +
-          '• Content quality\n' +
-          '• Top recommendations\n\n' +
-          'Please send me your website URL to get started!'
-      );
-      await logMessage(user.id, 'Asked for website URL for SEO audit', 'assistant');
-      return STATES.SEO_COLLECT_URL;
 
-    case 'svc_webdev': {
-      // Honors cross-flow carryover: if webdev data already exists (from a
-      // prior partial attempt or from the shared pool populated by other
-      // flows), resume at the first missing step instead of re-asking for
-      // the business name.
-      const { startWebdevFlow } = require('./webDev');
-      return startWebdevFlow(user);
-    }
-
-    case 'svc_appdev':
-      await sendWithMenuButton(
-        user.phone_number,
-        '📱 *App Development*\n\n' +
-          'We build mobile and web applications tailored to your needs.\n\n' +
-          'Tell me about your app idea - what problem does it solve, who is it for, and what features do you envision?'
-      );
-      await logMessage(user.id, 'Starting app development flow', 'assistant');
-      return STATES.APP_COLLECT_REQUIREMENTS;
-
-    case 'svc_marketing':
-      await sendWithMenuButton(
-        user.phone_number,
-        '📈 *Digital Marketing*\n\n' +
-          'We offer comprehensive digital marketing services including SEO, PPC, social media, and content marketing.\n\n' +
-          'Tell me about your business and what marketing goals you\'re looking to achieve.'
-      );
-      await logMessage(user.id, 'Starting marketing flow', 'assistant');
-      return STATES.MARKETING_COLLECT_DETAILS;
-
-    case 'svc_adgen': {
-      // Phase 11: cross-flow entry pre-fills businessName + industry from
-      // metadata.websiteData (set by the webdev flow) and jumps straight
-      // to the first missing state. Greeting + state transition both
-      // live in startAdFlow so the two paths (menu tap here vs sales-bot
-      // trigger) can never drift.
-      const { startAdFlow } = require('./adGeneration');
-      return startAdFlow(user);
-    }
-
-    case 'svc_logo': {
-      const { startLogoFlow } = require('./logoGeneration');
-      return startLogoFlow(user);
-    }
-
-    case 'svc_chatbot': {
-      const { startChatbotFlow } = require('./chatbotService');
-      return startChatbotFlow(user);
-    }
-
-    case 'svc_info':
-      await sendWithMenuButton(
-        user.phone_number,
-        '❓ *FAQ & Support*\n\n' +
-          'Hi! I\'m Pixie. I can help you with:\n\n' +
-          '• Information about our services\n' +
-          '• Pricing & timelines\n' +
-          '• How our process works\n' +
-          '• Technical questions\n\n' +
-          'What would you like to know?'
-      );
-      await logMessage(user.id, 'Entering informative/FAQ chat', 'assistant');
-      return STATES.INFORMATIVE_CHAT;
-
-    case 'svc_general':
-      await sendWithMenuButton(
-        user.phone_number,
-        '💬 Sure! I\'m Pixie. What can I help you with?'
-      );
-      await logMessage(user.id, 'Entering sales chat', 'assistant');
-      return STATES.SALES_CHAT;
-
-    default: {
-      // Exploratory phrases already pre-empted at the top of the handler,
-      // so if we're here the user's input isn't asking for "more / other
-      // / else" services. Tailor the re-show based on whether the input
-      // looks like a question (so the preface reads right).
-      const isQuestion =
-        /\?$/.test(text) ||
-        /^(what|whats|which|how|hows|when|whens|where|wheres|why|whys|does|do|can|could|should|would|is|are|will|who|whos|tell)\b/i.test(text);
-
-      const preface = isQuestion
-        ? "good question — I’ll show the main options; tap 📋 More Services for the full list."
-        : "hmm, didn’t catch that. Here are our main services:";
-
-      await sendInteractiveButtons(
-        user.phone_number,
-        preface,
-        [
-          { id: 'svc_seo', title: '🔍 SEO Audit' },
-          { id: 'svc_webdev', title: '🌐 Website' },
-          { id: 'svc_more', title: '📋 More Services' },
-        ]
-      );
-      await logMessage(user.id, 'Re-showing service selection', 'assistant', 'interactive');
-      return STATES.SERVICE_SELECTION;
-    }
+  // Always-on entries (FAQ + talk-to-human) regardless of which services
+  // are enabled — no need to gate them through the catalogue.
+  if (svcId === 'svc_info') {
+    await sendWithMenuButton(
+      user.phone_number,
+      '❓ *FAQ & Support*\n\nHi! I\'m Pixie. Ask me anything about how the website-build flow works, pricing, timelines, or our process.'
+    );
+    await logMessage(user.id, 'Entering informative/FAQ chat', 'assistant');
+    return STATES.INFORMATIVE_CHAT;
   }
+  if (svcId === 'svc_general') {
+    await sendWithMenuButton(
+      user.phone_number,
+      "💬 Sure! I'm Pixie. What can I help you with?"
+    );
+    await logMessage(user.id, 'Entering sales chat', 'assistant');
+    return STATES.SALES_CHAT;
+  }
+
+  // Catalogue-backed routing: if the picked service is currently enabled,
+  // dispatch to its starter. If it's a known but disabled service, hand
+  // off to a human. If we couldn't identify a service at all, re-show the
+  // menu.
+  const svc = svcId ? findServiceByMenuButton(svcId) : null;
+  if (svc) {
+    if (isServiceEnabled(svc.key)) {
+      // Currently the only enabled flow with a starter is webdev. As more
+      // services come back online, add their starters to this dispatch.
+      if (svc.key === 'website') {
+        const { startWebdevFlow } = require('./webDev');
+        return startWebdevFlow(user);
+      }
+      // Defensive fallback — service is in the enabled set but no starter
+      // is wired here yet. Treat as handoff so the user isn't stuck.
+      logger.warn(`[SERVICE-SELECTION] No starter wired for enabled service "${svc.key}" — falling back to handoff`);
+      return handoffToHuman(user, { serviceKey: svc.key, reason: 'no_starter_wired' });
+    }
+    // Known but disabled — straight to handoff.
+    return handoffToHuman(user, { serviceKey: svc.key, reason: 'service_not_chat_handled' });
+  }
+
+  // Couldn't map the input to any service. Re-show the menu with a
+  // tone-appropriate preface.
+  const isQuestion =
+    /\?$/.test(text) ||
+    /^(what|whats|which|how|hows|when|whens|where|wheres|why|whys|does|do|can|could|should|would|is|are|will|who|whos|tell)\b/i.test(text);
+  const preface = isQuestion
+    ? "good question — here's what I can help with directly:"
+    : "hmm, didn't catch that. Here's what I can help with:";
+  const buttons = buildMainMenuButtons();
+  if (buttons.length <= 3) {
+    await sendInteractiveButtons(user.phone_number, preface, buttons);
+  } else {
+    await sendInteractiveList(
+      user.phone_number,
+      preface,
+      'View Options',
+      [{ title: 'Options', rows: buttons.map((b) => ({ id: b.id, title: b.title })) }]
+    );
+  }
+  await logMessage(user.id, 'Re-showing service selection', 'assistant', 'interactive');
+  return STATES.SERVICE_SELECTION;
 }
 
 /**

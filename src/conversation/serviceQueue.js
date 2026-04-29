@@ -16,8 +16,16 @@ const { sendTextMessage } = require('../messages/sender');
 const { logMessage } = require('../db/conversations');
 const { logger } = require('../utils/logger');
 const { generateResponse } = require('../llm/provider');
+const { enabledServices } = require('../config/services');
 
-const QUEUEABLE = new Set(['svc_webdev', 'svc_adgen', 'svc_logo', 'svc_chatbot']);
+// QUEUEABLE is derived from the service catalogue so that re-enabling a
+// service via src/config/services.js automatically brings it into the
+// multi-service queue path. Only services with a menuButtonId AND an
+// active starter (currently webdev) qualify — everything else gets
+// handed off via [TRIGGER_HUMAN_HANDOFF] in the salesBot path.
+function buildQueueable() {
+  return new Set(enabledServices().map((s) => s.menuButtonId).filter(Boolean));
+}
 
 const SERVICE_LABELS = {
   svc_webdev: 'website',
@@ -77,8 +85,9 @@ Return ONLY valid JSON: {"services": ["svc_...", "svc_..."]} — may be empty ar
     if (!m) return [];
     const parsed = JSON.parse(m[0]);
     const arr = Array.isArray(parsed?.services) ? parsed.services : [];
+    const queueable = buildQueueable();
     const cleaned = arr
-      .filter((id) => typeof id === 'string' && QUEUEABLE.has(id))
+      .filter((id) => typeof id === 'string' && queueable.has(id))
       .filter((id, i, a) => a.indexOf(id) === i); // dedupe preserving order
     return cleaned.length >= 2 ? cleaned : [];
   } catch (err) {
@@ -117,7 +126,8 @@ function countServiceKeywordHits(raw) {
  */
 async function startServiceQueue(user, serviceIds) {
   if (!Array.isArray(serviceIds) || serviceIds.length === 0) return null;
-  const queueable = serviceIds.filter((id) => QUEUEABLE.has(id));
+  const enabled = buildQueueable();
+  const queueable = serviceIds.filter((id) => enabled.has(id));
   if (queueable.length === 0) return null;
 
   const [first, ...rest] = queueable;
@@ -238,6 +248,8 @@ module.exports = {
   clearServiceQueue,
   hasQueue,
   dropQueuedService,
-  QUEUEABLE_SERVICES: [...QUEUEABLE],
+  // Backwards-compat: callers reading this expect a snapshot of currently
+  // queueable services. Now derived from the catalogue at access time.
+  get QUEUEABLE_SERVICES() { return [...buildQueueable()]; },
   SERVICE_LABELS,
 };

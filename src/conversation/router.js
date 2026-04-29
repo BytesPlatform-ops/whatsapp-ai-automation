@@ -966,6 +966,41 @@ async function _routeMessage(message) {
     return;
   }
 
+  // ── Disabled-service redirect ───────────────────────────────────────────
+  // If the user is mid-flow on a service we've disabled (see
+  // src/config/services.js — currently SEO / chatbot / ad / logo /
+  // app / marketing flows are all off-chat), gracefully hand them off
+  // to a human on their next message rather than crashing or letting
+  // them keep typing into a dormant flow. Scheduling states (book a
+  // call with our team) intentionally aren't disabled — they're always
+  // available regardless of which build-services are enabled.
+  try {
+    const { isStateOnDisabledService, findServiceByState } = require('../config/services');
+    if (isStateOnDisabledService(user.state)) {
+      const svc = findServiceByState(user.state);
+      logger.info(
+        `[HANDOFF] Redirecting ${from} from disabled-service state ${user.state} (service=${svc?.key || 'unknown'}) to handoff`
+      );
+      const { handoffToHuman } = require('./handoff');
+      await handoffToHuman(user, {
+        serviceKey: svc?.key || null,
+        reason: 'in_flight_on_disabled_service',
+      });
+      // handoffToHuman flips humanTakeover on; subsequent messages from
+      // this user will short-circuit at the gate above. Reset state so
+      // an admin "resume bot" later starts fresh in SALES_CHAT instead
+      // of dropping the user back into the disabled flow.
+      try {
+        await updateUserState(user.id, STATES.SALES_CHAT);
+      } catch (err) {
+        logger.warn(`[HANDOFF] Failed to reset state to SALES_CHAT: ${err.message}`);
+      }
+      return;
+    }
+  } catch (err) {
+    logger.warn(`[HANDOFF] Disabled-service redirect threw: ${err.message}`);
+  }
+
   // Check for reset command
   if (text && text.toLowerCase().trim() === '/reset') {
     // Feedback: rapid-reset detector — if the user issued /reset

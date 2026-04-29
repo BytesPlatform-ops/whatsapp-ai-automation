@@ -541,6 +541,48 @@ async function sendAbuseNotification({ userPhone, userName, category, messageTex
   });
 }
 
+/**
+ * Notify admin that a user requested a service this chat doesn't currently
+ * handle and was handed off to a human (humanTakeover=true). Mirrors the
+ * sendAbuseNotification pattern — same email template style, but framed
+ * as a normal sales lead rather than an alert.
+ */
+async function sendHandoffNotification({ userPhone, userName, channel, userId, serviceKey, serviceLabel, reason }) {
+  const labelText = serviceLabel || serviceKey || 'unspecified service';
+  return sendEmail({
+    to: NOTIFY_EMAIL,
+    subject: `🤝 Human handoff requested (${labelText}) — ${userName || userPhone}`,
+    html: `
+      <div style="font-family:-apple-system,BlinkMacSystemFont,sans-serif;max-width:620px;margin:0 auto;padding:24px;color:#111827">
+        <div style="background:#eff6ff;border-left:4px solid #2563eb;padding:14px 18px;border-radius:4px;margin-bottom:20px">
+          <div style="font-size:12px;font-weight:700;color:#1e40af;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:6px">PIXIE · HUMAN HANDOFF</div>
+          <div style="font-size:17px;font-weight:700;color:#1e3a8a">${escape(labelText)}</div>
+        </div>
+        <p style="margin:0 0 14px;color:#374151">A user asked about a service this chat isn't currently handling. The bot has paused itself on this conversation (humanTakeover = on) and the user has been told a human will reach out. Pick it up from the admin dashboard.</p>
+        <table style="border-collapse:collapse;margin:8px 0 20px;width:100%">
+          <tr><td style="padding:6px 10px;font-weight:bold;background:#f9fafb;width:140px">User</td><td style="padding:6px 10px">${escape(userName || 'N/A')}</td></tr>
+          <tr><td style="padding:6px 10px;font-weight:bold;background:#f9fafb">Phone</td><td style="padding:6px 10px">${escape(userPhone || 'N/A')}</td></tr>
+          <tr><td style="padding:6px 10px;font-weight:bold;background:#f9fafb">Channel</td><td style="padding:6px 10px">${escape(channel || 'whatsapp')}</td></tr>
+          <tr><td style="padding:6px 10px;font-weight:bold;background:#f9fafb">Service requested</td><td style="padding:6px 10px;color:#1e3a8a;font-weight:bold">${escape(labelText)}</td></tr>
+          <tr><td style="padding:6px 10px;font-weight:bold;background:#f9fafb">Reason</td><td style="padding:6px 10px">${escape(reason || 'service_not_chat_handled')}</td></tr>
+          <tr><td style="padding:6px 10px;font-weight:bold;background:#f9fafb">User ID</td><td style="padding:6px 10px;font-family:monospace;font-size:12px">${escape(userId || 'N/A')}</td></tr>
+        </table>
+        <p style="margin:24px 0 0;font-size:13px;color:#6b7280">Toggle takeover off in the admin dashboard once you've followed up, or leave it on if you want the bot to stay paused on this thread.</p>
+      </div>
+    `,
+    text:
+      `PIXIE HUMAN HANDOFF\n` +
+      `${labelText}\n\n` +
+      `User: ${userName || 'N/A'}\n` +
+      `Phone: ${userPhone || 'N/A'}\n` +
+      `Channel: ${channel || 'whatsapp'}\n` +
+      `Service requested: ${labelText}\n` +
+      `Reason: ${reason || 'service_not_chat_handled'}\n` +
+      `User ID: ${userId || 'N/A'}\n\n` +
+      `The bot has paused itself (humanTakeover=on). Pick it up from the admin dashboard.`,
+  });
+}
+
 module.exports = {
   sendEmail,
   sendPaymentNotification,
@@ -549,4 +591,5 @@ module.exports = {
   sendMeetingLinkToLead,
   sendLeadNotification,
   sendAbuseNotification,
+  sendHandoffNotification,
 };
