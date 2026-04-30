@@ -84,6 +84,39 @@ async function getOverviewMetrics() {
 /**
  * Get all leads with last activity info.
  */
+// Supabase / PostgREST silently caps `.select(...)` to 1000 rows by
+// default. At scale that means a `count by user_id` over the entire
+// conversations table truncates and active users end up with an
+// inaccurate (often zero) message_count — the dashboard's conversation
+// list then filters those users out (`message_count === 0` is dropped),
+// even though they're sitting in the DB with full transcripts.
+//
+// This helper paginates a 'user_id'-scoped conversations query in
+// 1000-row chunks until exhausted, so counts and last-message lookups
+// see EVERY row. Cheap because each chunk is one indexed lookup.
+async function fetchAllConversationRows(userIds, columns, extraFilters = (q) => q) {
+  if (!userIds || userIds.length === 0) return [];
+  const PAGE = 1000;
+  const out = [];
+  let from = 0;
+  // Hard upper bound on iterations so a runaway query can't loop forever
+  // if Supabase ever changes pagination semantics.
+  const MAX_ITERATIONS = 200; // up to 200k rows
+  for (let i = 0; i < MAX_ITERATIONS; i++) {
+    let q = supabase
+      .from('conversations')
+      .select(columns)
+      .in('user_id', userIds);
+    q = extraFilters(q);
+    const { data, error } = await q.range(from, from + PAGE - 1);
+    if (error) throw error;
+    out.push(...(data || []));
+    if (!data || data.length < PAGE) break;
+    from += PAGE;
+  }
+  return out;
+}
+
 async function getLeads() {
   const { data: users, error } = await supabase
     .from('users')
@@ -99,11 +132,11 @@ async function getLeads() {
   //     reopen the window, so we must filter by role here to compute the
   //     green/red indicator correctly).
   const userIds = (users || []).map((u) => u.id);
-  const { data: lastMessages } = await supabase
-    .from('conversations')
-    .select('user_id, created_at, role')
-    .in('user_id', userIds.length > 0 ? userIds : ['none'])
-    .order('created_at', { ascending: false });
+  const lastMessages = await fetchAllConversationRows(
+    userIds,
+    'user_id, created_at, role',
+    (q) => q.order('created_at', { ascending: false })
+  );
 
   const lastMessageMap = {};
   const lastInboundMap = {};
@@ -130,11 +163,9 @@ async function getLeads() {
     };
   };
 
-  // Get message counts per user
-  const { data: messageCounts } = await supabase
-    .from('conversations')
-    .select('user_id')
-    .in('user_id', userIds.length > 0 ? userIds : ['none']);
+  // Get message counts per user — paginated so the silent 1000-row cap
+  // doesn't drop active users to message_count=0.
+  const messageCounts = await fetchAllConversationRows(userIds, 'user_id');
 
   const countMap = {};
   (messageCounts || []).forEach((m) => {
@@ -142,12 +173,12 @@ async function getLeads() {
   });
 
   // Flag users that have any manual (operator-sent) reply so the admin UI
-  // can highlight them in the conversations list.
-  const { data: manualMessages } = await supabase
-    .from('conversations')
-    .select('user_id')
-    .eq('message_type', 'manual')
-    .in('user_id', userIds.length > 0 ? userIds : ['none']);
+  // can highlight them in the conversations list. Same pagination guard.
+  const manualMessages = await fetchAllConversationRows(
+    userIds,
+    'user_id',
+    (q) => q.eq('message_type', 'manual')
+  );
 
   const manualMap = {};
   (manualMessages || []).forEach((m) => {
