@@ -24,6 +24,18 @@ function parseWebhookPayload(body) {
     const message = value.messages?.[0];
     if (!message) return null;
 
+    // Reactions (emoji taps on a previous message) arrive as type "reaction".
+    // They're not user input we should respond to — skip silently so the bot
+    // doesn't fall through to the "unsupported type" path and reply to taps.
+    if (message.type === 'reaction') {
+      logger.debug('Ignoring reaction message', {
+        from: message.from,
+        emoji: message.reaction?.emoji,
+        targetMessageId: message.reaction?.message_id,
+      });
+      return null;
+    }
+
     const contact = value.contacts?.[0];
 
     const parsed = {

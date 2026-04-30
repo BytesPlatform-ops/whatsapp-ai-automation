@@ -224,13 +224,13 @@ async function handleDocument(user, message) {
   await sendTextMessage(user.phone_number, msg);
 
   // Log the inbound (with the document filename in message_text so
-  // the admin conversation page shows it) and the ack.
+  // the admin conversation page shows it). The outbound ack is
+  // auto-logged by sendTextMessage above — don't double-log it.
   await logMessage(
     user.id,
     `[Document uploaded: ${doc.filename || doc.mediaId} (${doc.mimeType || 'unknown type'})${doc.caption ? ` — caption: "${doc.caption}"` : ''}]`,
     'user'
   ).catch(() => {});
-  await logMessage(user.id, msg, 'assistant').catch(() => {});
   logger.info(`[DOC] Received ${doc.filename || doc.mediaId} (${doc.mimeType}) from ${user.phone_number}`);
 
   return { handled: true };

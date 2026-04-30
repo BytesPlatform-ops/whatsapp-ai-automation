@@ -954,7 +954,16 @@ async function _routeMessage(message) {
       logger.error(`[LOCATION] Handler failed for ${from}: ${err.message}`);
     }
   }
-  if (!silencedForMedia && message.type === 'document') {
+  // Exception: when the user is at the logo-collection step, a document
+  // upload is almost always them sending the logo from the file picker
+  // (PNGs come through as type:document, mime:image/png). Skip the
+  // generic ack so the message reaches handleCollectLogo, which has its
+  // own LLM-driven classifier for what to do with the upload.
+  if (
+    !silencedForMedia &&
+    message.type === 'document' &&
+    user.state !== STATES.WEB_COLLECT_LOGO
+  ) {
     try {
       const { handleDocument } = require('./handlers/locationHandler');
       const result = await handleDocument(user, message);

@@ -2839,13 +2839,84 @@ async function showConfirmSummary(user, prefix = '') {
 async function handleCollectLogo(user, message) {
   const text = (message.text || '').trim();
 
-  // Image path — the sender captured the message with `type: 'image'` and
-  // a mediaId. downloadMedia pulls the bytes from WhatsApp's CDN.
-  // Take this branch first so a caption like "here's my logo" doesn't
-  // get misclassified as text intent.
-  const hasImage = message.type === 'image' && (message.mediaId || message.mediaUrl);
+  // Decide what kind of inbound this is. Anything with a mediaId is a
+  // candidate for the upload path — image (gallery), document (file
+  // picker, ships PNG/JPG as type:document with mime image/*), or even
+  // a stray audio/video (treated as not-a-logo by the LLM below).
+  let treatAsLogoUpload = false;
+  if (message.mediaId || message.mediaUrl) {
+    if (message.type === 'image') {
+      // Gallery uploads are unambiguous — straight to processing.
+      treatAsLogoUpload = true;
+    } else {
+      // Document / other media — ask the LLM to judge it from the
+      // metadata WhatsApp gave us. No regex, no mime-prefix check —
+      // the LLM gets the raw signals and decides.
+      try {
+        const resp = await generateResponse(
+          `The user is at the LOGO UPLOAD step of a website-builder flow. They were just asked: "Got a logo? Send it as an image (JPG or PNG) — I'll clean up the background automatically. Or reply *skip* and I'll use a text logo with your brand initial."
 
-  if (!hasImage) {
+They've now sent a media attachment with these metadata fields:
+- WhatsApp message type: ${message.type}
+- File name: ${message.filename || '(none)'}
+- MIME type: ${message.mimeType || '(unknown)'}
+- Caption: ${message.caption ? JSON.stringify(message.caption) : '(none)'}
+
+Decide if this attachment is the user's logo (i.e., something we should attempt to process as their brand logo) or not (e.g., a PDF résumé, a voice note, a contract, a video).
+
+Return ONLY one word:
+- logo  — if this looks like the user's logo image
+- other — if this is clearly something else`,
+          [{ role: 'user', content: '(media attachment)' }],
+          { userId: user.id, operation: 'logo_media_classify' }
+        );
+        const verdict = String(resp || '').trim().toLowerCase().split(/[\s\n]/)[0];
+        treatAsLogoUpload = verdict === 'logo';
+      } catch (err) {
+        logger.warn(`[WEBDEV-LOGO] media classifier threw: ${err.message}`);
+      }
+    }
+  }
+
+  if (!treatAsLogoUpload) {
+    // Media-but-not-a-logo path (e.g., user dropped a PDF résumé or a
+    // voice note here). The text-intent classifier below would see the
+    // parser placeholder ("[Document]" / "[Image]") and emit a generic
+    // "I didn't catch an image" reply, which is wrong — the user did
+    // send something. Have the LLM compose a contextual reply instead.
+    if (message.mediaId || message.mediaUrl) {
+      let reply = '';
+      try {
+        reply = await generateResponse(
+          `You are the assistant on a WhatsApp website-builder. The user is at the logo upload step. They were just asked to send a logo image (JPG/PNG) or reply "skip".
+
+They've now sent a non-logo attachment:
+- WhatsApp message type: ${message.type}
+- File name: ${message.filename || '(none)'}
+- MIME type: ${message.mimeType || '(unknown)'}
+- Caption: ${message.caption ? JSON.stringify(message.caption) : '(none)'}
+
+Write ONE short, friendly WhatsApp reply (1–2 sentences) that:
+- Acknowledges what they sent (referencing it specifically — file name or kind of file).
+- Tells them this isn't what's needed for the logo step.
+- Reminds them they can either send a logo image (JPG/PNG) or reply *skip* to use a text logo.
+
+Match the user's language if their caption hints at one, otherwise use English. Plain text only — no markdown headers, no emojis. Output ONLY the reply text.`,
+          [{ role: 'user', content: '(non-logo attachment)' }],
+          { userId: user.id, operation: 'logo_media_reject_reply' }
+        );
+        reply = String(reply || '').trim();
+      } catch (err) {
+        logger.warn(`[WEBDEV-LOGO] non-logo reply LLM threw: ${err.message}`);
+      }
+      if (!reply) {
+        reply = "That doesn't look like a logo image — send a JPG or PNG, or reply *skip* to use a text logo.";
+      }
+      await sendTextMessage(user.phone_number, reply);
+      await logMessage(user.id, 'Logo: non-logo attachment, replied via LLM', 'assistant');
+      return STATES.WEB_COLLECT_LOGO;
+    }
+
     // No image — classify the user's text into one of three intents:
     //   skip      — they don't have a logo / want to defer
     //   generate  — they want us to design one (we can't here)
