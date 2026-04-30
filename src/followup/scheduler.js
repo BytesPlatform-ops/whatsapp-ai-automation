@@ -22,6 +22,21 @@ const { handleConfirmedPayment } = require('../payments/postPayment');
 const { logger } = require('../utils/logger');
 const { STATES } = require('../conversation/states');
 
+// WhatsApp's customer-service window: free-form messages may only be
+// sent within 24 hours of the user's last INBOUND message. Outside
+// this window, Meta requires an approved Message Template; sending
+// free-form anyway risks quality-rating drops, throttling, and
+// eventual phone-number suspension. Until templates are wired up,
+// every bot-initiated WhatsApp outbound from a background worker
+// must gate on this window. Messenger / Instagram have similar 24h
+// rules (already handled by the channel skip in runFollowupCycle).
+const WA_24H_WINDOW_MS = 24 * 60 * 60 * 1000;
+function isWithinWaWindow(lastInboundIso) {
+  if (!lastInboundIso) return false;
+  const since = Date.now() - new Date(lastInboundIso).getTime();
+  return since < WA_24H_WINDOW_MS;
+}
+
 // Single-step ladder: at 22h unpaid, apply 20% discount to website portion.
 const FOLLOWUP_LADDER = [
   { step: 'followup_22h_discount', afterHours: 22 },
@@ -307,6 +322,41 @@ async function processUserFollowup(user) {
 
   if (msgErr || !lastMsg) return;
 
+  // ── 24-hour customer-service window gate (WhatsApp) ─────────────────
+  // Meta blocks free-form outbound past this window; Templates are
+  // required instead. We don't have approved Templates registered
+  // yet, so for now the only safe action past 24h is to silently mark
+  // the step complete and skip. Marking complete prevents the
+  // scheduler from re-trying every cycle for the rest of the user's
+  // lifetime and slowly burning quality rating.
+  //
+  // Channel-level note: Messenger / Instagram are already gated to
+  // skip processing entirely in runFollowupCycle (line ~266) for the
+  // same 24h-rule reason. This gate does the same for WhatsApp at the
+  // user level (since we DO want to process WhatsApp users — most
+  // active ones are inside the window).
+  const channel = user.channel || 'whatsapp';
+  if (channel === 'whatsapp' && !isWithinWaWindow(lastMsg.created_at)) {
+    const completedSteps = metadata.followupSteps || [];
+    const seoCompleted = metadata.seoFollowupSteps || [];
+    const isSeoLead = metadata.seoAuditTriggered && !metadata.domainChoice;
+    const completed = isSeoLead ? seoCompleted : completedSteps;
+    const ladder = isSeoLead ? SEO_FOLLOWUP_LADDER : FOLLOWUP_LADDER;
+    // If there are still un-completed steps, mark them all complete so
+    // we don't keep re-checking this user every cycle.
+    if (completed.length < ladder.length) {
+      const allSteps = ladder.map((r) => r.step);
+      const patch = isSeoLead
+        ? { seoFollowupSteps: allSteps }
+        : { followupSteps: allSteps };
+      await updateUserMetadata(user.id, patch);
+      logger.info(
+        `[FOLLOWUP] Skipping ${user.phone_number} — past 24h WhatsApp window (last inbound: ${lastMsg.created_at}). All remaining steps marked complete.`
+      );
+    }
+    return;
+  }
+
   // SEO-audit branch: a user who ran an audit but never entered the website
   // flow (no domain choice yet, no pending website payment) gets the SEO
   // ladder. `domainChoice` is set as soon as they answer the WEB_DOMAIN_CHOICE
@@ -472,13 +522,41 @@ async function runMeetingReminders() {
           const sentReminders = user?.metadata?.meetingRemindersSent || [];
           if (sentReminders.includes(meeting.id)) continue;
 
+          // 24h window gate: meeting reminders are transactional, but
+          // Meta still requires a utility-category Template past the
+          // customer-service window. Without an approved template
+          // registered, sending free-form is a policy violation. Look
+          // up the user's most recent inbound and skip if we're past
+          // the window. Mark the reminder as "sent" so we don't retry
+          // every cycle.
+          const channel = meeting.channel || 'whatsapp';
+          if (channel === 'whatsapp') {
+            const { data: lastIn } = await supabase
+              .from('conversations')
+              .select('created_at')
+              .eq('user_id', meeting.user_id)
+              .eq('role', 'user')
+              .order('created_at', { ascending: false })
+              .limit(1)
+              .single();
+            if (!lastIn || !isWithinWaWindow(lastIn.created_at)) {
+              await updateUserMetadata(meeting.user_id, {
+                meetingRemindersSent: [...sentReminders, meeting.id],
+              });
+              logger.info(
+                `[REMINDER] Skipping meeting reminder for ${meeting.phone_number} — past 24h WhatsApp window. Marked sent so we don't retry.`
+              );
+              continue;
+            }
+          }
+
           // Send the reminder
           const displayTime = meeting.preferred_time;
           const displayDate = meeting.preferred_date;
           const topic = meeting.topic || 'your upcoming call';
 
           await runWithContext(
-            { channel: meeting.channel || 'whatsapp', phoneNumberId: user?.via_phone_number_id || null },
+            { channel, phoneNumberId: user?.via_phone_number_id || null },
             () => sendTextMessage(
               meeting.phone_number,
               `Hey${meeting.name ? ' ' + meeting.name : ''}! Just a quick reminder - you have a call about *${topic}* in about 30 minutes (${displayTime}, ${displayDate}). Talk soon!`
