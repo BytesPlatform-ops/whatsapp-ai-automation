@@ -961,6 +961,7 @@ function getFooter(c) {
   return `<footer class="foot"><div class="ctn">
     <div class="foot-grid">
       <div>
+        ${c.logoUrl ? `<img src="${esc(c.logoUrl)}" alt="${esc(c.businessName || '')}" style="height:48px;max-height:48px;width:auto;margin-bottom:14px;object-fit:contain;display:block">` : ''}
         <p class="foot-brand">${esc(c.businessName)}${brokerage}</p>
         <p style="margin-top:18px;color:rgba(250,247,242,.7);max-width:320px">${esc(c.footerTagline || 'Helping families find homes that grow with them.')}</p>
         ${c.licenseNumber ? `<span class="foot-license">License #${esc(c.licenseNumber)}</span>` : ''}

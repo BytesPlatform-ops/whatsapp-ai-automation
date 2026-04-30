@@ -51,6 +51,16 @@ async function parseWeeklyHours(text) {
     return { hours: { ...DEFAULT_WEEKLY_HOURS }, usedDefault: true };
   }
 
+  // Guard against non-answer inputs leaking past the intent classifier.
+  // Pure punctuation ("?", "??", "...") and very-short tokens can't be
+  // valid hours — fall back to the default rather than burning an LLM
+  // call AND risking the model returning an all-empty schedule that
+  // validates clean and silently writes "everything closed" to the site.
+  if (input.length < 4 || /^[?!.,;\s]+$/.test(input)) {
+    logger.warn(`[HOURS] Rejecting non-answer input, using default. Input: "${input.slice(0, 40)}"`);
+    return { hours: { ...DEFAULT_WEEKLY_HOURS }, usedDefault: true };
+  }
+
   const systemPrompt =
     'You convert a salon\'s opening-hours description into strict JSON. Output ONLY the JSON object, no prose. ' +
     'Shape: {"mon":[{"open":"HH:MM","close":"HH:MM"}], ...} with keys mon,tue,wed,thu,fri,sat,sun. ' +
@@ -64,7 +74,19 @@ async function parseWeeklyHours(text) {
     const jsonMatch = response.match(/```(?:json)?\s*([\s\S]*?)\s*```/) || [null, response];
     const parsed = JSON.parse(jsonMatch[1]);
     const clean = validateHours(parsed);
-    if (clean) return { hours: clean, usedDefault: false };
+    if (clean) {
+      // An all-empty schedule means the LLM couldn't extract any time
+      // information from the input (typical when the user sent something
+      // off-topic or unparseable). Treat as a parse failure and fall back
+      // to the default — claiming "Got it: every day closed" would be a
+      // silent data-corruption bug.
+      const allEmpty = DAYS.every((d) => clean[d].length === 0);
+      if (allEmpty) {
+        logger.warn(`[HOURS] LLM returned all-days-closed for input — likely a non-answer, using default. Input: "${input.slice(0, 80)}"`);
+        return { hours: { ...DEFAULT_WEEKLY_HOURS }, usedDefault: true };
+      }
+      return { hours: clean, usedDefault: false };
+    }
     logger.warn('[HOURS] Validation failed for LLM output, using default');
   } catch (err) {
     logger.warn(`[HOURS] Parse failed: ${err.message}`);

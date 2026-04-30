@@ -115,7 +115,7 @@ function privacyPageHtml() {
 <p>We use a small number of sub-processors to operate the service. None of them sell your data. Current list:</p>
 <ul>
   <li><strong>Meta Platforms</strong> — WhatsApp / Messenger / Instagram messaging infrastructure.</li>
-  <li><strong>Anthropic</strong> and <strong>OpenAI</strong> — to generate replies. We send only the conversation context needed for the current reply; no data is retained for training under the API terms.</li>
+  <li><strong>OpenAI</strong> — to generate replies. We send only the conversation context needed for the current reply; no data is retained for training under the API terms.</li>
   <li><strong>Supabase</strong> — primary database for conversations, payments, generated sites.</li>
   <li><strong>Netlify</strong> — hosting for generated websites.</li>
   <li><strong>Stripe</strong> — payment processing. They are an independent controller for card data; see <a href="https://stripe.com/privacy">stripe.com/privacy</a>.</li>

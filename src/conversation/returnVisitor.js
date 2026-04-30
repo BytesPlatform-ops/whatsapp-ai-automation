@@ -132,7 +132,7 @@ Return just the greeting text. No quotes, no preamble.`;
     const response = await generateResponse(
       prompt,
       [{ role: 'user', content: 'Write the welcome-back greeting now.' }],
-      { userId: user.id, operation: 'return_visitor_greet', timeoutMs: 12_000 }
+      { userId: user.id, operation: 'return_visitor_greet', timeoutMs: 12_000, model: 'gpt-5.4-nano' }
     );
     const text = String(response || '').trim();
     return text || null;

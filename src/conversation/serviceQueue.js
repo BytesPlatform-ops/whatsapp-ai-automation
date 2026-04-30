@@ -79,7 +79,7 @@ Return ONLY valid JSON: {"services": ["svc_...", "svc_..."]} — may be empty ar
     const resp = await generateResponse(
       prompt,
       [{ role: 'user', content: 'Classify the services now.' }],
-      { userId, operation: 'service_queue_detect', timeoutMs: 10_000 }
+      { userId, operation: 'service_queue_detect', timeoutMs: 10_000, model: 'gpt-5.4-nano' }
     );
     const m = String(resp || '').match(/\{[\s\S]*?\}/);
     if (!m) return [];

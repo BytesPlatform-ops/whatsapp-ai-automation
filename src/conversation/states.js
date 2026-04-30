@@ -28,7 +28,6 @@ const STATES = {
   WEB_COLLECT_CONTACT: 'WEB_COLLECT_CONTACT',
   // Salon-specific collection (only entered when industry matches salon/beauty/barber/spa/nail)
   SALON_BOOKING_TOOL: 'SALON_BOOKING_TOOL',
-  SALON_INSTAGRAM: 'SALON_INSTAGRAM',
   SALON_HOURS: 'SALON_HOURS',
   SALON_SERVICE_DURATIONS: 'SALON_SERVICE_DURATIONS',
   // Domain choice happens BEFORE preview now — combined Stripe link at generation.

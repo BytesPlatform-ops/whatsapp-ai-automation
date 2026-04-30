@@ -29,7 +29,6 @@ const UNDOABLE_STATES = new Set([
   STATES.WEB_COLLECT_SERVICES,
   STATES.WEB_COLLECT_CONTACT,
   STATES.SALON_BOOKING_TOOL,
-  STATES.SALON_INSTAGRAM,
   STATES.SALON_HOURS,
   STATES.SALON_SERVICE_DURATIONS,
 ]);
@@ -120,7 +119,6 @@ function fieldLabelForState(state) {
     case STATES.WEB_COLLECT_SERVICES: return 'your services';
     case STATES.WEB_COLLECT_CONTACT: return 'your contact info';
     case STATES.SALON_BOOKING_TOOL: return 'your booking setup';
-    case STATES.SALON_INSTAGRAM: return 'your Instagram handle';
     case STATES.SALON_HOURS: return 'your opening hours';
     case STATES.SALON_SERVICE_DURATIONS: return 'your service durations & prices';
     default: return null;
@@ -182,8 +180,6 @@ function storedAnswerForState(state, metadata) {
       if (wd.bookingMode === 'native') return 'built-in booking system';
       return null;
     }
-    case STATES.SALON_INSTAGRAM:
-      return wd.instagramHandle ? `@${wd.instagramHandle}` : null;
     case STATES.SALON_HOURS:
       return formatWeeklyHoursShort(wd.weeklyHours);
     case STATES.SALON_SERVICE_DURATIONS: {

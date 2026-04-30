@@ -7,7 +7,7 @@ const { recordUsage } = require('../db/llmUsage');
 // gpt-5-nano is the cheapest tier ($0.05 / $0.40 per M tokens) and is
 // plenty for boolean-only intent classification. Using a heavier model
 // here would burn budget for no accuracy gain.
-const MODEL = 'gpt-5-nano';
+const MODEL = 'gpt-5.4-nano';
 
 // Intent checks fire in tight clusters (a single inbound WhatsApp message
 // often runs 5+ checks against the same `text`). Caching by text +
@@ -117,7 +117,7 @@ ${intentKeys.map((k) => `  "${k}": boolean`).join(',\n')}`;
           { role: 'user', content: userPrompt },
         ],
         max_completion_tokens: 256,
-        reasoning_effort: 'minimal',
+        reasoning_effort: 'none',
         response_format: { type: 'json_object' },
       }),
       new Promise((_, reject) =>

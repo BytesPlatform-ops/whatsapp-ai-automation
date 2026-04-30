@@ -146,7 +146,6 @@ function nextStepHint(state, user) {
     [STATES.WEB_COLLECT_LOGO]: 'next step: ask for a logo',
     [STATES.WEB_COLLECT_CONTACT]: 'next step: ask for contact details',
     [STATES.SALON_BOOKING_TOOL]: 'next step: ask about their salon booking tool',
-    [STATES.SALON_INSTAGRAM]: 'next step: ask for their Instagram handle',
     [STATES.SALON_HOURS]: 'next step: ask for business hours',
     [STATES.SALON_SERVICE_DURATIONS]: 'next step: ask for service durations',
     [STATES.WEB_CONFIRM]: 'next step: confirm and generate the site',
@@ -239,7 +238,7 @@ Return just the recap text. No quotes, no preamble.`;
     const response = await generateResponse(
       prompt,
       [{ role: 'user', content: 'Write the welcome-back recap now.' }],
-      { userId: user.id, operation: 'session_recap', timeoutMs: 15_000 }
+      { userId: user.id, operation: 'session_recap', timeoutMs: 15_000, model: 'gpt-5.4-nano' }
     );
     const text = String(response || '').trim();
     return text || null;

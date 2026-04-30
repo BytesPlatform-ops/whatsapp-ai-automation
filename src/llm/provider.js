@@ -1,21 +1,21 @@
-const { env } = require('../config/env');
-const claude = require('./claude');
 const openai = require('./openai');
 const { logger } = require('../utils/logger');
 const { costOf } = require('./pricing');
 const { recordUsage } = require('../db/llmUsage');
 
 /**
- * Generate a chat response using the configured LLM provider.
+ * Generate a chat response via OpenAI.
  *
  * @param {string} systemPrompt
  * @param {Array<{role: string, content: string}>} messages
- * @param {{ userId?: string, operation?: string }} [options]
+ * @param {{ userId?: string, operation?: string, model?: string, timeoutMs?: number }} [options]
  *   When userId is supplied, token usage + cost is persisted to the
  *   `llm_usage` table so the admin dashboard can show a per-conversation
  *   pricing breakdown. `operation` should be a short tag describing what
  *   this call was for ('webdev_extract', 'website_content', 'sales_chat',
- *   etc.) — anything unset lands in the "unknown" bucket.
+ *   etc.) — anything unset lands in the "unknown" bucket. `model` overrides
+ *   the default reply model — helper/classifier call sites pass
+ *   'gpt-5.4-nano' to use the cheaper variant.
  * @returns {Promise<string>} The generated response text.
  */
 // Default per-call timeout for LLM generations. Without this the call can
@@ -26,8 +26,6 @@ const { recordUsage } = require('../db/llmUsage');
 const DEFAULT_LLM_TIMEOUT_MS = 90_000;
 
 async function generateResponse(systemPrompt, messages, options = {}) {
-  const provider = env.llm.provider;
-  const impl = provider === 'openai' ? openai : claude;
   const start = Date.now();
 
   // Replace {{WEBSITE_PRICE}} / {{REVISION_PRICE}} / etc. in the prompt
@@ -44,7 +42,7 @@ async function generateResponse(systemPrompt, messages, options = {}) {
 
   const timeoutMs = options.timeoutMs || DEFAULT_LLM_TIMEOUT_MS;
   const result = await Promise.race([
-    impl.generateResponseWithUsage(renderedSystemPrompt, messages),
+    openai.generateResponseWithUsage(renderedSystemPrompt, messages, { model: options.model }),
     new Promise((_, reject) =>
       setTimeout(
         () => reject(new Error(`LLM call timed out after ${timeoutMs}ms (operation=${options.operation || 'unknown'})`)),
@@ -59,11 +57,10 @@ async function generateResponse(systemPrompt, messages, options = {}) {
     inputTokens = 0,
     outputTokens = 0,
     cachedInputTokens = 0,
-    cacheWriteTokens = 0,
   } = result;
 
   const durationMs = Date.now() - start;
-  const cost_usd = costOf(model, inputTokens, outputTokens, cachedInputTokens, cacheWriteTokens);
+  const cost_usd = costOf(model, inputTokens, outputTokens, cachedInputTokens);
 
   // Fire-and-forget — recordUsage swallows its own errors.
   recordUsage({
@@ -74,7 +71,7 @@ async function generateResponse(systemPrompt, messages, options = {}) {
     inputTokens,
     outputTokens,
     cachedInputTokens,
-    cacheWriteTokens,
+    cacheWriteTokens: 0,
     costUsd: cost_usd,
     durationMs,
   });
@@ -84,7 +81,7 @@ async function generateResponse(systemPrompt, messages, options = {}) {
 
 /**
  * Generate an embedding vector for text.
- * Always uses OpenAI (text-embedding-3-small) regardless of chat provider.
+ * Always uses OpenAI (text-embedding-3-small).
  * @param {string} text - Text to embed
  * @returns {Promise<number[]>} Embedding vector (1536 dimensions)
  */

@@ -31,7 +31,11 @@
 
 const { logger } = require('../utils/logger');
 
-const DEBOUNCE_MS = 1000;
+// 500ms still solves the burst-typing problem (users typing "hi" / "actually" /
+// "and X" in rapid succession get merged into one turn) while shaving 0.5s off
+// every text reply. Original value was 1000ms; lowered after profiling showed
+// the debounce was the single largest fixed cost in the reply path.
+const DEBOUNCE_MS = 500;
 const MAX_BUFFER = 10;
 
 // Map<userKey, { pending, resolvers, timer, flushing }>

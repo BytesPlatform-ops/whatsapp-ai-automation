@@ -183,6 +183,22 @@ async function smartAdvance(user, message, ackPrefix = null) {
 
   // All required fields filled? Send the confirmation summary.
   if (nextState === STATES.WEB_CONFIRM) {
+    // Salon detour: nextMissingWebDevState only checks the generic
+    // ladder (name / email / industry / services / contact / logo) and
+    // has no awareness of salon-specific fields (bookingMode, weeklyHours,
+    // service durations + prices). For salon businesses, the salon
+    // sub-flow MUST run before confirm — without this gate, a dense
+    // first-message extraction (businessName + industry + services +
+    // contact all in one go) skips straight to "got everything" and
+    // ships a salon site with no hours and no booking config. Detection
+    // falls back to the businessName when the LLM-extracted industry
+    // doesn't match the salon regex (e.g. extracted as "Personal Care"
+    // or "Manicure & Hair Cutting").
+    const looksLikeSalon =
+      isSalonIndustry(merged.industry) || isSalonIndustry(merged.businessName);
+    if (looksLikeSalon && !merged.bookingMode) {
+      return startSalonFlow(user);
+    }
     return await sendConfirmation(user, merged);
   }
 
@@ -357,7 +373,6 @@ const SUMMARY_REQUEST_STATES = new Set([
   STATES.WEB_COLLECT_LISTINGS_DETAILS,
   STATES.WEB_COLLECT_LISTINGS_PHOTOS,
   STATES.SALON_BOOKING_TOOL,
-  STATES.SALON_INSTAGRAM,
   STATES.SALON_HOURS,
   STATES.SALON_SERVICE_DURATIONS,
   STATES.WEB_COLLECT_CONTACT,
@@ -420,8 +435,6 @@ async function handleWebDev(user, message) {
       return handleCollectLogo(user, message);
     case STATES.SALON_BOOKING_TOOL:
       return handleSalonBookingTool(user, message);
-    case STATES.SALON_INSTAGRAM:
-      return handleSalonInstagram(user, message);
     case STATES.SALON_HOURS:
       return handleSalonHours(user, message);
     case STATES.SALON_SERVICE_DURATIONS:
@@ -982,20 +995,6 @@ function domainExampleFor(businessName) {
   return `${slug}.com`;
 }
 
-// Turn "Fresh Cuts" into "@freshcuts" for the Instagram-handle prompt example.
-// Uses the same slugification as domainExampleFor so the two stay consistent.
-// Falls back to "@yourhandle" when the name doesn't yield a usable slug.
-function instagramHandleExampleFor(businessName) {
-  const slug = String(businessName || '')
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase()
-    .replace(/&/g, ' and ')
-    .replace(/[^a-z0-9]+/g, '');
-  if (!slug || slug.length < 2) return '@yourhandle';
-  // Instagram caps at 30 characters for usernames.
-  return `@${slug.slice(0, 30)}`;
-}
 
 async function handleCollectServices(user, message) {
   const servicesText = (message.text || '').trim();
@@ -2012,104 +2011,82 @@ async function finishSalonFlow(user) {
 async function handleSalonBookingTool(user, message) {
   const text = (message.text || '').trim();
   const wd = { ...(user.metadata?.websiteData || {}) };
-  const urlMatch = text.match(/https?:\/\/\S+/i);
 
-  const igExample = instagramHandleExampleFor(wd.businessName);
-
-  if (urlMatch) {
-    wd.bookingMode = 'embed';
-    wd.bookingUrl = urlMatch[0].replace(/[)\]]+$/, '');
-    await updateUserMetadata(user.id, { websiteData: wd });
-    await logMessage(user.id, `Booking mode: embed (${wd.bookingUrl})`, 'assistant');
-    const msg = `Got it, we'll embed *${wd.bookingUrl}* on your booking page.\n\nWhat's your Instagram handle? (e.g. ${igExample}). Just skip if you don't have one.`;
-    await sendTextMessage(user.phone_number, await localize(msg, user, text));
-    return STATES.SALON_INSTAGRAM;
-  }
-
-  // Any form of "no / I don't have one / whatever / idk / haven't got one
-  // yet / I have no idea about this" lands on the built-in booking system.
-  // Regex handles the common phrasings; LLM covers natural prose the regex
-  // inevitably misses. Without the fallback the user stalls in a re-prompt
-  // loop on anything outside the keyword list.
-  const bookingQuestion =
-    'Do you already use a booking tool like Fresha, Booksy, Vagaro, or Calendly for appointments?';
-  if (await classifyDelegation(text, bookingQuestion)) {
-    wd.bookingMode = 'native';
-    await updateUserMetadata(user.id, { websiteData: wd });
-    await logMessage(user.id, 'Booking mode: native', 'assistant');
-    const msg = `Perfect, we'll build you a booking system. What's your Instagram handle? (e.g. ${igExample}). Just skip if you don't have one.`;
-    await sendTextMessage(user.phone_number, await localize(msg, user, text));
-    return STATES.SALON_INSTAGRAM;
-  }
-
-  await sendTextMessage(
-    user.phone_number,
-    await localize(
-      'Please either paste your booking tool link (Fresha/Booksy/Vagaro/etc.) or type *"no"* and we\'ll build one for you.',
-      user,
-      text
-    )
-  );
-  return STATES.SALON_BOOKING_TOOL;
-}
-
-async function handleSalonInstagram(user, message) {
-  const text = (message.text || '').trim();
-  const wd = { ...(user.metadata?.websiteData || {}) };
-
-  // Detect explicit skip BEFORE the handle parser. Without this, a bare
-  // "skip" / "Skip" / "none" / "no" matches the bare-handle regex below
-  // and gets saved verbatim as the Instagram handle, which then links
-  // the Follow button on the live site to instagram.com/Skip. Match
-  // case-insensitive — a capitalised "Skip" was the original report.
-  const skipWords = /^(skip|no|none|nah|nope|na|n\/a|later)$/i;
-  let isExplicitSkip = skipWords.test(text);
-  // LLM fallback for natural phrasings ("skip it", "i don't have one",
-  // "no instagram", "rehne do", any other language) without us trying
-  // to enumerate them. Gated on length so we don't fire LLM calls on
-  // long handle URLs.
-  if (!isExplicitSkip && text && text.length <= 60) {
-    try {
-      isExplicitSkip = await classifyDelegation(
-        text,
-        "What's your Instagram handle? (or reply skip)"
-      );
-    } catch (err) {
-      logger.warn(`[WEBDEV-INSTAGRAM] classifyDelegation threw: ${err.message}`);
-    }
-  }
-
-  // Only accept an obvious handle shape: an instagram.com URL, a @-prefixed
-  // token (either standalone or embedded in a sentence like "han, X kar do
-  // @asnhbukharu"), or a single bare handle-shaped word. Anything else
-  // (delegation, prose, "i dont have one") is treated as skip.
-  const urlHandle = !isExplicitSkip ? text.match(/instagram\.com\/([\w.]+)/i) : null;
-  const inlineAt = !isExplicitSkip ? text.match(/@([\w.]{3,30})\b/) : null;
-  let candidate = null;
-  if (urlHandle) {
-    candidate = urlHandle[1];
-  } else if (inlineAt) {
-    candidate = inlineAt[1];
-  } else if (!isExplicitSkip && /^[\w.]{3,30}$/.test(text)) {
-    candidate = text;
-  }
-  if (candidate && /^[\w.]{3,30}$/.test(candidate)) {
-    wd.instagramHandle = candidate;
-  }
-  await updateUserMetadata(user.id, { websiteData: wd });
-  await logMessage(user.id, `Instagram: ${wd.instagramHandle || '(skipped)'}`, 'assistant');
-
-  // Announce what got saved so the user knows we moved on.
-  const ack = wd.instagramHandle
-    ? `Got it — @${wd.instagramHandle}.`
-    : `No worries, no Instagram link on the site.`;
-  await sendTextMessage(user.phone_number, await localize(ack, user, text));
-
-  if (wd.bookingMode === 'native') {
+  if (!text) {
     await sendTextMessage(
       user.phone_number,
       await localize(
-        'What are your opening hours? A quick line is fine — for example: *"Tue-Sat 9-7, Sun-Mon closed"*.\n\nOr just tell me *default* for standard salon hours (Tue-Sat 9-7).',
+        'Do you already use a booking tool (Fresha, Booksy, Vagaro, Calendly, etc.)? Paste the link if yes, or just type *"no"* and we\'ll build one for you.',
+        user
+      )
+    );
+    return STATES.SALON_BOOKING_TOOL;
+  }
+
+  // One structured LLM call covers every phrasing in any language:
+  //   • a pasted URL → embed mode
+  //   • "no" / "i don't have one" / "build me one" / "rehne do" → native mode
+  //   • ambiguous prose / "maybe" / unrelated text → unclear → re-ask
+  // Modeled after handleCollectAreas — single call, JSON output, conservative
+  // re-ask on uncertainty rather than pattern-matching keyword lists.
+  let intent = 'unclear';
+  let bookingUrl = null;
+  let unclearReason = '';
+
+  try {
+    const extracted = await generateResponse(
+      `Classify a salon owner's reply about whether they already use an online booking tool. They may write in ANY language (English, Roman Urdu, Urdu, Hindi, Spanish, Arabic, etc.).
+
+Return ONLY JSON in this exact shape:
+{"intent": "embed" | "native" | "unclear", "url": "<full https://… URL or null>", "reason": "<short>"}
+
+Decision tree:
+1. **intent: "embed"** when the user IS providing an existing booking tool — they paste or mention a URL (Fresha/Booksy/Vagaro/Calendly/Square/Acuity/Setmore/Schedulicity/Mindbody/etc.), or name one of those services with enough detail to embed (the URL takes priority — only return "embed" with url:null if they clearly named a service but didn't paste the link, in which case ask them in the reason). Pull the cleanest http(s):// URL from the message into "url".
+2. **intent: "native"** when the user wants the built-in booking system: any "no" / "I don't have one" / "build me one" / "we don't use any" / "abhi nahi" / "rehne do" / "no thanks" / "skip" / delegation phrases / "whatever you suggest" / "you decide" — including when they explicitly mention NOT using the named services ("I don't use calendly or fresha", "no booking tool yet").
+3. **intent: "unclear"** ONLY when the message is irrelevant (smalltalk, off-topic, a question back, gibberish) and you genuinely cannot tell what they want.
+
+When in doubt between "embed" and "native", lean "native" (the user can always paste a link later). Never guess a URL — set url:null unless one is literally present in the text.`,
+      [{ role: 'user', content: text }],
+      { userId: user.id, operation: 'salon_booking_extract', model: 'gpt-5.4-nano', timeoutMs: 8_000 }
+    );
+    const m = String(extracted || '').match(/\{[\s\S]*\}/);
+    if (m) {
+      const parsed = JSON.parse(m[0]);
+      if (parsed.intent === 'embed' || parsed.intent === 'native' || parsed.intent === 'unclear') {
+        intent = parsed.intent;
+      }
+      if (parsed.url && /^https?:\/\//i.test(String(parsed.url))) {
+        // Trim trailing punctuation that often sneaks in from prose context.
+        bookingUrl = String(parsed.url).trim().replace(/[)\].,;:!?]+$/, '');
+      }
+      unclearReason = String(parsed.reason || '').slice(0, 200);
+    }
+  } catch (err) {
+    logger.warn(`[BOOKING] LLM extraction failed: ${err.message} — re-asking`);
+    intent = 'unclear';
+  }
+
+  if (intent === 'embed' && bookingUrl) {
+    wd.bookingMode = 'embed';
+    wd.bookingUrl = bookingUrl;
+    await updateUserMetadata(user.id, { websiteData: wd });
+    await logMessage(user.id, `Booking mode: embed (${wd.bookingUrl})`, 'assistant');
+    await sendTextMessage(
+      user.phone_number,
+      await localize(`Got it, we'll embed *${wd.bookingUrl}* on your booking page.`, user, text)
+    );
+    // Embed mode skips hours / durations — the booking widget owns scheduling.
+    return finishSalonFlow(user);
+  }
+
+  if (intent === 'native') {
+    wd.bookingMode = 'native';
+    await updateUserMetadata(user.id, { websiteData: wd });
+    await logMessage(user.id, 'Booking mode: native', 'assistant');
+    await sendTextMessage(
+      user.phone_number,
+      await localize(
+        `Perfect, we'll build you a booking system.\n\nWhat are your opening hours? A quick line is fine — for example: *"Tue-Sat 9-7, Sun-Mon closed"*.\n\nOr just reply *default* for standard salon hours (Tue-Sat 9-7).`,
         user,
         text
       )
@@ -2117,8 +2094,20 @@ async function handleSalonInstagram(user, message) {
     return STATES.SALON_HOURS;
   }
 
-  // Embed mode — skip hours/durations and finish the salon sub-flow.
-  return finishSalonFlow(user);
+  // Unclear (or "embed" without a usable URL) — re-ask, naming what we
+  // need explicitly so the user knows how to answer.
+  if (unclearReason) {
+    logger.info(`[BOOKING] Re-asking — intent=${intent} reason="${unclearReason}" raw="${text.slice(0, 80)}"`);
+  }
+  await sendTextMessage(
+    user.phone_number,
+    await localize(
+      'Got you — just need a clearer answer. Either *paste your booking tool link* (Fresha / Booksy / Vagaro / Calendly / etc.) or type *"no"* and we\'ll build one in.',
+      user,
+      text
+    )
+  );
+  return STATES.SALON_BOOKING_TOOL;
 }
 
 async function handleSalonHours(user, message) {
@@ -2178,69 +2167,83 @@ async function handleSalonHours(user, message) {
   return STATES.SALON_SERVICE_DURATIONS;
 }
 
-// Extract optional currency-prefixed or suffixed prices from the remainder of
-// a parsed service chunk. Accepts €25, $30, £40, ₹500, "25 euro", "from €20".
-const PRICE_RE = /(from\s*)?([€$£₹]\s*\d{1,5}(?:\.\d{1,2})?|\d{1,5}(?:\.\d{1,2})?\s*(?:eur|usd|gbp|inr|aed|euros?|dollars?|pounds?|rupees?))/i;
+/**
+ * LLM-driven extraction of service durations + prices from free text.
+ * Returns [{name, durationMinutes, priceText}] aligned to servicesList.
+ *
+ * Replaces the previous regex-based implementation that brittle-split on
+ * commas, ran a price regex over each chunk, and lossy-matched service
+ * names by substring. The LLM handles every phrasing — "Haircut: 30 mins
+ * for 25 bucks", "manicure 30m $20, pedicure 45 mins thirty dollars",
+ * "all of them are 30 minutes" — without us trying to enumerate them.
+ *
+ * On any failure (LLM error, malformed JSON, network), falls back to the
+ * standard default of 30min/no-price per service so the flow never stalls.
+ */
+async function parseServiceDurations(text, servicesList, userId) {
+  const services = Array.isArray(servicesList) ? servicesList : [];
+  const fallback = () => services.map((s) => ({ name: s, durationMinutes: 30, priceText: '' }));
+  if (!services.length) return [];
+  if (!text || !String(text).trim()) return fallback();
 
-function parseServiceDurations(text, servicesList) {
-  // Split the message into chunks by comma or newline and try to extract
-  // duration + price per chunk. Each chunk is matched back to a service name
-  // by lowercased exact/partial match.
-  const chunks = String(text || '')
-    .split(/[,;\n]+|\s+\|\s+/)
-    .map((c) => c.trim())
-    .filter(Boolean);
+  const systemPrompt =
+    `You extract per-service duration (in minutes) and price (as the user wrote it, including currency) from a salon owner's free-text reply.\n\n` +
+    `The salon offers these services in this exact order: ${JSON.stringify(services)}\n\n` +
+    `Return ONLY a JSON object: {"services": [{"name": "<exact name from list>", "durationMinutes": <int>, "priceText": "<currency+amount or empty string>"}, ...]}\n\n` +
+    `Rules:\n` +
+    `- Always return one entry per service in the SAME ORDER as the input list.\n` +
+    `- name MUST exactly match the input service name — do not rename, pluralize, or reorder.\n` +
+    `- durationMinutes must be a positive integer 1-600. If the user didn't specify a duration for a service, use 30 (the default).\n` +
+    `- priceText keeps the user's original currency symbol and amount (e.g. "$25", "€30", "Rs 500", "25 euros"). Empty string if no price was stated for that service.\n` +
+    `- If the user says "all 30min no price" / "default" / "same for all" / a bare number, apply that uniformly across every service.\n` +
+    `- Accept any language and currency.\n` +
+    `- Never invent durations or prices the user didn't state — emit defaults instead.`;
 
-  const byName = {}; // { loweredName: { duration, price } }
-
-  for (const chunk of chunks) {
-    const durMatch = chunk.match(/(\d{1,3})\s*(?:mins?|minutes|m)\b/i);
-    const priceMatch = chunk.match(PRICE_RE);
-
-    // The "name" is whatever precedes the duration or, failing that, the price.
-    let name = chunk;
-    const firstMeta = [durMatch?.index, priceMatch?.index].filter((x) => typeof x === 'number').sort((a, b) => a - b)[0];
-    if (typeof firstMeta === 'number') name = chunk.slice(0, firstMeta);
-    name = name.replace(/[:\-—]\s*$/, '').trim().toLowerCase();
-    if (!name) continue;
-
-    const entry = {};
-    if (durMatch) {
-      const mins = parseInt(durMatch[1], 10);
-      if (mins > 0 && mins <= 600) entry.duration = mins;
+  try {
+    const response = await generateResponse(
+      systemPrompt,
+      [{ role: 'user', content: String(text).slice(0, 800) }],
+      { userId, operation: 'salon_durations_extract', model: 'gpt-5.4-nano', timeoutMs: 12_000 }
+    );
+    const m = String(response || '').match(/\{[\s\S]*\}/);
+    if (!m) {
+      logger.warn('[SALON-DURATIONS] LLM returned no JSON, using defaults');
+      return fallback();
     }
-    if (priceMatch) {
-      // Normalise: keep the raw symbol+number, strip trailing comma/period.
-      entry.price = priceMatch[0].trim().replace(/[,.]$/, '');
+    const parsed = JSON.parse(m[0]);
+    const arr = Array.isArray(parsed.services) ? parsed.services : [];
+    const byName = {};
+    for (const entry of arr) {
+      if (!entry || typeof entry.name !== 'string') continue;
+      byName[entry.name.toLowerCase()] = entry;
     }
-    if (Object.keys(entry).length > 0) byName[name] = entry;
+    return services.map((s) => {
+      const hit = byName[s.toLowerCase()];
+      const rawDur = hit && Number(hit.durationMinutes);
+      const dur = Number.isFinite(rawDur) && rawDur > 0 && rawDur <= 600
+        ? Math.round(rawDur)
+        : 30;
+      const priceText = hit && typeof hit.priceText === 'string'
+        ? hit.priceText.trim().slice(0, 40)
+        : '';
+      return { name: s, durationMinutes: dur, priceText };
+    });
+  } catch (err) {
+    logger.warn(`[SALON-DURATIONS] Extraction failed: ${err.message} — using defaults`);
+    return fallback();
   }
-
-  return servicesList.map((s) => {
-    const key = s.toLowerCase();
-    let hit = byName[key];
-    if (!hit) {
-      const partial = Object.keys(byName).find((k) => key.includes(k) || k.includes(key));
-      if (partial) hit = byName[partial];
-    }
-    return {
-      name: s,
-      durationMinutes: hit?.duration || 30,
-      priceText: hit?.price || '',
-    };
-  });
 }
 
 async function handleSalonServiceDurations(user, message) {
   const text = (message.text || '').trim();
   const wd = { ...(user.metadata?.websiteData || {}) };
   const services = wd.services || [];
-  // Delegation ("whatever you think" / "default" / "idk" / etc.) or a bare
-  // "30" both mean "apply the 30min-no-price default to every service."
-  const useDefault = isDelegation(text) || /^30$/.test(text);
+  // Delegation ("whatever you think" / "default" / "idk" / etc.) means
+  // "apply 30min-no-price across every service" — skip the LLM call.
+  const useDefault = isDelegation(text);
   const salonServices = useDefault
     ? services.map((s) => ({ name: s, durationMinutes: 30, priceText: '' }))
-    : parseServiceDurations(text, services);
+    : await parseServiceDurations(text, services, user.id);
   wd.salonServices = salonServices;
   await updateUserMetadata(user.id, { websiteData: wd });
   await logMessage(
@@ -6137,6 +6140,81 @@ async function startWebdevFlow(user) {
   return nextState;
 }
 
+// ─── Cross-state field correction ────────────────────────────────────────────
+// Applies a {field, value} correction surfaced by correctionDetector.js.
+// Returns the human-readable acknowledgment string, or null if the value
+// failed validation / normalization (in which case the router falls back
+// to the regular state handler).
+async function applyFieldCorrection(user, field, rawValue) {
+  const wd = { ...(user.metadata?.websiteData || {}) };
+  const value = String(rawValue || '').trim();
+  if (!value) return null;
+
+  const updates = { websiteData: wd };
+  let ack = null;
+
+  switch (field) {
+    case 'businessName':
+      wd.businessName = value;
+      ack = `Got it — updated business name to *${value}*.`;
+      break;
+    case 'industry':
+      wd.industry = value;
+      ack = `Got it — updated industry to *${value}*.`;
+      break;
+    case 'contactEmail': {
+      // Loose email shape — must look like name@host.tld.
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) return null;
+      wd.contactEmail = value;
+      // Mirror to legacy top-level metadata.email; other paths read it.
+      updates.email = value;
+      ack = `Got it — updated email to *${value}*.`;
+      break;
+    }
+    case 'contactPhone':
+      wd.contactPhone = value;
+      ack = `Got it — updated phone to *${value}*.`;
+      break;
+    case 'contactAddress':
+      wd.contactAddress = value;
+      ack = `Got it — updated address to *${value}*.`;
+      break;
+    case 'primaryCity':
+      wd.primaryCity = value;
+      ack = `Got it — updated city to *${value}*.`;
+      break;
+    case 'services': {
+      const list = value.split(/\s*,\s*|\s+(?:and|&)\s+/i).map((s) => s.trim()).filter(Boolean);
+      if (!list.length) return null;
+      wd.services = list;
+      ack = `Got it — updated services to *${list.slice(0, 4).join(', ')}${list.length > 4 ? '…' : ''}*.`;
+      break;
+    }
+    case 'serviceAreas': {
+      const list = value.split(/\s*,\s*|\s+(?:and|&)\s+/i).map((s) => s.trim()).filter(Boolean);
+      if (!list.length) return null;
+      wd.serviceAreas = list;
+      ack = `Got it — updated service areas to *${list.slice(0, 4).join(', ')}${list.length > 4 ? '…' : ''}*.`;
+      break;
+    }
+    default:
+      return null;
+  }
+
+  await updateUserMetadata(user.id, updates);
+  user.metadata = { ...(user.metadata || {}), websiteData: wd };
+  if (updates.email) user.metadata.email = updates.email;
+  await logMessage(
+    user.id,
+    `Correction applied: ${field} → ${
+      Array.isArray(wd[field]) ? wd[field].join(', ') : value
+    }`,
+    'assistant'
+  );
+
+  return ack;
+}
+
 module.exports = {
   handleWebDev,
   handleGenerationFailed,
@@ -6148,6 +6226,9 @@ module.exports = {
   startSalonFlow,
   startWebdevFlow,
   showConfirmSummary,
+  // Cross-state correction handler — called from the router when
+  // correctionDetector flags a previously-answered field.
+  applyFieldCorrection,
   // Exposed so router's intent classifier can fast-path paid-claim
   // phrasings as 'answer' — otherwise the LLM classifier sometimes
   // reads them as 'menu' and routes the user to service-selection

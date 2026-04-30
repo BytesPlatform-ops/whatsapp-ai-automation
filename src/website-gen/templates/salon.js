@@ -326,6 +326,7 @@ function getFooter(c) {
 <footer class="foot">
   <div class="foot-inner">
     <div>
+      ${c.logoUrl ? `<img src="${attr(c.logoUrl)}" alt="${attr(c.businessName || '')}" style="height:48px;max-height:48px;width:auto;margin-bottom:14px;object-fit:contain;display:block">` : ''}
       <p class="foot-brand">${esc(c.businessName)}</p>
       <p class="foot-tag">${esc(c.footerTagline || c.tagline || '')}</p>
     </div>

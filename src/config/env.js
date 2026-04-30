@@ -11,9 +11,7 @@ const required = [
 
 const optional = [
   'WHATSAPP_APP_SECRET',
-  'ANTHROPIC_API_KEY',
   'OPENAI_API_KEY',
-  'LLM_PROVIDER',
   'NETLIFY_TOKEN',
   'ADMIN_PASSWORD',
   'ADMIN_SECRET',
@@ -71,8 +69,6 @@ const env = {
   },
   // LLM
   llm: {
-    provider: process.env.LLM_PROVIDER || 'claude',
-    anthropicApiKey: process.env.ANTHROPIC_API_KEY || '',
     openaiApiKey: process.env.OPENAI_API_KEY || '',
   },
   // Netlify

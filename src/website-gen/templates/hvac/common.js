@@ -1315,6 +1315,7 @@ function getHvacFooter(c) {
   return `<footer class="foot"><div class="ctn">
     <div class="foot-grid">
       <div>
+        ${c.logoUrl ? `<img src="${esc(c.logoUrl)}" alt="${esc(c.businessName || '')}" style="height:48px;max-height:48px;width:auto;margin-bottom:14px;object-fit:contain;display:block">` : ''}
         <p class="foot-brand">${esc(c.businessName)}</p>
         <p style="margin-bottom:18px">${esc(c.footerTagline || 'Licensed, insured, and here when you need us most.')}</p>
         ${phone ? `<a class="foot-big-phone" href="tel:${esc(tel)}">${icon('phone', 20)} ${esc(phone)}</a><br>` : ''}

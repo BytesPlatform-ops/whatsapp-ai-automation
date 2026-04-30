@@ -889,7 +889,19 @@ async function handleSalesBot(user, message) {
     // Salon industry has its own sub-flow (booking tool / hours / prices /
     // instagram) that isn't covered by nextMissingWebDevState's generic
     // ladder. Route to startSalonFlow so those questions get asked.
-    if (industry && isSalonIndustry(industry)) {
+    //
+    // Detection falls back to the BUSINESS NAME when the LLM-extracted
+    // industry doesn't match the salon regex. Cases this catches:
+    //   • LLM extracted industry as "Personal Care" / "Cosmetology" /
+    //     "Manicure & Hair Cutting" — semantically salon, but doesn't
+    //     contain salon|beauty|barber|spa|nail|hair|lash|brow|makeup.
+    //   • LLM didn't extract an industry at all (sparse mega-message).
+    // Without this fallback, "Umair's Salon" + already-filled generic
+    // fields would short-circuit straight to WEB_CONFIRM, shipping a
+    // salon site with no hours, no booking config, and no service prices.
+    const salonByName = isSalonIndustry(websiteData.businessName);
+    const salonByIndustry = industry && isSalonIndustry(industry);
+    if (salonByIndustry || salonByName) {
       // Services must be collected BEFORE entering the salon sub-flow.
       // The salon flow's hours step assumes a services list exists, and
       // when missing it silently skips SALON_SERVICE_DURATIONS via

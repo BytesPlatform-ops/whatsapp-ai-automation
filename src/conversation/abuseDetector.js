@@ -100,7 +100,7 @@ Return ONLY one word from the list above. No quotes, no explanation.`;
     const resp = await generateResponse(
       prompt,
       [{ role: 'user', content: 'Classify now.' }],
-      { userId, operation: 'abuse_classify', timeoutMs: 8_000 }
+      { userId, operation: 'abuse_classify', timeoutMs: 8_000, model: 'gpt-5.4-nano' }
     );
     const cleaned = String(resp || '').trim().toLowerCase().replace(/[^a-z_]/g, '');
     if (ALL_CATEGORIES.has(cleaned)) return cleaned;

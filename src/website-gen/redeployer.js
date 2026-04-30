@@ -161,9 +161,44 @@ async function updateSiteBannerPricing(userId, pricing = {}) {
   return redeployWithOverrides(site.id, overrides);
 }
 
+/**
+ * Redeploy a user's latest site with a new logo URL. Used when a user
+ * uploads (or replaces) a logo AFTER the site is already live — we
+ * splice the new logoUrl into the stored siteConfig and re-render +
+ * push to Netlify so the favicon, nav, and footer update without
+ * regenerating any LLM-generated copy.
+ *
+ * Targets the user's most-recent generated site.
+ *
+ * @param {string|number} userId
+ * @param {string} logoUrl  Public URL of the processed logo
+ * @returns {Promise<{ok: boolean, previewUrl?: string, reason?: string}>}
+ */
+async function redeployWithLogo(userId, logoUrl) {
+  if (!userId || !logoUrl) return { ok: false, reason: 'missing args' };
+  const { data: site, error } = await supabase
+    .from('generated_sites')
+    .select('id, site_data')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error || !site) {
+    logger.warn(`[REDEPLOY] No site found for user ${userId} to apply logo`);
+    return { ok: false, reason: 'no site' };
+  }
+  const current = site.site_data || {};
+  if (current.logoUrl === logoUrl) {
+    return { ok: true, reason: 'logo unchanged', previewUrl: null };
+  }
+  logger.info(`[REDEPLOY] Applying new logo to site ${site.id} → ${logoUrl}`);
+  return redeployWithOverrides(site.id, { logoUrl });
+}
+
 module.exports = {
   redeployAsPaid,
   redeployAsPreview,
+  redeployWithLogo,
   updateSiteBannerLink,
   updateSiteBannerPricing,
 };

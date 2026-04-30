@@ -123,7 +123,6 @@ const STATE_HANDLERS = {
   [STATES.WEB_COLLECT_LOGO]: handleWebDev,
   [STATES.WEB_COLLECT_CONTACT]: handleWebDev,
   [STATES.SALON_BOOKING_TOOL]: handleWebDev,
-  [STATES.SALON_INSTAGRAM]: handleWebDev,
   [STATES.SALON_HOURS]: handleWebDev,
   [STATES.SALON_SERVICE_DURATIONS]: handleWebDev,
   [STATES.WEB_DOMAIN_CHOICE]: handleWebDev,
@@ -226,7 +225,6 @@ const COLLECTION_STATES = new Set([
   STATES.WEB_REVISIONS,
   // Salon sub-flow collection states
   STATES.SALON_BOOKING_TOOL,
-  STATES.SALON_INSTAGRAM,
   STATES.SALON_HOURS,
   STATES.SALON_SERVICE_DURATIONS,
   // SEO post-audit chat
@@ -275,7 +273,6 @@ const STATE_QUESTION = {
   [STATES.WEB_COLLECT_CONTACT]: 'Please share your contact details (email, phone, address)',
   [STATES.WEB_REVISIONS]: "Tell me what you'd like to change on the site, or reply approve to move on.",
   [STATES.SALON_BOOKING_TOOL]: 'Do you use a booking tool (like Fresha, Vagaro) or want one built in?',
-  [STATES.SALON_INSTAGRAM]: "What's your Instagram handle? (or reply skip)",
   [STATES.SALON_HOURS]: 'What are your opening hours for each day of the week?',
   [STATES.SALON_SERVICE_DURATIONS]: 'How long does each service take, and what does it cost?',
   [STATES.SEO_COLLECT_URL]: 'Please send your website URL to analyze',
@@ -343,7 +340,7 @@ NOT objections: asking a question, providing business info, agreeing, specifying
     const raw = await generateResponse(
       prompt,
       [{ role: 'user', content: t.slice(0, 500) }],
-      { userId, operation: 'sales_objection_check', timeoutMs: 15_000 }
+      { userId, operation: 'sales_objection_check', timeoutMs: 15_000, model: 'gpt-5.4-nano' }
     );
     const m = String(raw || '').match(/\{[\s\S]*?\}/);
     if (!m) return false;
@@ -386,7 +383,7 @@ Return ONLY one word: pivot or continue.`;
     const resp = await generateResponse(
       prompt,
       [{ role: 'user', content: 'Classify.' }],
-      { userId, operation: 'scope_decline_pivot', timeoutMs: 8_000 }
+      { userId, operation: 'scope_decline_pivot', timeoutMs: 8_000, model: 'gpt-5.4-nano' }
     );
     const cleaned = String(resp || '').trim().toLowerCase().replace(/[^a-z]/g, '');
     return cleaned === 'pivot';
@@ -407,11 +404,23 @@ async function classifyIntent(state, text, userId, opts = {}) {
   // answers and skip the LLM call entirely.
   const t = String(text || '').trim().toLowerCase();
   if (!t) return 'answer';
+  // Punctuation-only input ("?", "??", "...", "!") is a confusion signal,
+  // never a valid answer to a flow question. Routing as 'question' triggers
+  // the aside-then-re-prompt path. Without this, the length<4 fast-path
+  // below mis-routed "?" as an answer and downstream parsers silently
+  // accepted garbage (e.g. hoursParser turned "?" into all-days-closed).
+  if (/^[?!.,;]+$/.test(t)) return 'question';
   if (/^(skip|none|no|nope|nah|n\/?a|na|next|continue|done|same|ok|okay|yes|yeah|yep|ya|sure|y|n)$/.test(t)) return 'answer';
   // Phone-number-shaped input
   if (/^[\d\s\-+().]{6,}$/.test(t)) return 'answer';
-  // Email-shaped input
-  if (/@/.test(t) && t.length < 100 && !/[?]/.test(t)) return 'answer';
+  // Email-shaped input — actual email pattern, not just any '@'. The old
+  // `/@/.test()` check fired for ANY message containing '@', which let
+  // Instagram-handle corrections like "wait, the insta id is @umairkasalon"
+  // skip the LLM intent classifier and route as 'answer' to whatever
+  // question the user happened to be on. Real emails: name@host.tld with
+  // at least one dot in the host. Bare social handles (@umairsalon) don't
+  // match — they fall through to the LLM classifier which can read intent.
+  if (/[\w.+-]+@[\w-]+\.[\w.-]+/.test(t) && t.length < 100 && !/[?]/.test(t)) return 'answer';
   // Very short replies (< 4 chars) almost always answers, never menu requests
   if (t.length < 4) return 'answer';
   // Short messages that clearly express skip / delegate / acceptance intent.
@@ -557,12 +566,11 @@ async function _routeMessage(message) {
   // Track the message ID so typing indicators work for all outgoing messages
   setLastMessageId(from, messageId);
 
-  // Mark message as read
-  try {
-    await markAsRead(messageId);
-  } catch {
-    // Non-critical - continue processing
-  }
+  // Mark message as read — fire-and-forget. The blue ticks are cosmetic;
+  // gating processing on this WhatsApp API roundtrip cost ~300-700ms per
+  // turn for no reply-time benefit. The .catch swallows errors so an
+  // unhandled rejection can't bubble up if the API hiccups.
+  markAsRead(messageId).catch(() => {});
 
   // Save original message type before audio transcription overwrites it
   const originalType = message.type;
@@ -761,6 +769,81 @@ async function _routeMessage(message) {
     } catch (err) {
       logger.warn(`[INTERACTIVE] Matcher threw for ${from}: ${err.message}`);
     }
+  }
+
+  // ── Intent classifier kickoff ──────────────────────────────────────────
+  // For free-text turns in collection states, we'll need an intent
+  // classification (answer / question / menu / exit). Kick that LLM call
+  // off NOW, in parallel with the abuse detector below. Both are cheap
+  // gpt-5.4-nano classifiers but each has its own ~700-1000ms round trip;
+  // running them sequentially was the single biggest contributor to the
+  // 5-9s reply latency. Started here, this promise also overlaps with the
+  // intermediate code (logMessage, lead temp update, recap/return-greet
+  // checks) so by the time it's actually awaited at the intent block
+  // below, it's usually already resolved. Wasted work cost: a tiny number
+  // of nano calls on turns where an early return fires before the await.
+  let intentPromise = null;
+  if (
+    text &&
+    !message.buttonId &&
+    !message.listId &&
+    message.type === 'text' &&
+    COLLECTION_STATES.has(user.state) &&
+    !user.metadata?.humanTakeover
+  ) {
+    intentPromise = (async () => {
+      let recentContext = '';
+      try {
+        const { getConversationHistory } = require('../db/conversations');
+        const hist = await getConversationHistory(user.id, 6, {
+          afterTimestamp: user.metadata?.lastResetAt || null,
+        });
+        const recentAssistant = (hist || [])
+          .filter((m) => m.role === 'assistant')
+          .slice(-3);
+        if (recentAssistant.length) {
+          recentContext = recentAssistant
+            .map((m) => `Bot just said: "${String(m.message_text || '').replace(/\s+/g, ' ').slice(0, 220)}"`)
+            .join('\n');
+        }
+      } catch (err) {
+        logger.warn(`[INTENT-CTX] Recent-context fetch failed: ${err.message}`);
+      }
+      return classifyIntent(user.state, text, user.id, { recentContext });
+    })().catch((err) => {
+      logger.warn(`[INTENT] Pre-classify failed: ${err.message}`);
+      return 'answer';
+    });
+  }
+
+  // ── Cross-state correction kickoff ─────────────────────────────────────
+  // Detects mid-flow corrections like "wait, the email is X" / "actually
+  // change the business name to Y" while the user is on a different
+  // question. Started in parallel with abuse + intent so the latency is
+  // bounded by the slowest of the three (~700-1000ms) instead of summed.
+  // Awaited at the top of the intent block below — if it returns a
+  // correction, we apply it and skip dispatch to the state handler.
+  let correctionPromise = null;
+  if (
+    text &&
+    !message.buttonId &&
+    !message.listId &&
+    message.type === 'text' &&
+    COLLECTION_STATES.has(user.state) &&
+    !user.metadata?.humanTakeover
+  ) {
+    correctionPromise = (async () => {
+      const { detectCorrection } = require('./correctionDetector');
+      return detectCorrection({
+        text,
+        currentState: user.state,
+        websiteData: user.metadata?.websiteData || {},
+        userId: user.id,
+      });
+    })().catch((err) => {
+      logger.warn(`[CORRECTION] Pre-detect failed: ${err.message}`);
+      return null;
+    });
   }
 
   // ── Abuse detection (Phase 13) ─────────────────────────────────────────
@@ -1235,9 +1318,8 @@ async function _routeMessage(message) {
       // states defer to nextMissingWebDevState.
       let nextState;
       if (user.state === STATES.SALON_BOOKING_TOOL) {
-        nextState = STATES.SALON_INSTAGRAM;
-      } else if (user.state === STATES.SALON_INSTAGRAM) {
-        // Embed mode skips hours/durations; native goes through them.
+        // Embed mode skips hours/durations (the booking widget owns
+        // scheduling); native goes through hours next.
         nextState = wd.bookingMode === 'embed'
           ? null  // sentinel — finishSalonFlow handles rest
           : STATES.SALON_HOURS;
@@ -1379,7 +1461,11 @@ async function _routeMessage(message) {
 
   // ── Intent interceptor ─────────────────────────────────────────────────────
   // For collection states with free-text (no button press), classify intent
-  // before blindly passing the text to the handler.
+  // before blindly passing the text to the handler. The classifier was
+  // kicked off earlier (in parallel with the abuse check) so by the time
+  // we get here it's typically already resolved — awaiting is essentially
+  // free. Fall back to a fresh classify call if the promise wasn't started
+  // (e.g. user.metadata changed mid-turn so the kickoff gates didn't match).
   if (
     text &&
     !message.buttonId &&
@@ -1387,29 +1473,35 @@ async function _routeMessage(message) {
     message.type === 'text' &&
     COLLECTION_STATES.has(user.state)
   ) {
-    // Pull the last 2-3 assistant messages so the classifier can tell an
-    // echo ("make a booking system" right after we promised one) from a
-    // real flow-switch. Best-effort — failure here just means the
-    // classifier runs without context (its prior behavior).
-    let recentContext = '';
-    try {
-      const { getConversationHistory } = require('../db/conversations');
-      const hist = await getConversationHistory(user.id, 6, {
-        afterTimestamp: user.metadata?.lastResetAt || null,
-      });
-      const recentAssistant = (hist || [])
-        .filter((m) => m.role === 'assistant')
-        .slice(-3);
-      if (recentAssistant.length) {
-        recentContext = recentAssistant
-          .map((m) => `Bot just said: "${String(m.message_text || '').replace(/\s+/g, ' ').slice(0, 220)}"`)
-          .join('\n');
+    // Cross-state correction check first — "wait, the email is X" mid-hours
+    // should update email, not be classified as an answer/menu/exit. The
+    // detector returns null for active-field corrections so the regular
+    // handler still gets normal answers (even ones phrased with "actually").
+    if (correctionPromise) {
+      const correction = await correctionPromise;
+      if (correction) {
+        try {
+          const webDev = require('./handlers/webDev');
+          const ack = await webDev.applyFieldCorrection(user, correction.field, correction.value);
+          if (ack) {
+            logger.info(`[CORRECTION] Applied ${correction.field} for ${from}`);
+            const currentQuestion = STATE_QUESTION[user.state];
+            const combined = currentQuestion
+              ? `${ack}\n\nNow back to: ${currentQuestion}`
+              : ack;
+            await sendWithMenuButton(user.phone_number, combined);
+            return;
+          }
+          logger.info(`[CORRECTION] applyFieldCorrection rejected ${correction.field}=${correction.value} — falling through to state handler`);
+        } catch (err) {
+          logger.warn(`[CORRECTION] apply failed for ${from}: ${err.message} — falling through`);
+        }
       }
-    } catch (err) {
-      logger.warn(`[INTENT-CTX] Recent-context fetch failed: ${err.message}`);
     }
 
-    const intent = await classifyIntent(user.state, text, user.id, { recentContext });
+    const intent = intentPromise
+      ? await intentPromise
+      : await classifyIntent(user.state, text, user.id, { recentContext: '' });
     logger.debug(`Intent classified for ${from} in state ${user.state}: ${intent}`);
 
     if (intent === 'menu' || intent === 'exit') {
@@ -1521,6 +1613,19 @@ async function _routeMessage(message) {
       // If the LLM call fails, skip the aside and just re-prompt — better
       // than stalling silently.
       const currentQuestion = STATE_QUESTION[user.state];
+
+      // Pure-punctuation input ("?", "??", "...") is a "what did you ask?"
+      // signal, not a real question with content to respond to. Skip the
+      // LLM aside (which would generate something awkward like "Sure,
+      // what's your question?") and just re-ask the current question.
+      const isReprompt = /^[?!.,;\s]+$/.test(String(text || '').trim());
+      if (isReprompt) {
+        if (currentQuestion && !recapFired) {
+          await sendWithMenuButton(user.phone_number, currentQuestion);
+          await logMessage(user.id, `Re-asked: ${currentQuestion}`, 'assistant');
+        }
+        return;
+      }
 
       // Pick an aside prompt scoped to the current flow. Generic
       // GENERAL_CHAT_PROMPT pitches the full agency menu (SEO, social,

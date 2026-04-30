@@ -11,15 +11,19 @@ function getClient() {
   return client;
 }
 
-const MODEL = 'gpt-5';
+// Default model for user-facing replies. Helper/classifier call sites pass
+// `{ model: 'gpt-5.4-nano' }` to use the cheaper, faster nano variant.
+const DEFAULT_MODEL = 'gpt-5.4-mini';
 
-// gpt-5 / gpt-5-mini / gpt-5-nano require `max_completion_tokens` and don't
-// accept the legacy `max_tokens`. Older 4.x models accept both. Pick the
-// right param name at request time so the same code path works for either.
-const USES_COMPLETION_TOKENS = /^gpt-5/.test(MODEL);
+// gpt-5 family models require `max_completion_tokens` and don't accept the
+// legacy `max_tokens`. Older 4.x models accept both.
+function usesCompletionTokens(model) {
+  return /^gpt-5/.test(model);
+}
 
-async function generateResponseWithUsage(systemPrompt, messages) {
+async function generateResponseWithUsage(systemPrompt, messages, options = {}) {
   const openai = getClient();
+  const model = options.model || DEFAULT_MODEL;
 
   const formattedMessages = [
     { role: 'system', content: systemPrompt },
@@ -34,18 +38,19 @@ async function generateResponseWithUsage(systemPrompt, messages) {
     // read back the `cached_tokens` counter so the provider can bill the
     // discounted rate for cache hits.
     const request = {
-      model: MODEL,
+      model,
       messages: formattedMessages,
     };
-    if (USES_COMPLETION_TOKENS) {
-      // gpt-5 counts reasoning tokens toward max_completion_tokens. With
-      // reasoning on by default, a tight budget gets burned entirely on
-      // invisible thinking and returns empty content. `reasoning_effort:
-      // minimal` effectively disables reasoning for chat-style outputs
-      // (sub-3-second WhatsApp replies don't need deep deliberation), and
-      // we keep a generous 4096-token ceiling as a safety margin.
+    if (usesCompletionTokens(model)) {
+      // gpt-5 family counts reasoning tokens toward max_completion_tokens.
+      // With reasoning on by default, a tight budget gets burned entirely
+      // on invisible thinking and returns empty content. `reasoning_effort:
+      // none` disables reasoning for chat-style outputs (sub-3-second
+      // WhatsApp replies don't need deep deliberation). 5.0 used 'minimal'
+      // as the off-switch; 5.4+ renamed it to 'none'. We keep a generous
+      // 4096-token ceiling as a safety margin.
       request.max_completion_tokens = 4096;
-      request.reasoning_effort = 'minimal';
+      request.reasoning_effort = 'none';
     } else {
       request.max_tokens = 2048;
     }
@@ -56,7 +61,7 @@ async function generateResponseWithUsage(systemPrompt, messages) {
 
     return {
       text: response.choices[0].message.content,
-      model: MODEL,
+      model,
       provider: 'openai',
       // inputTokens excludes cached tokens so cost math can bill them separately.
       inputTokens: Math.max(0, promptTokens - cachedInputTokens),
@@ -68,7 +73,7 @@ async function generateResponseWithUsage(systemPrompt, messages) {
     // limit" / auth issues are visible in one log line instead of the
     // generic "API error:" dump.
     logger.error('OpenAI API error:', {
-      model: MODEL,
+      model: options.model || DEFAULT_MODEL,
       status: error?.status,
       code: error?.code,
       type: error?.type,
@@ -79,8 +84,8 @@ async function generateResponseWithUsage(systemPrompt, messages) {
   }
 }
 
-async function generateResponse(systemPrompt, messages) {
-  const { text } = await generateResponseWithUsage(systemPrompt, messages);
+async function generateResponse(systemPrompt, messages, options = {}) {
+  const { text } = await generateResponseWithUsage(systemPrompt, messages, options);
   return text;
 }
 
