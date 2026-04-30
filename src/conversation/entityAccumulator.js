@@ -227,13 +227,12 @@ async function extractIndustry(userReply, context = {}) {
   const raw = String(userReply || '').trim();
   if (!raw) return null;
 
-  // Fast path: clean 1-3 word answer already in good shape. Saves an LLM
-  // call for the common "Tech" / "Barbershop" / "Real Estate" replies.
-  const clean1to3 = /^[A-Za-z][A-Za-z\s&\-']{0,28}$/;
-  const fillerWords = /\b(?:we|i|its|it'?s|is|are|we'?re|im|i'?m|just|only|mainly|basically|probably|maybe|sort\s*of|kind\s*of|think|guess)\b/i;
-  if (clean1to3.test(raw) && raw.split(/\s+/).length <= 3 && !fillerWords.test(raw)) {
-    return raw;
-  }
+  // Always go through the LLM — no regex fast-path. The reply gets
+  // normalized regardless of whether it arrives clean ("HVAC") or
+  // surrounded by disfluencies ("uhmm hvac") / filler verbs ("we just
+  // do hvac stuff"). Single LLM call per user, negligible cost, much
+  // better correctness than a hand-rolled fast-path that misses any
+  // class of inputs the regex didn't anticipate.
 
   const businessLine = context.businessName ? `Business name: "${context.businessName}"\n` : '';
   const historyLine = context.recentConversation
@@ -246,6 +245,8 @@ Extract the industry as a clean 1-3 word label (examples: "Tech", "Food & Bevera
 
 Rules:
 - Normalize, don't echo. "we just rent trucks" → "Trucking". "i think its tech" → "Tech". "oh we do AI stuff" → "AI / Software".
+- **Strip leading disfluencies, hedges, and filler.** Words / phrases that are speech filler — not part of the industry — MUST be removed before returning the label. This applies in any language. Examples: "uhmm hvac" → "HVAC". "uh, tech" → "Tech". "well, real estate" → "Real Estate". "hmm we do plumbing" → "Plumbing". "okay so it's a salon" → "Salon". "umm, like, photography" → "Photography". The label is the trade word(s), nothing else.
+- Capitalize cleanly. "hvac" → "HVAC". "real estate" → "Real Estate". "plumbing" → "Plumbing". Acronyms get full uppercase; multi-word labels get title case.
 - **Business-name inference is a FIRST-CLASS move, not a last resort.** When the user delegates ("whatever", "you pick", "idk", "i'm not sure", "select one for me", "relevant to my business name"), READ THE BUSINESS NAME you were given at the top and extract the industry directly from it. A business literally called "Hasnain Plumbing" has industry "Plumbing". "Joe's Auto Repair" → "Auto Repair". "Glow Studio Salon" → "Salon". "Acme Bakery" → "Bakery". "Bright Dental" → "Dental". If the business name contains a trade/industry word (plumbing, salon, bakery, electric, roofing, dental, law, realty, photography, etc.), that IS the industry — return it, do NOT return "unknown".
 - If the user is delegating AND the business name doesn't contain an industry word, use conversation context. Only if BOTH fail, return "unknown".
 - If the reply isn't an industry at all (nonsense, "?", greeting), return "unknown".
