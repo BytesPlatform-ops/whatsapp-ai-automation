@@ -687,35 +687,51 @@ async function handleCollectAreas(user, message) {
   let skipIntent = false;
   let extractionUnclear = false;
   let extractionReason = '';
+  // Geographic granularity hint from the extractor: 'city' | 'state' |
+  // 'country' | null. When the user names a region wider than a city
+  // ("Texas, USA, UK") we ask a follow-up scoped to that region instead
+  // of blanket re-asking — otherwise the user repeats "USA" three times
+  // and the bot keeps rejecting it.
+  let extractionLevel = null;
+  let extractionHint = null;
 
   try {
     const ctx = existingCity
       ? `\n\nContext: We already know the primary city is "${existingCity}". The user's reply is most likely a list of neighborhoods within that city, OR a skip / "use just the city" intent. Do NOT change primaryCity unless the user explicitly names a different city.`
-      : `\n\nContext: We do NOT yet know the user's city. Their reply should name a city (and optionally neighborhoods).`;
+      : `\n\nContext: We do NOT yet know the user's city. Their reply should name a CITY (and optionally neighborhoods).`;
 
     const extracted = await generateResponse(
-      `Classify a user reply about their business's city + service areas. They may write in ANY language (English, Roman Urdu, Urdu, Hindi, Spanish, Arabic, etc.).${ctx}
+      `Classify a user reply about their business's city + service areas. They may write in ANY language. Focus on intent and on the geographic granularity of any place names mentioned.${ctx}
 
 Return ONLY JSON in this exact shape:
-{"skipIntent": <true|false>, "primaryCity": "<city>" | null, "serviceAreas": ["<city or neighborhood>", ...], "unclear": <true|false>, "reason": "<short>"}
+{"skipIntent": <true|false>, "primaryCity": "<city>" | null, "serviceAreas": ["<city or neighborhood>", ...], "level": "city"|"state"|"country"|null, "hint": "<place name>" | null, "unclear": <true|false>, "reason": "<short>"}
 
 Decision tree:
-1. **skipIntent: true** when the user wants to skip / defer / leave it for later. Examples: "skip", "later", "baad mein", "rehne do", "abhi nahi", "abhi waqt nahi", "i'll add later", "nope", "no thanks", "chodo bhai", "rehne dete hain", "abhi pata nahi". When skipIntent is true, primaryCity / serviceAreas can be null / empty.
-2. **unclear: true** when the user did NOT name an actual place AND did not clearly skip. Treat these as non-answers, NOT as places:
-   - Deflections: "us main kartay han bhai" (Roman Urdu: "we work in those"), "wahan", "udhar", "in those", "in that", "in your example", "everywhere you said", "wherever", "jahan aap ne kaha", "haan bhai", "yes we do", "ji haan"
-   - Pure verbs / sentences with no place name: "we operate", "ham kaam karte hain"
-   - Vague geography: "all over", "everywhere", "the whole city", "globally", "nationwide", "outside"
-3. **Otherwise extract**:
-   - primaryCity = the single main city they're based in — a short proper noun like "Karachi", NEVER a full phrase like "pakistan k andar karachi".
-   - serviceAreas = array of cities/neighborhoods they serve. If they named multiple cities (e.g. Karachi and Lahore), the first becomes primaryCity and the rest go into serviceAreas.
-   - Strip filler words like "based in", "pakistan k andar", "in the city of", "ham serve karte hain in", etc.
-   - When context says we already have a primaryCity, leave it set and put neighborhoods in serviceAreas.`,
+1. **skipIntent: true** when the user wants to skip / defer / leave it for later (any language). Set primaryCity / serviceAreas null / empty.
+2. **level + hint** — geographic granularity of any place(s) mentioned:
+   - "city" → user named at least one CITY (Houston, Karachi, Austin, London, Dallas, Lahore).
+   - "state" → user only named a STATE / PROVINCE / REGION ("Texas", "California", "Punjab", "Ontario") — NOT a city.
+   - "country" → user only named a COUNTRY ("USA", "United States", "UK", "Pakistan", "India") — NOT a city.
+   - null → user named no place at all OR named only a vague geography or a deflection.
+3. **unclear: true** when ANY of the following:
+   - level is null and skipIntent is false (no place named, not a skip).
+   - level is "state" or "country" only (no city specified — we need a city to build the site).
+   - Deflections / non-answers / vague geography ("everywhere", "all over", "globally", "nationwide", "wherever", "the same", "in those", "yes we do").
+   - Verbatim echoes of any example we may have shown previously (e.g. exact text "Karachi: Clifton, DHA, Gulshan" — copy of an example, not a real answer).
+4. **Otherwise extract**:
+   - primaryCity = the single main city — a short proper noun (e.g. "Karachi"), NEVER a full phrase.
+   - serviceAreas = array of cities / neighborhoods they serve. Multiple cities → first is primaryCity, rest are serviceAreas.
+   - Strip filler words / language-specific copulas / connecting prepositions.
+   - When context says we already have a primaryCity, leave it set and put neighborhoods in serviceAreas.
+5. **hint** — when level is "state" or "country", set hint to the place the user named (e.g. "Texas" or "USA") so we can ask which CITY in that region. When level is "city", set hint to null.`,
       [{ role: 'user', content: raw }],
       { userId: user.id, operation: 'webdev_areas_extract' }
     );
     const m = extracted.match(/\{[\s\S]*\}/);
     if (m) {
       const parsed = JSON.parse(m[0]);
+      extractionLevel = typeof parsed.level === 'string' ? parsed.level.toLowerCase() : null;
+      extractionHint = typeof parsed.hint === 'string' ? parsed.hint.trim() : null;
       if (parsed.skipIntent === true) {
         skipIntent = true;
       } else if (parsed.unclear === true || (!parsed.primaryCity && !existingCity)) {
@@ -763,11 +779,15 @@ Decision tree:
   // shared side-channel classifier — user might be updating a different
   // field ("we also do AC selling" → service add, not a city answer).
   if (extractionUnclear || !primaryCity) {
-    logger.info(`[AREAS] Re-asking — no real place detected. raw="${raw.slice(0, 80)}" reason="${extractionReason}"`);
+    logger.info(`[AREAS] Re-asking — raw="${raw.slice(0, 80)}" level=${extractionLevel} hint=${extractionHint} reason="${extractionReason}"`);
 
     const sc = await tryApplySideChannel(user, 'primaryCity', raw);
     if (sc) {
-      const reaskCity = `Now, *which city* are you based in? Like *Karachi*, *Lahore*, *Austin* — just the city name. If you serve specific neighborhoods, list them comma-separated (e.g. *Karachi: Clifton, DHA, Gulshan*).`;
+      // After a cross-field update, ask for the city using a placeholder
+      // format — if we used literal city names here, users who copy-paste
+      // the example would round-trip the example back to us as if it
+      // were their answer.
+      const reaskCity = `Now, what *city* are you based in? Just type the name of your main city.`;
       await sendTextMessage(
         user.phone_number,
         await localize(`${sc.ackPart} ${reaskCity}`, user, raw)
@@ -775,18 +795,48 @@ Decision tree:
       return STATES.WEB_COLLECT_AREAS;
     }
 
-    // True fallback — user really didn't answer the city question and
-    // we couldn't recognize a side-channel intent either. Re-ask in the
-    // user's language.
+    // Track retries so we can escalate language if the user is stuck.
+    // Stored on websiteData so it gets cleared with the rest of the
+    // website context on /reset.
+    const retries = Number(user.metadata?.websiteData?.areasRetryCount || 0) + 1;
+    try {
+      const wd = { ...(user.metadata?.websiteData || {}), areasRetryCount: retries };
+      await updateUserMetadata(user.id, { websiteData: wd });
+      user.metadata = { ...(user.metadata || {}), websiteData: wd };
+    } catch (err) {
+      logger.warn(`[AREAS] Failed to bump areasRetryCount: ${err.message}`);
+    }
+
+    let fallbackMsg;
+    if (extractionLevel === 'state' || extractionLevel === 'country') {
+      // User named a region wider than a city (Texas, USA, UK). Ask for
+      // a city WITHIN that region rather than blanket re-asking.
+      const where = extractionHint ? `in *${extractionHint}*` : 'where you operate';
+      fallbackMsg = `For your website I need a CITY, not a state or country. Which city ${where} is your business based in? Just the city name.`;
+    } else if (retries >= 2) {
+      // Two failed attempts — escalate to a stricter, simpler instruction.
+      fallbackMsg = `Let me ask one more time, simpler: *type only the name of your city* — for example a single word or two like "Houston" or "Karachi", with no other text.`;
+    } else {
+      fallbackMsg = `I didn't catch a city in that reply. What *city* is your business based in? Just type the city name on its own.`;
+    }
+
     await sendTextMessage(
       user.phone_number,
-      await localize(
-        `Hmm — I didn't catch a city name in that reply. *Which city* are you based in? Like *Karachi*, *Lahore*, *Austin* — just the city name, and if you serve specific neighborhoods list them comma-separated (e.g. *Karachi: Clifton, DHA, Gulshan*).`,
-        user,
-        raw
-      )
+      await localize(fallbackMsg, user, raw)
     );
     return STATES.WEB_COLLECT_AREAS;
+  }
+
+  // Successful capture — clear the retry counter for next time.
+  if (user.metadata?.websiteData?.areasRetryCount) {
+    try {
+      const wd = { ...(user.metadata.websiteData || {}) };
+      delete wd.areasRetryCount;
+      await updateUserMetadata(user.id, { websiteData: wd });
+      user.metadata = { ...(user.metadata || {}), websiteData: wd };
+    } catch (err) {
+      logger.warn(`[AREAS] Failed to clear areasRetryCount: ${err.message}`);
+    }
   }
 
   const websiteData = {
@@ -6141,17 +6191,44 @@ async function startWebdevFlow(user) {
 }
 
 // ─── Cross-state field correction ────────────────────────────────────────────
-// Applies a {field, value} correction surfaced by correctionDetector.js.
+// Applies a {field, op, value} correction surfaced by correctionDetector.js.
+// `op` is "replace" (default) for scalar fields and replace-list intents,
+// or "add" / "remove" for list fields (services / serviceAreas) when the
+// user is appending or pruning specific items rather than overwriting the
+// whole list.
+//
 // Returns the human-readable acknowledgment string, or null if the value
 // failed validation / normalization (in which case the router falls back
 // to the regular state handler).
-async function applyFieldCorrection(user, field, rawValue) {
+async function applyFieldCorrection(user, field, rawValue, op = 'replace') {
   const wd = { ...(user.metadata?.websiteData || {}) };
   const value = String(rawValue || '').trim();
   if (!value) return null;
 
   const updates = { websiteData: wd };
   let ack = null;
+
+  // Helper: split a comma-separated value into clean items.
+  const splitItems = (v) =>
+    String(v).split(/\s*,\s*|\s+(?:and|&)\s+/i).map((s) => s.trim()).filter(Boolean);
+
+  // Helper: apply add/remove/replace to a list field.
+  const applyListOp = (existing, items, op) => {
+    const existingArr = Array.isArray(existing) ? existing : [];
+    if (op === 'add') {
+      const lower = new Set(existingArr.map((s) => String(s).toLowerCase().trim()));
+      const fresh = items.filter((s) => !lower.has(s.toLowerCase().trim()));
+      return { next: [...existingArr, ...fresh], affected: fresh, kind: 'add' };
+    }
+    if (op === 'remove') {
+      const lower = new Set(items.map((s) => String(s).toLowerCase().trim()));
+      const next = existingArr.filter((s) => !lower.has(String(s).toLowerCase().trim()));
+      const affected = existingArr.filter((s) => lower.has(String(s).toLowerCase().trim()));
+      return { next, affected, kind: 'remove' };
+    }
+    // replace
+    return { next: items, affected: items, kind: 'replace' };
+  };
 
   switch (field) {
     case 'businessName':
@@ -6184,17 +6261,31 @@ async function applyFieldCorrection(user, field, rawValue) {
       ack = `Got it — updated city to *${value}*.`;
       break;
     case 'services': {
-      const list = value.split(/\s*,\s*|\s+(?:and|&)\s+/i).map((s) => s.trim()).filter(Boolean);
-      if (!list.length) return null;
-      wd.services = list;
-      ack = `Got it — updated services to *${list.slice(0, 4).join(', ')}${list.length > 4 ? '…' : ''}*.`;
+      const items = splitItems(value);
+      if (!items.length) return null;
+      const { next, affected, kind } = applyListOp(wd.services, items, op);
+      // Nothing actually changed — guard against silent no-ops (e.g.
+      // remove-of-non-existent, add-of-already-present).
+      if (kind !== 'replace' && affected.length === 0) return null;
+      wd.services = next;
+      const preview = (affected.length ? affected : next).slice(0, 4).join(', ');
+      const ellipsis = (affected.length ? affected.length : next.length) > 4 ? '…' : '';
+      if (kind === 'add') ack = `Got it — added *${preview}${ellipsis}* to your services.`;
+      else if (kind === 'remove') ack = `Got it — removed *${preview}${ellipsis}* from your services.`;
+      else ack = `Got it — updated services to *${preview}${ellipsis}*.`;
       break;
     }
     case 'serviceAreas': {
-      const list = value.split(/\s*,\s*|\s+(?:and|&)\s+/i).map((s) => s.trim()).filter(Boolean);
-      if (!list.length) return null;
-      wd.serviceAreas = list;
-      ack = `Got it — updated service areas to *${list.slice(0, 4).join(', ')}${list.length > 4 ? '…' : ''}*.`;
+      const items = splitItems(value);
+      if (!items.length) return null;
+      const { next, affected, kind } = applyListOp(wd.serviceAreas, items, op);
+      if (kind !== 'replace' && affected.length === 0) return null;
+      wd.serviceAreas = next;
+      const preview = (affected.length ? affected : next).slice(0, 4).join(', ');
+      const ellipsis = (affected.length ? affected.length : next.length) > 4 ? '…' : '';
+      if (kind === 'add') ack = `Got it — added *${preview}${ellipsis}* to your service areas.`;
+      else if (kind === 'remove') ack = `Got it — removed *${preview}${ellipsis}* from your service areas.`;
+      else ack = `Got it — updated service areas to *${preview}${ellipsis}*.`;
       break;
     }
     default:
@@ -6206,7 +6297,7 @@ async function applyFieldCorrection(user, field, rawValue) {
   if (updates.email) user.metadata.email = updates.email;
   await logMessage(
     user.id,
-    `Correction applied: ${field} → ${
+    `Correction applied (${op}): ${field} → ${
       Array.isArray(wd[field]) ? wd[field].join(', ') : value
     }`,
     'assistant'

@@ -57,15 +57,23 @@ async function classifyUndoOrKeep(text, { undoPending = false, userId } = {}) {
     : `- "keep": DO NOT return "keep". The user is NOT currently at a "change or keep it?" prompt, so "keep" isn't a valid classification right now.`;
 
   const undoPendingGuidance = undoPending
-    ? `\n\nIMPORTANT context: the bot JUST popped back one step and asked "change it or keep it?". So the user's reply is most likely either "keep" or a NEW VALUE for the field. Only return "undo" if the user explicitly asks to go back ANOTHER step (e.g., "go back further", "one more step back", "no, the one before that"). A reply like "yes change it to X" / "han, X kar do" / "make it X" is supplying the new value — classify as "none", NOT "undo".`
+    ? `\n\nIMPORTANT context: the bot JUST popped back one step and asked "change it or keep it?". So the user's reply is most likely either "keep" or a NEW VALUE for the field. Only return "undo" if the user explicitly asks to go back ANOTHER step (e.g., "go back further", "one more step back", "no, the one before that"). A reply that supplies a specific new value for any field — classify as "none", NOT "undo".`
     : '';
 
   const prompt = `The user is mid-conversation with a chatbot that's collecting info to build a website.
 
 Classify the user's reply as ONE of:
-- "undo": user wants to go back to the previous question / correct an earlier answer (e.g., "wait go back", "let's revisit that", "change the last one", "one step back", "actually, previous step"). NOT "undo" if the user just means "go to the main menu" or "start over". NOT "undo" if the user is providing a new value for the current field ("change it to X", "make it Y", "han, X kar do") — that's an answer, return "none".
+- "undo": user wants to NAVIGATE BACK one step in the flow — return to the previous question with no specific new value supplied. Examples of pure-navigation undo: "wait go back", "let's revisit that", "one step back", "previous step please", "back up", "scratch that, take me back". The user is asking to RETURN to the previous question, not handing the bot a new value to apply.
 ${keepClause}
-- "none": neither of the above — user is either giving a real answer (including "yes, change it to X"), asking an unrelated question, or saying something else.${undoPendingGuidance}
+- "none": user is doing anything else — supplying a real answer, supplying a NEW VALUE for any field (even an earlier field), asking a question, going off-topic, etc.
+
+CRITICAL — these are NOT undo, they are EDIT-WITH-VALUE messages and must return "none" so the cross-state correction handler can apply the value:
+- "actually the business name is X" / "the name is X, not Y" / "change the name to X" / "name should be X"
+- "the industry is actually Y" / "change industry to Z"
+- "we also do Q" / "remove R from services" / "add P to services"
+- "the email is X" / "phone is Y" / "address is Z"
+- "wait the contact number was X"
+Even though these "correct an earlier answer", they carry a specific value — they are NOT navigate-back requests. Returning "undo" for these would HIJACK the message and the user's correction would be lost.${undoPendingGuidance}
 
 The user said: "${t}"
 

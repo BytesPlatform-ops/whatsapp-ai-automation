@@ -824,12 +824,25 @@ async function _routeMessage(message) {
   // Awaited at the top of the intent block below — if it returns a
   // correction, we apply it and skip dispatch to the state handler.
   let correctionPromise = null;
+  // Domain states (new/own/skip + late-search variants) aren't in
+  // COLLECTION_STATES because they're button-driven, but a free-text
+  // reply at that step is often a correction to an earlier field
+  // ("wait the contact number was X", "actually the name should be Y").
+  // Gate the detector on these too so cross-state corrections still
+  // fire while the bot is asking about domains.
+  const DOMAIN_CORRECTION_STATES = new Set([
+    STATES.WEB_DOMAIN_CHOICE,
+    STATES.WEB_DOMAIN_OWN_INPUT,
+    STATES.WEB_DOMAIN_OWN_REGISTRAR,
+    STATES.WEB_DOMAIN_SEARCH,
+    STATES.WEB_DOMAIN_LATE_SEARCH,
+  ]);
   if (
     text &&
     !message.buttonId &&
     !message.listId &&
     message.type === 'text' &&
-    COLLECTION_STATES.has(user.state) &&
+    (COLLECTION_STATES.has(user.state) || DOMAIN_CORRECTION_STATES.has(user.state)) &&
     !user.metadata?.humanTakeover
   ) {
     correctionPromise = (async () => {
@@ -1482,9 +1495,9 @@ async function _routeMessage(message) {
       if (correction) {
         try {
           const webDev = require('./handlers/webDev');
-          const ack = await webDev.applyFieldCorrection(user, correction.field, correction.value);
+          const ack = await webDev.applyFieldCorrection(user, correction.field, correction.value, correction.op || 'replace');
           if (ack) {
-            logger.info(`[CORRECTION] Applied ${correction.field} for ${from}`);
+            logger.info(`[CORRECTION] Applied ${correction.field} (${correction.op || 'replace'}) for ${from}`);
             const currentQuestion = STATE_QUESTION[user.state];
             const combined = currentQuestion
               ? `${ack}\n\nNow back to: ${currentQuestion}`

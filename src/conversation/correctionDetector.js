@@ -95,14 +95,18 @@ ${activeBlock}
 ${knownBlock}
 
 Rules:
-- Return {"field": "<name>", "value": "<new value>"} ONLY when the user is clearly correcting / updating a field they answered earlier. Phrasings: "wait, the email is X", "actually, change the business name to Y", "i meant Z, not W", "sorry the phone is...", "let me update X", in any language including Roman Urdu ("sahi karo", "theek karo", "galat tha", "ye nahi, ye lo").
-- If the corrected field is in the "Currently being asked about" list above, return {"field": null, "value": null} — the regular handler will pick it up.
-- If the user is just answering the current question (even with phrases like "actually" or "wait"), return {"field": null, "value": null}.
-- If the message is a question, smalltalk, off-topic, or ambiguous, return {"field": null, "value": null}.
-- For services / serviceAreas, return the comma-separated raw text — the caller will normalize it.
+- Return {"field": "<name>", "op": "replace|add|remove", "value": "<new value or items to add/remove>"} ONLY when the user is clearly correcting / updating a field they answered earlier. The user's intent across languages is what matters; read the meaning, not just keywords.
+- "op" semantics:
+  - "replace" (DEFAULT): user is overwriting the existing value with a new one. Use this for scalar fields (businessName / industry / contactEmail / contactPhone / contactAddress / primaryCity) and for list fields when the user is supplying a complete new list.
+  - "add": ONLY for list fields (services / serviceAreas), when the user is APPENDING to the existing list. Phrasings like "add X", "we also do Y", "include Z too", "X is also part of what we offer". Return ONLY the new items in "value" (comma-separated) — do not include the existing items.
+  - "remove": ONLY for list fields (services / serviceAreas), when the user is REMOVING items from the existing list. Phrasings like "remove X", "drop Y", "we don't do Z anymore", "take W off", "scrap V". Return ONLY the items to remove in "value" (comma-separated) — and ONLY items that ACTUALLY exist in the current list shown above (case-insensitive match). If the user names something not in the list, return {"field": null, ...}.
+- If the corrected field is in the "Currently being asked about" list above, return {"field": null, "op": null, "value": null} — the regular handler will pick it up.
+- If the user is just answering the current question (even with phrases like "actually" or "wait"), return {"field": null, "op": null, "value": null}.
+- If the message is a question, smalltalk, off-topic, or ambiguous, return {"field": null, "op": null, "value": null}.
+- For services / serviceAreas, return the comma-separated raw text in "value" — the caller will split & normalize.
 - Never invent field names. Never return any field outside the allowed list above.
 
-Output ONLY valid JSON: {"field": "...", "value": "..."} or {"field": null, "value": null}`;
+Output ONLY valid JSON: {"field": "...", "op": "...", "value": "..."} or {"field": null, "op": null, "value": null}`;
 
   const start = Date.now();
   try {
@@ -156,7 +160,15 @@ Output ONLY valid JSON: {"field": "...", "value": "..."} or {"field": null, "val
     if (activeFields.includes(parsed.field)) return null;
     if (parsed.value == null || String(parsed.value).trim() === '') return null;
 
-    return { field: parsed.field, value: String(parsed.value).trim() };
+    // Validate op. Default to 'replace' (preserves prior behavior for
+    // scalar fields). 'add' / 'remove' are only meaningful for list
+    // fields — collapse to 'replace' on scalars so callers don't have to
+    // re-check.
+    const opRaw = String(parsed.op || 'replace').toLowerCase().trim();
+    const isList = parsed.field === 'services' || parsed.field === 'serviceAreas';
+    const op = isList && (opRaw === 'add' || opRaw === 'remove') ? opRaw : 'replace';
+
+    return { field: parsed.field, op, value: String(parsed.value).trim() };
   } catch (err) {
     logger.warn(`[CORRECTION] detect failed: ${err.message}`);
     return null;
