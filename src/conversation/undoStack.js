@@ -53,11 +53,15 @@ async function classifyUndoOrKeep(text, { undoPending = false, userId } = {}) {
   if (t.length > 80) return 'none';
 
   const keepClause = undoPending
-    ? `- "keep": user wants to leave the previously-stored answer as-is and move on (e.g., "keep", "same", "leave it", "fine", "it's fine", "nvm", "no change"). VALID because the bot just asked "change it or keep it?".`
+    ? `- "keep": user wants to leave the previously-stored answer as-is and move on. Match all of these patterns:
+  • Direct keep: "keep", "same", "leave it", "fine", "it's fine", "nvm", "no change", "as is".
+  • Implicit keep — user is referring to an answer they already gave and asking the bot to reuse it: "I already told you", "use what I gave you", "use the previous one", "use what I said before", "don't make me repeat", "you already have it", "same as before", "the previous one is fine", "leave the previous one". These mean "use the existing value" — that is exactly what "keep" does.
+  • Equivalents in any language (Roman Urdu / Hindi / Spanish / Arabic) — read intent, not keywords.
+This is VALID because the bot just asked "change it or keep it?".`
     : `- "keep": DO NOT return "keep". The user is NOT currently at a "change or keep it?" prompt, so "keep" isn't a valid classification right now.`;
 
   const undoPendingGuidance = undoPending
-    ? `\n\nIMPORTANT context: the bot JUST popped back one step and asked "change it or keep it?". So the user's reply is most likely either "keep" or a NEW VALUE for the field. Only return "undo" if the user explicitly asks to go back ANOTHER step (e.g., "go back further", "one more step back", "no, the one before that"). A reply that supplies a specific new value for any field — classify as "none", NOT "undo".`
+    ? `\n\nIMPORTANT context: the bot JUST popped back one step and asked "change it or keep it?". So the user's reply is most likely either "keep" (in any of the forms listed above) or a NEW VALUE for the field. Only return "undo" if the user explicitly asks to go back ANOTHER step (e.g., "go back further", "one more step back", "no, the one before that"). A reply that supplies a specific new value for any field — classify as "none", NOT "undo".`
     : '';
 
   const prompt = `The user is mid-conversation with a chatbot that's collecting info to build a website.
@@ -66,6 +70,11 @@ Classify the user's reply as ONE of:
 - "undo": user wants to NAVIGATE BACK one step in the flow — return to the previous question with no specific new value supplied. Examples of pure-navigation undo: "wait go back", "let's revisit that", "one step back", "previous step please", "back up", "scratch that, take me back". The user is asking to RETURN to the previous question, not handing the bot a new value to apply.
 ${keepClause}
 - "none": user is doing anything else — supplying a real answer, supplying a NEW VALUE for any field (even an earlier field), asking a question, going off-topic, etc.
+
+CRITICAL — these are NOT undo, they are SKIP / DECLINE-CURRENT-QUESTION replies. ALWAYS classify as "none" — never as undo. The current handler decides what skip means in this context (most steps explicitly accept "skip" as an answer):
+- "skip", "skip this", "skip it", "let's skip", "just skip", "skip krdo", "skip it for now", "i want to skip", "please skip"
+- Equivalents in any language: "rehne do", "abhi nahi", "baad mein", "saltar", "passer".
+A "skip" reply is the user moving FORWARD past the current question, not going back. Returning "undo" for "skip" sends the user backward into a step they already completed — the worst possible UX failure.
 
 CRITICAL — these are NOT undo, they are EDIT-WITH-VALUE messages and must return "none" so the cross-state correction handler can apply the value:
 - "actually the business name is X" / "the name is X, not Y" / "change the name to X" / "name should be X"

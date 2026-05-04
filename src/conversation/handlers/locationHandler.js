@@ -126,14 +126,14 @@ async function handleLocation(user, message) {
       const followUp = buildPostPinFollowUp(user.state, wd);
       const head = "Got your pin — I couldn't auto-detect the city from those coordinates.";
       const msg = followUp ? `${head}\n\n${followUp}` : head;
+      // sendTextMessage auto-logs via the sender facade — calling
+      // logMessage here would create a duplicate row in conversations.
       await sendTextMessage(user.phone_number, msg);
-      await logMessage(user.id, msg, 'assistant');
       logger.info(`[LOCATION] Geocode failed for ${user.phone_number} at state ${user.state}; recorded pin and asked for text fallback`);
       return { handled: true };
     }
     const msg = `Got your location (${lat.toFixed(4)}, ${lon.toFixed(4)}). I'll save the coordinates — let me know if there's anything specific you want done with them.`;
     await sendTextMessage(user.phone_number, msg);
-    await logMessage(user.id, msg, 'assistant');
     logger.info(`[LOCATION] Geocode unavailable for ${user.phone_number}; saved raw coords`);
     return { handled: true };
   }
@@ -175,8 +175,9 @@ async function handleLocation(user, message) {
       // seed ack and the conversation stalls.
       const followUp = buildPostPinFollowUp(user.state, wd);
       const combined = followUp ? `${seedLine}\n\n${followUp}` : seedLine;
+      // sendTextMessage auto-logs (sender facade); a manual logMessage
+      // here would emit the seed-ack twice in the admin transcript.
       await sendTextMessage(user.phone_number, combined);
-      await logMessage(user.id, combined, 'assistant');
       return { handled: true };
     }
   }
@@ -187,7 +188,6 @@ async function handleLocation(user, message) {
     : geo.displayName || 'that location';
   const msg = `Got your location: *${where}*. Let me know if you'd like me to use this for anything specific.`;
   await sendTextMessage(user.phone_number, msg);
-  await logMessage(user.id, msg, 'assistant');
   logger.info(`[LOCATION] Acked for ${user.phone_number}: ${where}`);
   return { handled: true };
 }
