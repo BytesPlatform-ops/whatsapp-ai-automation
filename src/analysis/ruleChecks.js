@@ -5,19 +5,23 @@
 // failing fetch never breaks the whole audit; missing signals are marked
 // "unknown" so the scorer treats them neutrally instead of penalizing.
 
-const axios = require('axios');
 const cheerio = require('cheerio');
 const { logger } = require('../utils/logger');
+const { safeAxiosGet, safeAxiosHead } = require('../utils/safeFetch');
 
 const FETCH_TIMEOUT_MS = 8000;
 const UA = 'Mozilla/5.0 (compatible; PixieAudit/1.0; +https://pixiebot.co)';
 
+// safeGet/safeHead now delegate to safeAxiosGet/safeAxiosHead which pin
+// the connection to a pre-validated public IP. The error-swallowing shape
+// (returning {status: 0, error}) is preserved because rule checks rely on
+// it — a single failing fetch must never break the whole audit.
 async function safeGet(url, opts = {}) {
   try {
-    const res = await axios.get(url, {
+    const res = await safeAxiosGet(url, {
       timeout: FETCH_TIMEOUT_MS,
       headers: { 'User-Agent': UA, ...(opts.headers || {}) },
-      validateStatus: () => true, // Never throw on HTTP status — we handle it
+      validateStatus: () => true,
       maxContentLength: 2 * 1024 * 1024,
       ...opts,
     });
@@ -29,7 +33,7 @@ async function safeGet(url, opts = {}) {
 
 async function safeHead(url) {
   try {
-    const res = await axios.head(url, {
+    const res = await safeAxiosHead(url, {
       timeout: FETCH_TIMEOUT_MS,
       headers: { 'User-Agent': UA },
       validateStatus: () => true,

@@ -67,6 +67,33 @@ async function maybeRunJudge(user) {
   // the flag via the existing /api/conversations/:userId/takeover endpoint.
   if (user.metadata?.humanTakeover) return;
 
+  // Security-flag escalation runs EVERY turn (before the every-5-turns gate
+  // below). Pasted secrets, repeated injection attempts, and similar
+  // input-level abuse should pause the chat quickly rather than waiting
+  // for the next LLM-judge window. Flags are accumulated by salesBot.js
+  // from both JS detectors (detectSecrets) and the LLM's [SECURITY_FLAGS:
+  // ...] tag — see src/llm/prompts.js INPUT SAFETY & SECURITY section.
+  const flags = user.metadata?.securityFlags || {};
+  const flagTypes = Object.keys(flags);
+  if (flagTypes.length > 0) {
+    const oneHourAgo = Date.now() - 60 * 60 * 1000;
+    let recentEvents = 0;
+    for (const k of flagTypes) {
+      const seen = flags[k]?.lastSeenAt;
+      if (seen && new Date(seen).getTime() >= oneHourAgo) {
+        recentEvents += flags[k]?.count || 0;
+      }
+    }
+    if (flagTypes.length >= 3 || recentEvents >= 5) {
+      logger.warn(`[ABUSE] ${user.phone_number} security-flag threshold hit (${flagTypes.length} types, ${recentEvents} recent events) — escalating to handover`);
+      await applyHandover(
+        user,
+        `Security flags accumulated (${flagTypes.length} types: ${flagTypes.join(', ')}; ${recentEvents} events in last hour)`
+      );
+      return;
+    }
+  }
+
   const current = Number(user.metadata?.abuseTurnCount || 0) + 1;
   await patchMetadata(user.id, { abuseTurnCount: current });
 

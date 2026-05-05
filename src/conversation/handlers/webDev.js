@@ -8,6 +8,7 @@ const {
 const { logMessage, getConversationHistory } = require('../../db/conversations');
 const { updateUserMetadata, updateUserState } = require('../../db/users');
 const { createSite, updateSite, getLatestSite } = require('../../db/sites');
+const { checkSiteCreationAllowed, formatTimeUntil } = require('../../db/siteRateLimit');
 const { logger } = require('../../utils/logger');
 const { generateResponse } = require('../../llm/provider');
 const { STATES } = require('../states');
@@ -473,9 +474,34 @@ async function handleCollectName(user, message) {
     return STATES.WEB_COLLECT_NAME;
   }
 
-  // Create site record if not yet
+  // Create site record if not yet. Rate-limit gate: non-tester / non-paid
+  // users are capped at WEBSITE_RATE_LIMIT_PER_DAY new sites per rolling
+  // window — see src/db/siteRateLimit.js. Only checked on the first turn of
+  // the flow (when no currentSiteId yet) so revisions to an existing site
+  // never count against the cap.
   const existingWebsiteData = user.metadata?.websiteData || {};
   if (!user.metadata?.currentSiteId) {
+    const gate = await checkSiteCreationAllowed(user);
+    if (!gate.allowed) {
+      const resetIn = formatTimeUntil(gate.resetAt);
+      logger.info(
+        `[WEBDEV] Rate-limited user ${user.phone_number} — ${gate.count}/${gate.limit} sites in last ${gate.windowHours}h, resets in ${resetIn}`
+      );
+      await sendTextMessage(
+        user.phone_number,
+        await localize(
+          `You've hit the daily limit on free preview websites (${gate.limit} in ${gate.windowHours} hours). This resets in ${resetIn}.\n\nIf you'd like to keep building, you can activate one of your existing previews — just reply with the site link and I'll send you the activation link. 💡`,
+          user,
+          message.text
+        )
+      );
+      await logMessage(
+        user.id,
+        `Website creation rate-limited (${gate.count}/${gate.limit}, resets in ${resetIn})`,
+        'assistant'
+      );
+      return STATES.SALES_CHAT;
+    }
     const site = await createSite(user.id, 'business-starter');
     await updateUserMetadata(user.id, { currentSiteId: site.id });
     user.metadata = { ...(user.metadata || {}), currentSiteId: site.id };
@@ -2987,6 +3013,7 @@ Return ONLY one word: skip, generate, or other.`,
 
   let mediaBuffer = null;
   let mediaMime = 'image/png';
+  let unsafeReason = null;
   try {
     const { downloadMedia } = require('../../messages/sender');
     const media = await downloadMedia(message.mediaId || message.mediaUrl);
@@ -2995,7 +3022,24 @@ Return ONLY one word: skip, generate, or other.`,
       mediaMime = media.mimeType || mediaMime;
     }
   } catch (err) {
-    logger.error(`[LOGO-COLLECT] Media download failed: ${err.message}`);
+    if (err && err.name === 'UnsafeMediaError') {
+      unsafeReason = err.reason || 'unknown';
+      logger.warn(`[LOGO-COLLECT] Rejected unsafe upload (${unsafeReason}, mime=${err.mimeType || 'unknown'})`);
+    } else {
+      logger.error(`[LOGO-COLLECT] Media download failed: ${err.message}`);
+    }
+  }
+
+  if (unsafeReason) {
+    await sendTextMessage(
+      user.phone_number,
+      await localize(
+        "I can't accept that image format. Please send your logo as a JPG, PNG, or WebP — or reply *skip* to use a text logo.",
+        user,
+        text
+      )
+    );
+    return STATES.WEB_COLLECT_LOGO;
   }
 
   if (!mediaBuffer) {

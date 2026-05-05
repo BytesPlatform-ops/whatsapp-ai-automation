@@ -285,30 +285,66 @@ async function markAsRead(messageId) {
 }
 
 /**
+ * Sentinel error class so callers can distinguish "user uploaded a
+ * disallowed file" from "the network broke." Handlers catch this to send
+ * a friendly explanation instead of crashing or swallowing the failure.
+ */
+class UnsafeMediaError extends Error {
+  constructor(reason, mimeType) {
+    super(`Unsafe media rejected (${reason}, mime=${mimeType || 'unknown'})`);
+    this.name = 'UnsafeMediaError';
+    this.reason = reason;
+    this.mimeType = mimeType || null;
+  }
+}
+
+/**
  * Download media from WhatsApp (for receiving images/documents from users).
+ *
+ * For image MIME types we hard-block SVG (real or spoofed) at this boundary
+ * so a malicious upload never reaches any of our Supabase buckets. Audio,
+ * voice, and other non-image media pass through unchanged — they're
+ * consumed by the transcription path, not embedded into deployed sites.
  */
 async function downloadMedia(mediaId) {
+  let urlResponse, mediaResponse;
   try {
     // First get the media URL
-    const urlResponse = await axios.get(
+    urlResponse = await axios.get(
       `https://graph.facebook.com/v21.0/${mediaId}`,
       { headers: { Authorization: `Bearer ${env.whatsapp.accessToken}` } }
     );
 
     // Then download the actual file
-    const mediaResponse = await axios.get(urlResponse.data.url, {
+    mediaResponse = await axios.get(urlResponse.data.url, {
       headers: { Authorization: `Bearer ${env.whatsapp.accessToken}` },
       responseType: 'arraybuffer',
     });
-
-    return {
-      buffer: Buffer.from(mediaResponse.data),
-      mimeType: urlResponse.data.mime_type,
-    };
   } catch (error) {
     logger.error('Media download error:', error);
     throw error;
   }
+
+  const buffer = Buffer.from(mediaResponse.data);
+  const mimeType = urlResponse.data.mime_type;
+  const mime = String(mimeType || '').toLowerCase();
+
+  // Image-class media: reject SVG by MIME, and reject any payload whose
+  // first non-whitespace byte is `<` (catches spoofed-MIME SVG/HTML/XML).
+  if (mime.startsWith('image/')) {
+    if (/\bsvg\b/.test(mime) || mime.includes('svg+xml')) {
+      logger.warn(`[MEDIA] Rejected SVG upload mediaId=${mediaId} mime=${mime}`);
+      throw new UnsafeMediaError('svg_blocked', mimeType);
+    }
+    let i = 0;
+    while (i < buffer.length && i < 8 && buffer[i] <= 0x20) i++;
+    if (i < buffer.length && buffer[i] === 0x3C /* '<' */) {
+      logger.warn(`[MEDIA] Rejected text-payload-as-image mediaId=${mediaId} mime=${mime}`);
+      throw new UnsafeMediaError('svg_blocked', mimeType);
+    }
+  }
+
+  return { buffer, mimeType };
 }
 
 module.exports = {
@@ -324,4 +360,5 @@ module.exports = {
   downloadMedia,
   showTyping,
   setLastMessageId,
+  UnsafeMediaError,
 };

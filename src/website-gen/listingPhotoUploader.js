@@ -5,8 +5,10 @@
 const { supabase } = require('../config/database');
 const { v4: uuidv4 } = require('uuid');
 const { logger } = require('../utils/logger');
+const { assertImageBytesSafe } = require('../utils/validators');
 
 const BUCKET = 'listing-photos';
+const ALLOWED_MIMES = ['image/png', 'image/jpeg', 'image/webp'];
 
 async function ensureBucket() {
   const { error } = await supabase.storage.createBucket(BUCKET, {
@@ -27,6 +29,14 @@ async function ensureBucket() {
  */
 async function uploadListingPhoto(buffer, mimeType = 'image/jpeg') {
   await ensureBucket();
+
+  // Bucket allowedMimeTypes is only enforced at creation; re-validate here.
+  const safety = assertImageBytesSafe(buffer, mimeType, ALLOWED_MIMES);
+  if (!safety.ok) {
+    logger.warn(`[LISTING-UPLOAD] Rejected upload (${safety.reason}, mime=${mimeType})`);
+    throw new Error(`Listing photo upload rejected: ${safety.reason}`);
+  }
+
   const ext = (mimeType.split('/')[1] || 'jpg').replace('jpeg', 'jpg');
   const filename = `${Date.now()}-${uuidv4().slice(0, 8)}.${ext}`;
 

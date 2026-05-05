@@ -5,6 +5,21 @@ const { classifyIntent } = require('../../llm/intentClassifier');
 const { buildSalesPrompt } = require('../../llm/prompts');
 const { formatWhatsApp } = require('../../utils/formatWhatsApp');
 const { updateUserMetadata } = require('../../db/users');
+const { detectSecrets, validateBusinessName } = require('../../utils/validators');
+
+// Internal-signal tag the LLM appends when it spots an injection attempt,
+// pasted secret, etc. The set must stay in sync with the prompt section
+// "INPUT SAFETY & SECURITY" in src/llm/prompts.js — anything outside this
+// set is dropped (so a hallucinated label can't poison user metadata).
+const ALLOWED_SECURITY_FLAGS = new Set([
+  'prompt_injection_attempt',
+  'credential_or_secret_in_message',
+  'pii_dump',
+  'repeated_identical_messages',
+  'sudden_topic_shift_to_admin_or_internal',
+  'request_for_other_user_data',
+  'suspected_automation',
+]);
 const { logger } = require('../../utils/logger');
 const { STATES } = require('../states');
 const { env } = require('../../config/env');
@@ -89,7 +104,7 @@ function extractLeadBrief(text) {
 }
 
 async function handleSalesBot(user, message) {
-  const text = (message.text || '').trim();
+  let text = (message.text || '').trim();
 
   if (!text) {
     await sendTextMessage(
@@ -97,6 +112,29 @@ async function handleSalesBot(user, message) {
       "Hey! I didn't catch that - what can I help you with?"
     );
     return STATES.SALES_CHAT;
+  }
+
+  // Cap inbound text size before it reaches the LLM. The router already
+  // dropped pasted secrets via redactSecrets, but a 10KB injection prompt
+  // is no less dangerous for being non-secret. Most legitimate WhatsApp
+  // messages are under a few hundred chars; 4000 is generous for the
+  // rare paragraph-length business description.
+  const INBOUND_MAX = 4000;
+  if (text.length > INBOUND_MAX) {
+    logger.warn(`[SECURITY] Truncating inbound message from ${user.phone_number} (${text.length} chars)`);
+    text = text.slice(0, INBOUND_MAX);
+  }
+
+  // Security-flag accumulator for this turn. Sources, in order:
+  //   1. Router-level secret redaction (user._secretRedaction is set when
+  //      router.js scrubbed a key/token/JWT before this handler ran).
+  //   2. JS-side detectSecrets backstop (in case the redaction patterns
+  //      and detection patterns ever drift apart).
+  //   3. The LLM's own [SECURITY_FLAGS: ...] tag, parsed below.
+  const securityFlagSet = new Set();
+  if (user._secretRedaction || detectSecrets(text)) {
+    securityFlagSet.add('credential_or_secret_in_message');
+    logger.warn(`[SECURITY] Possible secret in message from ${user.phone_number} — not echoing back`);
   }
 
   // Un-stick: if websiteDemoTriggered was set in a previous turn but the
@@ -255,7 +293,14 @@ async function handleSalesBot(user, message) {
         const val = clean(pair.slice(eq + 1));
         if (!val) continue;
         if (key === 'name' || key === 'business') {
-          if (val.length <= 60) websiteDemoBusinessName = val;
+          // Drop the field on validation failure rather than blocking the
+          // whole trigger — the wizard will re-ask for what's missing.
+          const v = validateBusinessName(val);
+          if (v.ok && v.value.length <= 60) {
+            websiteDemoBusinessName = v.value;
+          } else {
+            logger.warn(`[SALES] Dropping invalid business name from trigger tag (${v.ok ? 'too_long_for_trigger' : v.reason})`);
+          }
         } else if (key === 'industry' || key === 'niche') {
           if (val.length <= 40) websiteDemoIndustry = val;
         } else if (key === 'services' || key === 'service') {
@@ -268,7 +313,14 @@ async function handleSalesBot(user, message) {
       }
     } else {
       const name = clean(payload);
-      if (name && name.length <= 60) websiteDemoBusinessName = name;
+      if (name) {
+        const v = validateBusinessName(name);
+        if (v.ok && v.value.length <= 60) {
+          websiteDemoBusinessName = v.value;
+        } else {
+          logger.warn(`[SALES] Dropping invalid bare business name from trigger tag (${v.ok ? 'too_long_for_trigger' : v.reason})`);
+        }
+      }
     }
   }
   // Strip generic industry-echo services ("plumbing services" when industry
@@ -306,6 +358,23 @@ async function handleSalesBot(user, message) {
   // service this chat doesn't currently handle. Payload is a free-form
   // service label ("chatbot", "SEO audit", "ad design", etc.).
   const humanHandoffMatch = cleanText.match(/\[TRIGGER_HUMAN_HANDOFF:\s*([^\]]+)\]/i);
+
+  // Internal-signal tag from the INPUT SAFETY section of the prompt. The
+  // LLM appends [SECURITY_FLAGS: <comma,labels>] when it detects injection
+  // attempts, pasted secrets, requests for other users' data, etc. We
+  // intersect with the allow-set so a hallucinated label can't sneak into
+  // user metadata. The tag is stripped from the user-visible reply below.
+  const securityFlagsMatch = cleanText.match(/\[SECURITY_FLAGS:\s*([^\]]+)\]/i);
+  if (securityFlagsMatch) {
+    for (const raw of securityFlagsMatch[1].split(',')) {
+      const label = raw.trim().toLowerCase();
+      if (ALLOWED_SECURITY_FLAGS.has(label)) {
+        securityFlagSet.add(label);
+      } else if (label) {
+        logger.debug(`[SECURITY] Dropping unknown flag label from LLM: "${label}"`);
+      }
+    }
+  }
 
   // Stitch the recent conversation + bot reply into one snippet so the
   // topic classifier sees both sides. We trim to the last few turns —
@@ -521,7 +590,32 @@ async function handleSalesBot(user, message) {
     .replace(/\[TRIGGER_SEO_AUDIT:[^\]]*\]/g, '')
     .replace(/\[TRIGGER_HUMAN_HANDOFF:[^\]]*\]/gi, '')
     .replace(/\[SEND_PAYMENT:[^\]]*\]/g, '')
+    .replace(/\[SECURITY_FLAGS:[^\]]*\]/gi, '')
     .trim();
+
+  // Persist any security flags collected this turn (from JS detectors +
+  // LLM-emitted tag). Stored under metadata.securityFlags as a per-flag
+  // { count, lastSeenAt } record so the abuse detector can read a running
+  // history. Awaited (not fire-and-forget) so the next inbound turn can't
+  // read stale metadata after the per-user lock releases.
+  if (securityFlagSet.size > 0) {
+    const nowIso = new Date().toISOString();
+    const existing = (user.metadata && user.metadata.securityFlags) || {};
+    const merged = { ...existing };
+    for (const flag of securityFlagSet) {
+      const prior = merged[flag] || { count: 0 };
+      merged[flag] = { count: (prior.count || 0) + 1, lastSeenAt: nowIso };
+    }
+    try {
+      await updateUserMetadata(user.id, { securityFlags: merged });
+      // Reflect the write back onto the in-memory user so anything later
+      // in this turn (e.g. the abuse detector) reads consistent state.
+      user.metadata = { ...(user.metadata || {}), securityFlags: merged };
+    } catch (err) {
+      logger.warn(`[SECURITY] Failed to persist flags for ${user.phone_number}: ${err.message}`);
+    }
+    logger.warn(`[SECURITY] ${user.phone_number} flags this turn: ${Array.from(securityFlagSet).join(', ')}`);
+  }
 
   // Strip the Calendly URL from the text - we'll send it as a tappable CTA button instead
   const calendlyUrl = env.calendlyUrl;
@@ -797,6 +891,34 @@ async function handleSalesBot(user, message) {
   // Trigger website demo flow
   if (websiteDemoTrigger && !user.metadata?.websiteDemoTriggered) {
     logger.info(`[SALES] Triggering website demo for ${user.phone_number}`);
+
+    // Rate-limit gate: cap how many demo previews a single non-tester /
+    // non-paid user can spawn in a rolling window. We check BEFORE setting
+    // websiteDemoTriggered so the trigger can fire again later (e.g. user
+    // tries again the next day after the window resets).
+    const { checkSiteCreationAllowed, formatTimeUntil } = require('../../db/siteRateLimit');
+    const gate = await checkSiteCreationAllowed(user);
+    if (!gate.allowed) {
+      const resetIn = formatTimeUntil(gate.resetAt);
+      logger.info(
+        `[SALES] Website demo rate-limited for ${user.phone_number} — ${gate.count}/${gate.limit} sites in last ${gate.windowHours}h, resets in ${resetIn}`
+      );
+      await sendTextMessage(
+        user.phone_number,
+        await localize(
+          `You've hit the daily limit on free preview websites (${gate.limit} in ${gate.windowHours} hours). This resets in ${resetIn}.\n\nIf you'd like to keep building, you can activate one of your existing previews — just reply with the site link and I'll send you the activation link. 💡`,
+          user,
+          text
+        )
+      );
+      await logMessage(
+        user.id,
+        `Sales-bot website demo rate-limited (${gate.count}/${gate.limit}, resets in ${resetIn})`,
+        'assistant'
+      );
+      return STATES.SALES_CHAT;
+    }
+
     await updateUserMetadata(user.id, { websiteDemoTriggered: true, returnToSales: true });
 
     const { createSite } = require('../../db/sites');

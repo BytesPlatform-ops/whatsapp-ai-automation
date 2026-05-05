@@ -41,6 +41,8 @@ const optional = [
   'NAMECHEAP_USE_SANDBOX',
   'UNSPLASH_ACCESS_KEY',
   'TESTER_PHONES',
+  'WEBSITE_RATE_LIMIT_PER_DAY',
+  'WEBSITE_RATE_LIMIT_WINDOW_HOURS',
 ];
 // Note: UNSPLASH_ACCESS_KEY / PEXELS_API_KEY are intentionally NOT required.
 // Image fetches degrade gracefully — sites render with gradient heroes when

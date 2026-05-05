@@ -40,7 +40,8 @@ async function analyzeWebsite(scrapedData, options = {}) {
   let $ = null;
   let homepageHeaders = {};
   try {
-    const res = await axios.get(url, {
+    const { safeAxiosGet } = require('../utils/safeFetch');
+    const res = await safeAxiosGet(url, {
       timeout: 10000,
       headers: { 'User-Agent': 'Mozilla/5.0 (compatible; PixieAudit/1.0)' },
       validateStatus: () => true,

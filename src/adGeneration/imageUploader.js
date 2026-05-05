@@ -10,8 +10,10 @@
 const { supabase } = require('../config/database');
 const { v4: uuidv4 } = require('uuid');
 const { logger } = require('../utils/logger');
+const { assertImageBytesSafe } = require('../utils/validators');
 
 const BUCKET = 'ad-images';
+const ALLOWED_MIMES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
 
 /**
  * Ensure the ad-images bucket exists and is public.
@@ -43,6 +45,13 @@ async function uploadAdImage(base64Data, mimeType = 'image/png') {
   const ext = mimeType.split('/')[1]?.replace('jpeg', 'jpg') || 'png';
   const filename = `${Date.now()}-${uuidv4().slice(0, 8)}.${ext}`;
   const buffer = Buffer.from(base64Data, 'base64');
+
+  // Bucket allowedMimeTypes is only enforced at creation; re-validate here.
+  const safety = assertImageBytesSafe(buffer, mimeType, ALLOWED_MIMES);
+  if (!safety.ok) {
+    logger.warn(`[AD-UPLOAD] Rejected upload (${safety.reason}, mime=${mimeType})`);
+    throw new Error(`Ad image upload rejected: ${safety.reason}`);
+  }
 
   const { error: uploadError } = await supabase.storage
     .from(BUCKET)

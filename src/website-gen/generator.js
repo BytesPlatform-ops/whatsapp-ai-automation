@@ -525,7 +525,12 @@ Generate compelling website copy for this business. Return ONLY valid JSON.${lan
   };
 
   logger.info(`Generated website content for ${businessName}${heroImage ? ' (with Unsplash hero)' : ''}`);
-  return siteConfig;
+  // Single chokepoint for HTML/URL safety. Even with the per-template
+  // esc() calls in place, this catches anything a future template author
+  // forgets to escape and nulls out URL fields that don't pass strict
+  // validation (e.g. javascript: in logoUrl).
+  const { sanitizeSiteConfig } = require('./sanitizeConfig');
+  return sanitizeSiteConfig(siteConfig);
 }
 
 module.exports = { generateWebsiteContent };

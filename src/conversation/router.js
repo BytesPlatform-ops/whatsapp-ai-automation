@@ -1046,8 +1046,29 @@ async function _routeMessage(message) {
     logger.info(`[AD TRACKING] Platform: ${channel} | Product: ${product} | Ad: ${ref.headline || 'N/A'} | User: ${from}`);
   }
 
-  // Log incoming message — use latest text (may be audio transcript), originalType (so audio shows as audio)
-  await logMessage(user.id, message.text || text || '', 'user', originalType, messageId, mediaData, mediaMime);
+  // Redact any pasted secrets (API keys, JWTs, private-key blocks, etc.)
+  // BEFORE the message hits the conversation log or any downstream
+  // handler. Once it's in the DB, getConversationHistory will replay it
+  // into every future LLM call for this user — so this is the only
+  // boundary where redaction is meaningful. Mutating message.text means
+  // every downstream consumer (handlers, classifiers, LLM context) sees
+  // the redacted version. The salesBot handler reads `user._secretRedaction`
+  // so it can still raise the credential_or_secret_in_message flag without
+  // re-detecting the now-redacted text.
+  try {
+    const { redactSecrets } = require('../utils/validators');
+    const incomingText = message.text || text || '';
+    const redaction = redactSecrets(incomingText);
+    if (redaction.redacted) {
+      logger.warn(`[SECURITY] Redacted ${redaction.types.join(',')} from inbound message for ${from}`);
+      message.text = redaction.text;
+      user._secretRedaction = { types: redaction.types };
+    }
+    await logMessage(user.id, redaction.text, 'user', originalType, messageId, mediaData, mediaMime);
+  } catch (err) {
+    logger.warn(`[SECURITY] redactSecrets failed for ${from}: ${err.message} — logging raw text`);
+    await logMessage(user.id, message.text || text || '', 'user', originalType, messageId, mediaData, mediaMime);
+  }
 
   // Auto-update lead temperature based on user message count
   const messageCount = (user.metadata?.userMessageCount || 0) + 1;

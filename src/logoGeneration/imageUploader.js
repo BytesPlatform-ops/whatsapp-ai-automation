@@ -10,8 +10,10 @@
 const { supabase } = require('../config/database');
 const { v4: uuidv4 } = require('uuid');
 const { logger } = require('../utils/logger');
+const { assertImageBytesSafe } = require('../utils/validators');
 
 const BUCKET = 'logo-images';
+const ALLOWED_MIMES = ['image/png', 'image/jpeg', 'image/webp'];
 
 /**
  * Ensure the logo-images bucket exists and is public.
@@ -42,6 +44,16 @@ async function uploadLogoImage(base64Data, mimeType = 'image/png') {
   const ext = mimeType.split('/')[1]?.replace('jpeg', 'jpg') || 'png';
   const filename = `${Date.now()}-${uuidv4().slice(0, 8)}.${ext}`;
   const buffer = Buffer.from(base64Data, 'base64');
+
+  // Re-validate before pushing to public storage. Supabase enforces the
+  // allowedMimeTypes only at bucket *creation* — existing buckets accept
+  // whatever we hand them, so a spoofed MIME or an SVG can otherwise slip
+  // through. assertImageBytesSafe runs MIME allowlist + magic-byte sniff.
+  const safety = assertImageBytesSafe(buffer, mimeType, ALLOWED_MIMES);
+  if (!safety.ok) {
+    logger.warn(`[LOGO-UPLOAD] Rejected upload (${safety.reason}, mime=${mimeType})`);
+    throw new Error(`Logo upload rejected: ${safety.reason}`);
+  }
 
   const { error: uploadError } = await supabase.storage
     .from(BUCKET)

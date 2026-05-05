@@ -1,6 +1,6 @@
-const axios = require('axios');
 const cheerio = require('cheerio');
 const { logger } = require('../utils/logger');
+const { safeAxiosGet } = require('../utils/safeFetch');
 
 /**
  * Scrape a website and extract key data for analysis.
@@ -12,7 +12,11 @@ async function scrapeWebsite(url) {
   logger.info(`[SEO:SCRAPER] Starting scrape for: ${url}`);
   const startTime = Date.now();
 
-  const response = await axios.get(url, {
+  // safeAxiosGet pins the connection to a pre-validated public IP so a
+  // domain that resolves to a private address at fetch time (DNS rebinding)
+  // cannot reach internal infrastructure even when the URL string itself
+  // looked safe at intake.
+  const response = await safeAxiosGet(url, {
     timeout: 15000,
     headers: {
       'User-Agent':
