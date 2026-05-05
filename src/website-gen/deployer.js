@@ -35,7 +35,14 @@ async function deployToNetlify(siteConfig, existingSiteId = null, { watermark = 
   if (!env.netlify.token) throw new Error('NETLIFY_TOKEN is not configured');
   const headers = { Authorization: `Bearer ${env.netlify.token}`, 'Content-Type': 'application/json' };
   try {
-    const files = renderAllPagesForTemplate(siteConfig, watermark);
+    const rawFiles = renderAllPagesForTemplate(siteConfig, watermark);
+    // Inject a hash-based Content-Security-Policy meta tag into every
+    // .html page. Templates' own inline <script> blocks are hashed so they
+    // still execute; anything an attacker manages to inject later (via
+    // a missed esc() or a future template bug) is blocked by the browser
+    // because no matching hash is in the policy.
+    const { applyCspToFiles } = require('./csp');
+    const files = applyCspToFiles(rawFiles);
     let siteId, siteName;
 
     if (existingSiteId) {
@@ -913,17 +920,60 @@ function heroTextPalette(primaryColor, override) {
 }
 
 /**
- * Add a custom domain to an existing Netlify site.
+ * Attach a custom domain to an existing Netlify site.
+ *
+ * Netlify exposes domains as fields on the site resource (custom_domain
+ * and domain_aliases), not as a sub-collection — there is no
+ * POST /sites/{id}/domain_aliases endpoint. We GET the current site,
+ * merge in the new domain, then PATCH the full state back. PATCH replaces
+ * domain_aliases wholesale, so the merge step is required.
+ *
+ * Idempotent: calling with a domain already set is a no-op. Apex/bare
+ * domains are placed in custom_domain when it's empty; www and additional
+ * domains are added to domain_aliases.
  */
 async function addCustomDomainToNetlify(netlifySiteId, domain) {
   const headers = { Authorization: `Bearer ${env.netlify.token}`, 'Content-Type': 'application/json' };
+  const wantedLower = domain.toLowerCase();
+
+  // 1. Fetch current site state.
+  let current;
   try {
-    await axios.post(`${NETLIFY_API}/sites/${netlifySiteId}/domain_aliases`, { domain }, { headers, timeout: NETLIFY_TIMEOUT_MS });
-    logger.info(`[NETLIFY] Custom domain added: ${domain} -> site ${netlifySiteId}`);
+    const r = await axios.get(`${NETLIFY_API}/sites/${netlifySiteId}`, { headers, timeout: NETLIFY_TIMEOUT_MS });
+    current = r.data;
+  } catch (err) {
+    logger.error(`[NETLIFY] GET site failed for ${netlifySiteId}: ${err.response?.status || err.message}`);
+    throw err;
+  }
+
+  const currentCustom = (current.custom_domain || '').toLowerCase();
+  const currentAliases = Array.isArray(current.domain_aliases) ? [...current.domain_aliases] : [];
+  const aliasesLower = currentAliases.map((a) => String(a).toLowerCase());
+  const isWww = /^www\./i.test(domain);
+
+  // 2. Decide what (if anything) to change.
+  if (currentCustom === wantedLower || aliasesLower.includes(wantedLower)) {
+    logger.info(`[NETLIFY] ${domain} already attached to site ${netlifySiteId} — no change`);
     return true;
-  } catch (error) {
-    logger.error(`[NETLIFY] Failed to add custom domain ${domain}:`, error.response?.data || error.message);
-    throw error;
+  }
+
+  const patch = {};
+  if (!isWww && !currentCustom) {
+    // Apex with no primary set yet — make it the primary.
+    patch.custom_domain = domain;
+  } else {
+    // www, or apex when primary is already taken — append to aliases.
+    patch.domain_aliases = [...currentAliases, domain];
+  }
+
+  // 3. PATCH back.
+  try {
+    await axios.patch(`${NETLIFY_API}/sites/${netlifySiteId}`, patch, { headers, timeout: NETLIFY_TIMEOUT_MS });
+    logger.info(`[NETLIFY] Attached ${domain} to site ${netlifySiteId} via ${Object.keys(patch).join(',')}`);
+    return true;
+  } catch (err) {
+    logger.error(`[NETLIFY] PATCH failed for ${domain} on ${netlifySiteId}:`, err.response?.data || err.message);
+    throw err;
   }
 }
 

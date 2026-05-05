@@ -349,42 +349,145 @@ async function registerDomain(domain, years = 1) {
 // ─── DNS FOR NETLIFY ───────────────────────────────────────────────
 
 /**
+ * List all DNS records on a domain. Returns an array (empty if none).
+ * Each record has: record_id, type, host (FQDN), value, ttl, distance.
+ */
+async function dnsListRecords(domain) {
+  const reply = await nsRequest('dnsListRecords', { domain });
+  // NameSilo wraps records under `resource_record`. Single record may come
+  // back as an object (not array) due to JSON-of-XML quirks, so normalize.
+  // Defensive fallback: try a few alternative field names if the common one
+  // is missing, so we don't silently treat "no field" as "no records".
+  const raw =
+    reply.resource_record ??
+    reply.resource_records ??
+    reply.records ??
+    null;
+  if (!raw) {
+    logger.warn(
+      `[NAMESILO] dnsListRecords for ${domain}: no records field in reply. Keys=${Object.keys(reply).join(',')}`
+    );
+    return [];
+  }
+  return Array.isArray(raw) ? raw : [raw];
+}
+
+async function dnsDeleteRecord(domain, rrid) {
+  await nsRequest('dnsDeleteRecord', { domain, rrid });
+}
+
+/**
+ * Normalize a NameSilo `host` field for comparison. Different responses
+ * may return the apex as the FQDN, "@", empty string, or with a trailing
+ * dot. Returns the FQDN form (no trailing dot, lowercased).
+ */
+function normalizeHost(host, domain) {
+  const h = String(host ?? '').toLowerCase().replace(/\.$/, '').trim();
+  if (!h || h === '@') return domain;
+  if (h === domain || h.endsWith(`.${domain}`)) return h;
+  return `${h}.${domain}`;
+}
+
+/**
  * Configure DNS records so the domain points at the Netlify site:
  *   - A record @ → 75.2.60.5 (Netlify's load balancer)
  *   - CNAME www → <subdomain>.netlify.app
  *
- * NameSilo's dnsAddRecord takes rrtype, rrhost, rrvalue, rrttl.
+ * Idempotent: lists existing records first, deletes parking A/AAAA/CNAME
+ * records on apex/www that conflict with our targets, and skips re-adding
+ * records that are already correct. MX/TXT/CAA records are NEVER touched
+ * — deleting those could break customer email or cert issuance.
  */
 async function setDNSForNetlify(domain, netlifySubdomain) {
   const clean = domain.toLowerCase().trim();
+  const apexHost = clean;
+  const wwwHost = `www.${clean}`;
+  const apexValue = '75.2.60.5';
+  const cnameValue = `${netlifySubdomain}.netlify.app`;
 
-  // Apex A record
+  // 1. Snapshot current DNS state
+  let existing;
   try {
-    await nsRequest('dnsAddRecord', {
-      domain: clean,
-      rrtype: 'A',
-      rrhost: '',             // empty host = apex (@)
-      rrvalue: '75.2.60.5',
-      rrttl: '300',
-    });
-    logger.info(`[NAMESILO] A record created for ${clean} → 75.2.60.5`);
+    existing = await dnsListRecords(clean);
   } catch (err) {
-    logger.error(`[NAMESILO] Failed to create A record for ${clean}: ${err.message}`);
+    logger.error(`[NAMESILO] dnsListRecords failed for ${clean}: ${err.message}`);
     throw err;
   }
+  logger.info(`[NAMESILO] dnsListRecords for ${clean}: ${existing.length} record(s)`);
+  for (const rec of existing) {
+    logger.info(
+      `[NAMESILO]   rrid=${rec.record_id} type=${rec.type} host="${rec.host}" value="${rec.value}"`
+    );
+  }
 
-  // www CNAME (non-fatal if it fails — A record alone is enough for apex)
-  try {
-    await nsRequest('dnsAddRecord', {
-      domain: clean,
-      rrtype: 'CNAME',
-      rrhost: 'www',
-      rrvalue: `${netlifySubdomain}.netlify.app`,
-      rrttl: '300',
-    });
-    logger.info(`[NAMESILO] CNAME created for www.${clean} → ${netlifySubdomain}.netlify.app`);
-  } catch (err) {
-    logger.warn(`[NAMESILO] www CNAME create failed for ${clean}: ${err.message}`);
+  // 2. Apex A record — delete strays, skip-or-add
+  let apexCorrect = false;
+  for (const rec of existing) {
+    const recHost = normalizeHost(rec.host, clean);
+    const recType = String(rec.type || '').toUpperCase();
+    if (recHost !== apexHost) continue;
+    if (recType !== 'A' && recType !== 'AAAA') continue;
+    if (recType === 'A' && rec.value === apexValue) {
+      apexCorrect = true;
+      logger.info(`[NAMESILO] Apex A already correct for ${clean} (rrid=${rec.record_id})`);
+      continue;
+    }
+    try {
+      await dnsDeleteRecord(clean, rec.record_id);
+      logger.info(`[NAMESILO] Deleted stray ${recType} on apex for ${clean}: ${rec.value} (rrid=${rec.record_id})`);
+    } catch (err) {
+      logger.warn(`[NAMESILO] Could not delete stray apex record ${rec.record_id} for ${clean}: ${err.message}`);
+    }
+  }
+  if (!apexCorrect) {
+    try {
+      await nsRequest('dnsAddRecord', {
+        domain: clean,
+        rrtype: 'A',
+        rrhost: '',             // empty host = apex (@)
+        rrvalue: apexValue,
+        rrttl: '3600',          // NameSilo requires 3600–2592000
+      });
+      logger.info(`[NAMESILO] A record created for ${clean} → ${apexValue}`);
+    } catch (err) {
+      logger.error(`[NAMESILO] Failed to create A record for ${clean}: ${err.message}`);
+      throw err;
+    }
+  }
+
+  // 3. www CNAME — delete blocking strays, skip-or-add. Non-fatal if add fails.
+  let wwwCorrect = false;
+  for (const rec of existing) {
+    const recHost = normalizeHost(rec.host, clean);
+    const recType = String(rec.type || '').toUpperCase();
+    if (recHost !== wwwHost) continue;
+    if (recType !== 'A' && recType !== 'AAAA' && recType !== 'CNAME') continue;
+    const recValue = String(rec.value || '').replace(/\.$/, '').toLowerCase();
+    if (recType === 'CNAME' && recValue === cnameValue.toLowerCase()) {
+      wwwCorrect = true;
+      logger.info(`[NAMESILO] www CNAME already correct for ${clean} (rrid=${rec.record_id})`);
+      continue;
+    }
+    try {
+      await dnsDeleteRecord(clean, rec.record_id);
+      logger.info(`[NAMESILO] Deleted stray ${recType} on www.${clean}: ${rec.value} (rrid=${rec.record_id})`);
+    } catch (err) {
+      logger.warn(`[NAMESILO] Could not delete stray www record ${rec.record_id} for ${clean}: ${err.message}`);
+    }
+  }
+  if (!wwwCorrect) {
+    try {
+      await nsRequest('dnsAddRecord', {
+        domain: clean,
+        rrtype: 'CNAME',
+        rrhost: 'www',
+        rrvalue: cnameValue,
+        rrttl: '3600',
+      });
+      logger.info(`[NAMESILO] CNAME created for www.${clean} → ${cnameValue}`);
+    } catch (err) {
+      logger.warn(`[NAMESILO] www CNAME create failed for ${clean}: ${err.message}`);
+    }
   }
 
   return true;
@@ -474,6 +577,8 @@ module.exports = {
   ensureContactId,
   registerDomain,
   setDNSForNetlify,
+  dnsListRecords,
+  dnsDeleteRecord,
   getAccountBalance,
   purchaseAndConfigureDomain,
   ping,

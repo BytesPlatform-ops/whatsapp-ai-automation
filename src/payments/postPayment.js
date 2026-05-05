@@ -159,6 +159,7 @@ async function handleConfirmedPayment(payment, paidSession) {
             );
             try {
               await addCustomDomainToNetlify(netlifySiteId, selectedDomain);
+              await addCustomDomainToNetlify(netlifySiteId, `www.${selectedDomain}`);
             } catch (e) {
               logger.error('[PAY] Late-domain Netlify attach failed:', e.message);
             }
@@ -339,7 +340,10 @@ async function handleConfirmedPayment(payment, paidSession) {
               await runWithContext({ channel: targetChannel, phoneNumberId: targetVia }, () =>
                 sendTextMessage(targetPhone, `⏳ Configuring your website on *${selectedDomain}*...`)
               );
-              try { await addCustomDomainToNetlify(netlifySiteId, selectedDomain); } catch (e) {
+              try {
+                await addCustomDomainToNetlify(netlifySiteId, selectedDomain);
+                await addCustomDomainToNetlify(netlifySiteId, `www.${selectedDomain}`);
+              } catch (e) {
                 logger.error('[PAY] Netlify domain add failed:', e.message);
               }
             }
