@@ -1,0 +1,33 @@
+{
+  "name": "services-conversational-lead-in",
+  "description": "Regression for extractServices fast-path. A casual reply with a 'yeah they're' opener and an 'and X' tail used to bypass the LLM via the regex fast-path and store ['yeah theyre <first>', ..., 'and <last>'] verbatim. The fast-path now rejects conversational openers and connector-prefixed tail tokens, falling through to the LLM which normalizes the list. Originally surfaced in the salon onboarding flow ('yeah theyre waxing, facials, nails, and haircuts'); the parser is industry-agnostic, so this fixture seeds a plumbing user — that path echoes the captured services back in the ack, letting reply_not_contains catch any literal leak of the dirty fragments.",
+  "channel": "whatsapp",
+  "seed": {
+    "state": "WEB_COLLECT_SERVICES",
+    "metadata": {
+      "websiteData": {
+        "businessName": "Noman Plumbing",
+        "industry": "Plumbing",
+        "primaryCity": "Karachi",
+        "serviceAreas": ["Clifton"]
+      },
+      "websiteDemoTriggered": true,
+      "emailSkipped": true
+    }
+  },
+  "turns": [
+    {
+      "user": "yeah theyre drain cleaning, pipe repair, and water heater installation",
+      "expect": {
+        "metadata.websiteData.services": "*exists*",
+        "reply_not_contains": [
+          "yeah theyre",
+          "and water heater",
+          "Nothing to go back to",
+          "Sure, going back one step"
+        ],
+        "sent_count_gte": 1
+      }
+    }
+  ]
+}

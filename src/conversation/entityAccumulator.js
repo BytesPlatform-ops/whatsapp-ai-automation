@@ -274,32 +274,21 @@ Return ONLY the industry label or the single word "unknown". No quotes, no expla
 }
 
 /**
- * Extract a clean, normalized services array from a user reply. LLM-first.
- * Fast-path obviously-clean comma-separated lists (no prose) through without
- * an LLM call. Everything else gets normalized so "we just rent trucks" →
- * ["Truck rental"], "oh we do haircuts, nails, and also facials" →
- * ["Haircut", "Nails", "Facials"].
+ * Extract a clean, normalized services array from a user reply. Always
+ * goes through the LLM — no regex fast-path. Even clean-looking inputs
+ * like "haircut, nails, facials" go through the model so casing and
+ * normalization are consistent ("we just rent trucks" → ["Truck rental"],
+ * "yeah theyre waxing, facials, nails, and haircuts" →
+ * ["Waxing", "Facials", "Nails", "Haircuts"]).
  *
  * Returns an empty array for delegation ("whatever", "skip"), a non-empty
- * array for real service lists, or null if the LLM failed.
+ * array for real service lists, or null if the LLM failed (the caller in
+ * handleCollectServices falls back to a basic comma split in that case
+ * so we never silently lose the user's answer).
  */
 async function extractServices(userReply, context = {}) {
   const raw = String(userReply || '').trim();
   if (!raw) return [];
-
-  // Fast path: obviously-clean comma-separated list — no personal pronouns,
-  // no filler. "haircut, nails, facials" goes straight through.
-  const fillerWords = /\b(?:we|i|its|it'?s|we'?re|im|i'?m|our|my|the|a|an|just|only|basically|mainly|mostly|offer|do|provide|sell|make|rent|serve|help)\b/i;
-  const allSimpleTokens = raw.split(/\s*,\s*/).every((t) => t.trim().length >= 2 && t.trim().length < 40);
-  if (
-    raw.length <= 120 &&
-    /[a-zA-Z]/.test(raw) &&
-    raw.includes(',') &&
-    !fillerWords.test(raw) &&
-    allSimpleTokens
-  ) {
-    return raw.split(/\s*,\s*/).map((t) => t.trim()).filter(Boolean);
-  }
 
   const businessLine = context.businessName ? `Business name: "${context.businessName}"\n` : '';
   const industryLine = context.industry ? `Industry: "${context.industry}"\n` : '';
@@ -309,8 +298,8 @@ async function extractServices(userReply, context = {}) {
 Extract the services as a JSON array of clean, normalized service names.
 
 Rules:
-- Normalize, don't echo the user's prose. "we just rent trucks" → ["Truck rental"]. "we offer haircut, nails and facials" → ["Haircut", "Nails", "Facials"]. "hair cuts and transplant" → ["Haircut", "Hair transplant"].
-- Drop filler words ("we do", "we offer", "basically", "just", "also").
+- Normalize, don't echo the user's prose. "we just rent trucks" → ["Truck rental"]. "we offer haircut, nails and facials" → ["Haircut", "Nails", "Facials"]. "hair cuts and transplant" → ["Haircut", "Hair transplant"]. "yeah they're waxing, facials, nails, and haircuts" → ["Waxing", "Facials", "Nails", "Haircuts"].
+- Drop filler words and conversational lead-ins ("we do", "we offer", "basically", "just", "also", "yeah", "yes", "ok", "well", "so", "like", "um", "they're", "they are", "and" / "or" before a service).
 - If the user is delegating ("whatever", "skip", "idk", "you pick"), return an empty array: []
 - If the reply doesn't describe services at all (nonsense, greeting), return an empty array: []
 
