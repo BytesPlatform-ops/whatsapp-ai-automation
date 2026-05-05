@@ -1,0 +1,22 @@
+{
+  "name": "business-name-titlecased-on-save",
+  "description": "User types their business name in all-lowercase ('noman plumbing'). Bot must store the name with each word capitalized — 'Noman Plumbing' — not the lowercase verbatim text. Real tester report from May 2026: bot was echoing the lowercase string back into summaries and the generated site, looked like a typo to end users.",
+  "channel": "whatsapp",
+  "seed": {
+    "state": "WEB_COLLECT_NAME",
+    "metadata": {
+      "websiteDemoTriggered": true,
+      "emailSkipped": true
+    }
+  },
+  "turns": [
+    {
+      "user": "noman plumbing",
+      "expect": {
+        "metadata.websiteData.businessName": "Noman Plumbing",
+        "state_not": "WEB_COLLECT_NAME",
+        "sent_count_gte": 1
+      }
+    }
+  ]
+}

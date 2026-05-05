@@ -12,6 +12,7 @@
 const { generateResponse } = require('../llm/provider');
 const { updateUserMetadata } = require('../db/users');
 const { logger } = require('../utils/logger');
+const { normalizeBusinessName } = require('../utils/normalizeName');
 
 // Email regex — requires word-char parts between every dot, so trailing
 // sentence punctuation like "write me at foo@bar.com." doesn't end up
@@ -121,7 +122,9 @@ Return JSON like {"industry":"HVAC","primaryCity":"Austin"} or {} if nothing fou
         if (v == null) continue;
         if (typeof v === 'string') {
           const trimmed = v.trim();
-          if (trimmed.length >= 2 && trimmed.length < 120) out[k] = trimmed;
+          if (trimmed.length >= 2 && trimmed.length < 120) {
+            out[k] = k === 'businessName' ? normalizeBusinessName(trimmed) : trimmed;
+          }
         } else if (Array.isArray(v)) {
           const cleaned = v
             .map((x) => (typeof x === 'string' ? x.trim() : ''))

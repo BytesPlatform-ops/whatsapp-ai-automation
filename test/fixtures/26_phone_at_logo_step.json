@@ -1,0 +1,37 @@
+{
+  "name": "phone-at-logo-step-side-channels-into-contact",
+  "description": "User gave only their email at WEB_COLLECT_CONTACT, bot moved to WEB_COLLECT_LOGO and asked for a logo. User now sends their phone in a separate message ('+15677656788'). Bot must side-channel the phone into contactPhone (so the final site has both email and phone) AND stay at WEB_COLLECT_LOGO to keep asking for the logo. Earlier behavior: phone was lost — bot replied 'I didn't catch an image' and dropped the input.",
+  "channel": "whatsapp",
+  "seed": {
+    "state": "WEB_COLLECT_LOGO",
+    "metadata": {
+      "websiteData": {
+        "businessName": "Bestway HVAC Services",
+        "industry": "HVAC",
+        "primaryCity": "Denton",
+        "serviceAreas": ["Joshua Street"],
+        "services": ["AC repair", "Heat pumps"],
+        "contactEmail": "jones@gmail.com"
+      },
+      "websiteDemoTriggered": true,
+      "emailSkipped": true,
+      "contactSkipped": true,
+      "currentSiteId": "fake-site-phone-at-logo-test"
+    }
+  },
+  "turns": [
+    {
+      "user": "+15677656788",
+      "expect": {
+        "metadata.websiteData.contactPhone": "*exists*",
+        "metadata.websiteData.contactEmail": "jones@gmail.com",
+        "state": "WEB_COLLECT_LOGO",
+        "reply_not_contains": [
+          "Nothing to go back to",
+          "Sure, going back one step"
+        ],
+        "sent_count_gte": 1
+      }
+    }
+  ]
+}

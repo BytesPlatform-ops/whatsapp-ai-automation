@@ -1,0 +1,22 @@
+{
+  "name": "business-name-acronym-preserved",
+  "description": "User types 'bestway hvac services' all-lowercase. Bot must title-case each word AND keep HVAC fully uppercase (it's a known industry acronym in normalizeBusinessName). Expected output: 'Bestway HVAC Services'. Same tester report — name was being stored verbatim and lookd off in the website header + summary.",
+  "channel": "whatsapp",
+  "seed": {
+    "state": "WEB_COLLECT_NAME",
+    "metadata": {
+      "websiteDemoTriggered": true,
+      "emailSkipped": true
+    }
+  },
+  "turns": [
+    {
+      "user": "bestway hvac services",
+      "expect": {
+        "metadata.websiteData.businessName": "Bestway HVAC Services",
+        "state_not": "WEB_COLLECT_NAME",
+        "sent_count_gte": 1
+      }
+    }
+  ]
+}

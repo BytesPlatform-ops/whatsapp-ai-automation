@@ -27,6 +27,7 @@ const { saveLeadSummary } = require('../../db/leadSummaries');
 const { buildSummaryContext } = require('../summaryManager');
 const { hydrateWebsiteData } = require('../entityAccumulator');
 const { localize } = require('../../utils/localizer');
+const { normalizeBusinessName } = require('../../utils/normalizeName');
 const { isServiceEnabled, findServiceByKey } = require('../../config/services');
 const { handoffToHuman } = require('../handoff');
 
@@ -869,6 +870,7 @@ async function handleSalesBot(user, message) {
     }
 
     if (businessName) {
+      businessName = normalizeBusinessName(businessName);
       await updateUserMetadata(user.id, {
         chatbotData: { businessName },
       });
@@ -986,6 +988,7 @@ async function handleSalesBot(user, message) {
 
     // Pre-seed every field we resolved so the wizard doesn't re-ask for
     // things the LLM already heard.
+    businessName = normalizeBusinessName(businessName);
     const websiteData = { ...wd, businessName };
     if (industry) websiteData.industry = industry;
     if (services) websiteData.services = services;

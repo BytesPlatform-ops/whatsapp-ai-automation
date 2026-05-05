@@ -20,6 +20,7 @@ const {
 } = require('../entityAccumulator');
 const { isDelegation, classifyDelegation } = require('../../config/smartDefaults');
 const { localize } = require('../../utils/localizer');
+const { normalizeBusinessName } = require('../../utils/normalizeName');
 const { classifySideChannelInCollection } = require('../sideChannel');
 
 /**
@@ -62,8 +63,9 @@ async function tryApplySideChannel(user, currentField, userText) {
     patch = { ...before, services: [...existing, ...side.services] };
     ackPart = `Got it — added *${side.services.join(', ')}* to your services.`;
   } else if (side.kind === 'name_change' && side.value) {
-    patch = { ...before, businessName: side.value };
-    ackPart = `Updated business name to *${side.value}*.`;
+    const normalized = normalizeBusinessName(side.value);
+    patch = { ...before, businessName: normalized };
+    ackPart = `Updated business name to *${normalized}*.`;
   } else if (side.kind === 'industry_change' && side.value) {
     patch = { ...before, industry: side.value };
     ackPart = `Updated industry to *${side.value}*.`;
@@ -518,10 +520,11 @@ async function handleCollectName(user, message) {
     !/\b(in|at|serving|email|phone|located|based)\b/i.test(text);
 
   if (isSimple) {
-    const websiteData = { ...existingWebsiteData, businessName: text };
+    const businessName = normalizeBusinessName(text);
+    const websiteData = { ...existingWebsiteData, businessName };
     await updateUserMetadata(user.id, { websiteData });
     user.metadata = { ...(user.metadata || {}), websiteData };
-    await logMessage(user.id, `Business name: ${text}`, 'assistant');
+    await logMessage(user.id, `Business name: ${businessName}`, 'assistant');
   }
 
   return smartAdvance(user, message);
@@ -2998,6 +3001,56 @@ Return ONLY one word: skip, generate, or other.`,
       return STATES.WEB_COLLECT_LOGO;
     }
 
+    // Cross-field side-channel: the user might be sending a phone, email,
+    // address, or a name/industry/service correction at the logo step
+    // (e.g. they gave only an email at WEB_COLLECT_CONTACT and are now
+    // sending their phone in a separate message). Apply the update + ask
+    // for the logo again, instead of the blunt "didn't catch an image"
+    // reply that loses the input.
+    if (text && text.length >= 3) {
+      // Deterministic format short-circuit FIRST. A bare phone or email
+      // at the logo step is almost always contact info the user is
+      // catching up on — save directly without an LLM call. Same
+      // pattern as turnClassifier's fastpath_phone_shape /
+      // fastpath_email_shape (format-only, not intent).
+      const phoneShape = /^[+\d][\d\s\-().]{6,19}$/;
+      const emailShape = /^[\w.+-]+@[\w-]+(?:\.[\w-]+)+$/;
+      const phoneHit = phoneShape.test(text) ? text : null;
+      const emailHit = emailShape.test(text) ? text : null;
+      if (phoneHit || emailHit) {
+        const wd = { ...(user.metadata?.websiteData || {}) };
+        const bits = [];
+        if (phoneHit && !wd.contactPhone) { wd.contactPhone = phoneHit; bits.push(`phone *${phoneHit}*`); }
+        if (emailHit && !wd.contactEmail) { wd.contactEmail = emailHit; bits.push(`email *${emailHit}*`); }
+        if (bits.length) {
+          await updateUserMetadata(user.id, { websiteData: wd });
+          user.metadata = { ...(user.metadata || {}), websiteData: wd };
+          await sendTextMessage(
+            user.phone_number,
+            await localize(
+              `Saved your ${bits.join(' / ')}. Now, got a logo? Send it as an image (JPG or PNG), or reply *skip* to use a text logo.`,
+              user,
+              text
+            )
+          );
+          await logMessage(user.id, `Logo step: side-channel contact_update (${bits.join(', ')})`, 'assistant');
+          return STATES.WEB_COLLECT_LOGO;
+        }
+      }
+      // LLM fallback for richer cross-field intents (name / industry /
+      // service corrections — formats don't help there).
+      const sc = await tryApplySideChannel(user, 'logo', text);
+      if (sc) {
+        const reask = "Now, got a logo? Send it as an image (JPG or PNG), or reply *skip* to use a text logo.";
+        await sendTextMessage(
+          user.phone_number,
+          await localize(`${sc.ackPart} ${reask}`, user, text)
+        );
+        await logMessage(user.id, `Logo step: applied side-channel ${sc.side.kind}`, 'assistant');
+        return STATES.WEB_COLLECT_LOGO;
+      }
+    }
+
     await sendTextMessage(
       user.phone_number,
       await localize(
@@ -3180,7 +3233,7 @@ async function handleConfirm(user, message) {
     switch (field) {
       case 'businessName':
       case 'name':
-        wd.businessName = v;
+        wd.businessName = normalizeBusinessName(v);
         return `business name → *${wd.businessName}*`;
       case 'industry':
         wd.industry = v;
@@ -6346,10 +6399,12 @@ async function applyFieldCorrection(user, field, rawValue, op = 'replace') {
   };
 
   switch (field) {
-    case 'businessName':
-      wd.businessName = value;
-      ack = `Got it — updated business name to *${value}*.`;
+    case 'businessName': {
+      const normalized = normalizeBusinessName(value);
+      wd.businessName = normalized;
+      ack = `Got it — updated business name to *${normalized}*.`;
       break;
+    }
     case 'industry':
       wd.industry = value;
       ack = `Got it — updated industry to *${value}*.`;
