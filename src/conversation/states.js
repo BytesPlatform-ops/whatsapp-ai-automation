@@ -30,6 +30,10 @@ const STATES = {
   SALON_BOOKING_TOOL: 'SALON_BOOKING_TOOL',
   SALON_HOURS: 'SALON_HOURS',
   SALON_SERVICE_DURATIONS: 'SALON_SERVICE_DURATIONS',
+  // CRM-style services form: bot has handed the user a web form link
+  // for salon services or real-estate listings and is waiting for the
+  // submission. Form POST advances state past the loop in one shot.
+  WEB_AWAITING_FORM: 'WEB_AWAITING_FORM',
   // Domain choice happens BEFORE preview now — combined Stripe link at generation.
   WEB_DOMAIN_CHOICE: 'WEB_DOMAIN_CHOICE',
   WEB_DOMAIN_OWN_INPUT: 'WEB_DOMAIN_OWN_INPUT',

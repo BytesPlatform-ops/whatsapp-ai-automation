@@ -7,6 +7,7 @@ const {
 } = require('../../messages/sender');
 const { logMessage, getConversationHistory } = require('../../db/conversations');
 const { updateUserMetadata, updateUserState } = require('../../db/users');
+const { createToken: createServiceFormToken } = require('../../db/serviceFormTokens');
 const { createSite, updateSite, getLatestSite } = require('../../db/sites');
 const { checkSiteCreationAllowed, formatTimeUntil } = require('../../db/siteRateLimit');
 const { logger } = require('../../utils/logger');
@@ -97,6 +98,96 @@ async function tryApplySideChannel(user, currentField, userText) {
   return { ackPart, side };
 }
 
+
+// ═══════════════════════════════════════════════════════════════════════════
+// CRM-STYLE SERVICES FORM — fork into a web form for the loopy bits
+// (salon services with photos/durations/prices; real-estate listings).
+// Offered automatically when the user enters one of those collection states
+// for the first time. User can either fill out the form, type in chat, or
+// reply "chat" to switch back. The form POST persists data + advances the
+// state machine + pings the user proactively. See src/services-form/.
+// ═══════════════════════════════════════════════════════════════════════════
+
+function buildFormUrl(token) {
+  const base = (process.env.PUBLIC_BASE_URL || process.env.BASE_URL || '').replace(/\/$/, '');
+  return base ? `${base}/services-form/${token}` : `/services-form/${token}`;
+}
+
+async function offerServicesForm(user, kind) {
+  const wd = { ...(user.metadata?.websiteData || {}) };
+  let token;
+  try {
+    const row = await createServiceFormToken(user.id, kind);
+    token = row.token;
+  } catch (err) {
+    logger.warn(`[WEBDEV-FORM] token create failed: ${err.message} — falling back to chat`);
+    const fallbackState = kind === 'salon'
+      ? STATES.WEB_COLLECT_SERVICES
+      : STATES.WEB_COLLECT_LISTINGS_ASK;
+    await sendTextMessage(
+      user.phone_number,
+      await localize(questionForState(fallbackState, wd), user)
+    );
+    return fallbackState;
+  }
+  const url = buildFormUrl(token);
+  const intro = kind === 'salon'
+    ? `Quick choice — easier in chat or in a quick form?\n\n📋 Open the form: ${url}\n\nOr just type your services here (e.g. *Haircut $40, Color $120, Manicure $30…*).\nReply *chat* if you'd rather type them out one by one.`
+    : `Quick choice — easier in chat or in a quick form?\n\n📋 Open the form: ${url}\n\nOr reply *yes* to send your listings here in chat, *skip* to use placeholder listings, or *chat* to switch to typing them out.`;
+
+  const flagPatch = kind === 'salon'
+    ? { servicesFormOffered: true, servicesFormToken: token }
+    : { listingsFormOffered: true, listingsFormToken: token };
+  const merged = { ...wd, ...flagPatch };
+  await updateUserMetadata(user.id, { websiteData: merged });
+  user.metadata = { ...(user.metadata || {}), websiteData: merged };
+
+  await sendTextMessage(user.phone_number, await localize(intro, user));
+  return kind === 'salon' ? STATES.WEB_COLLECT_SERVICES : STATES.WEB_COLLECT_LISTINGS_ASK;
+}
+
+const FORM_REPLY_RX = /^\s*(form|link|open form|send link|re-?send)\s*$/i;
+const CHAT_REPLY_RX = /^\s*(chat|type|in chat|type in chat|switch to chat|cancel)\s*$/i;
+
+async function handleAwaitingForm(user, message) {
+  const text = (message?.text || '').trim();
+  const wd = { ...(user.metadata?.websiteData || {}) };
+  const kind = wd.formAwaitingKind || 'salon';
+  const token = wd.formAwaitingToken;
+
+  if (text && CHAT_REPLY_RX.test(text)) {
+    const cleared = {
+      ...wd,
+      servicesFormOffered: false,
+      listingsFormOffered: false,
+      servicesFormToken: null,
+      listingsFormToken: null,
+      formAwaitingKind: null,
+      formAwaitingToken: null,
+    };
+    await updateUserMetadata(user.id, { websiteData: cleared });
+    user.metadata = { ...(user.metadata || {}), websiteData: cleared };
+    const fallbackState = kind === 'salon'
+      ? STATES.WEB_COLLECT_SERVICES
+      : STATES.WEB_COLLECT_LISTINGS_ASK;
+    await sendTextMessage(
+      user.phone_number,
+      await localize(
+        `No problem — let's do it in chat.\n\n${questionForState(fallbackState, cleared)}`,
+        user,
+        text
+      )
+    );
+    return fallbackState;
+  }
+
+  const url = token ? buildFormUrl(token) : null;
+  const reminder = url
+    ? `Still here whenever you're ready — your form link: ${url}\n\nReply *chat* if you'd rather type it all out instead.`
+    : `Still here whenever you're ready. Reply *chat* to type it all out instead.`;
+  await sendTextMessage(user.phone_number, await localize(reminder, user, text));
+  return STATES.WEB_AWAITING_FORM;
+}
 
 // Walk the website-dev checklist and return the first state whose field
 // is still missing. Used to fast-forward past steps already covered. Email
@@ -221,6 +312,25 @@ async function smartAdvance(user, message, ackPrefix = null) {
     ack = ack ? `${ack} Also got: ${ackParts.join(', ')}.` : `Got it — ${ackParts.join(', ')}.`;
   }
   ack = ack.trim();
+
+  // Form-offer fork: when transitioning into one of the loopy collection
+  // states for the first time, offer the services-form web link instead
+  // of asking the bare chat question. The user can fill out the form, type
+  // in chat, or reply *chat* to switch. See offerServicesForm above.
+  const offerForSalon =
+    nextState === STATES.WEB_COLLECT_SERVICES &&
+    isSalonIndustry(merged.industry) &&
+    !merged.servicesFormOffered;
+  const offerForRealEstate =
+    nextState === STATES.WEB_COLLECT_LISTINGS_ASK &&
+    !merged.listingsFormOffered;
+  if (offerForSalon || offerForRealEstate) {
+    const userReply = (message && message.text) || '';
+    if (ack) {
+      await sendTextMessage(user.phone_number, await localize(ack, user, userReply));
+    }
+    return offerServicesForm(user, offerForSalon ? 'salon' : 'real_estate');
+  }
 
   const nextQuestion = questionForState(nextState, merged);
   const fullMsg = ack ? `${ack}\n\n${nextQuestion}` : nextQuestion;
@@ -442,6 +552,8 @@ async function handleWebDev(user, message) {
       return handleSalonHours(user, message);
     case STATES.SALON_SERVICE_DURATIONS:
       return handleSalonServiceDurations(user, message);
+    case STATES.WEB_AWAITING_FORM:
+      return handleAwaitingForm(user, message);
     case STATES.WEB_COLLECT_CONTACT:
       return handleCollectContact(user, message);
     case STATES.WEB_CONFIRM:
@@ -1077,6 +1189,44 @@ function domainExampleFor(businessName) {
 
 async function handleCollectServices(user, message) {
   const servicesText = (message.text || '').trim();
+
+  // Form-offer mode: bot just sent the "form or chat?" CTA. Intercept the
+  // explicit reply types before falling through to the regular services
+  // extractor — otherwise "chat" / "form" would get parsed as service names.
+  const wdPre = user.metadata?.websiteData || {};
+  if (wdPre.servicesFormOffered) {
+    if (servicesText && CHAT_REPLY_RX.test(servicesText)) {
+      const cleared = { ...wdPre, servicesFormOffered: false, servicesFormToken: null };
+      await updateUserMetadata(user.id, { websiteData: cleared });
+      user.metadata = { ...(user.metadata || {}), websiteData: cleared };
+      await sendTextMessage(
+        user.phone_number,
+        await localize(questionForState(STATES.WEB_COLLECT_SERVICES, cleared), user, servicesText)
+      );
+      return STATES.WEB_COLLECT_SERVICES;
+    }
+    if (servicesText && FORM_REPLY_RX.test(servicesText)) {
+      const url = wdPre.servicesFormToken ? buildFormUrl(wdPre.servicesFormToken) : null;
+      const merged = {
+        ...wdPre,
+        formAwaitingKind: 'salon',
+        formAwaitingToken: wdPre.servicesFormToken || null,
+      };
+      await updateUserMetadata(user.id, { websiteData: merged });
+      user.metadata = { ...(user.metadata || {}), websiteData: merged };
+      const msg = url
+        ? `Great — fill out the form here whenever you're ready: ${url}\n\nReply *chat* anytime to switch back to typing.`
+        : `Great — opening the form. Reply *chat* anytime to switch back to typing.`;
+      await sendTextMessage(user.phone_number, await localize(msg, user, servicesText));
+      return STATES.WEB_AWAITING_FORM;
+    }
+    if (servicesText) {
+      const cleared = { ...wdPre, servicesFormOffered: false };
+      await updateUserMetadata(user.id, { websiteData: cleared });
+      user.metadata = { ...(user.metadata || {}), websiteData: cleared };
+    }
+  }
+
   if (!servicesText || servicesText.length < 2) {
     await sendTextMessage(
       user.phone_number,
@@ -1773,6 +1923,42 @@ Respond with ONLY: yes or no.`;
 async function handleCollectListingsAsk(user, message) {
   const raw = (message.text || '').trim();
   const wd = { ...(user.metadata?.websiteData || {}) };
+
+  // Form-offer mode: same shape as salon's offer at handleCollectServices.
+  // Catches "chat" / "form" replies before they get classified as yes/skip.
+  if (wd.listingsFormOffered) {
+    if (raw && CHAT_REPLY_RX.test(raw)) {
+      const cleared = { ...wd, listingsFormOffered: false, listingsFormToken: null };
+      await updateUserMetadata(user.id, { websiteData: cleared });
+      user.metadata = { ...(user.metadata || {}), websiteData: cleared };
+      await sendTextMessage(
+        user.phone_number,
+        await localize(questionForState(STATES.WEB_COLLECT_LISTINGS_ASK, cleared), user, raw)
+      );
+      return STATES.WEB_COLLECT_LISTINGS_ASK;
+    }
+    if (raw && FORM_REPLY_RX.test(raw)) {
+      const url = wd.listingsFormToken ? buildFormUrl(wd.listingsFormToken) : null;
+      const merged = {
+        ...wd,
+        formAwaitingKind: 'real_estate',
+        formAwaitingToken: wd.listingsFormToken || null,
+      };
+      await updateUserMetadata(user.id, { websiteData: merged });
+      user.metadata = { ...(user.metadata || {}), websiteData: merged };
+      const msg = url
+        ? `Great — fill out the form here whenever you're ready: ${url}\n\nReply *chat* anytime to switch back to typing.`
+        : `Great — opening the form. Reply *chat* anytime to switch back to typing.`;
+      await sendTextMessage(user.phone_number, await localize(msg, user, raw));
+      return STATES.WEB_AWAITING_FORM;
+    }
+    if (raw) {
+      const cleared = { ...wd, listingsFormOffered: false };
+      await updateUserMetadata(user.id, { websiteData: cleared });
+      user.metadata = { ...(user.metadata || {}), websiteData: cleared };
+      Object.assign(wd, cleared);
+    }
+  }
 
   // Classify the user's reply as yes / skip / unclear. We use the LLM so
   // this works for ANY language the user might reply in ("skip kar do",
@@ -6487,6 +6673,9 @@ module.exports = {
   startSalonFlow,
   startWebdevFlow,
   showConfirmSummary,
+  // Exposed so the services-form POST handler can reuse the same transition
+  // logic (extract → next-state → send-question) the chat path uses.
+  smartAdvance,
   // Cross-state correction handler — called from the router when
   // correctionDetector flags a previously-answered field.
   applyFieldCorrection,

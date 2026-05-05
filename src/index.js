@@ -11,6 +11,7 @@ const { startFollowupScheduler } = require('./followup/scheduler');
 const chatbotApiRoutes = require('./chatbot/api');
 const chatbotPageRoutes = require('./chatbot/pages/routes');
 const leadRoutes = require('./leads/routes');
+const servicesFormRoutes = require('./services-form/routes');
 const stripeWebhookRoutes = require('./payments/stripeWebhook');
 const paymentRedirectRoutes = require('./payments/redirectRoute');
 const { router: privacyRoutes } = require('./privacy/routes');
@@ -46,7 +47,7 @@ app.set('trust proxy', 1);
 // also skip /privacy because the static policy page uses an inline <style> block
 // that helmet's default CSP would otherwise block).
 app.use((req, res, next) => {
-  if (req.path === '/' || req.path.startsWith('/_next/') || req.path.startsWith('/admin') || req.path === '/widget.js' || req.path.startsWith('/chat/') || req.path.startsWith('/demo/') || req.path === '/privacy') return next();
+  if (req.path === '/' || req.path.startsWith('/_next/') || req.path.startsWith('/admin') || req.path === '/widget.js' || req.path.startsWith('/chat/') || req.path.startsWith('/demo/') || req.path === '/privacy' || req.path.startsWith('/services-form/')) return next();
   helmet()(req, res, next);
 });
 
@@ -125,6 +126,12 @@ app.use('/', bookingRoutes);
 // + email the owner. Public on purpose (called from random *.netlify.app
 // hostnames); endpoint-level rate-limit and honeypot handle spam.
 app.use('/', leadRoutes);
+
+// CRM-style services form — replaces the painful chat-based collection
+// of salon services / real-estate listings with a per-user web form. The
+// bot generates a token and sends the link; on submit we persist data,
+// advance the state machine, and ping the user back.
+app.use('/', servicesFormRoutes);
 
 // Messenger & Instagram webhook routes
 const messengerRoutes = require('./webhook/messengerRoutes');
