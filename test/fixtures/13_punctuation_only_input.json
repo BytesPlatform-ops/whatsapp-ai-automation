@@ -1,0 +1,26 @@
+{
+  "name": "punctuation-only-must-not-corrupt",
+  "description": "User sends just '?' or '...' — confusion signal, not an answer. Bot must classify as question, not silently accept as answer. Earlier the length<4 fast-path mis-routed '?' as 'answer' and downstream parsers (e.g. hoursParser) silently accepted garbage.",
+  "channel": "whatsapp",
+  "seed": {
+    "state": "WEB_COLLECT_AREAS",
+    "metadata": {
+      "websiteData": {
+        "businessName": "Noman Plumbing",
+        "industry": "Plumbing"
+      },
+      "websiteDemoTriggered": true,
+      "emailSkipped": true
+    }
+  },
+  "turns": [
+    {
+      "user": "?",
+      "expect": {
+        "metadata.websiteData.primaryCity": "*missing*",
+        "state_not_one_of": ["WEB_COLLECT_NAME", "WEB_COLLECT_INDUSTRY"],
+        "sent_count_gte": 1
+      }
+    }
+  ]
+}

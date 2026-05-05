@@ -332,69 +332,6 @@ heroTextOverride values:
 
 Return ONLY valid JSON. No explanation outside the JSON.`;
 
-const INTENT_CLASSIFIER_PROMPT = `You are a WhatsApp chatbot assistant. The user is in the middle of a guided flow and has sent a free-text message. Determine their intent.
-
-The bot is currently asking: "{{CURRENT_QUESTION}}"
-{{RECENT_CONTEXT}}
-Classify the user's message into ONE of these intents:
-- "answer"  - The message is a genuine answer to the question being asked, OR the user is telling the bot to figure it out / use context / derive it from previous messages. Treat these as answers - the handler will deal with inferring the value.
-- "question"  - The user is asking something clearly unrelated (about services, pricing, other topics)
-- "menu"  - Pick this ONLY when EITHER (A) the user is EXPLICITLY flow-switching to a different Pixie service ("forget the website, do a logo instead", "scrap this, can you do ads?", "actually let's do a chatbot", "instead of this, build me an app"), OR (B) the user is EXPLICITLY asking to advance to the NEXT QUEUED service ("forget this, do the rest", "skip this, whats next", "move on to the next one", "lets go with the next one"). Case (A) requires an EXPLICIT SWITCH SIGNAL — words like "instead", "actually", "wait", "forget", "scrap", "scrap this", "drop this", "nevermind" — combined with a different service name. Case (B) requires an explicit advance-the-queue phrase ("rest", "next one", "others", "remaining", "continue with the next"). Merely containing a trade word (plumbing, dental, bakery, salon, etc.) as part of an ANSWER is NOT a flow-switch — business names, industries, and service descriptions routinely include those words. "Hasnain Plumbing" when asked for a business name is an ANSWER, not a menu request.
-
-  CRITICAL: a bare imperative like "make a booking system", "build me a website", "create a logo" — WITHOUT a switch signal ("instead"/"actually"/"forget") — is NOT a menu intent. Especially when RECENT CONTEXT shows the bot just OFFERED that exact thing. The user is echoing / confirming, not switching flows. Default to ANSWER in these cases.
-
-  CRITICAL: a BARE skip ("skip", "skip it", "skip this", "i want to skip", "let's skip", "just skip", "please skip") with no following "next/rest/others/queue" phrase is an ANSWER, NOT a menu. The user is skipping the CURRENT field (which the handler accepts), not switching flows. Only escalate to menu if the message ALSO names another service or explicitly says "next/rest/others".
-
-  CRITICAL: if RECENT CONTEXT is provided and the user's message echoes / confirms / restates something the bot just said or offered, classify as ANSWER. The user is replying in context, not switching flows.
-- "exit"  - The user wants to stop the current flow entirely
-- "objection"  - The user is pushing back on the PROCESS ITSELF — expressing doubt about value, price, trust, or stalling ("too expensive", "I'll just use Wix", "not sure this is worth it", "let me think about it"). This is NOT an answer to the current question; it's a concern that needs to be addressed before the flow can continue. Only use this when the pushback is clearly about buying/continuing, not when they're complaining about one specific ask.
-
-IMPORTANT: When in doubt, classify as "answer". Only classify as "question" if the message is clearly about a different topic. Messages like "figure it out", "you already know", "from the idea", "same as before", "idk you tell me" are ALL "answer" - they are responses to the current question. "Objection" is rare — only use it when the user is clearly rejecting value/price/trust, not just skipping or delegating a single field.
-
-Return ONLY valid JSON: {"intent": "answer"|"question"|"menu"|"exit"|"objection"}
-
-Examples:
-- Current question: "What is your business name?" / Message: "TechCorp" → {"intent": "answer"}
-- Current question: "What is your business name?" / Message: "Hasnain Plumbing" → {"intent": "answer"}
-- Current question: "What is your business name?" / Message: "Maria's Thai Kitchen" → {"intent": "answer"}
-- Current question: "What is your business name?" / Message: "Bright Dental" → {"intent": "answer"}
-- Current question: "What industry are you in?" / Message: "Plumbing" → {"intent": "answer"}
-- Current question: "What industry are you in?" / Message: "salon / spa" → {"intent": "answer"}
-- Current question: "What is your business name?" / Message: "What services do you offer?" → {"intent": "question"}
-- Current question: "What is your business name?" / Message: "?" → {"intent": "question"}  (single punctuation = confusion / asking for clarification)
-- Current question: "What is your business name?" / Message: "i said what services do you provide" → {"intent": "question"}  (user repeating an earlier question = still a question, even if frustrated)
-- Current question: "What is your business name?" / Message: "I said what services do you provide, are you dumb?" → {"intent": "question"}  (frustration + question = still a question, answer it)
-- Current question: "What is your business name?" / Message: "why should i give you my business name" → {"intent": "question"}  (objection-shaped but really a question — answer it, don't treat as a refusal-to-continue)
-- Current question: "What is your business name?" / Message: "huh?" → {"intent": "question"}
-- Current question: "What is your business name?" / Message: "I'm saying what service do you provide so I can choose their service" → {"intent": "question"}  (re-phrased question after being ignored)
-- Current question: "What industry are you in?" / Message: "No I want to see other options" → {"intent": "menu"}
-- Current question: "Send your website URL" / Message: "Actually forget it" → {"intent": "exit"}
-- Current question: "Please share your contact details" / Message: "forget the website, can you do ai chatbot for me?" → {"intent": "menu"}
-- Current question: "What industry are you in?" / Message: "actually scrap this, let's do a logo instead" → {"intent": "menu"}
-- Current question: "What are your brand colors?" / Message: "wait, can you do marketing ads too?" → {"intent": "menu"}
-- Current question: "What services do you offer?" / Message: "hold on, can you also build a chatbot?" → {"intent": "menu"}
-- Current question: "What contact info do you want on the site?" / Message: "nevermind, skip this, lets go with the next one" → {"intent": "menu"}
-- Current question: "What contact info do you want on the site?" / Message: "forget this, do the rest" → {"intent": "menu"}
-- Current question: "What are your brand colors?" / Message: "skip this, whats next" → {"intent": "menu"}
-- Current question: "What industry are you in?" / Message: "move on to the next" → {"intent": "menu"}
-- Current question: "What's your email address? (or reply skip)" / Message: "skip" → {"intent": "answer"}
-- Current question: "What's your email address? (or reply skip)" / Message: "skip it" → {"intent": "answer"}
-- Current question: "What's your email address? (or reply skip)" / Message: "i want to skip it" → {"intent": "answer"}
-- Current question: "What's your email address? (or reply skip)" / Message: "let's skip this" → {"intent": "answer"}
-- Current question: "What's your Instagram handle? (or reply skip)" / Message: "just skip" → {"intent": "answer"}
-- Current question: "What are your brand colors?" / Message: "skip this one" → {"intent": "answer"}
-- Current question: "What's your Instagram handle? (or reply skip)" / Recent context: bot said "we'll build you a booking system" / Message: "make a booking system" → {"intent": "answer"}  (echo/confirmation, NOT a flow switch)
-- Current question: "What's your Instagram handle? (or reply skip)" / Recent context: bot said "we'll build you a booking system" / Message: "build the booking system" → {"intent": "answer"}  (echo/confirmation)
-- Current question: "What's your Instagram handle? (or reply skip)" / Message: "actually scrap this, build me an app instead" → {"intent": "menu"}  (explicit switch signal: "scrap this", "instead")
-- Current question: "What services do you offer?" / Message: "make a chatbot for me instead" → {"intent": "menu"}  (explicit switch signal: "instead")
-- Current question: "What industry are you in?" / Message: "figure it out from the idea" → {"intent": "answer"}
-- Current question: "What industry are you in?" / Message: "I can't figure out, you tell me" → {"intent": "answer"}
-- Current question: "What services do you offer?" / Message: "I already told you" → {"intent": "answer"}
-- Current question: "What services do you offer?" / Message: "this is too expensive, i'll just use wix" → {"intent": "objection"}
-- Current question: "What industry are you in?" / Message: "not sure this is worth it tbh" → {"intent": "objection"}
-- Current question: "Please share your contact details" / Message: "let me think about it and get back to you" → {"intent": "objection"}
-- Current question: "What are your brand colors?" / Message: "idk what ChatGPT would just do this for free" → {"intent": "objection"}`;
-
 /**
  * Build the Pixie sales bot system prompt.
  * @param {string} calendlyUrl - Booking link injected into the prompt
@@ -1027,7 +964,6 @@ module.exports = {
   buildHvacContentPrompt,
   REAL_ESTATE_CONTENT_PROMPT,
   REVISION_PARSER_PROMPT,
-  INTENT_CLASSIFIER_PROMPT,
   INFORMATIVE_BOT_PROMPT,
   buildSalesPrompt,
 };

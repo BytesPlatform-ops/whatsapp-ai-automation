@@ -1,0 +1,30 @@
+{
+  "name": "industry-change-at-areas-step",
+  "description": "User at WEB_COLLECT_AREAS says 'wait we're actually a salon, not plumbing'. Bot must apply industry correction (turnClassifier returns correction with field=industry, value=salon) AND continue with the flow. The current question is about city/areas, so industry is NOT the active field — the correction handler should apply it cleanly. After update, bot may re-ask current question or transition to salon-specific sub-flow on the next turn — either is acceptable.",
+  "channel": "whatsapp",
+  "seed": {
+    "state": "WEB_COLLECT_AREAS",
+    "metadata": {
+      "websiteData": {
+        "businessName": "Glow Studio",
+        "industry": "Plumbing"
+      },
+      "websiteDemoTriggered": true,
+      "emailSkipped": true
+    }
+  },
+  "turns": [
+    {
+      "user": "wait, we're actually a salon not plumbing",
+      "expect": {
+        "metadata.websiteData.industry": "*exists*",
+        "state_not_one_of": ["WEB_COLLECT_NAME"],
+        "reply_not_contains": [
+          "Nothing to go back to",
+          "Sure, going back one step"
+        ],
+        "sent_count_gte": 1
+      }
+    }
+  ]
+}

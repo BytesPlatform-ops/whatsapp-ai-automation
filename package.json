@@ -7,7 +7,9 @@
     "start": "node src/index.js",
     "dev": "node --watch src/index.js",
     "embed": "node src/knowledge/loader.js",
-    "build:landing": "cd landing && npm install --include=dev && npm run build"
+    "build:landing": "cd landing && npm install --include=dev && npm run build",
+    "test:replay": "node test/replay.js",
+    "test:replay:list": "node test/replay.js --list"
   },
   "keywords": [
     "whatsapp",

@@ -1,0 +1,28 @@
+{
+  "name": "what-services-question-does-not-trigger-website-demo",
+  "description": "Regression: a plain 'What services do you provide?' must NOT fire [TRIGGER_WEBSITE_DEMO]. The bot should answer the WHAT WE OFFER line and stay in SALES_CHAT — no premature 'Let's build it!' / no jump to WEB_COLLECT_NAME.",
+  "channel": "whatsapp",
+  "turns": [
+    {
+      "user": "What services do you provide?",
+      "expect": {
+        "state": "SALES_CHAT",
+        "state_not_one_of": ["WEB_COLLECT_NAME", "WEB_COLLECT_INDUSTRY", "WEB_COLLECT_AREAS"],
+        "reply_not_contains": [
+          "Let's build it",
+          "What's your business name?",
+          "what's the business called"
+        ],
+        "metadata.websiteDemoTriggered": "*missing*"
+      }
+    },
+    {
+      "user": "okay, can you make me a website then?",
+      "_assertion_note": "We DON'T strictly require websiteDemoTriggered=true on this turn — the LLM is intentionally conservative after a question-shaped opener and may ask for one more clarifier ('what's the business called?') before triggering. The hard requirement is that the bot doesn't crash and doesn't drift into a wrong state. A real prompt regression where the bot REFUSES to ever proceed would surface as state stuck in SALES_CHAT after fixture 02's 'I want a website' turn — that's where strict trigger assertion belongs.",
+      "expect": {
+        "state_one_of": ["WEB_COLLECT_NAME", "SALES_CHAT"],
+        "sent_count_gte": 1
+      }
+    }
+  ]
+}

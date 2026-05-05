@@ -1,0 +1,35 @@
+{
+  "name": "implicit-keep-after-undo",
+  "description": "Regression: when the user is sitting at a popped-back state (undoPendingState set) and replies with an implicit-keep phrasing like 'I already told you' / 'use what I gave you', it must classify as 'keep' (advance with stored value) — NOT fall through to side-channel as 'question' which leaves the bot saying 'noted, I'll come back to that' and the user stuck.",
+  "channel": "whatsapp",
+  "seed": {
+    "state": "WEB_COLLECT_SERVICES",
+    "metadata": {
+      "websiteData": {
+        "businessName": "Noman Plumbing",
+        "industry": "Plumbing",
+        "primaryCity": "Karachi",
+        "serviceAreas": ["Clifton"],
+        "services": ["drain cleaning", "pipe repair"]
+      },
+      "websiteDemoTriggered": true,
+      "emailSkipped": true,
+      "undoPendingState": "WEB_COLLECT_SERVICES",
+      "stateHistory": []
+    }
+  },
+  "turns": [
+    {
+      "user": "I already told you, use what I gave",
+      "expect": {
+        "state_not": "WEB_COLLECT_SERVICES",
+        "metadata.undoPendingState": "*missing*",
+        "metadata.websiteData.services": ["drain cleaning", "pipe repair"],
+        "reply_not_contains": [
+          "Noted, I'll come back to that",
+          "let's finish setup first"
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,28 @@
+{
+  "name": "skip-chain-reaches-confirm",
+  "description": "User skips email + maybe other optional fields. Bot should still be able to advance to the confirmation summary or generation step — defaults applied. Tests that 'skip' at multiple steps doesn't get the user stuck and doesn't trigger any undo loops.",
+  "channel": "whatsapp",
+  "seed": {
+    "state": "WEB_COLLECT_EMAIL",
+    "metadata": {
+      "websiteData": {
+        "businessName": "Noman Plumbing",
+        "industry": "Plumbing"
+      },
+      "websiteDemoTriggered": true
+    }
+  },
+  "turns": [
+    {
+      "user": "skip",
+      "expect": {
+        "metadata.emailSkipped": true,
+        "state_not": "WEB_COLLECT_EMAIL",
+        "reply_not_contains": [
+          "Nothing to go back to",
+          "Sure, going back one step"
+        ]
+      }
+    }
+  ]
+}

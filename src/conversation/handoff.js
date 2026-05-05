@@ -104,7 +104,11 @@ async function handoffToHuman(user, { serviceKey, serviceLabel, reason } = {}) {
     logger.error(`[HANDOFF] Failed to persist handoff marker for ${user.phone_number}: ${err.message}`);
   }
 
-  // 3. Log a marker row so admin transcript shows the moment of handoff.
+  // 3. Log a system-role marker row so the admin transcript renders
+  // the moment of handoff as a divider. Migration 022 allows 'system'
+  // role in the conversations.role_check constraint — before that
+  // migration this insert would silently fail and the marker never
+  // landed.
   try {
     await logMessage(
       user.id,

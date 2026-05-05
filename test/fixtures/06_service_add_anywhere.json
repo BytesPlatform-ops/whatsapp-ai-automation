@@ -1,0 +1,38 @@
+{
+  "name": "service-add-anywhere",
+  "description": "Mid-flow 'also we do X' must classify as correction op=add and append the new service to the existing list. The user is at WEB_COLLECT_CONTACT (services already collected upstream). Bot must NOT replace the entire services list with just the new item.",
+  "channel": "whatsapp",
+  "seed": {
+    "state": "WEB_COLLECT_CONTACT",
+    "metadata": {
+      "websiteData": {
+        "businessName": "Noman Plumbing",
+        "industry": "Plumbing",
+        "primaryCity": "Karachi",
+        "serviceAreas": ["Clifton"],
+        "services": ["drain cleaning"]
+      },
+      "websiteDemoTriggered": true,
+      "emailSkipped": true
+    }
+  },
+  "turns": [
+    {
+      "user": "also we do pipe repair",
+      "expect": {
+        "metadata.websiteData.services": "*exists*",
+        "state_not_one_of": [
+          "WEB_COLLECT_NAME",
+          "WEB_COLLECT_INDUSTRY",
+          "WEB_COLLECT_AREAS",
+          "WEB_COLLECT_SERVICES"
+        ],
+        "reply_not_contains": [
+          "Nothing to go back to",
+          "Sure, going back one step"
+        ],
+        "reply_contains": ["pipe repair"]
+      }
+    }
+  ]
+}

@@ -1,14 +1,14 @@
 const { findOrCreateUser, updateUserState, updateUserMetadata } = require('../db/users');
 const { logMessage } = require('../db/conversations');
 const { markAsRead, sendTextMessage, sendInteractiveButtons, sendWithMenuButton, setLastMessageId } = require('../messages/sender');
-const { runWithContext, setUserId } = require('../messages/channelContext');
+const { runWithContext, setUserId, setTurnId } = require('../messages/channelContext');
+const { randomUUID } = require('crypto');
 const { STATES } = require('./states');
 const { logger } = require('../utils/logger');
 const { generateResponse } = require('../llm/provider');
-const { INTENT_CLASSIFIER_PROMPT, GENERAL_CHAT_PROMPT, WEB_REVISIONS_ASIDE_PROMPT } = require('../llm/prompts');
+const { GENERAL_CHAT_PROMPT, WEB_REVISIONS_ASIDE_PROMPT } = require('../llm/prompts');
 const { transcribeAudio } = require('../llm/transcribe');
 const { maybeUpdateSummary } = require('./summaryManager');
-const { isDelegation } = require('../config/smartDefaults');
 const {
   classifyUndoOrKeep,
   pushStateHistory,
@@ -393,75 +393,6 @@ Return ONLY one word: pivot or continue.`;
   }
 }
 
-async function classifyIntent(state, text, userId, opts = {}) {
-  const currentQuestion = STATE_QUESTION[state];
-  if (!currentQuestion) return 'answer';
-
-  // Fast-path — these are unambiguously answers, never menu/exit/question.
-  // The LLM classifier sometimes misfires on short replies (e.g. "skip" or
-  // "lets just skip it" gets routed to "menu", which resets the user back to
-  // service selection mid-flow). Treat the obvious short replies as plain
-  // answers and skip the LLM call entirely.
-  const t = String(text || '').trim().toLowerCase();
-  if (!t) return 'answer';
-  // Punctuation-only input ("?", "??", "...", "!") is a confusion signal,
-  // never a valid answer to a flow question. Routing as 'question' triggers
-  // the aside-then-re-prompt path. Without this, the length<4 fast-path
-  // below mis-routed "?" as an answer and downstream parsers silently
-  // accepted garbage (e.g. hoursParser turned "?" into all-days-closed).
-  if (/^[?!.,;]+$/.test(t)) return 'question';
-  if (/^(skip|none|no|nope|nah|n\/?a|na|next|continue|done|same|ok|okay|yes|yeah|yep|ya|sure|y|n)$/.test(t)) return 'answer';
-  // Phone-number-shaped input
-  if (/^[\d\s\-+().]{6,}$/.test(t)) return 'answer';
-  // Email-shaped input — actual email pattern, not just any '@'. The old
-  // `/@/.test()` check fired for ANY message containing '@', which let
-  // Instagram-handle corrections like "wait, the insta id is @umairkasalon"
-  // skip the LLM intent classifier and route as 'answer' to whatever
-  // question the user happened to be on. Real emails: name@host.tld with
-  // at least one dot in the host. Bare social handles (@umairsalon) don't
-  // match — they fall through to the LLM classifier which can read intent.
-  if (/[\w.+-]+@[\w-]+\.[\w.-]+/.test(t) && t.length < 100 && !/[?]/.test(t)) return 'answer';
-  // Very short replies (< 4 chars) almost always answers, never menu requests
-  if (t.length < 4) return 'answer';
-  // Short messages that clearly express skip / delegate / acceptance intent.
-  // Single source of truth is smartDefaults.isDelegation — covers "surprise
-  // me", "just add something random", "idk you pick", "i dont have it yet",
-  // etc. Without this short-circuit the LLM intent classifier sometimes
-  // misroutes them as "question" or "exit" and the user gets dumped out of
-  // their flow mid-step.
-  if (isDelegation(t)) return 'answer';
-  // Paid-claim phrasings ("made the payment", "i paid", "payment sent"
-  // etc.) are ALWAYS an answer — the user is talking about Stripe, not
-  // asking for the menu. Without this fast-path the LLM classifier has
-  // been known to read "made the payment" as 'menu' because of its
-  // "new subject, new service" pattern match, which dumps the user
-  // back into SERVICE_SELECTION instead of letting the handleRevisions
-  // paid-claim handler poll Stripe.
-  if (PAID_CLAIM_RX && PAID_CLAIM_RX.test(t)) return 'answer';
-
-  try {
-    // Recent context lets the LLM disambiguate echoes ("make a booking
-    // system" right after the bot promised one) from real flow-switches.
-    // Empty placeholder keeps the prompt clean when no context available.
-    const recentContextBlock = opts.recentContext
-      ? `\nRECENT CONVERSATION (so you can disambiguate echoes from switches):\n${opts.recentContext}\n`
-      : '';
-    const prompt = INTENT_CLASSIFIER_PROMPT
-      .replace('{{CURRENT_QUESTION}}', currentQuestion)
-      .replace('{{RECENT_CONTEXT}}', recentContextBlock);
-    const response = await generateResponse(prompt, [{ role: 'user', content: text }], {
-      userId,
-      operation: 'intent_classifier',
-    });
-    const jsonMatch = response.match(/\{[\s\S]*?\}/);
-    if (!jsonMatch) return 'answer';
-    const parsed = JSON.parse(jsonMatch[0]);
-    return parsed.intent || 'answer';
-  } catch {
-    return 'answer'; // On any failure, don't block the flow
-  }
-}
-
 /**
  * Inner processor: acquires the per-user lock, pins channel context, runs
  * _routeMessage with one retry if the first attempt threw before sending
@@ -617,6 +548,13 @@ async function _routeMessage(message) {
   // this, ~50% of bot replies don't show up in the admin panel chat history
   // because handlers used to have to call logMessage manually after each send.
   setUserId(user.id);
+
+  // Phase 1 observability: stamp this turn with a fresh UUID so every
+  // classifier decision recorded inside it (undo / intent / correction
+  // / side-channel / sales bot speech&topic / industry / services) gets
+  // grouped together. Admin "🔍 Trace" panel reads classifier_decisions
+  // by user_id + turn_id to render the per-turn decision graph.
+  setTurnId(randomUUID());
 
   // Backfill display name on EVERY turn, not just on the WELCOME state.
   // Messenger / Instagram resolve the name via Graph API in the route
@@ -782,16 +720,33 @@ async function _routeMessage(message) {
   // checks) so by the time it's actually awaited at the intent block
   // below, it's usually already resolved. Wasted work cost: a tiny number
   // of nano calls on turns where an early return fires before the await.
-  let intentPromise = null;
+  // Phase 3 — consolidated per-turn classifier. Replaces the previous
+  // three parallel calls (intentPromise + correctionPromise +
+  // classifyUndoOrKeep) with a SINGLE LLM call that returns a unified
+  // verdict (primary intent + optional correction payload + orthogonal
+  // flags). Same parallel-kickoff strategy as before so the verdict is
+  // usually resolved by the time we await it later. Old per-classifier
+  // call sites are skipped when this promise is set.
+  let turnClassifierPromise = null;
+  // We also gate this for the domain states the old correctionDetector
+  // covered (WEB_DOMAIN_*) — the same cross-state-correction value
+  // applies there ("wait the contact number was X" mid-domain).
+  const TURN_CLASSIFIER_DOMAIN_STATES = new Set([
+    STATES.WEB_DOMAIN_CHOICE,
+    STATES.WEB_DOMAIN_OWN_INPUT,
+    STATES.WEB_DOMAIN_OWN_REGISTRAR,
+    STATES.WEB_DOMAIN_SEARCH,
+    STATES.WEB_DOMAIN_LATE_SEARCH,
+  ]);
   if (
     text &&
     !message.buttonId &&
     !message.listId &&
     message.type === 'text' &&
-    COLLECTION_STATES.has(user.state) &&
+    (COLLECTION_STATES.has(user.state) || TURN_CLASSIFIER_DOMAIN_STATES.has(user.state)) &&
     !user.metadata?.humanTakeover
   ) {
-    intentPromise = (async () => {
+    turnClassifierPromise = (async () => {
       let recentContext = '';
       try {
         const { getConversationHistory } = require('../db/conversations');
@@ -807,57 +762,57 @@ async function _routeMessage(message) {
             .join('\n');
         }
       } catch (err) {
-        logger.warn(`[INTENT-CTX] Recent-context fetch failed: ${err.message}`);
+        logger.warn(`[TURN-CLASSIFIER] Recent-context fetch failed: ${err.message}`);
       }
-      return classifyIntent(user.state, text, user.id, { recentContext });
-    })().catch((err) => {
-      logger.warn(`[INTENT] Pre-classify failed: ${err.message}`);
-      return 'answer';
-    });
-  }
-
-  // ── Cross-state correction kickoff ─────────────────────────────────────
-  // Detects mid-flow corrections like "wait, the email is X" / "actually
-  // change the business name to Y" while the user is on a different
-  // question. Started in parallel with abuse + intent so the latency is
-  // bounded by the slowest of the three (~700-1000ms) instead of summed.
-  // Awaited at the top of the intent block below — if it returns a
-  // correction, we apply it and skip dispatch to the state handler.
-  let correctionPromise = null;
-  // Domain states (new/own/skip + late-search variants) aren't in
-  // COLLECTION_STATES because they're button-driven, but a free-text
-  // reply at that step is often a correction to an earlier field
-  // ("wait the contact number was X", "actually the name should be Y").
-  // Gate the detector on these too so cross-state corrections still
-  // fire while the bot is asking about domains.
-  const DOMAIN_CORRECTION_STATES = new Set([
-    STATES.WEB_DOMAIN_CHOICE,
-    STATES.WEB_DOMAIN_OWN_INPUT,
-    STATES.WEB_DOMAIN_OWN_REGISTRAR,
-    STATES.WEB_DOMAIN_SEARCH,
-    STATES.WEB_DOMAIN_LATE_SEARCH,
-  ]);
-  if (
-    text &&
-    !message.buttonId &&
-    !message.listId &&
-    message.type === 'text' &&
-    (COLLECTION_STATES.has(user.state) || DOMAIN_CORRECTION_STATES.has(user.state)) &&
-    !user.metadata?.humanTakeover
-  ) {
-    correctionPromise = (async () => {
-      const { detectCorrection } = require('./correctionDetector');
-      return detectCorrection({
+      const { classifyTurnIntent } = require('./turnClassifier');
+      const undoPending = user.metadata?.undoPendingState === user.state;
+      return classifyTurnIntent({
         text,
         currentState: user.state,
-        websiteData: user.metadata?.websiteData || {},
+        currentQuestion: STATE_QUESTION[user.state] || '',
+        recentContext,
+        knownFields: user.metadata?.websiteData || {},
+        undoPending,
         userId: user.id,
       });
     })().catch((err) => {
-      logger.warn(`[CORRECTION] Pre-detect failed: ${err.message}`);
+      logger.warn(`[TURN-CLASSIFIER] Pre-classify failed: ${err.message}`);
       return null;
     });
   }
+  // Legacy alias kept so the existing dispatch downstream — which
+  // historically used `intentPromise` — can still resolve to a string
+  // 'intent' value. We map verdict.primary → the same intent strings
+  // the old code expected ('answer', 'question', 'menu', 'exit',
+  // 'objection'). 'undo' / 'keep' / 'correction' / 'skip' are NEW
+  // primary values that the old intent code didn't have — they're
+  // handled by separate branches in the dispatch below.
+  let intentPromise = turnClassifierPromise
+    ? turnClassifierPromise.then((v) => {
+        if (!v) return 'answer';
+        if (v.primary === 'menu' || v.primary === 'exit' || v.primary === 'question' || v.primary === 'objection') {
+          return v.primary;
+        }
+        // 'answer' / 'skip' / 'undo' / 'keep' / 'correction' / 'unclear' all
+        // map to 'answer' for the legacy dispatch — the new branches
+        // above handle the special cases first.
+        return 'answer';
+      })
+    : null;
+
+  // ── Cross-state correction kickoff (Phase 3 — superseded) ─────────────
+  // Now sourced from turnClassifierPromise above. The unified classifier
+  // returns verdict.correction when applicable; we read that at the
+  // existing await site below instead of running a separate
+  // detectCorrection LLM call. Setting correctionPromise = null skips
+  // the old kickoff path; the await site is rewritten to pull from the
+  // turn verdict.
+  // (Phase 3) The old `correctionPromise = ... detectCorrection(...)`
+  // kickoff has been removed entirely — turnClassifierPromise above
+  // produces verdict.correction directly in the same shape
+  // applyFieldCorrection expects. The downstream correction-await site
+  // pulls from the turn verdict. Domain-state coverage (WEB_DOMAIN_*)
+  // is handled by TURN_CLASSIFIER_DOMAIN_STATES at the kickoff site.
 
   // ── Abuse detection (Phase 13) ─────────────────────────────────────────
   // Before ANY greeting / recap / handler dispatch runs, classify the
@@ -1331,11 +1286,12 @@ async function _routeMessage(message) {
   }
 
   // ── Undo / keep classifier ────────────────────────────────────────────────
-  // When the user is at an undo-able state, one LLM call decides if their
-  // reply means "go back", "keep the previous value", or neither. The LLM
-  // handles natural phrasings ("actually let's revisit that", "one step
-  // back", "nah, back up") without a brittle regex list. Long messages
-  // and non-text inputs short-circuit to skip the LLM call.
+  // Phase 3: undo / keep verdict now comes from the unified
+  // turnClassifier (started up at the top of the function in parallel
+  // with the abuse detector). Falls back to the legacy classifyUndoOrKeep
+  // call only when the turn classifier didn't run for this state — keeps
+  // behaviour identical across edge cases like SALON_INSTAGRAM that the
+  // domain-states + COLLECTION_STATES gate misses.
   if (
     text &&
     !message.buttonId &&
@@ -1343,10 +1299,21 @@ async function _routeMessage(message) {
     message.type === 'text' &&
     UNDOABLE_STATES.has(user.state)
   ) {
-    const intent = await classifyUndoOrKeep(text, {
-      undoPending: user.metadata?.undoPendingState === user.state,
-      userId: user.id,
-    });
+    let intent = 'none';
+    if (turnClassifierPromise) {
+      const v = await turnClassifierPromise;
+      if (v && (v.primary === 'undo' || v.primary === 'keep')) {
+        intent = v.primary;
+      }
+    } else {
+      // No unified classifier ran (state isn't in COLLECTION_STATES /
+      // domain set) — fall through to the legacy single-purpose call so
+      // states like SALON_INSTAGRAM still get undo/keep handling.
+      intent = await classifyUndoOrKeep(text, {
+        undoPending: user.metadata?.undoPendingState === user.state,
+        userId: user.id,
+      });
+    }
     if (intent === 'undo') {
       await handleUndo(user);
       return;
@@ -1518,11 +1485,15 @@ async function _routeMessage(message) {
   ) {
     // Cross-state correction check first — "wait, the email is X" mid-hours
     // should update email, not be classified as an answer/menu/exit. The
-    // detector returns null for active-field corrections so the regular
-    // handler still gets normal answers (even ones phrased with "actually").
-    if (correctionPromise) {
-      const correction = await correctionPromise;
-      if (correction) {
+    // unified turnClassifier returns verdict.correction when applicable
+    // (with active-field guarding already applied inside the classifier),
+    // so we just read it here instead of running a separate detect call.
+    let _turnVerdict = null;
+    if (turnClassifierPromise) {
+      _turnVerdict = await turnClassifierPromise;
+    }
+    const correction = _turnVerdict && _turnVerdict.primary === 'correction' ? _turnVerdict.correction : null;
+    if (correction) {
         try {
           const webDev = require('./handlers/webDev');
           const ack = await webDev.applyFieldCorrection(user, correction.field, correction.value, correction.op || 'replace');
@@ -1539,12 +1510,14 @@ async function _routeMessage(message) {
         } catch (err) {
           logger.warn(`[CORRECTION] apply failed for ${from}: ${err.message} — falling through`);
         }
-      }
     }
 
-    const intent = intentPromise
-      ? await intentPromise
-      : await classifyIntent(user.state, text, user.id, { recentContext: '' });
+    // intentPromise is guaranteed non-null inside this block because the
+    // outer `if` gates on the same conditions that set it (COLLECTION_STATES
+    // OR TURN_CLASSIFIER_DOMAIN_STATES, text-only, no buttons, no humanTakeover).
+    // If intentPromise ever does come back null (defensive default), treat
+    // as 'answer' so the handler runs.
+    const intent = intentPromise ? await intentPromise : 'answer';
     logger.debug(`Intent classified for ${from} in state ${user.state}: ${intent}`);
 
     if (intent === 'menu' || intent === 'exit') {

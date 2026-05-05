@@ -1,0 +1,20 @@
+{
+  "name": "pricing-question-no-premature-trigger",
+  "description": "User in SALES_CHAT asks about pricing ('how much does a website cost?'). Bot must answer the price question, NOT fire [TRIGGER_WEBSITE_DEMO]. Pricing-only questions are NOT consent — earlier we shipped a regression where any service-mention triggered the demo.",
+  "channel": "whatsapp",
+  "turns": [
+    {
+      "user": "how much does a website cost?",
+      "expect": {
+        "state": "SALES_CHAT",
+        "state_not": "WEB_COLLECT_NAME",
+        "metadata.websiteDemoTriggered": "*missing*",
+        "reply_not_contains": [
+          "what's your business called",
+          "Let's build it"
+        ],
+        "sent_count_gte": 1
+      }
+    }
+  ]
+}

@@ -1,0 +1,22 @@
+{
+  "name": "happy-path-name-captured-and-flow-progresses",
+  "description": "Smoke test: a fresh user says they want a website, gives a business name, and the bot captures the name + advances out of SALES_CHAT into the wizard. Strictly two turns to keep the fixture stable across LLM non-determinism — deeper field assertions live in the focused fixtures (01-22). What this fixture protects: the absolute basics — bot doesn't crash on a fresh user, name capture works, state machine moves forward.",
+  "channel": "whatsapp",
+  "turns": [
+    {
+      "user": "I want to make a website for my plumbing business",
+      "expect": {
+        "sent_count_gte": 1,
+        "reply_not_contains": ["Nothing to go back to", "Sure, going back one step"]
+      }
+    },
+    {
+      "user": "Noman Plumbing",
+      "expect": {
+        "metadata.websiteData.businessName": "Noman Plumbing",
+        "state_not": "WELCOME",
+        "sent_count_gte": 1
+      }
+    }
+  ]
+}

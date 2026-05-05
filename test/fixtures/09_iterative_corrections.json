@@ -1,0 +1,33 @@
+{
+  "name": "iterative-name-corrections",
+  "description": "User changes their mind once, then changes it again. Both corrections apply; the latest value wins. Tests that the unified turnClassifier handles consecutive corrections cleanly. Real users do this often: 'actually X', 'wait Y'. Bot must NOT lose the latest update. Note: tested with 2 changes rather than 3+ because the feedback-signals classifier reasonably treats rapid-fire indecision (3+ corrections in a row) as frustration and offers human escape — that's good production behavior, just not what this regression test is locking in.",
+  "channel": "whatsapp",
+  "seed": {
+    "state": "WEB_COLLECT_CONTACT",
+    "metadata": {
+      "websiteData": {
+        "businessName": "Noman Plumbing",
+        "industry": "Plumbing",
+        "primaryCity": "Karachi",
+        "serviceAreas": ["Clifton"],
+        "services": ["drain cleaning"]
+      },
+      "websiteDemoTriggered": true,
+      "emailSkipped": true
+    }
+  },
+  "turns": [
+    {
+      "user": "actually the business name should be Noman Plumbing Pro",
+      "expect": {
+        "metadata.websiteData.businessName": "Noman Plumbing Pro"
+      }
+    },
+    {
+      "user": "wait, change it to Pro Plumbing Services",
+      "expect": {
+        "metadata.websiteData.businessName": "Pro Plumbing Services"
+      }
+    }
+  ]
+}

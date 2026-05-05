@@ -1,0 +1,15 @@
+{
+  "name": "multi-field-shotgun-first-message",
+  "description": "Smart user crams business name, industry, location, services, and contact into ONE first message. The bot's hydrate path (entityAccumulator) should populate everything in one go, then fast-forward past the steps it already has answers for. Failure mode being guarded against: bot asks for the business name even though the user already said it.",
+  "channel": "whatsapp",
+  "turns": [
+    {
+      "user": "Hi, I want to make a website for Noman Plumbing — we do drain cleaning and pipe repair, based in Karachi (Clifton + DHA), email contact@nomanplumbing.com",
+      "expect": {
+        "metadata.websiteData.businessName": "*exists*",
+        "state_not": "WEB_COLLECT_NAME",
+        "sent_count_gte": 1
+      }
+    }
+  ]
+}

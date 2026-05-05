@@ -88,20 +88,40 @@ The user said: "${t}"
 
 Respond with ONLY one word: undo, keep, or none.`;
 
+  const start = Date.now();
+  let verdict = 'none';
+  let rawResponse = null;
   try {
-    const response = await generateResponse(
+    rawResponse = await generateResponse(
       prompt,
       [{ role: 'user', content: t }],
       { userId, operation: 'undo_classify' }
     );
-    const clean = String(response || '').trim().toLowerCase().replace(/[^a-z]/g, '');
-    if (clean === 'undo') return 'undo';
-    if (clean === 'keep' && undoPending) return 'keep';
-    return 'none';
+    const clean = String(rawResponse || '').trim().toLowerCase().replace(/[^a-z]/g, '');
+    if (clean === 'undo') verdict = 'undo';
+    else if (clean === 'keep' && undoPending) verdict = 'keep';
+    else verdict = 'none';
   } catch (err) {
     logger.warn(`[UNDO] LLM classify failed: ${err.message}`);
-    return 'none';
+    verdict = 'none';
   }
+
+  // Phase 1 observability — fire-and-forget. Records this classifier's
+  // verdict against the turn so the admin "🔍 Trace" panel can show
+  // exactly what undo decided for this user reply.
+  try {
+    const { recordClassifierDecision } = require('../db/classifierDecisions');
+    recordClassifierDecision({
+      classifier: 'classifyUndoOrKeep',
+      inputText: t,
+      inputContext: { undoPending },
+      output: { verdict, rawResponse: typeof rawResponse === 'string' ? rawResponse.slice(0, 80) : null },
+      latencyMs: Date.now() - start,
+      userId,
+    }).catch(() => {});
+  } catch (_) {}
+
+  return verdict;
 }
 
 /**

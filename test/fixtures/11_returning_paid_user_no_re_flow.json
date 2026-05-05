@@ -1,0 +1,39 @@
+{
+  "name": "returning-paid-user-no-re-flow",
+  "description": "User has already paid and their site is live. They come back with a generic greeting. Bot must NOT treat this as a new website request, must NOT re-trigger the website demo, must NOT pretend the project is still being delivered. The earlier bug: bot would say 'I'll activate your site now and send the live link' on a returning hi from a paid customer — pure hallucination.",
+  "channel": "whatsapp",
+  "seed": {
+    "state": "WEB_REVISIONS",
+    "metadata": {
+      "websiteData": {
+        "businessName": "Noman Plumbing",
+        "industry": "Plumbing",
+        "primaryCity": "Karachi",
+        "serviceAreas": ["Clifton"],
+        "services": ["drain cleaning", "pipe repair"]
+      },
+      "paymentConfirmed": true,
+      "leadClosed": true,
+      "lastBusinessName": "Noman Plumbing",
+      "lastCompletedProjectType": "website",
+      "lastPaymentAmount": 9900,
+      "paidAt": "2026-04-15T10:00:00Z",
+      "websiteDemoTriggered": true,
+      "currentSiteId": "fake-site-id-for-test"
+    }
+  },
+  "turns": [
+    {
+      "user": "hey",
+      "expect": {
+        "state_not_one_of": ["WEB_COLLECT_NAME", "WEB_COLLECT_INDUSTRY", "WEB_COLLECT_AREAS"],
+        "reply_not_contains": [
+          "let's build it",
+          "what's your business called",
+          "I'll activate your site now",
+          "send the live link"
+        ]
+      }
+    }
+  ]
+}

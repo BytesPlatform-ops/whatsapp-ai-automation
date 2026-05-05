@@ -1,0 +1,28 @@
+{
+  "name": "roman-urdu-skip-recognized",
+  "description": "User mid-English flow types 'rehne do' or 'baad mein' — these are Roman Urdu for 'leave it / later', semantically equivalent to 'skip'. Unified turnClassifier's prompt explicitly mentions any-language skip equivalents. Bot must classify as skip, not crash, not undo, not treat as answer-text.",
+  "channel": "whatsapp",
+  "seed": {
+    "state": "WEB_COLLECT_EMAIL",
+    "metadata": {
+      "websiteData": {
+        "businessName": "Noman Plumbing",
+        "industry": "Plumbing"
+      },
+      "websiteDemoTriggered": true
+    }
+  },
+  "turns": [
+    {
+      "user": "rehne do",
+      "expect": {
+        "state_not": "WEB_COLLECT_NAME",
+        "reply_not_contains": [
+          "Nothing to go back to",
+          "Sure, going back one step"
+        ],
+        "sent_count_gte": 1
+      }
+    }
+  ]
+}

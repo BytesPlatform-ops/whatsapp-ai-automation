@@ -1,0 +1,33 @@
+{
+  "name": "domain-choice-skip-text",
+  "description": "User at WEB_DOMAIN_CHOICE types 'skip' as text (not a button tap). Bot must advance to generation/preview, NOT crash, NOT re-ask the new/own/skip question.",
+  "channel": "whatsapp",
+  "seed": {
+    "state": "WEB_DOMAIN_CHOICE",
+    "metadata": {
+      "websiteData": {
+        "businessName": "Noman Plumbing",
+        "industry": "Plumbing",
+        "primaryCity": "Karachi",
+        "serviceAreas": ["Clifton"],
+        "services": ["drain cleaning"]
+      },
+      "websiteDemoTriggered": true,
+      "emailSkipped": true,
+      "currentSiteId": "fake-site-domain-skip-test"
+    }
+  },
+  "turns": [
+    {
+      "user": "skip",
+      "expect": {
+        "state_not": "WEB_DOMAIN_CHOICE",
+        "metadata.domainChoice": "skip",
+        "reply_not_contains": [
+          "Nothing to go back to",
+          "Sure, going back one step"
+        ]
+      }
+    }
+  ]
+}

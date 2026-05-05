@@ -1,0 +1,24 @@
+{
+  "name": "frustrated-question-still-answered",
+  "description": "User is annoyed and wraps a question in frustration: 'I said what services do you provide, are you dumb?'. Bot must still recognize this as a QUESTION (so it answers + re-asks current step) — NOT as an objection or as the answer to the current question. Earlier the bot just kept re-asking 'what's your business name?' and ignored the user's frustration entirely.",
+  "channel": "whatsapp",
+  "seed": {
+    "state": "WEB_COLLECT_NAME",
+    "metadata": {
+      "websiteDemoTriggered": true
+    }
+  },
+  "turns": [
+    {
+      "user": "I said what services do you provide, are you dumb?",
+      "expect": {
+        "metadata.websiteData.businessName": "*missing*",
+        "sent_count_gte": 1,
+        "reply_not_contains": [
+          "Nothing to go back to",
+          "Sure, going back one step"
+        ]
+      }
+    }
+  ]
+}

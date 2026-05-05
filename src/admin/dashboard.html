@@ -829,9 +829,105 @@ function openConversation(userId, phone, name) {
 
     // Load LLM cost breakdown in parallel — non-critical, don't block the view.
     loadLlmCost(userId);
+    // Phase 1 observability — load classifier traces in parallel and
+    // attach them to user messages by turn timestamp once both arrive.
+    loadClassifierTraces(userId, msgs);
   }).catch(function(err) {
     document.getElementById('conv-modal-body').innerHTML = '<p class="text-red-500">Failed to load: ' + esc(err.message) + '</p>';
   });
+}
+
+// ─── Classifier trace (Phase 1 observability) ─────────────────────
+// Fetches all classifier_decisions rows for the user, groups by turn_id,
+// and attaches each turn to the user message that triggered it (latest
+// user message before the turn's first decision). Renders a "🔍 Trace"
+// toggle inline on each user message bubble that expands to show the
+// full per-turn decision graph.
+function loadClassifierTraces(userId, msgs) {
+  api('conversations/' + userId + '/decisions').then(function(decisions) {
+    if (!Array.isArray(decisions) || decisions.length === 0) return;
+    // 1. Group decisions by turn_id (and sort each turn oldest-first).
+    var turns = {};
+    decisions.forEach(function(d) {
+      if (!d.turn_id) return;
+      if (!turns[d.turn_id]) turns[d.turn_id] = [];
+      turns[d.turn_id].push(d);
+    });
+    Object.keys(turns).forEach(function(tid) {
+      turns[tid].sort(function(a, b) { return new Date(a.created_at) - new Date(b.created_at); });
+    });
+    // 2. Map each turn to the most-recent user message before it.
+    var userMsgs = msgs.filter(function(m) { return m.role === 'user'; })
+                        .sort(function(a, b) { return new Date(a.created_at) - new Date(b.created_at); });
+    var traceByMsgId = {};
+    Object.keys(turns).forEach(function(tid) {
+      var turnStart = new Date(turns[tid][0].created_at);
+      var match = null;
+      for (var i = userMsgs.length - 1; i >= 0; i--) {
+        if (new Date(userMsgs[i].created_at) <= turnStart) { match = userMsgs[i]; break; }
+      }
+      if (match) traceByMsgId[match.id] = turns[tid];
+    });
+    // 3. Render: find each user message bubble in the DOM (we can't
+    //    cleanly back-reference from text, so re-render the relevant
+    //    bubbles' inner HTML by walking the modal body). Cheaper /
+    //    safer: build a sidebar trace panel keyed by message timestamp.
+    //    Append a toggle to each user message bubble whose data-msg-id
+    //    matches an entry in traceByMsgId.
+    var body = document.getElementById('conv-modal-body');
+    if (!body) return;
+    // Re-render approach: walk through msgs, find their bubbles by
+    // index in the rendered list, and inject the toggle inline. The
+    // simplest stable mapping is to give each user-message bubble a
+    // data-msg-id attribute on first render — but the existing
+    // openConversation doesn't do that. Workaround: append a single
+    // collapsible "Classifier Trace" panel at the bottom listing all
+    // turns in chronological order with the user-message preview as
+    // the header, plus per-classifier decision rows. Simpler, still
+    // useful for debugging.
+    var turnList = Object.keys(turns).map(function(tid) {
+      var t = turns[tid];
+      var ts = t[0].created_at;
+      var matchMsg = null;
+      for (var i = userMsgs.length - 1; i >= 0; i--) {
+        if (new Date(userMsgs[i].created_at) <= new Date(ts)) { matchMsg = userMsgs[i]; break; }
+      }
+      var msgPreview = matchMsg
+        ? esc(String(matchMsg.message_text || '').slice(0, 80))
+        : '<i>no matching user msg</i>';
+      var rows = t.map(function(d) {
+        var out = '';
+        try { out = JSON.stringify(d.output, null, 0); } catch (_) { out = String(d.output); }
+        var ctx = '';
+        try { ctx = d.input_context && Object.keys(d.input_context).length ? JSON.stringify(d.input_context) : ''; } catch (_) {}
+        return '<tr class="border-t border-gray-100">' +
+          '<td class="py-1 pr-2 font-mono text-[10px] text-indigo-700 align-top whitespace-nowrap">' + esc(d.classifier) + '</td>' +
+          '<td class="py-1 pr-2 text-[10px] align-top text-gray-700"><pre class="whitespace-pre-wrap break-all">' + esc(out.slice(0, 400)) + '</pre>' +
+            (ctx ? '<div class="text-[9px] text-gray-400 mt-0.5">ctx: ' + esc(ctx.slice(0, 200)) + '</div>' : '') +
+          '</td>' +
+          '<td class="py-1 pr-2 text-right text-[10px] text-gray-500 align-top whitespace-nowrap">' + (d.latency_ms != null ? d.latency_ms + 'ms' : '') + '</td>' +
+        '</tr>';
+      }).join('');
+      return '<details class="mb-2 border border-gray-200 rounded-lg p-2">' +
+        '<summary class="cursor-pointer text-[11px] font-semibold text-gray-700">' +
+          '🔍 Turn at ' + fmtDate(ts) + ' · <span class="text-gray-500 font-normal">' + msgPreview + '</span> · <span class="text-indigo-600">' + t.length + ' decisions</span>' +
+        '</summary>' +
+        '<table class="w-full mt-2 text-[10px]">' +
+          '<thead><tr class="text-gray-400"><th class="text-left">Classifier</th><th class="text-left">Output</th><th class="text-right">Latency</th></tr></thead>' +
+          '<tbody>' + rows + '</tbody>' +
+        '</table>' +
+      '</details>';
+    }).join('');
+    var panelHtml =
+      '<div class="bg-white border border-gray-200 rounded-lg p-3 mt-4 mb-2">' +
+        '<div class="flex items-center justify-between mb-2">' +
+          '<p class="text-xs font-bold text-gray-700">🔍 Classifier Trace</p>' +
+          '<p class="text-[10px] text-gray-500">' + Object.keys(turns).length + ' turn(s) · ' + decisions.length + ' decision(s)</p>' +
+        '</div>' +
+        turnList +
+      '</div>';
+    body.insertAdjacentHTML('beforeend', panelHtml);
+  }).catch(function() { /* observability is best-effort — no error UI */ });
 }
 
 function fmtUSD(n) {

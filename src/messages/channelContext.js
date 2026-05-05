@@ -14,7 +14,11 @@ function runWithContext({ channel, phoneNumberId }, fn) {
   // decide whether a retry would duplicate already-delivered content.
   // `userId` is null at turn start; router fills it in after findOrCreateUser
   // so the sender can auto-log outbound messages against the right user.
-  return channelStore.run({ channel, phoneNumberId: phoneNumberId || null, sendCount: 0, userId: null }, fn);
+  // `turnId` groups every classifier decision made in response to a
+  // single inbound message — set by the router after findOrCreateUser
+  // and read by classifierDecisions.recordClassifierDecision so each
+  // verdict can be tied back to the user-message that triggered it.
+  return channelStore.run({ channel, phoneNumberId: phoneNumberId || null, sendCount: 0, userId: null, turnId: null }, fn);
 }
 
 /**
@@ -31,6 +35,20 @@ function setUserId(userId) {
 
 function getUserId() {
   return channelStore.getStore()?.userId || null;
+}
+
+/**
+ * Set the per-turn classifier-trace id. Router calls this once after
+ * findOrCreateUser so every classifier decision recorded inside the
+ * turn shares the same turn_id. Reads via getTurnId().
+ */
+function setTurnId(turnId) {
+  const store = channelStore.getStore();
+  if (store) store.turnId = turnId || null;
+}
+
+function getTurnId() {
+  return channelStore.getStore()?.turnId || null;
 }
 
 /**
@@ -81,4 +99,6 @@ module.exports = {
   getSendCount,
   setUserId,
   getUserId,
+  setTurnId,
+  getTurnId,
 };

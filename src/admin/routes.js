@@ -150,6 +150,21 @@ router.get('/api/conversations/:userId/llm-usage', async (req, res) => {
   }
 });
 
+// Phase 1 observability — every classifier decision recorded for this
+// user, ordered newest-first. The dashboard groups them by turn_id in
+// JS to render a per-turn "🔍 Trace" panel inline with the message
+// transcript. Capped at 500 rows by the helper to keep payload sane.
+router.get('/api/conversations/:userId/decisions', async (req, res) => {
+  try {
+    const { getDecisionsForUser } = require('../db/classifierDecisions');
+    const data = await getDecisionsForUser(req.params.userId);
+    res.json(data);
+  } catch (err) {
+    logger.error('[ADMIN] Classifier decisions error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.post('/api/conversations/:userId/reply', async (req, res) => {
   try {
     const { messageText } = req.body;

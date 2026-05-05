@@ -1,0 +1,33 @@
+{
+  "name": "areas-step-accepts-email-cross-field",
+  "description": "Bot at WEB_COLLECT_AREAS asks for city/areas. User provides email instead. Email must be captured (turnClassifier returns correction with field=contactEmail), bot must NOT crash, NOT lose the email. After the correction, bot should re-ask city or move forward — NOT pop backward.",
+  "channel": "whatsapp",
+  "seed": {
+    "state": "WEB_COLLECT_AREAS",
+    "metadata": {
+      "websiteData": {
+        "businessName": "Noman Plumbing",
+        "industry": "Plumbing"
+      },
+      "websiteDemoTriggered": true,
+      "emailSkipped": true
+    }
+  },
+  "turns": [
+    {
+      "user": "the email is contact@nomanplumbing.com",
+      "expect": {
+        "metadata.websiteData.contactEmail": "contact@nomanplumbing.com",
+        "state_not_one_of": [
+          "WEB_COLLECT_NAME",
+          "WEB_COLLECT_INDUSTRY"
+        ],
+        "reply_not_contains": [
+          "Nothing to go back to",
+          "Sure, going back one step"
+        ],
+        "sent_count_gte": 1
+      }
+    }
+  ]
+}

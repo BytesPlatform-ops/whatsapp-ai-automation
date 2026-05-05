@@ -1,0 +1,37 @@
+{
+  "name": "contact-step-accepts-services-cross-field",
+  "description": "Bot at WEB_COLLECT_CONTACT asks for email/phone/address. User provides services instead. Services must be captured (correctionDetector op=replace via the unified turnClassifier), bot must NOT crash, NOT undo, NOT lose the services. The user-experience requirement: 'bot kabhi bhi cater kare — kuch bhi bole, sahi field mein save ho.'",
+  "channel": "whatsapp",
+  "seed": {
+    "state": "WEB_COLLECT_CONTACT",
+    "metadata": {
+      "websiteData": {
+        "businessName": "Noman Plumbing",
+        "industry": "Plumbing",
+        "primaryCity": "Karachi",
+        "serviceAreas": ["Clifton"],
+        "services": []
+      },
+      "websiteDemoTriggered": true,
+      "emailSkipped": true
+    }
+  },
+  "turns": [
+    {
+      "user": "we offer drain cleaning and pipe repair",
+      "expect": {
+        "metadata.websiteData.services": "*exists*",
+        "state_not_one_of": [
+          "WEB_COLLECT_NAME",
+          "WEB_COLLECT_INDUSTRY",
+          "WEB_COLLECT_AREAS"
+        ],
+        "reply_not_contains": [
+          "Nothing to go back to",
+          "Sure, going back one step"
+        ],
+        "sent_count_gte": 1
+      }
+    }
+  ]
+}

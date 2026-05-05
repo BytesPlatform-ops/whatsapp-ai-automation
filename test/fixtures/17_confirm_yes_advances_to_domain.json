@@ -1,0 +1,35 @@
+{
+  "name": "confirm-yes-advances-to-domain",
+  "description": "User reaches WEB_CONFIRM with all data filled, types 'yes' (or 'looks good'). Bot must advance to WEB_DOMAIN_CHOICE asking new/own/skip. Tests the confirm → domain transition that every paying user crosses.",
+  "channel": "whatsapp",
+  "seed": {
+    "state": "WEB_CONFIRM",
+    "metadata": {
+      "websiteData": {
+        "businessName": "Noman Plumbing",
+        "industry": "Plumbing",
+        "primaryCity": "Karachi",
+        "serviceAreas": ["Clifton", "DHA"],
+        "services": ["drain cleaning", "pipe repair"],
+        "contactEmail": "noman@plumbing.com",
+        "logoSkipped": true
+      },
+      "websiteDemoTriggered": true,
+      "emailSkipped": false,
+      "currentSiteId": "fake-site-confirm-test"
+    }
+  },
+  "turns": [
+    {
+      "user": "yes looks good",
+      "expect": {
+        "state_one_of": ["WEB_DOMAIN_CHOICE", "WEB_GENERATING", "WEB_CONFIRM"],
+        "sent_count_gte": 1,
+        "reply_not_contains": [
+          "Nothing to go back to",
+          "Sure, going back one step"
+        ]
+      }
+    }
+  ]
+}

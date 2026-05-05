@@ -1,0 +1,25 @@
+{
+  "name": "handoff-for-chatbot-mid-flow",
+  "description": "User is mid-website-build and changes their mind: 'forget the website, I want a chatbot'. Bot must trigger HUMAN_HANDOFF for chatbot (with switch signal 'forget'), set handoffFiredFor, send admin email-style ack, and NOT keep collecting website fields. Tests the unified turnClassifier's menu-vs-correction-vs-handoff disambiguation.",
+  "channel": "whatsapp",
+  "seed": {
+    "state": "WEB_COLLECT_AREAS",
+    "metadata": {
+      "websiteData": {
+        "businessName": "Noman Plumbing",
+        "industry": "Plumbing"
+      },
+      "websiteDemoTriggered": true,
+      "emailSkipped": true
+    }
+  },
+  "turns": [
+    {
+      "user": "actually scrap the website, I want a chatbot instead",
+      "expect": {
+        "state_not_one_of": ["WEB_COLLECT_AREAS", "WEB_COLLECT_SERVICES", "WEB_COLLECT_LOGO"],
+        "sent_count_gte": 1
+      }
+    }
+  ]
+}

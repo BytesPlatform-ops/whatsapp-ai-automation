@@ -1,0 +1,40 @@
+{
+  "name": "skip-at-contact-must-not-pop-undo",
+  "description": "Regression: 'skip' at WEB_COLLECT_CONTACT must advance the flow forward (or stay in contact for re-prompt), NEVER trigger undo and pop the user back to an earlier collection state. The earlier bug: undo classifier returned 'undo' for the bare word 'skip', sending the user backward into a skip-undo loop.",
+  "channel": "whatsapp",
+  "seed": {
+    "state": "WEB_COLLECT_CONTACT",
+    "metadata": {
+      "websiteData": {
+        "businessName": "Noman Plumbing",
+        "industry": "Plumbing",
+        "primaryCity": "Karachi",
+        "serviceAreas": ["Clifton", "DHA"],
+        "services": ["drain cleaning", "pipe repair"],
+        "logoSkipped": true
+      },
+      "emailSkipped": true,
+      "websiteDemoTriggered": true,
+      "currentSiteId": null
+    }
+  },
+  "turns": [
+    {
+      "user": "skip",
+      "expect": {
+        "state_not_one_of": [
+          "WEB_COLLECT_NAME",
+          "WEB_COLLECT_INDUSTRY",
+          "WEB_COLLECT_AREAS",
+          "WEB_COLLECT_SERVICES"
+        ],
+        "reply_not_contains": [
+          "Nothing to go back to",
+          "Sure, going back one step",
+          "Want to change it, or reply *keep*",
+          "we haven't filled anything in yet"
+        ]
+      }
+    }
+  ]
+}

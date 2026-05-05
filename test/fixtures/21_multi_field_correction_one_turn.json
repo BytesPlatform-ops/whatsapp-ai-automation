@@ -1,0 +1,33 @@
+{
+  "name": "multi-field-correction-one-turn",
+  "description": "User packs multiple corrections into a single message: 'change name to X and remove drain cleaning from services'. Bot has to handle this gracefully — at minimum, ONE of the corrections lands. Strict assertion is on the name change since that's the higher-confidence one for the LLM. The remove may or may not also fire (LLM may pick whichever feels more salient); both behaviors are acceptable as long as the name change succeeds and the bot doesn't crash.",
+  "channel": "whatsapp",
+  "seed": {
+    "state": "WEB_CONFIRM",
+    "metadata": {
+      "websiteData": {
+        "businessName": "Noman Plumbing",
+        "industry": "Plumbing",
+        "primaryCity": "Karachi",
+        "serviceAreas": ["Clifton"],
+        "services": ["drain cleaning", "pipe repair"]
+      },
+      "websiteDemoTriggered": true,
+      "emailSkipped": true,
+      "currentSiteId": "fake-site-multi-correction-test"
+    }
+  },
+  "turns": [
+    {
+      "user": "change the name to Noman Pro Plumbing and remove drain cleaning from services",
+      "expect": {
+        "state_not_one_of": ["WEB_COLLECT_NAME", "WEB_COLLECT_INDUSTRY", "WEB_COLLECT_AREAS"],
+        "sent_count_gte": 1,
+        "reply_not_contains": [
+          "Nothing to go back to",
+          "Sure, going back one step"
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,29 @@
+{
+  "name": "confirm-field-edit-applies-and-rerenders",
+  "description": "User at WEB_CONFIRM reviewing the summary types a field edit ('change the name to X'). Bot must apply the correction (turnClassifier returns correction with field=businessName) AND show the updated summary, NOT advance to domain (user hasn't confirmed yet).",
+  "channel": "whatsapp",
+  "seed": {
+    "state": "WEB_CONFIRM",
+    "metadata": {
+      "websiteData": {
+        "businessName": "Noman Plumbing",
+        "industry": "Plumbing",
+        "primaryCity": "Karachi",
+        "serviceAreas": ["Clifton"],
+        "services": ["drain cleaning"]
+      },
+      "websiteDemoTriggered": true,
+      "emailSkipped": true,
+      "currentSiteId": "fake-site-edit-test"
+    }
+  },
+  "turns": [
+    {
+      "user": "change the business name to Noman Pro Plumbing",
+      "expect": {
+        "metadata.websiteData.businessName": "Noman Pro Plumbing",
+        "state_not_one_of": ["WEB_GENERATING", "WEB_DOMAIN_CHOICE"]
+      }
+    }
+  ]
+}

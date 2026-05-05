@@ -84,6 +84,20 @@ async function classifyIntent(text, intents, opts = {}) {
       durationMs: 0,
       cached: true,
     });
+    // Phase 1: also persist the cached verdict so the per-turn trace
+    // panel sees it. Tag operation+cached=true so the UI can render
+    // it differently (no LLM call cost).
+    try {
+      const { recordClassifierDecision } = require('../db/classifierDecisions');
+      recordClassifierDecision({
+        classifier: opts.operation || 'classifyIntent',
+        inputText: safeText,
+        inputContext: { intents: Object.keys(intents), context: opts.context ? opts.context.slice(0, 200) : null, cached: true },
+        output: { ...cached, _truthy: Object.keys(cached).filter((k) => cached[k]) },
+        latencyMs: 0,
+        userId: opts.userId,
+      }).catch(() => {});
+    } catch (_) {}
     return cached;
   }
 
@@ -184,10 +198,38 @@ ${intentKeys.map((k) => `  "${k}": boolean`).join(',\n')}`;
       cached: false,
     });
 
+    // Phase 1 observability — persist the verdict so the admin "🔍 Trace"
+    // panel can show every classifier that fired this turn alongside
+    // the user's message. Operation tag becomes the classifier name so
+    // the same prompt fired by sales bot vs feedback can be told apart
+    // (e.g. 'sales_user_intent' vs 'sales_bot_speech' vs 'sales_conv_topic').
+    try {
+      const { recordClassifierDecision } = require('../db/classifierDecisions');
+      recordClassifierDecision({
+        classifier: opts.operation || 'classifyIntent',
+        inputText: safeText,
+        inputContext: { intents: Object.keys(intents), context: opts.context ? opts.context.slice(0, 200) : null, cached: false },
+        output: { ...result, _truthy: Object.keys(result).filter((k) => result[k]) },
+        latencyMs: durationMs,
+        userId: opts.userId,
+      }).catch(() => {});
+    } catch (_) {}
+
     cacheSet(key, result);
     return result;
   } catch (err) {
     logger.warn(`[intentClassifier] failed (op=${opts.operation || 'intent_classifier'}): ${err.message}`);
+    try {
+      const { recordClassifierDecision } = require('../db/classifierDecisions');
+      recordClassifierDecision({
+        classifier: opts.operation || 'classifyIntent',
+        inputText: safeText,
+        inputContext: { intents: Object.keys(intents), context: opts.context ? opts.context.slice(0, 200) : null },
+        output: { threw: true, message: String(err.message || err).slice(0, 200), fallback },
+        latencyMs: Date.now() - start,
+        userId: opts.userId,
+      }).catch(() => {});
+    } catch (_) {}
     return fallback;
   }
 }

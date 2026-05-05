@@ -44,7 +44,31 @@ const FIELD_QUESTIONS = {
 
 async function classifySideChannelInCollection({ currentField, userText, websiteData = {}, userId }) {
   const raw = String(userText || '').trim();
-  if (!raw) return { kind: 'unclear' };
+  // Phase 1 observability — every return path through this function
+  // logs its verdict against the turn so the admin "🔍 Trace" panel
+  // can show what side-channel decided. Implemented as an inner
+  // function that swallows its own errors so observability can never
+  // break classification.
+  const __sc_start = Date.now();
+  const __sc_log = (verdict) => {
+    try {
+      const { recordClassifierDecision } = require('../db/classifierDecisions');
+      recordClassifierDecision({
+        classifier: 'classifySideChannelInCollection',
+        inputText: raw,
+        inputContext: {
+          currentField,
+          knownName: websiteData.businessName || null,
+          knownIndustry: websiteData.industry || null,
+          knownServicesCount: Array.isArray(websiteData.services) ? websiteData.services.length : 0,
+        },
+        output: verdict,
+        latencyMs: Date.now() - __sc_start,
+        userId,
+      }).catch(() => {});
+    } catch (_) {}
+  };
+  if (!raw) { const r = { kind: 'unclear' }; __sc_log(r); return r; }
 
   const currentQuestion = FIELD_QUESTIONS[currentField] || `(unknown field: ${currentField})`;
   const knownServices = Array.isArray(websiteData.services) ? websiteData.services : [];
@@ -98,21 +122,22 @@ Return ONLY the JSON object, nothing else.`;
     );
   } catch (err) {
     logger.warn(`[SIDE-CHANNEL] LLM call failed: ${err.message}`);
-    return { kind: 'unclear' };
+    const r = { kind: 'unclear', _reason: 'llm_failed' }; __sc_log(r); return { kind: 'unclear' };
   }
 
   const m = String(response || '').match(/\{[\s\S]*\}/);
-  if (!m) return { kind: 'unclear' };
+  if (!m) { const r = { kind: 'unclear', _reason: 'no_json' }; __sc_log(r); return { kind: 'unclear' }; }
 
   let parsed;
   try {
     parsed = JSON.parse(m[0]);
   } catch (err) {
     logger.warn(`[SIDE-CHANNEL] Failed to parse JSON: ${err.message}`);
-    return { kind: 'unclear' };
+    const r = { kind: 'unclear', _reason: 'parse_failed' }; __sc_log(r); return { kind: 'unclear' };
   }
 
   const kind = String(parsed?.kind || '').toLowerCase().trim();
+  let result = null;
 
   if (kind === 'service_add') {
     const arr = Array.isArray(parsed.services) ? parsed.services : [];
@@ -123,37 +148,28 @@ Return ONLY the JSON object, nothing else.`;
     // already but we re-check so we never silently add dupes.
     const knownLower = new Set(knownServices.map((s) => String(s).toLowerCase().trim()));
     const fresh = cleaned.filter((s) => !knownLower.has(s.toLowerCase()));
-    if (fresh.length === 0) return { kind: 'unclear' };
-    return { kind: 'service_add', services: fresh };
-  }
-
-  if (kind === 'name_change') {
+    result = fresh.length === 0 ? { kind: 'unclear' } : { kind: 'service_add', services: fresh };
+  } else if (kind === 'name_change') {
     const v = typeof parsed.value === 'string' ? parsed.value.trim() : '';
-    if (!v || v.length < 2 || v.length > 80) return { kind: 'unclear' };
-    return { kind: 'name_change', value: v };
-  }
-
-  if (kind === 'industry_change') {
+    result = (!v || v.length < 2 || v.length > 80) ? { kind: 'unclear' } : { kind: 'name_change', value: v };
+  } else if (kind === 'industry_change') {
     const v = typeof parsed.value === 'string' ? parsed.value.trim() : '';
-    if (!v || v.length < 2 || v.length > 60) return { kind: 'unclear' };
-    return { kind: 'industry_change', value: v };
-  }
-
-  if (kind === 'contact_update') {
+    result = (!v || v.length < 2 || v.length > 60) ? { kind: 'unclear' } : { kind: 'industry_change', value: v };
+  } else if (kind === 'contact_update') {
     const out = { kind: 'contact_update', email: null, phone: null, address: null };
     if (typeof parsed.email === 'string' && /\S+@\S+\.\S+/.test(parsed.email)) out.email = parsed.email.trim();
     if (typeof parsed.phone === 'string' && /\d/.test(parsed.phone)) out.phone = parsed.phone.trim();
     if (typeof parsed.address === 'string' && parsed.address.trim().length >= 5) out.address = parsed.address.trim();
-    if (!out.email && !out.phone && !out.address) return { kind: 'unclear' };
-    return out;
-  }
-
-  if (kind === 'question') {
+    result = (!out.email && !out.phone && !out.address) ? { kind: 'unclear' } : out;
+  } else if (kind === 'question') {
     const q = typeof parsed.question === 'string' ? parsed.question.trim() : '';
-    return { kind: 'question', question: q || raw.slice(0, 120) };
+    result = { kind: 'question', question: q || raw.slice(0, 120) };
+  } else {
+    result = { kind: 'unclear' };
   }
 
-  return { kind: 'unclear' };
+  __sc_log(result);
+  return result;
 }
 
 module.exports = { classifySideChannelInCollection };

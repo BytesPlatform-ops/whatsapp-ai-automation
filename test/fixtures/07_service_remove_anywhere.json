@@ -1,0 +1,38 @@
+{
+  "name": "service-remove-anywhere",
+  "description": "Mid-flow 'remove X from services' must classify as correction op=remove and filter the item out — NOT replace the entire services list with the removed item. Phase 2 confirmed this works via correctionDetector; Phase 3 must keep it working through the unified turnClassifier. Item must already exist in the list (case-insensitive) for removal to apply.",
+  "channel": "whatsapp",
+  "seed": {
+    "state": "WEB_COLLECT_CONTACT",
+    "metadata": {
+      "websiteData": {
+        "businessName": "Noman Plumbing",
+        "industry": "Plumbing",
+        "primaryCity": "Karachi",
+        "serviceAreas": ["Clifton"],
+        "services": ["drain cleaning", "pipe repair", "AC installation"]
+      },
+      "websiteDemoTriggered": true,
+      "emailSkipped": true
+    }
+  },
+  "turns": [
+    {
+      "user": "remove AC installation from services",
+      "expect": {
+        "metadata.websiteData.services": "*exists*",
+        "state_not_one_of": [
+          "WEB_COLLECT_NAME",
+          "WEB_COLLECT_INDUSTRY",
+          "WEB_COLLECT_AREAS",
+          "WEB_COLLECT_SERVICES"
+        ],
+        "reply_not_contains": [
+          "Nothing to go back to",
+          "Sure, going back one step"
+        ],
+        "reply_contains": ["removed", "AC installation"]
+      }
+    }
+  ]
+}
