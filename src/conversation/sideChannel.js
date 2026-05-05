@@ -40,6 +40,9 @@ const FIELD_QUESTIONS = {
   contactAddress: 'What is your business address?',
   logo: 'Do you have a logo to upload?',
   colors: 'Any preferred colors / brand palette?',
+  bookingTool: 'Do you already use a booking tool (Fresha, Booksy, Vagaro, Calendly, etc.) — or should we build you one?',
+  salonHours: 'What are your salon\'s opening hours?',
+  salonDurations: 'How long does each service take, and what is the price?',
 };
 
 async function classifySideChannelInCollection({ currentField, userText, websiteData = {}, userId }) {

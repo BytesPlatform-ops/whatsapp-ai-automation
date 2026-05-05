@@ -1,0 +1,47 @@
+{
+  "name": "yes-confirms-single-domain-offer",
+  "description": "After a specific-domain lookup (runSpecificDomainLookup), only ONE domain sits in domainOptions and the bot prompts 'Reply *yes* (or *1*) to pick it'. User typing 'yes' must select that single option — NOT fall through to the new-base-name search path that runs `runDomainSearchInline(user, 'yes')` and gets a 'registrar unreachable' error from the registrar's 500 on the literal 3-letter base 'yes'. Real tester convo from May 6 hit this path twice in the same session.",
+  "channel": "whatsapp",
+  "seed": {
+    "state": "WEB_DOMAIN_SEARCH",
+    "metadata": {
+      "websiteData": {
+        "businessName": "Bestway HVAC Services",
+        "industry": "HVAC",
+        "primaryCity": "Denton",
+        "serviceAreas": ["Joshua Street"],
+        "services": ["AC repair", "Heat pumps"],
+        "contactEmail": "jones@gmail.com"
+      },
+      "websiteDemoTriggered": true,
+      "emailSkipped": true,
+      "contactSkipped": true,
+      "currentSiteId": "fake-site-yes-confirm-test",
+      "domainOptions": [
+        {
+          "domain": "pixiebytes.help",
+          "available": true,
+          "premium": false,
+          "price": "2.19"
+        }
+      ],
+      "domainSearchName": "pixiebytes.help"
+    }
+  },
+  "turns": [
+    {
+      "user": "yes",
+      "expect": {
+        "metadata.selectedDomain": "pixiebytes.help",
+        "metadata.domainChoice": "need",
+        "state_not": "WEB_DOMAIN_SEARCH",
+        "reply_not_contains": [
+          "Checking domain availability for *yes*",
+          "registrar is temporarily unreachable",
+          "Reply *yes* (or *1*) to pick it"
+        ],
+        "sent_count_gte": 1
+      }
+    }
+  ]
+}

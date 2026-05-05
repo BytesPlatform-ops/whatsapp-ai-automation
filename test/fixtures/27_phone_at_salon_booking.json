@@ -1,0 +1,37 @@
+{
+  "name": "phone-at-salon-booking-tool-side-channels-into-contact",
+  "description": "User is at SALON_BOOKING_TOOL (after the salon flow asked 'do you use a booking tool?'). They send their phone in a separate message instead of answering. Bot must side-channel the phone into contactPhone AND stay at SALON_BOOKING_TOOL to keep asking the booking question. Earlier behavior: bare phone landed in the booking-intent LLM as 'unclear', triggered a re-ask, dropped the phone. Format short-circuit fixes this without a Wikipedia call.",
+  "channel": "whatsapp",
+  "seed": {
+    "state": "SALON_BOOKING_TOOL",
+    "metadata": {
+      "websiteData": {
+        "businessName": "Glow Studio",
+        "industry": "Salon",
+        "primaryCity": "Karachi",
+        "serviceAreas": ["Clifton"],
+        "services": ["Haircut", "Color"],
+        "contactEmail": "glow@example.com"
+      },
+      "websiteDemoTriggered": true,
+      "emailSkipped": true,
+      "contactSkipped": true,
+      "currentSiteId": "fake-site-salon-phone-booking-test"
+    }
+  },
+  "turns": [
+    {
+      "user": "+15677656788",
+      "expect": {
+        "metadata.websiteData.contactPhone": "*exists*",
+        "metadata.websiteData.contactEmail": "glow@example.com",
+        "state": "SALON_BOOKING_TOOL",
+        "reply_not_contains": [
+          "Nothing to go back to",
+          "Sure, going back one step"
+        ],
+        "sent_count_gte": 1
+      }
+    }
+  ]
+}

@@ -1,0 +1,29 @@
+{
+  "name": "salon-by-name-does-not-override-explicit-non-salon-industry",
+  "description": "User asks for a website for a software company called 'Hair Plus Tech'. The name contains 'hair' which matches isSalonIndustry's regex, but the explicitly-stated industry is software. Bot must NOT enter the salon sub-flow on the strength of the business name alone — by-name salon detection should only fire when industry is unset or itself a salon match. Earlier behavior: any name containing salon|beauty|barber|spa|nail|hair|lash|brow|makeup unconditionally triggered salon flow, which is wrong for software / data / SaaS companies.",
+  "channel": "whatsapp",
+  "turns": [
+    {
+      "user": "i want a website for our software company called Hair Plus Tech, we make accounting software for small businesses",
+      "expect": {
+        "state_not_one_of": [
+          "SALON_BOOKING_TOOL",
+          "SALON_HOURS",
+          "SALON_SERVICE_DURATIONS"
+        ],
+        "sent_count_gte": 1
+      }
+    },
+    {
+      "user": "yes go ahead",
+      "expect": {
+        "state_not_one_of": [
+          "SALON_BOOKING_TOOL",
+          "SALON_HOURS",
+          "SALON_SERVICE_DURATIONS"
+        ],
+        "sent_count_gte": 1
+      }
+    }
+  ]
+}
