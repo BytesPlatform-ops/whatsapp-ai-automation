@@ -97,6 +97,44 @@ async function tryApplySideChannel(user, currentField, userText) {
   return { ackPart, side };
 }
 
+/**
+ * Format-deterministic short-circuit for contact info that arrives at a
+ * non-contact step (logo / salon-booking / salon-hours / etc.). A whole
+ * message that's just a phone or email shape is almost always the user
+ * adding contact info that didn't fit in their original CONTACT-step
+ * answer — save it directly to websiteData.contactPhone / contactEmail
+ * without any LLM call (matches turnClassifier's fastpath_phone_shape
+ * pattern: format check, not intent).
+ *
+ * Returns { ackPart } when applied so the caller can compose a re-ask of
+ * its own current question. Returns null when the text isn't a bare
+ * contact format — caller should fall through to its normal flow
+ * (typically: LLM side-channel for richer intents, then the standard
+ * "didn't catch that" re-ask).
+ */
+async function tryApplyContactFormat(user, text) {
+  const phoneShape = /^[+\d][\d\s\-().]{6,19}$/;
+  const emailShape = /^[\w.+-]+@[\w-]+(?:\.[\w-]+)+$/;
+  const phoneHit = phoneShape.test(text) ? text : null;
+  const emailHit = emailShape.test(text) ? text : null;
+  if (!phoneHit && !emailHit) return null;
+
+  const wd = { ...(user.metadata?.websiteData || {}) };
+  const bits = [];
+  if (phoneHit && !wd.contactPhone) { wd.contactPhone = phoneHit; bits.push(`phone *${phoneHit}*`); }
+  if (emailHit && !wd.contactEmail) { wd.contactEmail = emailHit; bits.push(`email *${emailHit}*`); }
+  if (!bits.length) return null;
+
+  try {
+    await updateUserMetadata(user.id, { websiteData: wd });
+    user.metadata = { ...(user.metadata || {}), websiteData: wd };
+  } catch (err) {
+    logger.warn(`[WEBDEV-FORMAT] persist failed: ${err.message}`);
+    return null;
+  }
+  return { ackPart: `Saved your ${bits.join(' / ')}.` };
+}
+
 
 // Walk the website-dev checklist and return the first state whose field
 // is still missing. Used to fast-forward past steps already covered. Email
@@ -193,12 +231,19 @@ async function smartAdvance(user, message, ackPrefix = null) {
     // sub-flow MUST run before confirm — without this gate, a dense
     // first-message extraction (businessName + industry + services +
     // contact all in one go) skips straight to "got everything" and
-    // ships a salon site with no hours and no booking config. Detection
-    // falls back to the businessName when the LLM-extracted industry
-    // doesn't match the salon regex (e.g. extracted as "Personal Care"
-    // or "Manicure & Hair Cutting").
+    // ships a salon site with no hours and no booking config.
+    //
+    // Detection falls back to the businessName when industry is missing
+    // OR also matches the salon regex. We do NOT override a clear,
+    // non-salon industry on the strength of the name alone — names
+    // like "Hair Plus Tech" (software co) would otherwise misroute into
+    // the salon flow even when industry was correctly extracted as
+    // "Software". Mirrors the same gate in salesBot.js's salon trigger.
+    const salonByIndustryHere = isSalonIndustry(merged.industry);
+    const salonByNameHere = isSalonIndustry(merged.businessName);
+    const industryUnsetOrSalonHere = !merged.industry || salonByIndustryHere;
     const looksLikeSalon =
-      isSalonIndustry(merged.industry) || isSalonIndustry(merged.businessName);
+      salonByIndustryHere || (salonByNameHere && industryUnsetOrSalonHere);
     if (looksLikeSalon && !merged.bookingMode) {
       return startSalonFlow(user);
     }
@@ -2102,6 +2147,19 @@ async function handleSalonBookingTool(user, message) {
     return STATES.SALON_BOOKING_TOOL;
   }
 
+  // Cross-field short-circuit BEFORE the booking-intent LLM. A bare
+  // phone or email at this step is never a valid booking-tool answer —
+  // it's the user adding contact info that didn't fit earlier. The
+  // phone/email shape can't collide with a real booking URL (URLs start
+  // with http/https, not + or @).
+  const reaskBooking = 'Now, do you already use a booking tool (Fresha / Booksy / Vagaro / Calendly / etc.)? Paste the link if yes, or type *"no"* and we\'ll build one for you.';
+  const fmt = await tryApplyContactFormat(user, text);
+  if (fmt) {
+    await sendTextMessage(user.phone_number, await localize(`${fmt.ackPart} ${reaskBooking}`, user, text));
+    await logMessage(user.id, 'Salon booking step: applied contact format short-circuit', 'assistant');
+    return STATES.SALON_BOOKING_TOOL;
+  }
+
   // One structured LLM call covers every phrasing in any language:
   //   • a pasted URL → embed mode
   //   • "no" / "i don't have one" / "build me one" / "rehne do" → native mode
@@ -2173,6 +2231,19 @@ When in doubt between "embed" and "native", lean "native" (the user can always p
     return STATES.SALON_HOURS;
   }
 
+  // LLM side-channel for richer cross-field intents (name / industry /
+  // service correction at the booking step) that format checks can't
+  // catch. Runs only after the intent classifier said unclear or
+  // emitted embed-without-URL.
+  if (text && text.length >= 3) {
+    const sc = await tryApplySideChannel(user, 'bookingTool', text);
+    if (sc) {
+      await sendTextMessage(user.phone_number, await localize(`${sc.ackPart} ${reaskBooking}`, user, text));
+      await logMessage(user.id, `Salon booking step: applied side-channel ${sc.side.kind}`, 'assistant');
+      return STATES.SALON_BOOKING_TOOL;
+    }
+  }
+
   // Unclear (or "embed" without a usable URL) — re-ask, naming what we
   // need explicitly so the user knows how to answer.
   if (unclearReason) {
@@ -2207,6 +2278,34 @@ async function handleSalonHours(user, message) {
       )
     );
     return STATES.SALON_HOURS;
+  }
+
+  // Cross-field short-circuit BEFORE parseWeeklyHours. A bare phone /
+  // email at this step would otherwise be silently swallowed (parser
+  // returns DEFAULT_WEEKLY_HOURS, the digits / dots vanish, and bot
+  // moves on without saving the contact info). Phone/email shape
+  // can't collide with valid hours notation.
+  const reaskHours = 'Now, what are your opening hours? A quick line is fine — for example: *"Tue-Sat 9-7, Sun-Mon closed"*.\n\nOr just reply *default* for standard salon hours (Tue-Sat 9-7).';
+  if (text) {
+    const fmt = await tryApplyContactFormat(user, text);
+    if (fmt) {
+      await sendTextMessage(user.phone_number, await localize(`${fmt.ackPart} ${reaskHours}`, user, text));
+      await logMessage(user.id, 'Salon hours step: applied contact format short-circuit', 'assistant');
+      return STATES.SALON_HOURS;
+    }
+  }
+
+  // LLM side-channel for richer cross-field corrections (name /
+  // industry / service / contact-with-prose) that format checks
+  // can't catch. Skip on the obvious delegation phrases — the parser
+  // handles those — to keep latency down.
+  if (text && text.length >= 3 && !isDelegation(text)) {
+    const sc = await tryApplySideChannel(user, 'salonHours', text);
+    if (sc) {
+      await sendTextMessage(user.phone_number, await localize(`${sc.ackPart} ${reaskHours}`, user, text));
+      await logMessage(user.id, `Salon hours step: applied side-channel ${sc.side.kind}`, 'assistant');
+      return STATES.SALON_HOURS;
+    }
   }
 
   const { parseWeeklyHours, formatHoursForDisplay } = require('../../website-gen/hoursParser');
@@ -2317,6 +2416,32 @@ async function handleSalonServiceDurations(user, message) {
   const text = (message.text || '').trim();
   const wd = { ...(user.metadata?.websiteData || {}) };
   const services = wd.services || [];
+
+  // Cross-field handling at the durations step. A bare phone / email
+  // would otherwise be eaten by parseServiceDurations (LLM extracts
+  // nothing, defaults applied, contact info lost). Run format
+  // short-circuit + LLM side-channel before the durations parser.
+  const reaskDurations =
+    `Now, how long does each service take, and what's the price?\n\n` +
+    `Example: *"Haircut 30min €25, Colour 90min €85"*. Your services: ${services.join(', ') || '(none yet)'}.\n\n` +
+    `Or just reply *default* for 30min with no price.`;
+  if (text) {
+    const fmt = await tryApplyContactFormat(user, text);
+    if (fmt) {
+      await sendTextMessage(user.phone_number, await localize(`${fmt.ackPart} ${reaskDurations}`, user, text));
+      await logMessage(user.id, 'Salon durations step: applied contact format short-circuit', 'assistant');
+      return STATES.SALON_SERVICE_DURATIONS;
+    }
+  }
+  if (text && text.length >= 3 && !isDelegation(text)) {
+    const sc = await tryApplySideChannel(user, 'salonDurations', text);
+    if (sc) {
+      await sendTextMessage(user.phone_number, await localize(`${sc.ackPart} ${reaskDurations}`, user, text));
+      await logMessage(user.id, `Salon durations step: applied side-channel ${sc.side.kind}`, 'assistant');
+      return STATES.SALON_SERVICE_DURATIONS;
+    }
+  }
+
   // Delegation ("whatever you think" / "default" / "idk" / etc.) means
   // "apply 30min-no-price across every service" — skip the LLM call.
   const useDefault = isDelegation(text);
@@ -3001,51 +3126,23 @@ Return ONLY one word: skip, generate, or other.`,
       return STATES.WEB_COLLECT_LOGO;
     }
 
-    // Cross-field side-channel: the user might be sending a phone, email,
+    // Cross-field handling: the user might be sending a phone, email,
     // address, or a name/industry/service correction at the logo step
     // (e.g. they gave only an email at WEB_COLLECT_CONTACT and are now
     // sending their phone in a separate message). Apply the update + ask
     // for the logo again, instead of the blunt "didn't catch an image"
     // reply that loses the input.
     if (text && text.length >= 3) {
-      // Deterministic format short-circuit FIRST. A bare phone or email
-      // at the logo step is almost always contact info the user is
-      // catching up on — save directly without an LLM call. Same
-      // pattern as turnClassifier's fastpath_phone_shape /
-      // fastpath_email_shape (format-only, not intent).
-      const phoneShape = /^[+\d][\d\s\-().]{6,19}$/;
-      const emailShape = /^[\w.+-]+@[\w-]+(?:\.[\w-]+)+$/;
-      const phoneHit = phoneShape.test(text) ? text : null;
-      const emailHit = emailShape.test(text) ? text : null;
-      if (phoneHit || emailHit) {
-        const wd = { ...(user.metadata?.websiteData || {}) };
-        const bits = [];
-        if (phoneHit && !wd.contactPhone) { wd.contactPhone = phoneHit; bits.push(`phone *${phoneHit}*`); }
-        if (emailHit && !wd.contactEmail) { wd.contactEmail = emailHit; bits.push(`email *${emailHit}*`); }
-        if (bits.length) {
-          await updateUserMetadata(user.id, { websiteData: wd });
-          user.metadata = { ...(user.metadata || {}), websiteData: wd };
-          await sendTextMessage(
-            user.phone_number,
-            await localize(
-              `Saved your ${bits.join(' / ')}. Now, got a logo? Send it as an image (JPG or PNG), or reply *skip* to use a text logo.`,
-              user,
-              text
-            )
-          );
-          await logMessage(user.id, `Logo step: side-channel contact_update (${bits.join(', ')})`, 'assistant');
-          return STATES.WEB_COLLECT_LOGO;
-        }
+      const reaskLogo = "Now, got a logo? Send it as an image (JPG or PNG), or reply *skip* to use a text logo.";
+      const fmt = await tryApplyContactFormat(user, text);
+      if (fmt) {
+        await sendTextMessage(user.phone_number, await localize(`${fmt.ackPart} ${reaskLogo}`, user, text));
+        await logMessage(user.id, `Logo step: applied contact format short-circuit`, 'assistant');
+        return STATES.WEB_COLLECT_LOGO;
       }
-      // LLM fallback for richer cross-field intents (name / industry /
-      // service corrections — formats don't help there).
       const sc = await tryApplySideChannel(user, 'logo', text);
       if (sc) {
-        const reask = "Now, got a logo? Send it as an image (JPG or PNG), or reply *skip* to use a text logo.";
-        await sendTextMessage(
-          user.phone_number,
-          await localize(`${sc.ackPart} ${reask}`, user, text)
-        );
+        await sendTextMessage(user.phone_number, await localize(`${sc.ackPart} ${reaskLogo}`, user, text));
         await logMessage(user.id, `Logo step: applied side-channel ${sc.side.kind}`, 'assistant');
         return STATES.WEB_COLLECT_LOGO;
       }
@@ -5213,6 +5310,38 @@ async function handleDomainSearch(user, message) {
 
   const domainOptions = user.metadata?.domainOptions || [];
 
+  // Single-offer confirmation. After runSpecificDomainLookup we leave
+  // ONE domain in domainOptions and prompt "Reply *yes* (or *1*) to
+  // pick it". Without this branch, "yes" / "yep" / "sure" fell through
+  // to the new-base-name search ("yes" → registrar lookup of "yes" →
+  // 500 → bot says 'registrar unreachable'). Only fires when there's
+  // exactly one option, so a 5-result list isn't ambiguously confirmed.
+  const positiveConfirm = /^(yes|yeah|yep|yup|sure|ok|okay|confirm|y|pick\s*it|that\s*one|got\s*it|cool|haan|han)\s*\.?!?\?*\s*$/i;
+  if (domainOptions.length === 1 && positiveConfirm.test(text)) {
+    const only = domainOptions[0];
+    if (only.available && !only.premium) {
+      return selectDomainInline(user, only);
+    }
+  }
+
+  // Single-offer rejection. "no" / "nope" / "nah" at a single-domain
+  // offer should re-prompt for a different name, NOT trigger a
+  // registrar lookup of the literal word "no" (the previous bug).
+  // The skip-phrases path above covers "no thanks" / "skip" / "nvm"; here
+  // we catch the bare negation that means "show me something else".
+  const negativeConfirm = /^(no|nope|nah|nahi|not\s*this|not\s*that\s*one)\s*\.?!?\?*\s*$/i;
+  if (domainOptions.length === 1 && negativeConfirm.test(text)) {
+    await sendTextMessage(
+      user.phone_number,
+      await localize(
+        "No problem — type a different domain name (e.g. *mybiz.ai* or just a base like *mybiz*), or reply *skip* to launch on the free preview URL.",
+        user,
+        raw
+      )
+    );
+    return STATES.WEB_DOMAIN_SEARCH;
+  }
+
   // Pick by number.
   const numMatch = text.match(/^(\d+)$/);
   if (numMatch && domainOptions.length > 0) {
@@ -6071,6 +6200,30 @@ async function handleLateDomainSearch(user, message) {
   }
 
   const domainOptions = user.metadata?.domainOptions || [];
+
+  // Single-offer confirmation/rejection — same fix as handleDomainSearch.
+  // Without these guards, "yes" or "no" at a single-domain offer would
+  // be treated as a fresh base-name and sent to the registrar (which
+  // either fails or runs a useless lookup of the literal word).
+  const positiveConfirmLate = /^(yes|yeah|yep|yup|sure|ok|okay|confirm|y|pick\s*it|that\s*one|got\s*it|cool|haan|han)\s*\.?!?\?*\s*$/i;
+  if (domainOptions.length === 1 && positiveConfirmLate.test(text)) {
+    const only = domainOptions[0];
+    if (only.available && !only.premium) {
+      return selectLateDomainInline(user, only);
+    }
+  }
+  const negativeConfirmLate = /^(no|nope|nah|nahi|not\s*this|not\s*that\s*one)\s*\.?!?\?*\s*$/i;
+  if (domainOptions.length === 1 && negativeConfirmLate.test(text)) {
+    await sendTextMessage(
+      user.phone_number,
+      await localize(
+        "No problem — type a different domain name (e.g. *mybiz.ai* or a base like *mybiz*), or reply *skip* to keep the current preview URL.",
+        user,
+        raw
+      )
+    );
+    return STATES.WEB_DOMAIN_LATE_SEARCH;
+  }
 
   // Pick by number.
   const numMatch = text.match(/^(\d+)$/);

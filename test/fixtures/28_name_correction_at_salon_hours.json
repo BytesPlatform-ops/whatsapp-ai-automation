@@ -1,0 +1,39 @@
+{
+  "name": "name-correction-at-salon-hours-applies-and-reasks",
+  "description": "User at SALON_HOURS — bot just asked for opening hours. User instead says 'actually our name is Glow Pro Salon'. Bot must apply the name correction via the LLM side-channel (turnClassifier flags it as a correction; sideChannel applies it) AND continue asking for hours. Previous behavior: parseWeeklyHours bailed to DEFAULT_WEEKLY_HOURS, the correction was silently dropped, and the bot moved to durations with the old name still in place.",
+  "channel": "whatsapp",
+  "seed": {
+    "state": "SALON_HOURS",
+    "metadata": {
+      "websiteData": {
+        "businessName": "Glow Studio",
+        "industry": "Salon",
+        "primaryCity": "Karachi",
+        "serviceAreas": ["Clifton"],
+        "services": ["Haircut", "Color"],
+        "bookingMode": "native"
+      },
+      "websiteDemoTriggered": true,
+      "emailSkipped": true,
+      "contactSkipped": true,
+      "currentSiteId": "fake-site-salon-name-correct-test"
+    }
+  },
+  "turns": [
+    {
+      "user": "actually our name is Glow Pro Salon",
+      "expect": {
+        "metadata.websiteData.businessName": "Glow Pro Salon",
+        "state_not_one_of": [
+          "SALON_SERVICE_DURATIONS",
+          "WEB_CONFIRM"
+        ],
+        "reply_not_contains": [
+          "Nothing to go back to",
+          "Sure, going back one step"
+        ],
+        "sent_count_gte": 1
+      }
+    }
+  ]
+}
