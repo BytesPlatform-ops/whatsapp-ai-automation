@@ -1,0 +1,29 @@
+{
+  "name": "phone-at-agent-profile-side-channels-into-contact",
+  "description": "Real-estate flow. User at WEB_COLLECT_AGENT_PROFILE types their phone instead of brokerage details. Bot must side-channel the phone into contactPhone AND stay at WEB_COLLECT_AGENT_PROFILE so the agent question gets re-asked. Earlier behavior: handler had no contact format short-circuit / no side-channel — phone got eaten by the LLM extractor (which returned no brokerage/years/designations) and the flow advanced with an empty agent profile, losing the phone.",
+  "channel": "whatsapp",
+  "seed": {
+    "state": "WEB_COLLECT_AGENT_PROFILE",
+    "metadata": {
+      "websiteData": {
+        "businessName": "Sarah Khan Realty",
+        "industry": "Real Estate",
+        "primaryCity": "Karachi",
+        "serviceAreas": ["Clifton", "DHA"]
+      },
+      "websiteDemoTriggered": true,
+      "emailSkipped": true
+    }
+  },
+  "turns": [
+    {
+      "user": "+15677656788",
+      "expect": {
+        "metadata.websiteData.contactPhone": "*exists*",
+        "state": "WEB_COLLECT_AGENT_PROFILE",
+        "metadata.websiteData.agentProfileCollected": "*missing*",
+        "sent_count_gte": 1
+      }
+    }
+  ]
+}

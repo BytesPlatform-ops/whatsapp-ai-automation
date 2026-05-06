@@ -1208,6 +1208,28 @@ async function handleCollectAgentProfile(user, message) {
   const industry = wd.industry || '';
   const colors = getColorsForIndustry(industry);
 
+  // Cross-field handling. A bare phone / email / address would otherwise
+  // get eaten by the agent-profile extractor (returning empty profile +
+  // advancing). Same applies to name / industry / service corrections.
+  // Same pattern as LOGO + salon states.
+  const reaskAgent = 'Now, what is your brokerage, years in real estate, and any designations (CRS, ABR, etc.)? Or reply *skip* if you\'d rather not say.';
+  if (raw) {
+    const fmt = await tryApplyContactFormat(user, raw);
+    if (fmt) {
+      await sendTextMessage(user.phone_number, await localize(`${fmt.ackPart} ${reaskAgent}`, user, raw));
+      await logMessage(user.id, 'Agent-profile step: applied contact format short-circuit', 'assistant');
+      return STATES.WEB_COLLECT_AGENT_PROFILE;
+    }
+  }
+  if (raw && raw.length >= 3) {
+    const sc = await tryApplySideChannel(user, 'agentProfile', raw);
+    if (sc) {
+      await sendTextMessage(user.phone_number, await localize(`${sc.ackPart} ${reaskAgent}`, user, raw));
+      await logMessage(user.id, `Agent-profile step: applied side-channel ${sc.side.kind}`, 'assistant');
+      return STATES.WEB_COLLECT_AGENT_PROFILE;
+    }
+  }
+
   // Fast regex + LLM fallback covers both the short "skip / idk" phrasings
   // and natural prose like "i have no idea about this" / "just use whatever
   // sounds right" that the regex can't enumerate.
@@ -1226,48 +1248,46 @@ async function handleCollectAgentProfile(user, message) {
     return smartAdvance(user, message, "No problem, we'll go with solo / no designations. You can add details from the summary later.");
   }
 
-  // Regex pre-pass for years (common patterns: "10 years", "10+ years", "a decade").
+  // Regex pre-pass for years — pure FORMAT shape ("10 years", "10+ years"),
+  // not intent. The keyword "decade" is left to the LLM extractor below.
   let yearsExperience = null;
   const yrsMatch = raw.match(/(\d{1,2})\s*\+?\s*(?:years?|yrs?|y\b)/i);
   if (yrsMatch) {
     const n = parseInt(yrsMatch[1], 10);
     if (n > 0 && n < 80) yearsExperience = n;
-  } else if (/\bdecade\b/i.test(raw)) {
-    yearsExperience = 10;
   }
 
-  // Regex pre-pass for well-known designation tokens.
+  // Regex pre-pass for well-known designation tokens — FORMAT (curated
+  // acronym list, same pattern as the HVAC/AC/LLC acronym set in
+  // normalizeBusinessName). The "no designations" intent is left to the
+  // LLM extractor; the regex only catches the format-shape acronyms.
   const DESIGNATION_RX = /\b(CRS|ABR|SRS|GRI|SRES|RENE|e-?Pro|CIPS|SFR|MRP|ABRM|CCIM|AHWD|CPM|CRB)\b/gi;
   let designations = [];
   const designMatches = raw.match(DESIGNATION_RX);
   if (designMatches) {
     designations = Array.from(new Set(designMatches.map((d) => d.toUpperCase().replace('-', ''))));
-  } else if (/\b(no|none)\s+(?:designations?|creds?|certifications?)?\b/i.test(raw) || /^none\b/i.test(raw)) {
-    designations = [];
   }
 
-  // Brokerage: solo vs named. Look for "solo", "independent", "by myself", or a
-  // quoted/clear name. Fallback: LLM extraction.
+  // brokerageName: pure LLM extraction. The prompt below knows that
+  // solo/independent/by-myself/freelance/self-employed all map to null,
+  // in any language. No keyword regex.
   let brokerageName = null;
-  if (/\b(solo|independent|by myself|on my own|no brokerage|freelance|self[- ]employed)\b/i.test(raw)) {
-    brokerageName = null; // explicit solo — keep null
-  }
 
-  // LLM extraction for anything missing (especially brokerageName which is hard
-  // to pattern-match reliably).
-  const needsLlm = brokerageName === null && !/\b(solo|independent)\b/i.test(raw);
-  if (needsLlm || yearsExperience == null || (!designations.length && !/\bnone\b/i.test(raw))) {
+  // Always run the LLM pass — it fills in anything the format regex
+  // didn't catch (decade → 10 years, "no creds" → designations=[], etc.)
+  // AND is the sole source for brokerageName.
+  if (raw && raw.length > 0) {
     try {
       const extractPrompt = `You are a structured-data extractor for a real-estate agent onboarding flow. Read the agent's message and return ONLY JSON with these fields:
 
 {
-  "brokerageName": "<the brokerage/firm name they work at, or null if they said solo/independent, or null if not mentioned>",
-  "yearsExperience": <integer if clearly stated, otherwise null>,
-  "designations": ["CRS", "ABR", ...] (common ones: CRS, ABR, SRS, GRI, SRES, RENE, ePro, CIPS, SFR, MRP, ABRM, CCIM). Return [] if they said none. Omit the field if not mentioned at all.
+  "brokerageName": "<the brokerage/firm name they work at, or null if they said solo/independent/by-myself/freelance/self-employed/no brokerage, or null if not mentioned>",
+  "yearsExperience": <integer if clearly stated — accept any phrasing in any language: "10 years", "a decade" (=10), "two decades" (=20), "half a decade" (=5), "since 2015", "saal" + number, etc. Otherwise null>,
+  "designations": ["CRS", "ABR", ...] (common ones: CRS, ABR, SRS, GRI, SRES, RENE, ePro, CIPS, SFR, MRP, ABRM, CCIM). Return [] if they said none / no designations / no creds. Omit the field if designations weren't mentioned at all.
 }
 
 Rules:
-- brokerageName: real firm names only. "solo", "independent", "by myself" → null.
+- brokerageName: real firm names only. ANY phrasing of solo/independent/freelance/self-employed/no-brokerage/by-myself in ANY language maps to null. Examples that ALL → null: "solo", "independent", "by myself", "on my own", "freelance", "self-employed", "no brokerage", "akela", "khud", "yo solo", "tout seul", "indépendant", "وحدي".
 - Never invent data. Omit unknown fields.
 - Keep brokerageName under 60 chars.`;
       const response = await generateResponse(
@@ -1318,7 +1338,6 @@ Rules:
 
   const ackBits = [];
   if (brokerageName) ackBits.push(`at *${brokerageName}*`);
-  else if (/\b(solo|independent)\b/i.test(raw)) ackBits.push('*solo agent*');
   if (yearsExperience != null) ackBits.push(`*${yearsExperience} years* in real estate`);
   if (designations.length) ackBits.push(`designations: *${designations.join(', ')}*`);
   const ackPrefix = ackBits.length ? `Got it — ${ackBits.join(', ')}.` : 'Thanks for the details.';
@@ -1458,11 +1477,9 @@ async function parseListingText(raw, user) {
     const n = parseInt(sqftMatch[1].replace(/,/g, ''), 10);
     if (n >= 200 && n <= 20000) out.sqft = n;
   }
-  // Status
-  if (/\bpending\b/i.test(text)) out.status = 'Pending';
-  else if (/\b(just\s*listed|new\s*listing)\b/i.test(text)) out.status = 'Just Listed';
-  else if (/\bsold\b/i.test(text)) out.status = 'Sold';
-  else if (/\bfor\s*sale\b/i.test(text)) out.status = 'For Sale';
+  // Status is INTENT (pending vs just-listed vs sold vs for-sale) — left
+  // entirely to the LLM extraction below. Avoids brittle keyword regex
+  // that misses non-English phrasings ("foroshi" / "venta" / "à vendre").
 
   // LLM pass for address (and anything missing). Always run — regex can't
   // reliably find street addresses.
@@ -1533,22 +1550,19 @@ Return like {"address":"45 Elm St","price":525000,"currency":"USD","beds":4,"bat
 async function classifyYesSkip(text, userId) {
   const t = String(text || '').trim();
   if (!t) return 'unclear';
-  // Long free-text almost always carries real content (a listing, a
-  // question, a long refusal). Treat as unclear so the handler either
-  // re-asks or the structured-listing fast-path picks it up first.
-  if (t.length > 80) return 'unclear';
 
   try {
-    const prompt = `A chatbot just asked the user: "Do you want to send your property listings now, or skip and use placeholder listings?"
+    const prompt = `A chatbot just asked a real-estate agent: "Do you want to send your property listings now, or skip and use placeholder listings?"
 
 Classify the user's reply into ONE of:
-- "yes": user wants to send / share / add their listings (in any language — "yes", "yeah add them", "haan bhai bhejta hoon", "sí, los tengo", "oui je veux", "نعم, أريد").
-- "skip": user wants to skip / use placeholders / doesn't have listings / not now (in any language — "skip", "skip kar do", "no", "nahi", "later", "no thanks", "dont have any", "saltar", "non merci", "لا, تخطى").
-- "unclear": anything else — a question, garbage text, "?", an off-topic reply, or anything ambiguous.
+- "yes": user wants to send / share / add their listings without yet pasting any details — short consent like "yes", "yeah add them", "haan bhai bhejta hoon", "sí, los tengo", "oui je veux", "نعم, أريد", "let me send them".
+- "skip": user wants to skip / use placeholders / doesn't have listings / not now (any language: "skip", "skip kar do", "no", "nahi", "later", "no thanks", "dont have any", "saltar", "non merci", "لا, تخطى").
+- "listing": the user IS already providing actual listing content (address, price, beds/baths, sqft, neighborhood, property type) without explicit yes/skip framing. Examples: "45 Elm St $525k 4bed 3bath", "3 bedroom flat Clifton 50 lakhs", "kothi defence phase 5 12 crore", "casa en zona norte $200k". A long message containing property details, even mixed with prose, → listing.
+- "unclear": anything else — questions back, off-topic chatter, gibberish, "?".
 
 The user said: "${t}"
 
-Respond with ONLY one word: yes, skip, or unclear.`;
+Respond with ONLY one word: yes, skip, listing, or unclear.`;
 
     const response = await generateResponse(
       prompt,
@@ -1556,8 +1570,7 @@ Respond with ONLY one word: yes, skip, or unclear.`;
       { userId, operation: 'yes_skip_classify' }
     );
     const clean = String(response || '').trim().toLowerCase().replace(/[^a-z]/g, '');
-    if (clean === 'yes') return 'yes';
-    if (clean === 'skip') return 'skip';
+    if (clean === 'yes' || clean === 'skip' || clean === 'listing') return clean;
     return 'unclear';
   } catch (err) {
     logger.warn(`[YES_SKIP] LLM classify failed: ${err.message}`);
@@ -1836,28 +1849,88 @@ Respond with ONLY: yes or no.`;
   }
 }
 
+/**
+ * One LLM call covers all three intents at WEB_COLLECT_LISTINGS_DETAILS:
+ *   done    — user is signaling "no more listings, move on" ("done", "that's
+ *             all", "khatam", "fini", "ya basta", "no more").
+ *   skip    — user wants to abandon the listings flow, use placeholders
+ *             ("skip", "skip kar do", "rehne do", "salta esto", "I don't
+ *             want to add any").
+ *   listing — user is providing actual listing content (address / price /
+ *             beds / etc.) — caller should run parseListingText next.
+ *   unclear — anything else (off-topic, gibberish). Caller treats as listing
+ *             so the parser can attempt to extract whatever's there.
+ * Replaces the previous doneWords + skipWords regex pre-checks.
+ */
+async function classifyListingsDetailsTurn(text, userId) {
+  const t = String(text || '').trim();
+  if (!t) return 'unclear';
+  // Long messages are almost always listing content.
+  if (t.length > 140) return 'listing';
+  try {
+    const resp = await generateResponse(
+      `A real-estate agent is iteratively sending property listings to a chatbot. We just asked them: "Send your next listing details, or reply done to move on." Classify their reply into ONE of: done, skip, listing.
+
+- done: they're telling us they're finished sending listings and want to move on. Any phrasing in any language: "done", "that's all", "finished", "no more", "stop", "enough", "that's it", "khatam", "bas", "ho gaya", "ya basta", "fini", "c'est tout", "تم", "no more listings".
+- skip: they want to abandon listing collection entirely and use placeholders / they don't have listings. Any phrasing: "skip", "skip it", "use placeholders", "i don't have any", "nahi hai", "rehne do", "salta", "sauter", "تخطى".
+- listing: they're sending actual property details (address, price, beds/baths, sqft, status, neighborhood). If the message contains a street address, dollar amount, bed/bath count, or any property specifics — return listing.
+- (Treat ambiguous / off-topic as listing so the parser gets to try; the parser handles "no usable fields" with its own re-ask.)
+
+The user said: "${t}"
+
+Reply with ONLY one word: done, skip, or listing.`,
+      [{ role: 'user', content: t }],
+      { userId, operation: 'listings_details_turn' }
+    );
+    const clean = String(resp || '').trim().toLowerCase().replace(/[^a-z]/g, '');
+    if (clean === 'done' || clean === 'skip' || clean === 'listing') return clean;
+    return 'listing';
+  } catch (err) {
+    logger.warn(`[LISTINGS-DETAILS-TURN] LLM threw: ${err.message}`);
+    return 'listing';
+  }
+}
+
 async function handleCollectListingsAsk(user, message) {
   const raw = (message.text || '').trim();
   const wd = { ...(user.metadata?.websiteData || {}) };
 
-  // Classify the user's reply as yes / skip / unclear. We use the LLM so
-  // this works for ANY language the user might reply in ("skip kar do",
-  // "sí, los tengo", "لا", "non merci", "haan bhai", etc.) without a
-  // language-by-language regex list. Long messages that look like actual
-  // listings (addresses, prices, bed/bath counts) bypass the classifier
-  // and drop straight into the details parser.
-  const looksLikeListing =
-    /\$|\d+\s*(bed|bd|ba|sqft|sf)\b/i.test(raw) ||
-    /\b(listing|property|home|house|condo)\b/i.test(raw);
+  // Cross-field handling. Phone / email / address volunteered here, or a
+  // name / industry / contact correction at this step, is otherwise lost.
+  const reaskListings = 'Now, do you want to send your property listings, or reply *skip* to use professional placeholder listings?';
+  if (raw) {
+    const fmt = await tryApplyContactFormat(user, raw);
+    if (fmt) {
+      await sendTextMessage(user.phone_number, await localize(`${fmt.ackPart} ${reaskListings}`, user, raw));
+      await logMessage(user.id, 'Listings-ask step: applied contact format short-circuit', 'assistant');
+      return STATES.WEB_COLLECT_LISTINGS_ASK;
+    }
+  }
+  if (raw && raw.length >= 3) {
+    const sc = await tryApplySideChannel(user, 'listingsAsk', raw);
+    if (sc) {
+      await sendTextMessage(user.phone_number, await localize(`${sc.ackPart} ${reaskListings}`, user, raw));
+      await logMessage(user.id, `Listings-ask step: applied side-channel ${sc.side.kind}`, 'assistant');
+      return STATES.WEB_COLLECT_LISTINGS_ASK;
+    }
+  }
 
-  if (looksLikeListing) {
+  // Pure-LLM intent classification. classifyYesSkip now returns one of
+  // yes / skip / listing / unclear in a single call — replaces the
+  // prior `looksLikeListing` regex pre-check that missed non-English
+  // property terms ("kothi", "makaan", "ghar", "casa", etc.) and only
+  // recognized $ / bed / bath as listing markers.
+  const intent = await classifyYesSkip(raw, user.id);
+
+  if (intent === 'listing') {
+    // User went straight to listing content — skip the yes/skip ack and
+    // route into the details parser, which will extract whatever fields
+    // are present.
     const merged = { ...wd, listingsAskAnswered: true, listings: wd.listings || [] };
     await updateUserMetadata(user.id, { websiteData: merged });
     user.metadata = { ...(user.metadata || {}), websiteData: merged };
     return handleCollectListingsDetails(user, message);
   }
-
-  const intent = await classifyYesSkip(raw, user.id);
 
   if (intent === 'skip') {
     const merged = { ...wd, listingsAskAnswered: true, listingsDetailsDone: true, listingsFlowDone: true, listings: [] };
@@ -1895,26 +1968,37 @@ async function handleCollectListingsDetails(user, message) {
   const raw = (message.text || '').trim();
   const wd = { ...(user.metadata?.websiteData || {}) };
   const listings = Array.isArray(wd.listings) ? [...wd.listings] : [];
-  const doneWords = /^(done|finished|that'?s (it|all)|stop|enough|no more|bas|khatam)$/i;
-  const skipWords = /^(skip|cancel)$/i;
 
-  // LLM fallback for skip phrasings the narrow regex doesn't catch
-  // ("skip it", "i want to skip these", "salta esto", "rehne do", etc.).
-  // Gated to short replies that aren't already a clear done-signal so we
-  // don't fire LLM calls on every listing description.
-  let isSkip = skipWords.test(raw);
-  if (!isSkip && raw && raw.length <= 60 && !doneWords.test(raw)) {
-    try {
-      isSkip = await classifyDelegation(
-        raw,
-        'Send your listing details, or skip to use placeholder listings.'
-      );
-    } catch (err) {
-      logger.warn(`[WEBDEV-LISTINGS] classifyDelegation threw: ${err.message}`);
+  // Cross-field handling. Run BEFORE the listing-intent classifier below —
+  // if the user is volunteering contact info ("phone is +123") or
+  // correcting a prior field ("change name to X") at this step, those
+  // cross-field intents would otherwise get fed to the listing parser
+  // and produce nothing useful.
+  const reaskListings = 'Send your next listing details (e.g. *45 Elm St, $525k, 4 bed 3 bath, 2200 sqft*), or reply *done* to finish.';
+  if (raw) {
+    const fmt = await tryApplyContactFormat(user, raw);
+    if (fmt) {
+      await sendTextMessage(user.phone_number, await localize(`${fmt.ackPart} ${reaskListings}`, user, raw));
+      await logMessage(user.id, 'Listings-details step: applied contact format short-circuit', 'assistant');
+      return STATES.WEB_COLLECT_LISTINGS_DETAILS;
+    }
+  }
+  if (raw && raw.length >= 3) {
+    const sc = await tryApplySideChannel(user, 'listingsDetails', raw);
+    if (sc) {
+      await sendTextMessage(user.phone_number, await localize(`${sc.ackPart} ${reaskListings}`, user, raw));
+      await logMessage(user.id, `Listings-details step: applied side-channel ${sc.side.kind}`, 'assistant');
+      return STATES.WEB_COLLECT_LISTINGS_DETAILS;
     }
   }
 
-  if (isSkip) {
+  // Pure-LLM intent classification for the listings-details turn.
+  // Replaces the prior doneWords / skipWords regex + classifyDelegation
+  // fallback. One call covers any language and any phrasing of done /
+  // skip / providing-listing-content.
+  const turnIntent = await classifyListingsDetailsTurn(raw, user.id);
+
+  if (turnIntent === 'skip') {
     // Skip mid-flow — keep what we have (if any), fall back for the rest.
     const merged = { ...wd, listings, listingsDetailsDone: true, listingsFlowDone: true };
     await updateUserMetadata(user.id, { websiteData: merged });
@@ -1922,7 +2006,7 @@ async function handleCollectListingsDetails(user, message) {
     return smartAdvance(user, message, listings.length ? `Got ${listings.length} listing(s), using defaults for the rest.` : 'No problem — using professional placeholder listings.');
   }
 
-  if (doneWords.test(raw)) {
+  if (turnIntent === 'done') {
     if (listings.length === 0) {
       // User said "done" with zero listings — treat as skip
       const merged = { ...wd, listingsDetailsDone: true, listingsFlowDone: true, listings: [] };
@@ -1984,17 +2068,80 @@ async function handleCollectListingsDetails(user, message) {
   return STATES.WEB_COLLECT_LISTINGS_DETAILS;
 }
 
+/**
+ * One LLM call extracts the user's intent at the photo-assignment turn:
+ *   { action: 'discard' }       — skip / discard this photo
+ *   { action: 'assign', n: N }  — assign to listing N (1..listingsCount)
+ *   null                        — couldn't tell, caller re-asks
+ *
+ * Replaces the `^[1-9]$` regex + literal "skip"/"discard" string match,
+ * so natural phrasings like "the first one", "1st", "ek wala", "primero",
+ * "skip kar do" all resolve cleanly.
+ */
+async function classifyPhotoAssignTurn(text, listingsCount, userId) {
+  const t = String(text || '').trim();
+  if (!t) return null;
+  try {
+    const resp = await generateResponse(
+      `A real-estate agent just sent us a property photo. They have ${listingsCount} listings (numbered 1 through ${listingsCount}). We asked: "Which listing is this photo for? Reply with the number, or *skip*."
+
+Their reply: "${t}"
+
+Classify into JSON ONLY: {"action": "skip" | "assign", "n": <integer 1..${listingsCount} or null>}
+- skip: user wants to discard this photo / not assign it / cancel. Any language: "skip", "discard", "skip kar do", "salta", "تخطى", "rehne do", "no need".
+- assign: user is naming a listing index — bare number ("1") OR ordinal in any language ("first", "the first one", "1st", "second", "third", "ek wala", "doosra", "primero", "deuxième", "الأول"). Set n to the 1-based listing index.
+- If you can't tell: {"action": "skip", "n": null}
+
+Return ONLY the JSON.`,
+      [{ role: 'user', content: t }],
+      { userId, operation: 'photo_assign_turn' }
+    );
+    const m = String(resp || '').match(/\{[\s\S]*\}/);
+    if (!m) return null;
+    const parsed = JSON.parse(m[0]);
+    if (parsed.action === 'skip') return { action: 'discard' };
+    if (parsed.action === 'assign' && Number.isInteger(parsed.n) && parsed.n >= 1 && parsed.n <= listingsCount) {
+      return { action: 'assign', n: parsed.n };
+    }
+    return null;
+  } catch (err) {
+    logger.warn(`[PHOTO-ASSIGN-TURN] LLM threw: ${err.message}`);
+    return null;
+  }
+}
+
 async function handleCollectListingsPhotos(user, message) {
   const raw = (message.text || '').trim();
   const wd = { ...(user.metadata?.websiteData || {}) };
   const listings = Array.isArray(wd.listings) ? [...wd.listings] : [];
-  const skipWords = /^(skip|done|no more|bas|khatam|stock|use stock|placeholder)$/i;
-  // LLM fallback for skip phrasings the narrow regex doesn't catch
-  // ("skip it", "i want to skip the photos", "use stock photos please",
-  // any-language equivalents). Computed once up front so the existing
-  // `skipWords.test(raw)` site below uses the LLM-aware result.
-  let isSkip = skipWords.test(raw);
-  if (!isSkip && raw && raw.length <= 60 && !message.mediaId) {
+
+  // Cross-field handling. Skip when we're awaiting a listing-assignment
+  // number (pendingPhotoAssign) — at that point a bare "1" / "2" must
+  // route through the assignment parser, not the side-channel.
+  const pendingForSideChannel = wd.pendingPhotoAssign;
+  const reaskPhotos = 'Send a listing photo as an image (JPG / PNG), or reply *done* / *skip* to use stock photos.';
+  if (raw && pendingForSideChannel == null && !message.mediaId) {
+    const fmt = await tryApplyContactFormat(user, raw);
+    if (fmt) {
+      await sendTextMessage(user.phone_number, await localize(`${fmt.ackPart} ${reaskPhotos}`, user, raw));
+      await logMessage(user.id, 'Listings-photos step: applied contact format short-circuit', 'assistant');
+      return STATES.WEB_COLLECT_LISTINGS_PHOTOS;
+    }
+    if (raw.length >= 3) {
+      const sc = await tryApplySideChannel(user, 'listingsPhotos', raw);
+      if (sc) {
+        await sendTextMessage(user.phone_number, await localize(`${sc.ackPart} ${reaskPhotos}`, user, raw));
+        await logMessage(user.id, `Listings-photos step: applied side-channel ${sc.side.kind}`, 'assistant');
+        return STATES.WEB_COLLECT_LISTINGS_PHOTOS;
+      }
+    }
+  }
+  // Pure-LLM skip detection. classifyDelegation handles any phrasing in
+  // any language ("skip", "skip it", "use stock photos", "rehne do",
+  // "salta esto", "fini", etc.) — replaces the prior whole-string
+  // skipWords regex which only matched a curated list of literal tokens.
+  let isSkip = false;
+  if (raw && raw.length <= 80 && !message.mediaId) {
     try {
       isSkip = await classifyDelegation(
         raw,
@@ -2006,25 +2153,24 @@ async function handleCollectListingsPhotos(user, message) {
   }
   const pendingIdx = wd.pendingPhotoAssign; // null when waiting for next image
 
-  // If we're waiting for an assignment number ("1", "2", "3", or skip)
+  // If we're waiting for an assignment number ("1", "2", "3", or skip):
+  // pure-LLM intent classification covers bare numbers, ordinals
+  // ("first", "the second one", "1st", "ek wala", "primero"), and any
+  // skip/discard phrasing.
   if (pendingIdx != null) {
-    if (/^skip$/i.test(raw) || /^discard$/i.test(raw)) {
+    const verdict = await classifyPhotoAssignTurn(raw, listings.length, user.id);
+    if (!verdict) {
+      await sendTextMessage(user.phone_number, `Please tell me which listing this is for — reply with a number ${listings.map((_, i) => i + 1).join(', ')} (or "first", "second", etc.), or *skip*.`);
+      return STATES.WEB_COLLECT_LISTINGS_PHOTOS;
+    }
+    if (verdict.action === 'discard') {
       const merged = { ...wd, pendingPhotoAssign: null };
       await updateUserMetadata(user.id, { websiteData: merged });
       user.metadata = { ...(user.metadata || {}), websiteData: merged };
       await sendTextMessage(user.phone_number, 'Skipped. Send another photo or reply *done* to finish.');
       return STATES.WEB_COLLECT_LISTINGS_PHOTOS;
     }
-    const numMatch = raw.match(/^([1-9])$/);
-    if (!numMatch) {
-      await sendTextMessage(user.phone_number, `Please reply with just a number: ${listings.map((_, i) => i + 1).join(', ')}, or *skip*.`);
-      return STATES.WEB_COLLECT_LISTINGS_PHOTOS;
-    }
-    const n = parseInt(numMatch[1], 10);
-    if (n < 1 || n > listings.length) {
-      await sendTextMessage(user.phone_number, `Pick a valid number: ${listings.map((_, i) => i + 1).join(', ')}, or *skip*.`);
-      return STATES.WEB_COLLECT_LISTINGS_PHOTOS;
-    }
+    const n = verdict.n;
     // Upload the stored buffer to Supabase now that we know where it belongs.
     try {
       const { uploadListingPhoto } = require('../../website-gen/listingPhotoUploader');

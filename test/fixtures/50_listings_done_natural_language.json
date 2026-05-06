@@ -1,0 +1,44 @@
+{
+  "name": "listings-done-natural-language-recognized",
+  "description": "Real-estate flow. After adding one listing, user types a natural-language done phrasing — 'I think that's all for now' — instead of the literal word 'done'. Bot must move to the photos phase. Earlier behavior: doneWords regex (^/done|finished|that's it|that's all|stop|enough|no more|bas|khatam$/) only matched short tokens, so 'I think that's all for now' fell through to parseListingText which returned no usable fields → re-ask. Now classifyListingsDetailsTurn LLM call recognizes any natural phrasing of 'done' in any language.",
+  "channel": "whatsapp",
+  "seed": {
+    "state": "WEB_COLLECT_LISTINGS_DETAILS",
+    "metadata": {
+      "websiteData": {
+        "businessName": "Sarah Khan Realty",
+        "industry": "Real Estate",
+        "primaryCity": "Karachi",
+        "serviceAreas": ["Clifton"],
+        "agentProfileCollected": true,
+        "yearsExperience": 8,
+        "listingsAskAnswered": true,
+        "listings": [
+          {
+            "address": "45 Clifton Block 2",
+            "price": 12000000,
+            "currency": "PKR",
+            "beds": 4,
+            "baths": 3,
+            "sqft": 2200,
+            "status": "For Sale",
+            "photoUrl": null,
+            "neighborhood": ""
+          }
+        ]
+      },
+      "websiteDemoTriggered": true,
+      "emailSkipped": true
+    }
+  },
+  "turns": [
+    {
+      "user": "I think that's all for now",
+      "expect": {
+        "metadata.websiteData.listingsDetailsDone": true,
+        "state": "WEB_COLLECT_LISTINGS_PHOTOS",
+        "sent_count_gte": 1
+      }
+    }
+  ]
+}

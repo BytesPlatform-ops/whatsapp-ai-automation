@@ -43,6 +43,10 @@ const FIELD_QUESTIONS = {
   bookingTool: 'Do you already use a booking tool (Fresha, Booksy, Vagaro, Calendly, etc.) — or should we build you one?',
   salonHours: 'What are your salon\'s opening hours?',
   salonDurations: 'How long does each service take, and what is the price?',
+  agentProfile: 'What is your brokerage, years in real estate, and any designations?',
+  listingsAsk: 'Do you want to send your listings now, or skip and use placeholder listings?',
+  listingsDetails: 'Send your next listing details (address, price, beds/baths/sqft), or reply done.',
+  listingsPhotos: 'Send a listing photo as an image, or reply done / skip to use stock photos.',
 };
 
 async function classifySideChannelInCollection({ currentField, userText, websiteData = {}, userId }) {
