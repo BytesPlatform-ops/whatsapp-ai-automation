@@ -2392,24 +2392,46 @@ async function handleSalonHours(user, message) {
  * On any failure (LLM error, malformed JSON, network), falls back to the
  * standard default of 30min/no-price per service so the flow never stalls.
  */
-async function parseServiceDurations(text, servicesList, userId) {
+async function parseServiceDurations(text, servicesList, userId, existingSalonServices = []) {
   const services = Array.isArray(servicesList) ? servicesList : [];
   const fallback = () => services.map((s) => ({ name: s, durationMinutes: 30, priceText: '', addressed: false }));
   if (!services.length) return [];
   if (!text || !String(text).trim()) return fallback();
 
+  // Prior-state context. Lets the LLM understand iterative inputs like
+  // "the rest are default" / "baki sab 30min" — apply defaults to
+  // services that DON'T already have explicit values, leave the
+  // already-addressed ones alone.
+  const prior = Array.isArray(existingSalonServices) ? existingSalonServices : [];
+  const priorByName = {};
+  for (const e of prior) {
+    if (e && typeof e.name === 'string') priorByName[e.name.toLowerCase()] = e;
+  }
+  const priorLines = services.map((s) => {
+    const p = priorByName[s.toLowerCase()];
+    if (p && p.addressed) {
+      return `- ${s}: addressed=true (${p.durationMinutes}min${p.priceText ? ', ' + p.priceText : ', no price'})`;
+    }
+    return `- ${s}: addressed=false (no value yet)`;
+  }).join('\n');
+
   const systemPrompt =
     `You extract per-service duration (in minutes) and price (as the user wrote it, including currency) from a salon owner's free-text reply.\n\n` +
     `The salon offers these services in this exact order: ${JSON.stringify(services)}\n\n` +
+    `Prior state — what's been collected so far:\n${priorLines}\n\n` +
     `Return ONLY a JSON object: {"services": [{"name": "<exact name from list>", "durationMinutes": <int>, "priceText": "<currency+amount or empty string>", "addressed": <true|false>}, ...]}\n\n` +
     `Rules:\n` +
     `- Always return one entry per service in the SAME ORDER as the input list.\n` +
     `- name MUST exactly match the input service name — do not rename, pluralize, or reorder.\n` +
     `- durationMinutes must be a positive integer 1-600. If the user didn't specify a duration for a service, use 30 (the default).\n` +
     `- priceText keeps the user's original currency symbol and amount (e.g. "$25", "€30", "Rs 500", "25 euros"). Empty string if no price was stated for that service.\n` +
-    `- addressed: TRUE if the user's reply explicitly mentioned this service by name OR if the user used a uniform phrase that applies to all services ("all 30min", "default", "same for all", "every service"). FALSE only when the user named some other service(s) and this one wasn't covered.\n` +
-    `- If the user says "all 30min no price" / "default" / "same for all" / a bare number, apply that uniformly across every service AND mark addressed:true for all.\n` +
-    `- Accept any language and currency.\n` +
+    `- addressed: TRUE if the user's reply explicitly addresses this service in this turn, OR if a uniform phrase covers it (see below). FALSE if the user named some other service(s) and this one wasn't covered AND no uniform phrase applies.\n` +
+    `\nUNIFORM phrases cover ALL services — apply default 30min/no-price across every service AND mark all addressed=true:\n` +
+    `  • "all 30min" / "30 min for everything" / "default" / "same for all" / "every service" / "use defaults" / a bare number\n` +
+    `\n"REST" phrases cover ONLY services where prior addressed=false — apply default 30min/no-price to those, mark them addressed=true; for prior-addressed services, keep their existing duration+price+addressed=true:\n` +
+    `  • "the rest are default" / "others are default" / "remaining 30min" / "baki sab default" / "baki 30min" / "rest 30 mins no price" / "los demás default" / "set the unaddressed to 30min" / "make the rest 30"\n` +
+    `\nFor REST phrases, you MUST output the existing values for prior-addressed services exactly (durationMinutes + priceText from the prior state) — do NOT overwrite them with defaults.\n` +
+    `\n- Accept any language and currency.\n` +
     `- Never invent durations or prices the user didn't state — emit defaults instead.`;
 
   try {
@@ -2495,7 +2517,7 @@ async function handleSalonServiceDurations(user, message) {
         if (prev && prev.addressed) return { ...prev, addressed: true };
         return { name: s, durationMinutes: 30, priceText: '', addressed: true };
       })
-    : await parseServiceDurations(text, services, user.id);
+    : await parseServiceDurations(text, services, user.id, existing);
 
   // Iterative collection: merge newly-addressed entries onto whatever we
   // already had from earlier turns. A user typing "Facials are 1 hour

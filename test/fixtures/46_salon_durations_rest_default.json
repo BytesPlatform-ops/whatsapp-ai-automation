@@ -1,0 +1,50 @@
+{
+  "name": "salon-durations-rest-are-default-fills-only-unaddressed",
+  "description": "Iterative durations real-world phrasing. After Manicure (50min/$50) and Haircuts (45min/$50) were already addressed in prior turns, user says 'The rest are default' — bot must apply 30min/no-price to ONLY the unaddressed services (Facials, Pedicure, Massage), keep Manicure and Haircuts at their explicit values, and finalize the durations step. Earlier behavior: 'The rest are default' isn't a whole-message delegation phrase so isDelegation regex returned false; the LLM in parseServiceDurations didn't understand 'rest' semantics; result was the partial-coverage fallback 'Couldn't pull a duration from that'. Now the prompt receives prior salonServices state and explicitly handles REST phrases.",
+  "channel": "whatsapp",
+  "seed": {
+    "state": "SALON_SERVICE_DURATIONS",
+    "metadata": {
+      "websiteData": {
+        "businessName": "Umair Salon",
+        "industry": "Salon",
+        "services": ["Facials", "Manicure", "Pedicure", "Haircuts", "Massage"],
+        "bookingMode": "native",
+        "weeklyHours": {
+          "mon": [{"open": "09:00", "close": "19:00"}],
+          "tue": [{"open": "09:00", "close": "19:00"}],
+          "wed": [{"open": "09:00", "close": "19:00"}],
+          "thu": [{"open": "09:00", "close": "19:00"}],
+          "fri": [{"open": "09:00", "close": "19:00"}],
+          "sat": [],
+          "sun": []
+        },
+        "salonServices": [
+          {"name": "Facials", "durationMinutes": 30, "priceText": "", "addressed": false},
+          {"name": "Manicure", "durationMinutes": 50, "priceText": "50 dollars", "addressed": true},
+          {"name": "Pedicure", "durationMinutes": 30, "priceText": "", "addressed": false},
+          {"name": "Haircuts", "durationMinutes": 45, "priceText": "50 dollars", "addressed": true},
+          {"name": "Massage", "durationMinutes": 30, "priceText": "", "addressed": false}
+        ]
+      },
+      "websiteDemoTriggered": true,
+      "emailSkipped": true,
+      "contactSkipped": true,
+      "currentSiteId": "fake-site-rest-default-test"
+    }
+  },
+  "turns": [
+    {
+      "user": "The rest are default",
+      "expect": {
+        "metadata.websiteData.salonServices.1.name": "Manicure",
+        "metadata.websiteData.salonServices.1.durationMinutes": 50,
+        "metadata.websiteData.salonServices.3.name": "Haircuts",
+        "metadata.websiteData.salonServices.3.durationMinutes": 45,
+        "state_not": "SALON_SERVICE_DURATIONS",
+        "reply_not_contains": ["Couldn't pull a duration"],
+        "sent_count_gte": 1
+      }
+    }
+  ]
+}
