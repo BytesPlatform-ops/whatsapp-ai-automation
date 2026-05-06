@@ -1,0 +1,32 @@
+{
+  "name": "instagram-link-at-booking-tool-not-treated-as-booking",
+  "description": "Dumb-user behavior: user pastes their Instagram link 'instagram.com/glowstudio' at SALON_BOOKING_TOOL thinking it's the same kind of 'paste your link' question. Instagram is NOT a booking tool — embedding it would make the booking page useless. Bot must either reject this politely (re-ask for booking-tool URL) or recognize the wrong-link mistake — but must NOT save it as bookingUrl/bookingMode='embed'. State stays SALON_BOOKING_TOOL, no booking mode set.",
+  "channel": "whatsapp",
+  "seed": {
+    "state": "SALON_BOOKING_TOOL",
+    "metadata": {
+      "websiteData": {
+        "businessName": "Glow Studio",
+        "industry": "Salon",
+        "primaryCity": "Karachi",
+        "serviceAreas": ["Clifton"],
+        "services": ["Haircut", "Color"]
+      },
+      "websiteDemoTriggered": true,
+      "emailSkipped": true,
+      "contactSkipped": true,
+      "currentSiteId": "fake-site-salon-instagram-mistake-test"
+    }
+  },
+  "turns": [
+    {
+      "user": "https://instagram.com/glowstudio",
+      "expect": {
+        "metadata.websiteData.bookingMode": "*missing*",
+        "metadata.websiteData.bookingUrl": "*missing*",
+        "state": "SALON_BOOKING_TOOL",
+        "sent_count_gte": 1
+      }
+    }
+  ]
+}

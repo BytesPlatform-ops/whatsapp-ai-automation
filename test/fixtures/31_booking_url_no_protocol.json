@@ -1,0 +1,36 @@
+{
+  "name": "salon-booking-url-without-protocol-still-embeds",
+  "description": "User pastes a booking-tool URL WITHOUT the https:// prefix at SALON_BOOKING_TOOL — typical dumb-user pattern: 'fresha.com/glow-studio'. Bot must recognize the URL, save it WITH the protocol prepended, and advance into embed mode. Earlier behavior: LLM extraction prompt only emitted the URL when it already had http(s)://, so a bare-domain paste fell through to 'embed without URL' and got re-asked endlessly.",
+  "channel": "whatsapp",
+  "seed": {
+    "state": "SALON_BOOKING_TOOL",
+    "metadata": {
+      "websiteData": {
+        "businessName": "Glow Studio",
+        "industry": "Salon",
+        "primaryCity": "Karachi",
+        "serviceAreas": ["Clifton"],
+        "services": ["Haircut", "Color"]
+      },
+      "websiteDemoTriggered": true,
+      "emailSkipped": true,
+      "contactSkipped": true,
+      "currentSiteId": "fake-site-salon-no-protocol-test"
+    }
+  },
+  "turns": [
+    {
+      "user": "fresha.com/glow-studio",
+      "expect": {
+        "metadata.websiteData.bookingMode": "embed",
+        "metadata.websiteData.bookingUrl": "*exists*",
+        "state_not": "SALON_BOOKING_TOOL",
+        "reply_not_contains": [
+          "just need a clearer answer",
+          "Either *paste your booking tool link*"
+        ],
+        "sent_count_gte": 1
+      }
+    }
+  ]
+}

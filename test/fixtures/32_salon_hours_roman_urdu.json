@@ -1,0 +1,36 @@
+{
+  "name": "salon-hours-in-roman-urdu-mixed-language",
+  "description": "Pakistani salon owner types opening hours in Roman Urdu / English mix at SALON_HOURS: 'subah 9 baje se shaam 9 baje tak, mon-fri, sun-mon band'. Bot must extract a real weekly schedule from this — NOT silently fall back to defaults and lose the user's actual hours. The hours parser is LLM-based so it should handle multilingual prose without us hand-coding language patterns.",
+  "channel": "whatsapp",
+  "seed": {
+    "state": "SALON_HOURS",
+    "metadata": {
+      "websiteData": {
+        "businessName": "Glow Studio",
+        "industry": "Salon",
+        "primaryCity": "Karachi",
+        "serviceAreas": ["Clifton"],
+        "services": ["Haircut", "Color"],
+        "bookingMode": "native"
+      },
+      "websiteDemoTriggered": true,
+      "emailSkipped": true,
+      "contactSkipped": true,
+      "currentSiteId": "fake-site-salon-roman-urdu-hours-test"
+    }
+  },
+  "turns": [
+    {
+      "user": "subah 9 baje se shaam 9 baje tak, tue-sat, sun-mon band",
+      "expect": {
+        "metadata.websiteData.weeklyHours": "*exists*",
+        "state": "SALON_SERVICE_DURATIONS",
+        "reply_not_contains": [
+          "Nothing to go back to",
+          "Sure, going back one step"
+        ],
+        "sent_count_gte": 1
+      }
+    }
+  ]
+}

@@ -2178,9 +2178,15 @@ Return ONLY JSON in this exact shape:
 {"intent": "embed" | "native" | "unclear", "url": "<full https://… URL or null>", "reason": "<short>"}
 
 Decision tree:
-1. **intent: "embed"** when the user IS providing an existing booking tool — they paste or mention a URL (Fresha/Booksy/Vagaro/Calendly/Square/Acuity/Setmore/Schedulicity/Mindbody/etc.), or name one of those services with enough detail to embed (the URL takes priority — only return "embed" with url:null if they clearly named a service but didn't paste the link, in which case ask them in the reason). Pull the cleanest http(s):// URL from the message into "url".
+1. **intent: "embed"** when the user IS providing a real booking-tool URL or naming a real booking service — Fresha, Booksy, Vagaro, Calendly, Square Appointments, Acuity, Setmore, Schedulicity, Mindbody, SimplyBook, Picktime, Goldie, Boulevard, GlossGenius, Squire, Schedulista, Timely, etc. The URL takes priority. If the user types a domain WITHOUT a protocol ("fresha.com/glow-studio"), still output it in the url field WITH the https:// prefix prepended ("https://fresha.com/glow-studio") — bare-domain pastes are common and we should accept them. Only return "embed" with url:null if they clearly named a real booking service but didn't paste the link, in which case explain in the reason.
+
 2. **intent: "native"** when the user wants the built-in booking system: any "no" / "I don't have one" / "build me one" / "we don't use any" / "abhi nahi" / "rehne do" / "no thanks" / "skip" / delegation phrases / "whatever you suggest" / "you decide" — including when they explicitly mention NOT using the named services ("I don't use calendly or fresha", "no booking tool yet").
-3. **intent: "unclear"** ONLY when the message is irrelevant (smalltalk, off-topic, a question back, gibberish) and you genuinely cannot tell what they want.
+
+3. **intent: "unclear"** when:
+   - The message is irrelevant (smalltalk, off-topic, a question back, gibberish) and you genuinely cannot tell what they want.
+   - The user pasted a URL that is NOT a booking tool — social media (instagram.com, facebook.com, twitter.com, x.com, tiktok.com, youtube.com, linkedin.com, snapchat.com), their own salon's website (their general site, not a booking page), Google Maps links, WhatsApp links, generic landing pages, etc. These are NOT booking tools — return unclear with reason explaining what they sent and asking for an actual booking-tool link or "no". DO NOT set url even if a URL was present; setting url means embed-mode, which would put a useless page on their booking page.
+
+Hard rule: if the URL host is a known social-media or general-website host (instagram, facebook, twitter, x.com, tiktok, youtube, linkedin, snapchat, google.com/maps, wa.me, the salon's own .com/.net), it is NEVER a booking tool — return unclear, not embed.
 
 When in doubt between "embed" and "native", lean "native" (the user can always paste a link later). Never guess a URL — set url:null unless one is literally present in the text.`,
       [{ role: 'user', content: text }],
@@ -2295,11 +2301,20 @@ async function handleSalonHours(user, message) {
     }
   }
 
+  const { parseWeeklyHours, formatHoursForDisplay } = require('../../website-gen/hoursParser');
+  const { hours, usedDefault } = await parseWeeklyHours(text);
+
   // LLM side-channel for richer cross-field corrections (name /
-  // industry / service / contact-with-prose) that format checks
-  // can't catch. Skip on the obvious delegation phrases — the parser
-  // handles those — to keep latency down.
-  if (text && text.length >= 3 && !isDelegation(text)) {
+  // industry / service / contact-with-prose) that format checks can't
+  // catch. ONLY runs when the hours parser bailed (usedDefault=true)
+  // AND the user didn't explicitly delegate. This ordering matters:
+  // a multilingual hours answer ("subah 9 baje se shaam 9 baje tak,
+  // tue-sat") parses cleanly via the parser's own LLM, so we trust
+  // that result and skip the side-channel call. Side-channel only
+  // fires when the user clearly didn't give us hours — at which point
+  // the question is "what DID they say?" (cross-field correction,
+  // contact info, etc.) and the side-channel is the right tool.
+  if (usedDefault && text && text.length >= 3 && !isDelegation(text)) {
     const sc = await tryApplySideChannel(user, 'salonHours', text);
     if (sc) {
       await sendTextMessage(user.phone_number, await localize(`${sc.ackPart} ${reaskHours}`, user, text));
@@ -2308,8 +2323,6 @@ async function handleSalonHours(user, message) {
     }
   }
 
-  const { parseWeeklyHours, formatHoursForDisplay } = require('../../website-gen/hoursParser');
-  const { hours, usedDefault } = await parseWeeklyHours(text);
   wd.weeklyHours = hours;
   await updateUserMetadata(user.id, { websiteData: wd });
   await logMessage(user.id, `Hours${usedDefault ? ' (default)' : ''}:\n${formatHoursForDisplay(hours)}`, 'assistant');

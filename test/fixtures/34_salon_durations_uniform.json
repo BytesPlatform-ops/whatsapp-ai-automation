@@ -1,0 +1,41 @@
+{
+  "name": "salon-durations-uniform-all-30-mins",
+  "description": "User at SALON_SERVICE_DURATIONS types a uniform-duration phrase like 'all 30 mins' or 'each is 30 mins, $25'. Bot must apply the duration (and price if given) across every service in the list — NOT default-fail per-service or fall through to the LLM giving wrong durations. Tests the parser's 'apply uniformly' rule from the prompt.",
+  "channel": "whatsapp",
+  "seed": {
+    "state": "SALON_SERVICE_DURATIONS",
+    "metadata": {
+      "websiteData": {
+        "businessName": "Glow Studio",
+        "industry": "Salon",
+        "primaryCity": "Karachi",
+        "serviceAreas": ["Clifton"],
+        "services": ["Haircut", "Color", "Manicure"],
+        "bookingMode": "native",
+        "weeklyHours": {
+          "mon": [],
+          "tue": [{"open": "09:00", "close": "19:00"}],
+          "wed": [{"open": "09:00", "close": "19:00"}],
+          "thu": [{"open": "09:00", "close": "19:00"}],
+          "fri": [{"open": "09:00", "close": "19:00"}],
+          "sat": [{"open": "09:00", "close": "19:00"}],
+          "sun": []
+        }
+      },
+      "websiteDemoTriggered": true,
+      "emailSkipped": true,
+      "contactSkipped": true,
+      "currentSiteId": "fake-site-salon-uniform-dur-test"
+    }
+  },
+  "turns": [
+    {
+      "user": "all 30 mins, $25 each",
+      "expect": {
+        "metadata.websiteData.salonServices": "*exists*",
+        "state_not": "SALON_SERVICE_DURATIONS",
+        "sent_count_gte": 1
+      }
+    }
+  ]
+}
