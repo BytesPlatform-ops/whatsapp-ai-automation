@@ -60,8 +60,9 @@ async function tryApplySideChannel(user, currentField, userText) {
 
   if (side.kind === 'service_add' && Array.isArray(side.services) && side.services.length > 0) {
     const existing = Array.isArray(before.services) ? before.services : [];
-    patch = { ...before, services: [...existing, ...side.services] };
-    ackPart = `Got it — added *${side.services.join(', ')}* to your services.`;
+    const normalizedAdds = side.services.map((s) => normalizeBusinessName(s));
+    patch = { ...before, services: [...existing, ...normalizedAdds] };
+    ackPart = `Got it — added *${normalizedAdds.join(', ')}* to your services.`;
   } else if (side.kind === 'name_change' && side.value) {
     const normalized = normalizeBusinessName(side.value);
     patch = { ...before, businessName: normalized };
@@ -1157,7 +1158,8 @@ async function handleCollectServices(user, message) {
     services = servicesText
       .split(/\s*,\s*|\s+(?:and|&)\s+/i)
       .map((s) => s.trim())
-      .filter(Boolean);
+      .filter(Boolean)
+      .map((s) => normalizeBusinessName(s));
   }
 
   // Empty services result is ambiguous: it could be a genuine skip
@@ -1691,22 +1693,35 @@ Available fields: businessName, industry, services, areas, email, phone, address
 Current values:
 ${present.length ? present.map((f) => '- ' + f).join('\n') : '(none yet)'}
 
-Rules:
-1. Extract ONLY when the user is clearly asking to change / update / set / write / replace a field.
-2. Understand typos and casual language — "write services too nails, makeup, hairs" → field=services, value="nails, makeup, hairs" (the "too" is a typo for "to"; do NOT include "o" or "too" in the value).
+Each edit object has THREE parts:
+- field: one of the available fields
+- op: "add" | "remove" | "replace" — for list fields ONLY (services, areas). Scalar fields (businessName, industry, email, phone, address, contact) always use "replace" — omit op for them.
+- value: the new value (string)
+
+Op rules for list fields:
+- "Add X" / "include X too" / "we also do Y" / "X bhi rakho" → op=add, value="X"
+- "Remove X" / "drop X" / "take X out" / "X hata do" / "no more X" → op=remove, value="X"
+- "Change services to X, Y, Z" / "set services as X, Y" / "services to X" → op=replace, value="X, Y, Z"
+- When unsure between add and replace on a list field, prefer add for single-item ("hair transformation") and replace for multi-item ("nails, makeup, hairs").
+
+General rules:
+1. Extract ONLY when the user is clearly asking to change / update / set / write / add / remove a field.
+2. Understand typos and casual language — "write services too nails, makeup, hairs" → field=services, op=replace, value="nails, makeup, hairs" (the "too" is a typo for "to"; do NOT include "o" or "too" in the value).
 3. Multi-field edits are supported: a single message can contain multiple edits — return ALL of them.
-4. Distinguish "services" (what the business DOES — e.g. haircuts, plumbing) from "areas" (WHERE it operates — neighborhoods, cities). "Service areas" = areas, NOT services.
-5. For lists (services / areas), keep the comma/and-separated list AS-IS as the value (e.g. "nails, makeup, hairs"). Do NOT trim items.
+4. Distinguish "services" (what the business DOES) from "areas" (WHERE it operates). "Service areas" = areas.
+5. For list values, keep the comma/and-separated list AS-IS as the value. Do NOT trim items.
 6. Preserve emails / phone numbers / URLs / addresses exactly as written.
-7. Understand any language: English, Roman Urdu, Urdu, Hindi, Spanish, French, Arabic, etc. ("address ko Gulshan Iqbal kr do", "cambia el email a foo@bar.com").
+7. Understand any language: English, Roman Urdu, Urdu, Hindi, Spanish, French, Arabic, etc. ("address ko Gulshan Iqbal kr do", "cambia el email a foo@bar.com", "haircut ko services may add krdo").
 8. If the user is NOT trying to change anything (saying "yes", "looks good", "cancel", "build it", a question, off-topic), return {"edits": []}.
 
 User said: "${t}"
 
 Return JSON ONLY. No prose. Examples:
 {"edits": [{"field": "address", "value": "Gulshan Iqbal, Karachi"}]}
-{"edits": [{"field": "businessName", "value": "MyCo"}, {"field": "services", "value": "design, SEO"}]}
-{"edits": [{"field": "services", "value": "nails, makeup, hairs"}]}
+{"edits": [{"field": "businessName", "value": "MyCo"}, {"field": "services", "op": "replace", "value": "design, SEO"}]}
+{"edits": [{"field": "services", "op": "add", "value": "hair transformation"}]}
+{"edits": [{"field": "services", "op": "remove", "value": "waxing"}]}
+{"edits": [{"field": "services", "op": "replace", "value": "nails, makeup, hairs"}]}
 {"edits": []}`;
 
   try {
@@ -1719,9 +1734,15 @@ Return JSON ONLY. No prose. Examples:
     if (!m) return [];
     const parsed = JSON.parse(m[0]);
     if (!Array.isArray(parsed.edits)) return [];
-    return parsed.edits.filter(
-      (e) => e && typeof e.field === 'string' && e.field && (typeof e.value === 'string' || Array.isArray(e.value)) && String(e.value).trim()
-    );
+    return parsed.edits
+      .filter((e) => e && typeof e.field === 'string' && e.field && (typeof e.value === 'string' || Array.isArray(e.value)) && String(e.value).trim())
+      .map((e) => {
+        const out = { field: e.field, value: e.value };
+        if (typeof e.op === 'string' && ['add', 'remove', 'replace'].includes(e.op.toLowerCase())) {
+          out.op = e.op.toLowerCase();
+        }
+        return out;
+      });
   } catch (err) {
     logger.warn(`[WEBDEV-CONFIRM] detectFieldEditsLLM threw: ${err.message}`);
     return [];
@@ -2373,20 +2394,21 @@ async function handleSalonHours(user, message) {
  */
 async function parseServiceDurations(text, servicesList, userId) {
   const services = Array.isArray(servicesList) ? servicesList : [];
-  const fallback = () => services.map((s) => ({ name: s, durationMinutes: 30, priceText: '' }));
+  const fallback = () => services.map((s) => ({ name: s, durationMinutes: 30, priceText: '', addressed: false }));
   if (!services.length) return [];
   if (!text || !String(text).trim()) return fallback();
 
   const systemPrompt =
     `You extract per-service duration (in minutes) and price (as the user wrote it, including currency) from a salon owner's free-text reply.\n\n` +
     `The salon offers these services in this exact order: ${JSON.stringify(services)}\n\n` +
-    `Return ONLY a JSON object: {"services": [{"name": "<exact name from list>", "durationMinutes": <int>, "priceText": "<currency+amount or empty string>"}, ...]}\n\n` +
+    `Return ONLY a JSON object: {"services": [{"name": "<exact name from list>", "durationMinutes": <int>, "priceText": "<currency+amount or empty string>", "addressed": <true|false>}, ...]}\n\n` +
     `Rules:\n` +
     `- Always return one entry per service in the SAME ORDER as the input list.\n` +
     `- name MUST exactly match the input service name — do not rename, pluralize, or reorder.\n` +
     `- durationMinutes must be a positive integer 1-600. If the user didn't specify a duration for a service, use 30 (the default).\n` +
     `- priceText keeps the user's original currency symbol and amount (e.g. "$25", "€30", "Rs 500", "25 euros"). Empty string if no price was stated for that service.\n` +
-    `- If the user says "all 30min no price" / "default" / "same for all" / a bare number, apply that uniformly across every service.\n` +
+    `- addressed: TRUE if the user's reply explicitly mentioned this service by name OR if the user used a uniform phrase that applies to all services ("all 30min", "default", "same for all", "every service"). FALSE only when the user named some other service(s) and this one wasn't covered.\n` +
+    `- If the user says "all 30min no price" / "default" / "same for all" / a bare number, apply that uniformly across every service AND mark addressed:true for all.\n` +
     `- Accept any language and currency.\n` +
     `- Never invent durations or prices the user didn't state — emit defaults instead.`;
 
@@ -2417,7 +2439,8 @@ async function parseServiceDurations(text, servicesList, userId) {
       const priceText = hit && typeof hit.priceText === 'string'
         ? hit.priceText.trim().slice(0, 40)
         : '';
-      return { name: s, durationMinutes: dur, priceText };
+      const addressed = !!(hit && hit.addressed === true);
+      return { name: s, durationMinutes: dur, priceText, addressed };
     });
   } catch (err) {
     logger.warn(`[SALON-DURATIONS] Extraction failed: ${err.message} — using defaults`);
@@ -2458,31 +2481,63 @@ async function handleSalonServiceDurations(user, message) {
   // Delegation ("whatever you think" / "default" / "idk" / etc.) means
   // "apply 30min-no-price across every service" — skip the LLM call.
   const useDefault = isDelegation(text);
-  const salonServices = useDefault
-    ? services.map((s) => ({ name: s, durationMinutes: 30, priceText: '' }))
+  const newParsed = useDefault
+    ? services.map((s) => ({ name: s, durationMinutes: 30, priceText: '', addressed: true }))
     : await parseServiceDurations(text, services, user.id);
-  wd.salonServices = salonServices;
+
+  // Iterative collection: merge newly-addressed entries onto whatever we
+  // already had from earlier turns. A user typing "Facials are 1 hour
+  // at $50" addresses ONE service — we should save that and ask about
+  // the rest, not silently default the others. Only mark services
+  // addressed when the LLM (or delegation) confirms it.
+  const existing = Array.isArray(wd.salonServices) ? wd.salonServices : [];
+  const existingByName = {};
+  for (const e of existing) {
+    if (e && typeof e.name === 'string') existingByName[e.name.toLowerCase()] = e;
+  }
+  const merged = newParsed.map((entry) => {
+    const prev = existingByName[entry.name.toLowerCase()];
+    if (entry.addressed) return { name: entry.name, durationMinutes: entry.durationMinutes, priceText: entry.priceText, addressed: true };
+    if (prev && prev.addressed) return { ...prev, addressed: true };
+    return { name: entry.name, durationMinutes: 30, priceText: '', addressed: false };
+  });
+  wd.salonServices = merged;
   await updateUserMetadata(user.id, { websiteData: wd });
   await logMessage(
     user.id,
-    `Salon services: ${salonServices.map((s) => `${s.name} ${s.durationMinutes}m${s.priceText ? ' ' + s.priceText : ''}`).join(', ')}`,
+    `Salon services: ${merged.map((s) => `${s.name} ${s.durationMinutes}m${s.priceText ? ' ' + s.priceText : ''}${s.addressed ? '' : ' (default)'}`).join(', ')}`,
     'assistant'
   );
 
-  // Announce what we picked so the user isn't left wondering what got saved.
-  let ackMsg;
-  if (useDefault) {
-    ackMsg = `Got it, I'll set every service to *30 minutes with no price listed*. You can tweak durations and prices later from the summary.`;
-  } else {
-    const preview = salonServices
-      .slice(0, 3)
-      .map((s) => `${s.name} ${s.durationMinutes}m${s.priceText ? ' ' + s.priceText : ''}`)
-      .join(', ');
-    ackMsg = `Got it — ${preview}${salonServices.length > 3 ? '…' : ''}.`;
-  }
-  await sendTextMessage(user.phone_number, await localize(ackMsg, user, text));
+  const remaining = merged.filter((s) => !s.addressed);
+  const justAddressed = merged.filter((s) => s.addressed && newParsed.find((n) => n.name === s.name && n.addressed));
 
-  return finishSalonFlow(user);
+  // If the user delegated OR everything is now addressed, we're done.
+  if (useDefault || remaining.length === 0) {
+    let ackMsg;
+    if (useDefault) {
+      ackMsg = `Got it, I'll set every service to *30 minutes with no price listed*. You can tweak durations and prices later from the summary.`;
+    } else {
+      const preview = merged
+        .slice(0, 3)
+        .map((s) => `${s.name} ${s.durationMinutes}m${s.priceText ? ' ' + s.priceText : ''}`)
+        .join(', ');
+      ackMsg = `Got it — ${preview}${merged.length > 3 ? '…' : ''}.`;
+    }
+    await sendTextMessage(user.phone_number, await localize(ackMsg, user, text));
+    return finishSalonFlow(user);
+  }
+
+  // Partial coverage — ack what we got, ask about the rest, stay in
+  // SALON_SERVICE_DURATIONS so the user can keep adding one-by-one.
+  // Reply *default* on a follow-up turn fills the rest at 30min/no-price.
+  const ackParts = justAddressed.map((s) => `${s.name} ${s.durationMinutes}m${s.priceText ? ' ' + s.priceText : ''}`);
+  const remainingNames = remaining.map((s) => s.name).join(', ');
+  const ackMsg = ackParts.length
+    ? `Got it — ${ackParts.join(', ')}. What about ${remainingNames}? Send durations + prices, or reply *default* to set them at 30min with no price.`
+    : `Couldn't pull a duration from that — could you give it like *"${remaining[0].name} 30min $25"*? Or reply *default* for 30min/no-price across all.`;
+  await sendTextMessage(user.phone_number, await localize(ackMsg, user, text));
+  return STATES.SALON_SERVICE_DURATIONS;
 }
 
 /**
@@ -2767,18 +2822,65 @@ async function handleCollectContact(user, message) {
   );
   const effectiveContact = userExplicitlySkipped ? contactData : mergedContact;
   const mergedWebsiteData = { ...prevWd, ...effectiveContact };
-  // Mark the contact step completed so nextMissingWebDevState doesn't loop
-  // back on users who provided only an address (or skipped). Setting this
-  // unconditionally once handleCollectContact finishes is safe — we've
-  // asked the user once, that's the UX contract.
+
+  // Iterative contact collection: if the user gave only some fields
+  // (e.g. email only), don't immediately mark contactSkipped and leave
+  // for the logo step — they may have been about to follow up with
+  // their phone or address. Save what they gave, then ask once more.
+  // The follow-up turn (tracked via contactFollowupAsked) finalizes —
+  // whatever's there at that point is what they want.
+  const alreadyAskedFollowup = !!user.metadata?.contactFollowupAsked;
+  const fieldsHave = [
+    !!effectiveContact.contactEmail && 'email',
+    !!effectiveContact.contactPhone && 'phone',
+    !!effectiveContact.contactAddress && 'address',
+  ].filter(Boolean);
+  const allThreePresent = fieldsHave.length >= 3;
+  const shouldAskFollowup =
+    !alreadyAskedFollowup &&
+    !userExplicitlySkipped &&
+    !allThreePresent &&
+    fieldsHave.length >= 1;
+
+  if (shouldAskFollowup) {
+    // Save the partial contact, set the follow-up flag, ask for more.
+    await updateUserMetadata(user.id, {
+      websiteData: mergedWebsiteData,
+      contactFollowupAsked: true,
+    });
+    user.metadata = {
+      ...(user.metadata || {}),
+      websiteData: mergedWebsiteData,
+      contactFollowupAsked: true,
+    };
+    const haveLine = fieldsHave.map((f) => `*${f}*`).join(' and ');
+    const missingFields = ['email', 'phone', 'address'].filter((f) => !fieldsHave.includes(f));
+    const missingLine = missingFields.join(' or ');
+    await sendTextMessage(
+      user.phone_number,
+      await localize(
+        `Got your ${haveLine}. Want to add a ${missingLine} too — or reply *skip* to move on with just what you've shared?`,
+        user,
+        contactText
+      )
+    );
+    await logMessage(user.id, `Contact: partial (${fieldsHave.join(', ')}), asked follow-up`, 'assistant');
+    return STATES.WEB_COLLECT_CONTACT;
+  }
+
+  // Either the user gave all three, explicitly skipped, or this is the
+  // follow-up turn — finalize and move on. Clear the follow-up flag
+  // either way so a future re-entry doesn't get stuck.
   await updateUserMetadata(user.id, {
     websiteData: mergedWebsiteData,
     contactSkipped: true,
+    contactFollowupAsked: false,
   });
   user.metadata = {
     ...(user.metadata || {}),
     websiteData: mergedWebsiteData,
     contactSkipped: true,
+    contactFollowupAsked: false,
   };
 
   // Optional logo step — runs between contact and the confirmation summary
@@ -3334,10 +3436,41 @@ async function handleConfirm(user, message) {
   // path.
   const llmEdits = await detectFieldEditsLLM(originalText, wd, user.id);
 
+  // Helper: split a comma/and-separated value into clean items + title-case
+  // each one. Used for list fields below.
+  const splitListValue = (v, normalize = true) =>
+    String(v)
+      .split(/\s*,\s*|\s+(?:and|&|aur|y|et|und)\s+/i)
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .map((s) => (normalize ? normalizeBusinessName(s) : s));
+
+  // Helper: apply add/remove/replace op to a list field. Returns the new
+  // list AND an "affected" subset for the ack message. Mirrors the
+  // applyListOp helper used by the late-revisions edit path so confirm-edit
+  // and revisions-edit have identical semantics.
+  const applyListOpLocal = (existing, items, op) => {
+    const existingArr = Array.isArray(existing) ? existing : [];
+    if (op === 'add') {
+      const lower = new Set(existingArr.map((s) => String(s).toLowerCase().trim()));
+      const fresh = items.filter((s) => !lower.has(s.toLowerCase().trim()));
+      return { next: [...existingArr, ...fresh], affected: fresh, kind: 'add' };
+    }
+    if (op === 'remove') {
+      const lower = new Set(items.map((s) => String(s).toLowerCase().trim()));
+      const next = existingArr.filter((s) => !lower.has(String(s).toLowerCase().trim()));
+      const affected = existingArr.filter((s) => lower.has(String(s).toLowerCase().trim()));
+      return { next, affected, kind: 'remove' };
+    }
+    return { next: items, affected: items, kind: 'replace' };
+  };
+
   // Mutates wd in place for one field. Returns a short ack string like
   // "business name → *MyCo*" or null if the value wasn't applicable. Shared
-  // by the single-edit and multi-edit paths below.
-  const mutateWdForField = (field, value) => {
+  // by the single-edit and multi-edit paths below. List fields (services,
+  // serviceAreas) honor an `op` parameter (add / remove / replace); scalars
+  // always replace.
+  const mutateWdForField = (field, value, op) => {
     const v = String(value || '').trim();
     if (!v) return null;
     switch (field) {
@@ -3348,19 +3481,33 @@ async function handleConfirm(user, message) {
       case 'industry':
         wd.industry = v;
         return `industry → *${wd.industry}*`;
-      case 'services':
-        wd.services = v
-          .split(/\s*,\s*|\s+(?:and|&|aur|y|et|und)\s+/i)
-          .map((s) => s.trim())
-          .filter(Boolean);
-        return `services → *${wd.services.join(', ')}*`;
+      case 'services': {
+        const items = splitListValue(v);
+        if (!items.length) return null;
+        const effectiveOp = op || 'replace';
+        const { next, affected, kind } = applyListOpLocal(wd.services, items, effectiveOp);
+        // No-op guard: "remove waxing" when waxing isn't there shouldn't
+        // silently claim success.
+        if (kind !== 'replace' && affected.length === 0) return null;
+        wd.services = next;
+        const preview = (affected.length ? affected : next).join(', ');
+        if (kind === 'add') return `services + *${preview}* (now: ${next.join(', ')})`;
+        if (kind === 'remove') return `services − *${preview}* (now: ${next.join(', ')})`;
+        return `services → *${next.join(', ')}*`;
+      }
       case 'areas':
-      case 'serviceAreas':
-        wd.serviceAreas = v
-          .split(/\s*,\s*|\s+(?:and|&|aur|y|et|und)\s+/i)
-          .map((s) => s.trim())
-          .filter(Boolean);
-        return `service areas → *${wd.serviceAreas.join(', ')}*`;
+      case 'serviceAreas': {
+        const items = splitListValue(v, false);
+        if (!items.length) return null;
+        const effectiveOp = op || 'replace';
+        const { next, affected, kind } = applyListOpLocal(wd.serviceAreas, items, effectiveOp);
+        if (kind !== 'replace' && affected.length === 0) return null;
+        wd.serviceAreas = next;
+        const preview = (affected.length ? affected : next).join(', ');
+        if (kind === 'add') return `service areas + *${preview}*`;
+        if (kind === 'remove') return `service areas − *${preview}*`;
+        return `service areas → *${next.join(', ')}*`;
+      }
       case 'email':
       case 'contactEmail': {
         const m = v.match(/[\w.-]+@[\w.-]+\.\w+/);
@@ -3437,7 +3584,7 @@ async function handleConfirm(user, message) {
 
     const labels = [];
     for (const m of llmEdits) {
-      const label = mutateWdForField(m.field, m.value);
+      const label = mutateWdForField(m.field, m.value, m.op);
       if (label) labels.push(label);
     }
     if (labels.length > 0) {
@@ -6543,8 +6690,15 @@ async function applyFieldCorrection(user, field, rawValue, op = 'replace') {
   let ack = null;
 
   // Helper: split a comma-separated value into clean items.
+  // Title-case each item (services + areas use this) so user input
+  // like "manicure, pedicure" lands as "Manicure, Pedicure" — matches
+  // how the LLM extractor normalizes the initial collection too.
   const splitItems = (v) =>
-    String(v).split(/\s*,\s*|\s+(?:and|&)\s+/i).map((s) => s.trim()).filter(Boolean);
+    String(v)
+      .split(/\s*,\s*|\s+(?:and|&)\s+/i)
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .map((s) => normalizeBusinessName(s));
 
   // Helper: apply add/remove/replace to a list field.
   const applyListOp = (existing, items, op) => {

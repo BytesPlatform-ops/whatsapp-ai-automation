@@ -1,0 +1,40 @@
+{
+  "name": "salon-durations-iterative-collection-per-service",
+  "description": "Salon owner gives one service's duration at a time at SALON_SERVICE_DURATIONS — 'Facials are for 1 hour at 50 dollars'. Bot must save Facials at 60min/$50 AND stay at SALON_SERVICE_DURATIONS to ask about the rest, NOT silently default the 4 unaddressed services to 30min. Real tester from May 7 — bot defaulted Manicure/Pedicure/Haircuts/Massage immediately and the user couldn't iterate. Now uses parser's 'addressed' flag to track partial coverage; stays in state until all addressed OR user replies *default*.",
+  "channel": "whatsapp",
+  "seed": {
+    "state": "SALON_SERVICE_DURATIONS",
+    "metadata": {
+      "websiteData": {
+        "businessName": "Ansh Barber",
+        "industry": "Barber",
+        "services": ["Facials", "Manicure", "Pedicure", "Haircuts", "Massage"],
+        "bookingMode": "native",
+        "weeklyHours": {
+          "mon": [{"open": "09:00", "close": "20:00"}],
+          "tue": [{"open": "09:00", "close": "20:00"}],
+          "wed": [{"open": "09:00", "close": "20:00"}],
+          "thu": [{"open": "09:00", "close": "20:00"}],
+          "fri": [{"open": "09:00", "close": "20:00"}],
+          "sat": [{"open": "09:00", "close": "20:00"}],
+          "sun": []
+        }
+      },
+      "websiteDemoTriggered": true,
+      "emailSkipped": true,
+      "contactSkipped": true,
+      "currentSiteId": "fake-site-iter-durations-test"
+    }
+  },
+  "turns": [
+    {
+      "user": "Facials are for 1 hour at 50 dollars",
+      "expect": {
+        "metadata.websiteData.salonServices": "*exists*",
+        "state": "SALON_SERVICE_DURATIONS",
+        "reply_contains": ["Manicure"],
+        "sent_count_gte": 1
+      }
+    }
+  ]
+}

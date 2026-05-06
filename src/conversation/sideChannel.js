@@ -83,6 +83,13 @@ They replied: "${raw.slice(0, 400)}"
 
 Their reply did NOT cleanly answer the current question. Classify what they actually meant. Reply in ANY language is OK — read the meaning, not just keywords. Return ONLY valid JSON.
 
+HARD RULE — anti-"unclear" bias for contact info: if the message contains ANY of (a) the literal word "Address" / "Email" / "Phone" / "Mobile" / "Tel" / "Number" followed by a value, OR (b) an at-sign with text on both sides, OR (c) a run of 6+ digits, OR (d) a street/road/avenue/lane/block/sector/colony/nagar/society keyword followed by a place token — you MUST return contact_update with the matching field set. Do NOT return unclear for these cases. Examples that are ALL contact_update, never unclear:
+   - "Address zamzama road karachi" → {"kind":"contact_update","address":"zamzama road karachi","email":null,"phone":null}
+   - "Phone 03353279708" → {"kind":"contact_update","phone":"03353279708","email":null,"address":null}
+   - "Email is foo@bar.com" → {"kind":"contact_update","email":"foo@bar.com","phone":null,"address":null}
+   - "5 jail road, lahore" → {"kind":"contact_update","address":"5 jail road, lahore","email":null,"phone":null}
+   - "Block 4 gulshan-e-iqbal" → {"kind":"contact_update","address":"Block 4 gulshan-e-iqbal","email":null,"phone":null}
+
 CONTEXT (do not re-add fields the user already gave):
 - Business name: ${knownName ? `"${knownName}"` : 'unknown'}
 - Industry: ${knownIndustry ? `"${knownIndustry}"` : 'unknown'}
@@ -99,7 +106,10 @@ Possible classifications:
 3. **industry_change** — user wants to update the industry / niche.
    Shape: {"kind":"industry_change","value":"<new industry>"}
 
-4. **contact_update** — the user is volunteering an email, phone, or street address (when we weren't asking for it).
+4. **contact_update** — the user is volunteering an email, phone, or street address (when we weren't asking for it). Be generous here: any message that ALMOST looks like contact info should land as contact_update, not unclear. Specifically:
+   - Explicit labels: "Address X" / "address: X" / "phone is X" / "email X" / "the address is X" — extract the value, set the matching field.
+   - Bare prose with a street/road/colony/sector hint and a place name ("zamzama road karachi", "5 main street, austin", "block 4 gulshan", "23 jail road") — that's an address, set the address field.
+   - Phone-shaped digit runs and email-shaped strings always count.
    Shape: {"kind":"contact_update","email":"<email or null>","phone":"<phone or null>","address":"<address or null>"}
 
 5. **question** — the user is asking us a question (not answering ours).
@@ -109,10 +119,11 @@ Possible classifications:
    Shape: {"kind":"unclear"}
 
 Rules:
+- The HARD RULE for contact info above OVERRIDES every other rule below. If the message has an Address/Email/Phone label, an at-sign, a 6+ digit run, or a street/road/block/sector keyword, it IS contact_update and never unclear — even if you're tempted to call it unclear.
 - ONLY classify as service_add when the user is genuinely adding to the services list. "We do plumbing" when industry is already Plumbing → unclear, NOT service_add.
 - For service_add, return the NEW services only — strip the ones already in the existing list (case-insensitive).
 - For name_change / industry_change: only if the user EXPLICITLY signals a change (not just mentions a different word in passing).
-- When in doubt → unclear. Don't guess.
+- When in doubt between an actionable category (service_add / name_change / industry_change / contact_update / question) and unclear → pick unclear. But contact info always wins per the HARD RULE.
 
 Return ONLY the JSON object, nothing else.`;
 

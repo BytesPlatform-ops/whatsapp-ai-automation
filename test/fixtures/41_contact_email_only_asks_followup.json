@@ -1,0 +1,30 @@
+{
+  "name": "contact-email-only-asks-followup-before-logo",
+  "description": "User at WEB_COLLECT_CONTACT replies with just an email ('Email is bytes@bytes.com'). Bot must NOT silently move on to the logo step — it should save the email AND ask 'want to add a phone or address too, or skip?'. Real tester from May 7 — bot accepted email and immediately moved to logo, the user was about to add a phone but never got the chance. Now sets contactFollowupAsked flag, stays in WEB_COLLECT_CONTACT for one more turn.",
+  "channel": "whatsapp",
+  "seed": {
+    "state": "WEB_COLLECT_CONTACT",
+    "metadata": {
+      "websiteData": {
+        "businessName": "Ansh Barber",
+        "industry": "Barber",
+        "services": ["Facials", "Manicure", "Pedicure", "Haircuts", "Massage"],
+        "bookingMode": "native"
+      },
+      "websiteDemoTriggered": true,
+      "emailSkipped": true
+    }
+  },
+  "turns": [
+    {
+      "user": "Email is bytes@bytes.com",
+      "expect": {
+        "metadata.websiteData.contactEmail": "bytes@bytes.com",
+        "metadata.contactFollowupAsked": true,
+        "state": "WEB_COLLECT_CONTACT",
+        "reply_contains": ["phone", "address"],
+        "sent_count_gte": 1
+      }
+    }
+  ]
+}

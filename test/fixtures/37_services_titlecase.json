@@ -1,0 +1,26 @@
+{
+  "name": "services-titlecased-on-save",
+  "description": "User types salon services in lowercase ('manicure, pedicure, hair cut'). Bot must store the services list with each entry title-cased — *Manicure, Pedicure, Hair Cut* — not the lowercase verbatim text. Real tester report from May 6: services rendered lowercase on the generated salon site, looked unprofessional. Same fix class as the earlier businessName casing — apply normalizeBusinessName to every service entry at every save-site (extractor output, comma-split fallback, side-channel service_add, confirm-edit).",
+  "channel": "whatsapp",
+  "seed": {
+    "state": "WEB_COLLECT_SERVICES",
+    "metadata": {
+      "websiteData": {
+        "businessName": "Nomi Salon",
+        "industry": "Salon"
+      },
+      "websiteDemoTriggered": true,
+      "emailSkipped": true
+    }
+  },
+  "turns": [
+    {
+      "user": "manicure, pedicure, waxing",
+      "expect": {
+        "metadata.websiteData.services": ["Manicure", "Pedicure", "Waxing"],
+        "state_not": "WEB_COLLECT_SERVICES",
+        "sent_count_gte": 1
+      }
+    }
+  ]
+}

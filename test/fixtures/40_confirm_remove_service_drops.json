@@ -1,0 +1,31 @@
+{
+  "name": "confirm-remove-service-drops-just-that-one",
+  "description": "Confirm-edit op semantics: 'Remove waxing' should drop only waxing from the services list, leaving everything else intact. The LLM emits op=remove and applyListOpLocal handles the diff. Also covers the no-op case implicitly (if the list didn't have waxing, the edit returns null label and the bot doesn't falsely claim success).",
+  "channel": "whatsapp",
+  "seed": {
+    "state": "WEB_CONFIRM",
+    "metadata": {
+      "websiteData": {
+        "businessName": "Glow Studio",
+        "industry": "Salon",
+        "services": ["Waxing", "Facials", "Manicure", "Pedicure"],
+        "contactEmail": "glow@example.com",
+        "bookingMode": "native"
+      },
+      "websiteDemoTriggered": true,
+      "emailSkipped": true,
+      "contactSkipped": true,
+      "currentSiteId": "fake-site-remove-service-test"
+    }
+  },
+  "turns": [
+    {
+      "user": "Remove waxing",
+      "expect": {
+        "metadata.websiteData.services": ["Facials", "Manicure", "Pedicure"],
+        "state": "WEB_CONFIRM",
+        "sent_count_gte": 1
+      }
+    }
+  ]
+}
