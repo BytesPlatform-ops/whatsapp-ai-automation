@@ -1,0 +1,41 @@
+{
+  "name": "salon-services-array-stays-in-sync-with-services-edits",
+  "description": "When the user adds a service at WEB_CONFIRM, both wd.services AND wd.salonServices must stay in sync. Earlier: services got the new entry but salonServices stayed at the old length, so the summary showed the wrong 'priced services' count and the generated salon site missed the new service's duration page. Now syncSalonServices runs inside the services mutation: existing entries preserved by name, new ones get default 30min/no-price stubs.",
+  "channel": "whatsapp",
+  "seed": {
+    "state": "WEB_CONFIRM",
+    "metadata": {
+      "websiteData": {
+        "businessName": "Glow Studio",
+        "industry": "Salon",
+        "services": ["Facials", "Manicure", "Pedicure", "Haircuts", "Massage"],
+        "salonServices": [
+          {"name": "Facials", "durationMinutes": 60, "priceText": "$50", "addressed": true},
+          {"name": "Manicure", "durationMinutes": 30, "priceText": "", "addressed": false},
+          {"name": "Pedicure", "durationMinutes": 30, "priceText": "", "addressed": false},
+          {"name": "Haircuts", "durationMinutes": 30, "priceText": "", "addressed": false},
+          {"name": "Massage", "durationMinutes": 30, "priceText": "", "addressed": false}
+        ],
+        "contactEmail": "glow@example.com",
+        "bookingMode": "native"
+      },
+      "websiteDemoTriggered": true,
+      "emailSkipped": true,
+      "contactSkipped": true,
+      "currentSiteId": "fake-site-salon-sync-test"
+    }
+  },
+  "turns": [
+    {
+      "user": "Add hair transformation",
+      "expect": {
+        "metadata.websiteData.services": ["Facials", "Manicure", "Pedicure", "Haircuts", "Massage", "Hair Transformation"],
+        "metadata.websiteData.salonServices.0.name": "Facials",
+        "metadata.websiteData.salonServices.0.durationMinutes": 60,
+        "metadata.websiteData.salonServices.5.name": "Hair Transformation",
+        "state": "WEB_CONFIRM",
+        "sent_count_gte": 1
+      }
+    }
+  ]
+}

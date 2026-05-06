@@ -2479,10 +2479,22 @@ async function handleSalonServiceDurations(user, message) {
   }
 
   // Delegation ("whatever you think" / "default" / "idk" / etc.) means
-  // "apply 30min-no-price across every service" — skip the LLM call.
+  // "fill the rest with 30min/no-price" on a FOLLOW-UP turn — but it
+  // must NOT overwrite a service the user explicitly set earlier.
+  // Compute the existing-by-name map first so the delegation branch
+  // can preserve previously-addressed entries.
   const useDefault = isDelegation(text);
+  const existing = Array.isArray(wd.salonServices) ? wd.salonServices : [];
+  const existingByName = {};
+  for (const e of existing) {
+    if (e && typeof e.name === 'string') existingByName[e.name.toLowerCase()] = e;
+  }
   const newParsed = useDefault
-    ? services.map((s) => ({ name: s, durationMinutes: 30, priceText: '', addressed: true }))
+    ? services.map((s) => {
+        const prev = existingByName[s.toLowerCase()];
+        if (prev && prev.addressed) return { ...prev, addressed: true };
+        return { name: s, durationMinutes: 30, priceText: '', addressed: true };
+      })
     : await parseServiceDurations(text, services, user.id);
 
   // Iterative collection: merge newly-addressed entries onto whatever we
@@ -2490,11 +2502,6 @@ async function handleSalonServiceDurations(user, message) {
   // at $50" addresses ONE service — we should save that and ask about
   // the rest, not silently default the others. Only mark services
   // addressed when the LLM (or delegation) confirms it.
-  const existing = Array.isArray(wd.salonServices) ? wd.salonServices : [];
-  const existingByName = {};
-  for (const e of existing) {
-    if (e && typeof e.name === 'string') existingByName[e.name.toLowerCase()] = e;
-  }
   const merged = newParsed.map((entry) => {
     const prev = existingByName[entry.name.toLowerCase()];
     if (entry.addressed) return { name: entry.name, durationMinutes: entry.durationMinutes, priceText: entry.priceText, addressed: true };
@@ -3465,11 +3472,34 @@ async function handleConfirm(user, message) {
     return { next: items, affected: items, kind: 'replace' };
   };
 
-  // Mutates wd in place for one field. Returns a short ack string like
-  // "business name → *MyCo*" or null if the value wasn't applicable. Shared
-  // by the single-edit and multi-edit paths below. List fields (services,
-  // serviceAreas) honor an `op` parameter (add / remove / replace); scalars
-  // always replace.
+  // Keep wd.salonServices in lock-step with wd.services. Confirm-edit
+  // can append/remove/replace the services list at any time; without
+  // this sync the salonServices array goes stale (count mismatch in
+  // summary, missing duration entries for newly-added services on the
+  // generated salon site). Existing entries are preserved by name;
+  // freshly-added services get the standard 30min/no-price defaults
+  // (with addressed:false so the salon flow can ask about them later
+  // if the user re-enters durations collection).
+  const syncSalonServices = () => {
+    if (!Array.isArray(wd.services)) return;
+    const prev = Array.isArray(wd.salonServices) ? wd.salonServices : [];
+    const prevByName = {};
+    for (const e of prev) {
+      if (e && typeof e.name === 'string') prevByName[e.name.toLowerCase()] = e;
+    }
+    wd.salonServices = wd.services.map((name) => {
+      const hit = prevByName[name.toLowerCase()];
+      return hit || { name, durationMinutes: 30, priceText: '', addressed: false };
+    });
+  };
+
+  // Mutates wd in place for one field. Returns { label, kind } or null.
+  //   kind: 'change' = real mutation, ack with ✅
+  //   kind: 'noop'   = nothing changed (e.g. "add X" when X already there) —
+  //                    inform the user without a checkmark
+  // Shared by the single-edit and multi-edit paths below. List fields
+  // (services, serviceAreas) honor an `op` parameter (add / remove /
+  // replace); scalars always replace.
   const mutateWdForField = (field, value, op) => {
     const v = String(value || '').trim();
     if (!v) return null;
@@ -3477,23 +3507,30 @@ async function handleConfirm(user, message) {
       case 'businessName':
       case 'name':
         wd.businessName = normalizeBusinessName(v);
-        return `business name → *${wd.businessName}*`;
+        return { label: `business name → *${wd.businessName}*`, kind: 'change' };
       case 'industry':
         wd.industry = v;
-        return `industry → *${wd.industry}*`;
+        return { label: `industry → *${wd.industry}*`, kind: 'change' };
       case 'services': {
         const items = splitListValue(v);
         if (!items.length) return null;
         const effectiveOp = op || 'replace';
         const { next, affected, kind } = applyListOpLocal(wd.services, items, effectiveOp);
-        // No-op guard: "remove waxing" when waxing isn't there shouldn't
-        // silently claim success.
-        if (kind !== 'replace' && affected.length === 0) return null;
+        // No-op feedback: tell the user the requested change was already
+        // satisfied (or the item wasn't there to remove). Earlier the
+        // bot returned null and the caller fell through to a confusing
+        // "what would you like to change?" hint.
+        if (kind !== 'replace' && affected.length === 0) {
+          const itemList = items.join(', ');
+          if (kind === 'add') return { label: `*${itemList}* already in your services`, kind: 'noop' };
+          if (kind === 'remove') return { label: `*${itemList}* wasn't in your services`, kind: 'noop' };
+        }
         wd.services = next;
+        syncSalonServices();
         const preview = (affected.length ? affected : next).join(', ');
-        if (kind === 'add') return `services + *${preview}* (now: ${next.join(', ')})`;
-        if (kind === 'remove') return `services − *${preview}* (now: ${next.join(', ')})`;
-        return `services → *${next.join(', ')}*`;
+        if (kind === 'add') return { label: `services + *${preview}* (now: ${next.join(', ')})`, kind: 'change' };
+        if (kind === 'remove') return { label: `services − *${preview}* (now: ${next.join(', ')})`, kind: 'change' };
+        return { label: `services → *${next.join(', ')}*`, kind: 'change' };
       }
       case 'areas':
       case 'serviceAreas': {
@@ -3501,34 +3538,38 @@ async function handleConfirm(user, message) {
         if (!items.length) return null;
         const effectiveOp = op || 'replace';
         const { next, affected, kind } = applyListOpLocal(wd.serviceAreas, items, effectiveOp);
-        if (kind !== 'replace' && affected.length === 0) return null;
+        if (kind !== 'replace' && affected.length === 0) {
+          const itemList = items.join(', ');
+          if (kind === 'add') return { label: `*${itemList}* already in your service areas`, kind: 'noop' };
+          if (kind === 'remove') return { label: `*${itemList}* wasn't in your service areas`, kind: 'noop' };
+        }
         wd.serviceAreas = next;
         const preview = (affected.length ? affected : next).join(', ');
-        if (kind === 'add') return `service areas + *${preview}*`;
-        if (kind === 'remove') return `service areas − *${preview}*`;
-        return `service areas → *${next.join(', ')}*`;
+        if (kind === 'add') return { label: `service areas + *${preview}*`, kind: 'change' };
+        if (kind === 'remove') return { label: `service areas − *${preview}*`, kind: 'change' };
+        return { label: `service areas → *${next.join(', ')}*`, kind: 'change' };
       }
       case 'email':
       case 'contactEmail': {
         const m = v.match(/[\w.-]+@[\w.-]+\.\w+/);
         wd.contactEmail = m ? m[0] : v;
-        return `email → *${wd.contactEmail}*`;
+        return { label: `email → *${wd.contactEmail}*`, kind: 'change' };
       }
       case 'phone':
       case 'contactPhone':
         wd.contactPhone = v;
-        return `phone → *${wd.contactPhone}*`;
+        return { label: `phone → *${wd.contactPhone}*`, kind: 'change' };
       case 'address':
       case 'contactAddress':
         wd.contactAddress = v;
-        return `address → *${wd.contactAddress}*`;
+        return { label: `address → *${wd.contactAddress}*`, kind: 'change' };
       case 'contact': {
         const parsed = parseContactFields(v);
         const applied = [];
         if (parsed.contactEmail) { wd.contactEmail = parsed.contactEmail; applied.push(`email → *${wd.contactEmail}*`); }
         if (parsed.contactPhone) { wd.contactPhone = parsed.contactPhone; applied.push(`phone → *${wd.contactPhone}*`); }
         if (parsed.contactAddress) { wd.contactAddress = parsed.contactAddress; applied.push(`address → *${wd.contactAddress}*`); }
-        return applied.length ? applied.join('; ') : null;
+        return applied.length ? { label: applied.join('; '), kind: 'change' } : null;
       }
       default:
         return null;
@@ -3559,9 +3600,11 @@ async function handleConfirm(user, message) {
       }
       return applyAndReshow(`Industry updated to *${wd.industry}*`);
     }
-    const label = mutateWdForField(field, value);
-    if (!label) return null;
-    return applyAndReshow(label.charAt(0).toUpperCase() + label.slice(1));
+    const result = mutateWdForField(field, value);
+    if (!result) return null;
+    const { label, kind } = result;
+    const prefix = kind === 'noop' ? 'ℹ️' : '✅';
+    return applyAndReshow(`${prefix} ${label.charAt(0).toUpperCase() + label.slice(1)}`);
   };
 
   // Apply LLM-detected edits as a batch. Supports multi-field replies
@@ -3582,15 +3625,29 @@ async function handleConfirm(user, message) {
       if (r !== null) return r;
     }
 
-    const labels = [];
+    const changes = [];
+    const noops = [];
     for (const m of llmEdits) {
-      const label = mutateWdForField(m.field, m.value, m.op);
-      if (label) labels.push(label);
+      const result = mutateWdForField(m.field, m.value, m.op);
+      if (!result) continue;
+      if (result.kind === 'change') changes.push(result.label);
+      else if (result.kind === 'noop') noops.push(result.label);
     }
-    if (labels.length > 0) {
-      const ackPrefix = labels.length === 1
-        ? `✅ ${labels[0].charAt(0).toUpperCase() + labels[0].slice(1)}. Here's the updated summary:`
-        : `✅ Updated ${labels.length} fields: ${labels.join('; ')}. Here's the updated summary:`;
+    if (changes.length > 0 || noops.length > 0) {
+      // Build prefix: real changes get a checkmark, no-ops an info icon.
+      // Mixed (some changed, some already-there) gets both for clarity.
+      const parts = [];
+      if (changes.length === 1) {
+        parts.push(`✅ ${changes[0].charAt(0).toUpperCase() + changes[0].slice(1)}`);
+      } else if (changes.length > 1) {
+        parts.push(`✅ Updated ${changes.length} fields: ${changes.join('; ')}`);
+      }
+      if (noops.length === 1) {
+        parts.push(`ℹ️ ${noops[0].charAt(0).toUpperCase() + noops[0].slice(1)}`);
+      } else if (noops.length > 1) {
+        parts.push(`ℹ️ ${noops.join('; ')}`);
+      }
+      const ackPrefix = `${parts.join('. ')}. Here's the ${changes.length ? 'updated' : 'current'} summary:`;
       await updateUserMetadata(user.id, { websiteData: wd });
       user.metadata = { ...(user.metadata || {}), websiteData: wd };
       return showConfirmSummary(user, ackPrefix);

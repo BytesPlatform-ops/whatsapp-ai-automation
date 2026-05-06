@@ -1,0 +1,48 @@
+{
+  "name": "iterative-default-preserves-explicit-durations",
+  "description": "Two-turn iterative durations test. Turn 1 explicitly sets Facials to 60min/$50 (one of five services). Turn 2 says 'default' — bot must apply 30min/no-price defaults to the four UNADDRESSED services WITHOUT overwriting the Facials value the user already set. Earlier behavior (introduced by my own iterative-collection fix and now repaired): delegation reset all entries to default, wiping explicit values. The merge logic now consults existingByName for previously-addressed entries before falling back to default.",
+  "channel": "whatsapp",
+  "seed": {
+    "state": "SALON_SERVICE_DURATIONS",
+    "metadata": {
+      "websiteData": {
+        "businessName": "Ansh Barber",
+        "industry": "Barber",
+        "services": ["Facials", "Manicure", "Pedicure", "Haircuts", "Massage"],
+        "bookingMode": "native",
+        "weeklyHours": {
+          "mon": [{"open": "09:00", "close": "20:00"}],
+          "tue": [{"open": "09:00", "close": "20:00"}],
+          "wed": [{"open": "09:00", "close": "20:00"}],
+          "thu": [{"open": "09:00", "close": "20:00"}],
+          "fri": [{"open": "09:00", "close": "20:00"}],
+          "sat": [{"open": "09:00", "close": "20:00"}],
+          "sun": []
+        }
+      },
+      "websiteDemoTriggered": true,
+      "emailSkipped": true,
+      "contactSkipped": true,
+      "currentSiteId": "fake-site-iter-default-test"
+    }
+  },
+  "turns": [
+    {
+      "user": "Facials are for 1 hour at 50 dollars",
+      "expect": {
+        "metadata.websiteData.salonServices": "*exists*",
+        "state": "SALON_SERVICE_DURATIONS",
+        "sent_count_gte": 1
+      }
+    },
+    {
+      "user": "default",
+      "expect": {
+        "metadata.websiteData.salonServices.0.name": "Facials",
+        "metadata.websiteData.salonServices.0.durationMinutes": 60,
+        "state_not": "SALON_SERVICE_DURATIONS",
+        "sent_count_gte": 1
+      }
+    }
+  ]
+}
