@@ -217,6 +217,10 @@ async function getLeads() {
       seo: !!u.metadata?.seoAuditTriggered,
       returnToSales: !!u.metadata?.returnToSales,
     },
+    // Detected inbound language (cached per-user via the
+    // detect-language endpoint). null when not yet detected — admin
+    // panel shows nothing for those rows. Format: { name, code, detectedAt }.
+    detected_language: u.metadata?.detectedLanguage || null,
     ad_source: u.metadata?.adSource || '',
     channel: u.channel || 'whatsapp',
     // Which of OUR WhatsApp numbers the user originally messaged. Surfacing
