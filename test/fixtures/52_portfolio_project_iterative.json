@@ -1,0 +1,32 @@
+{
+  "name": "portfolio-project-iterative-collection",
+  "description": "Portfolio user at WEB_COLLECT_PROJECTS_DETAILS sends a project in natural language ('BrandX rebrand 2024 — Lead Designer — behance.net/brandx'). Bot must parse via LLM and append a structured project entry to websiteData.projects with title + role + year + link populated, then stay in PROJECTS_DETAILS for more.",
+  "channel": "whatsapp",
+  "seed": {
+    "state": "WEB_COLLECT_PROJECTS_DETAILS",
+    "metadata": {
+      "websiteData": {
+        "businessName": "Sara Khan",
+        "industry": "UX Designer",
+        "services": ["Figma", "Prototyping"],
+        "aboutText": "Designer working at the intersection of brand and product.",
+        "projectsAskAnswered": true,
+        "projects": []
+      },
+      "websiteDemoTriggered": true,
+      "emailSkipped": true
+    }
+  },
+  "turns": [
+    {
+      "user": "BrandX rebrand 2024 — Lead Designer — behance.net/brandx",
+      "expect": {
+        "metadata.websiteData.projects.0.title": "*exists*",
+        "metadata.websiteData.projects.0.year": "2024",
+        "metadata.websiteData.projects.0.link": "*exists*",
+        "state": "WEB_COLLECT_PROJECTS_DETAILS",
+        "sent_count_gte": 1
+      }
+    }
+  ]
+}

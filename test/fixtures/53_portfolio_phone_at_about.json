@@ -1,0 +1,28 @@
+{
+  "name": "portfolio-phone-at-about-side-channels-into-contact",
+  "description": "Cross-field side-channel at the new portfolio about state. User at WEB_COLLECT_ABOUT types a phone number ('+15677656788') instead of a bio. Bot must save the phone via the format short-circuit AND stay at WEB_COLLECT_ABOUT to keep asking for the bio. Same class-of-bug coverage we added to LOGO + salon + RE states.",
+  "channel": "whatsapp",
+  "seed": {
+    "state": "WEB_COLLECT_ABOUT",
+    "metadata": {
+      "websiteData": {
+        "businessName": "Sara Khan",
+        "industry": "UX Designer",
+        "services": ["Figma", "Prototyping"]
+      },
+      "websiteDemoTriggered": true,
+      "emailSkipped": true
+    }
+  },
+  "turns": [
+    {
+      "user": "+15677656788",
+      "expect": {
+        "metadata.websiteData.contactPhone": "*exists*",
+        "state": "WEB_COLLECT_ABOUT",
+        "metadata.websiteData.aboutText": "*missing*",
+        "sent_count_gte": 1
+      }
+    }
+  ]
+}

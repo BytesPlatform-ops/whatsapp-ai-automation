@@ -1,0 +1,40 @@
+{
+  "name": "portfolio-projects-done-natural-language",
+  "description": "Portfolio user at WEB_COLLECT_PROJECTS_DETAILS, after adding one project, types a natural-language done phrase ('I think that\\'s all for now'). Bot's classifyProjectsDetailsTurn LLM call must recognize this as done (no doneWords regex) and advance to PROJECTS_PHOTOS state.",
+  "channel": "whatsapp",
+  "seed": {
+    "state": "WEB_COLLECT_PROJECTS_DETAILS",
+    "metadata": {
+      "websiteData": {
+        "businessName": "Sara Khan",
+        "industry": "UX Designer",
+        "services": ["Figma"],
+        "aboutText": "Designer.",
+        "projectsAskAnswered": true,
+        "projects": [
+          {
+            "title": "BrandX",
+            "description": "Rebrand work",
+            "role": "Lead Designer",
+            "year": "2024",
+            "link": "https://behance.net/brandx",
+            "tools": ["Figma"],
+            "photoUrl": null
+          }
+        ]
+      },
+      "websiteDemoTriggered": true,
+      "emailSkipped": true
+    }
+  },
+  "turns": [
+    {
+      "user": "I think that's all for now",
+      "expect": {
+        "metadata.websiteData.projectsDetailsDone": true,
+        "state": "WEB_COLLECT_PROJECTS_PHOTOS",
+        "sent_count_gte": 1
+      }
+    }
+  ]
+}

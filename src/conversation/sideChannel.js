@@ -47,6 +47,10 @@ const FIELD_QUESTIONS = {
   listingsAsk: 'Do you want to send your listings now, or skip and use placeholder listings?',
   listingsDetails: 'Send your next listing details (address, price, beds/baths/sqft), or reply done.',
   listingsPhotos: 'Send a listing photo as an image, or reply done / skip to use stock photos.',
+  about: 'Write a short bio for your portfolio hero — or reply skip and we\'ll generate one.',
+  projectsAsk: 'Do you want to send your projects now, or skip and use placeholders?',
+  projectsDetails: 'Send your next project details (title, what it was, your role, year, link), or reply done.',
+  projectsPhotos: 'Send a project cover image, or reply done / skip to use stock visuals.',
 };
 
 async function classifySideChannelInCollection({ currentField, userText, websiteData = {}, userId }) {

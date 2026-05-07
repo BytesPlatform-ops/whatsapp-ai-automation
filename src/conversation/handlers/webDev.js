@@ -256,7 +256,7 @@ async function handleAwaitingForm(user, message) {
 // is stored at top-level metadata.email by the legacy handler, so we accept
 // either location as "collected".
 function nextMissingWebDevState(websiteData, fullMetadata = {}) {
-  const { needsAreaCollection, isRealEstate } = require('../../website-gen/templates');
+  const { needsAreaCollection, isRealEstate, isPortfolio } = require('../../website-gen/templates');
   if (!websiteData.businessName) return STATES.WEB_COLLECT_NAME;
   const emailCollected =
     fullMetadata.email != null || websiteData.contactEmail != null || websiteData.email != null || fullMetadata.emailSkipped === true;
@@ -284,6 +284,16 @@ function nextMissingWebDevState(websiteData, fullMetadata = {}) {
       if (!websiteData.listingsAskAnswered) return STATES.WEB_COLLECT_LISTINGS_ASK;
       if (!websiteData.listingsDetailsDone) return STATES.WEB_COLLECT_LISTINGS_DETAILS;
       return STATES.WEB_COLLECT_LISTINGS_PHOTOS;
+    }
+  } else if (isPortfolio(websiteData.industry)) {
+    // Portfolio sub-flow: skills (services list) → about → projects (3-phase).
+    // Skills come first so the LLM has context for any auto-generated bio.
+    if (websiteData.services == null) return STATES.WEB_COLLECT_SERVICES;
+    if (!websiteData.aboutText && !websiteData.aboutSkipped) return STATES.WEB_COLLECT_ABOUT;
+    if (!websiteData.projectsFlowDone) {
+      if (!websiteData.projectsAskAnswered) return STATES.WEB_COLLECT_PROJECTS_ASK;
+      if (!websiteData.projectsDetailsDone) return STATES.WEB_COLLECT_PROJECTS_DETAILS;
+      return STATES.WEB_COLLECT_PROJECTS_PHOTOS;
     }
   } else if (websiteData.services == null) {
     return STATES.WEB_COLLECT_SERVICES;
@@ -497,6 +507,41 @@ function questionForState(state, websiteData) {
         "Or reply *skip* and I'll use professional stock photos."
       );
     }
+    case STATES.WEB_COLLECT_ABOUT:
+      return (
+        "Quick bio for your hero section — 1-2 sentences about you and what you do.\n\n" +
+        "Example: *\"Designer working at the intersection of brand and product. 6+ years across startups and agencies.\"*\n\n" +
+        "Or reply *skip* and I'll generate one based on your name + skills."
+      );
+    case STATES.WEB_COLLECT_PROJECTS_ASK:
+      return (
+        "Want to feature your work? Send me up to 6 projects to showcase on your site.\n\n" +
+        "• *Yes* — send them now (natural language is fine, e.g. *\"BrandX redesign — 2024 — Lead Designer — behance.net/...\"*)\n" +
+        "• *Skip* — I'll generate placeholder project cards for now (you can add real ones later)"
+      );
+    case STATES.WEB_COLLECT_PROJECTS_DETAILS: {
+      const got = (websiteData.projects || []).length;
+      if (got === 0) {
+        return (
+          "Great — send me your first project. Natural language is fine:\n\n" +
+          "*\"BrandX rebrand — 2024 — Lead Designer — Took the visual identity from corporate to bold. behance.net/brandx\"*\n\n" +
+          "Send one per message. Reply *done* whenever you're finished (up to 6)."
+        );
+      }
+      return `Got project ${got}. Send the next one, or reply *done* to move on.`;
+    }
+    case STATES.WEB_COLLECT_PROJECTS_PHOTOS: {
+      const list = websiteData.projects || [];
+      const pending = websiteData.pendingProjectPhotoAssign;
+      if (pending != null) {
+        const options = list.map((p, i) => `*${i + 1}* — ${p.title}`).join('\n');
+        return `For this image, which project?\n${options}\n*skip* — don't use this image`;
+      }
+      return (
+        "Want to add cover images for your projects? Forward them one at a time — I'll ask which project each one belongs to. " +
+        "Or reply *skip* and I'll use professional stock visuals."
+      );
+    }
     case STATES.WEB_COLLECT_CONTACT: {
       // If an earlier pin already seeded the address, suggesting
       // another pin is redundant — tell the user what we already
@@ -554,6 +599,10 @@ const SUMMARY_REQUEST_STATES = new Set([
   STATES.WEB_COLLECT_LISTINGS_ASK,
   STATES.WEB_COLLECT_LISTINGS_DETAILS,
   STATES.WEB_COLLECT_LISTINGS_PHOTOS,
+  STATES.WEB_COLLECT_ABOUT,
+  STATES.WEB_COLLECT_PROJECTS_ASK,
+  STATES.WEB_COLLECT_PROJECTS_DETAILS,
+  STATES.WEB_COLLECT_PROJECTS_PHOTOS,
   STATES.SALON_BOOKING_TOOL,
   STATES.SALON_HOURS,
   STATES.SALON_SERVICE_DURATIONS,
@@ -610,6 +659,14 @@ async function handleWebDev(user, message) {
       return handleCollectListingsDetails(user, message);
     case STATES.WEB_COLLECT_LISTINGS_PHOTOS:
       return handleCollectListingsPhotos(user, message);
+    case STATES.WEB_COLLECT_ABOUT:
+      return handleCollectAbout(user, message);
+    case STATES.WEB_COLLECT_PROJECTS_ASK:
+      return handleCollectProjectsAsk(user, message);
+    case STATES.WEB_COLLECT_PROJECTS_DETAILS:
+      return handleCollectProjectsDetails(user, message);
+    case STATES.WEB_COLLECT_PROJECTS_PHOTOS:
+      return handleCollectProjectsPhotos(user, message);
     case STATES.WEB_COLLECT_COLORS:
       // Legacy: skip straight to contact if stuck in this old state
       return STATES.WEB_COLLECT_CONTACT;
@@ -2924,6 +2981,533 @@ async function handleSalonServiceDurations(user, message) {
   return STATES.SALON_SERVICE_DURATIONS;
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// PORTFOLIO-SPECIFIC COLLECTION (designer / developer / photographer / writer
+// / freelancer / artist — anyone showcasing personal work). About bio +
+// 3-phase iterative project collection. Mirrors the real-estate listings
+// flow shape but with project-shaped fields.
+//
+// All intent classification within these handlers is LLM-only — no done/skip
+// keyword regex, no looksLikeProject heuristic. Format detection (phone /
+// email shape inside tryApplyContactFormat) is reused from the existing
+// helper as it's pure shape, not intent.
+// ═══════════════════════════════════════════════════════════════════════════
+
+const MAX_PROJECTS = 6;
+
+/**
+ * Generate a hero bio paragraph from the user's name + industry + skills,
+ * used when they reply "skip" at WEB_COLLECT_ABOUT. The LLM produces a
+ * 1-2 sentence professional opener that can be edited later from the
+ * confirmation summary. Returns null on failure so the caller falls back
+ * to a generic placeholder.
+ */
+async function generatePortfolioBio(websiteData, userId) {
+  const name = websiteData.businessName || 'this professional';
+  const industry = websiteData.industry || 'creative work';
+  const skills = Array.isArray(websiteData.services) && websiteData.services.length
+    ? websiteData.services.slice(0, 6).join(', ')
+    : '';
+  try {
+    const resp = await generateResponse(
+      `Write a single 1-2 sentence professional bio for the hero section of a portfolio website. Match the audience.
+
+Name: ${name}
+Field: ${industry}
+${skills ? `Skills/tools: ${skills}` : ''}
+
+Style: confident, specific, modern. No corporate-speak. No "I am" prefix. No fluff like "passionate about" / "love what I do". Lead with what they do; one specific detail; one outcome. Keep under 200 chars.
+
+Output ONLY the bio text — no quotes, no labels, no commentary.`,
+      [{ role: 'user', content: 'Generate the bio now.' }],
+      { userId, operation: 'portfolio_bio_gen' }
+    );
+    const cleaned = String(resp || '').trim().replace(/^["']|["']$/g, '');
+    if (cleaned && cleaned.length >= 10 && cleaned.length <= 280) return cleaned;
+    return null;
+  } catch (err) {
+    logger.warn(`[PORTFOLIO-BIO] LLM threw: ${err.message}`);
+    return null;
+  }
+}
+
+/**
+ * Parse a free-text project description into structured fields. Pure LLM —
+ * the user said "no regex, no fallback" for portfolio. Handles any natural
+ * phrasing in any language: "BrandX rebrand 2024 lead designer behance.net/x",
+ * "redesigned the dashboard for Foo Inc as the solo dev, 2023, github.com/foo",
+ * "kothi project 2022 architect — sketch + figma".
+ *
+ * Returns {} when the input clearly isn't a project description (caller
+ * re-asks). Required field is `title` — anything missing comes back empty
+ * and the handler fills with sensible defaults.
+ */
+async function parseProjectText(raw, userId) {
+  const text = String(raw || '').trim();
+  if (!text) return {};
+  const systemPrompt =
+    `Extract portfolio-project fields from a freelancer's free-text description. Return ONLY JSON — omit any field you can't confidently extract.\n\n` +
+    `Schema: {"title": <string, max 80 chars>, "description": <string 1-2 sentences, max 200 chars>, "role": <string max 60 chars or null>, "year": <string max 8 chars or null>, "link": <full https URL or null — accept bare domains and prepend https:// yourself>, "tools": [<string max 24 chars>, ...] or null}\n\n` +
+    `Rules:\n` +
+    `- title: the project name. Required for a usable result. If genuinely no title, return {} so the caller can re-ask.\n` +
+    `- description: a short blurb about what the project was. Pull from the user's prose — don't invent.\n` +
+    `- role: the user's role on the project (e.g. "Lead Designer", "Solo Developer", "UX Lead"). Null if not stated.\n` +
+    `- year: 4-digit year if stated explicitly. Accept "2024" / "'24" / "two years ago" → null. Null if uncertain.\n` +
+    `- link: ANY URL the user provided, even bare-domain like "behance.net/foo" or "github.com/x" → output WITH the https:// prefix prepended. Skip if no URL.\n` +
+    `- tools: array of tools/tech mentioned (Figma, React, Lightroom, Sketch, AfterEffects, etc.). Null if not stated.\n` +
+    `- ANY language is OK; translate the description to English if needed but keep proper nouns and the link verbatim.\n` +
+    `- Never invent values. Empty fields are fine.`;
+  try {
+    const response = await generateResponse(
+      systemPrompt,
+      [{ role: 'user', content: text.slice(0, 800) }],
+      { userId, operation: 'portfolio_project_parse', timeoutMs: 12_000 }
+    );
+    const m = String(response || '').match(/\{[\s\S]*\}/);
+    if (!m) return {};
+    const parsed = JSON.parse(m[0]);
+    const out = {};
+    if (typeof parsed.title === 'string' && parsed.title.trim().length >= 2 && parsed.title.trim().length <= 80) {
+      out.title = parsed.title.trim();
+    }
+    if (typeof parsed.description === 'string' && parsed.description.trim().length >= 5 && parsed.description.trim().length <= 220) {
+      out.description = parsed.description.trim();
+    }
+    if (typeof parsed.role === 'string' && parsed.role.trim().length >= 2 && parsed.role.trim().length <= 60) {
+      out.role = parsed.role.trim();
+    }
+    if (typeof parsed.year === 'string' && /^\d{4}$/.test(parsed.year.trim())) {
+      out.year = parsed.year.trim();
+    }
+    if (typeof parsed.link === 'string') {
+      const linkRaw = parsed.link.trim();
+      if (/^https?:\/\//i.test(linkRaw) && linkRaw.length <= 200) out.link = linkRaw;
+    }
+    if (Array.isArray(parsed.tools)) {
+      const cleaned = parsed.tools
+        .map((t) => (typeof t === 'string' ? t.trim() : ''))
+        .filter((t) => t && t.length <= 24)
+        .slice(0, 8);
+      if (cleaned.length) out.tools = cleaned;
+    }
+    return out;
+  } catch (err) {
+    logger.warn(`[PORTFOLIO-PROJECT-PARSE] LLM threw: ${err.message}`);
+    return {};
+  }
+}
+
+/**
+ * One LLM call covers the WEB_COLLECT_PROJECTS_ASK turn intents:
+ *   yes      — user wants to send their projects (no content yet)
+ *   skip     — user wants to skip / use placeholders
+ *   project  — user is already providing actual project content; caller
+ *              forwards directly into the details parser
+ *   unclear  — anything else; caller re-asks.
+ */
+async function classifyProjectsAskTurn(text, userId) {
+  const t = String(text || '').trim();
+  if (!t) return 'unclear';
+  try {
+    const resp = await generateResponse(
+      `A chatbot just asked a freelancer (designer / developer / photographer / writer / etc.): "Want to feature your work? Send me your projects, or skip and I'll use placeholders."
+
+Classify their reply into ONE of: yes, skip, project, unclear.
+
+- yes: they want to send their projects but haven't yet — short consent like "yes", "sure", "haan bhej deta hoon", "let me send them", "sí, los tengo".
+- skip: they want to skip / use placeholders / don't have projects yet (any language: "skip", "skip kar do", "no", "nahi", "later", "use defaults", "I don't have any yet", "saltar", "non merci").
+- project: they're ALREADY providing project content — title, description, role, year, link, tools, image, etc. Examples: "BrandX rebrand 2024", "redesigned dashboard for Foo Inc behance.net/x", "kothi residence 2022 architect", "casa moderna github.com/foo".
+- unclear: questions, off-topic, gibberish.
+
+The user said: "${t}"
+
+Reply with ONLY one word: yes, skip, project, or unclear.`,
+      [{ role: 'user', content: t }],
+      { userId, operation: 'projects_ask_turn' }
+    );
+    const clean = String(resp || '').trim().toLowerCase().replace(/[^a-z]/g, '');
+    if (clean === 'yes' || clean === 'skip' || clean === 'project' || clean === 'unclear') return clean;
+    return 'unclear';
+  } catch (err) {
+    logger.warn(`[PROJECTS-ASK-TURN] LLM threw: ${err.message}`);
+    return 'unclear';
+  }
+}
+
+/**
+ * Same shape as classifyListingsDetailsTurn but for portfolio projects.
+ * One LLM call returns done / skip / project / unclear.
+ */
+async function classifyProjectsDetailsTurn(text, userId) {
+  const t = String(text || '').trim();
+  if (!t) return 'unclear';
+  if (t.length > 160) return 'project'; // long messages are almost always project content
+  try {
+    const resp = await generateResponse(
+      `A freelancer is iteratively sending project descriptions to a portfolio-website builder. We just asked: "Send your next project, or reply done to move on." Classify their reply into ONE of: done, skip, project.
+
+- done: they're finished sending projects and want to move on. Any language: "done", "that's all", "finished", "no more", "stop", "enough", "ho gaya", "bas", "khatam", "ya basta", "fini", "تم".
+- skip: they want to abandon project collection and use placeholders. Any language: "skip", "use placeholders", "rehne do", "salta", "تخطى".
+- project: they're sending actual project content (a title, description, role, year, tools, link, image, etc.). When in doubt → project (the parser will handle it).
+
+The user said: "${t}"
+
+Reply with ONLY one word: done, skip, or project.`,
+      [{ role: 'user', content: t }],
+      { userId, operation: 'projects_details_turn' }
+    );
+    const clean = String(resp || '').trim().toLowerCase().replace(/[^a-z]/g, '');
+    if (clean === 'done' || clean === 'skip' || clean === 'project') return clean;
+    return 'project';
+  } catch (err) {
+    logger.warn(`[PROJECTS-DETAILS-TURN] LLM threw: ${err.message}`);
+    return 'project';
+  }
+}
+
+async function handleCollectAbout(user, message) {
+  const raw = (message.text || '').trim();
+  const wd = { ...(user.metadata?.websiteData || {}) };
+
+  // Cross-field handling: phone / email / address volunteered, or a name /
+  // industry / contact / service correction at this step. Same pattern as
+  // every other collection state.
+  const reaskAbout = 'Now, write a short 1-2 sentence bio — or reply *skip* and I\'ll generate one for you.';
+  if (raw) {
+    const fmt = await tryApplyContactFormat(user, raw);
+    if (fmt) {
+      await sendTextMessage(user.phone_number, await localize(`${fmt.ackPart} ${reaskAbout}`, user, raw));
+      await logMessage(user.id, 'About step: applied contact format short-circuit', 'assistant');
+      return STATES.WEB_COLLECT_ABOUT;
+    }
+  }
+  if (raw && raw.length >= 3) {
+    const sc = await tryApplySideChannel(user, 'about', raw);
+    if (sc) {
+      await sendTextMessage(user.phone_number, await localize(`${sc.ackPart} ${reaskAbout}`, user, raw));
+      await logMessage(user.id, `About step: applied side-channel ${sc.side.kind}`, 'assistant');
+      return STATES.WEB_COLLECT_ABOUT;
+    }
+  }
+
+  // Pure-LLM delegation check. classifyDelegation handles "skip", "skip kar do",
+  // "you write it", "sirf likh do", "saltar", any-language equivalents.
+  let isSkip = false;
+  if (raw && raw.length <= 60) {
+    try {
+      isSkip = await classifyDelegation(raw, 'Write a short bio for your portfolio hero, or skip to auto-generate.');
+    } catch (err) {
+      logger.warn(`[ABOUT] classifyDelegation threw: ${err.message}`);
+    }
+  }
+
+  let aboutText;
+  if (isSkip || !raw) {
+    // Auto-generate from name + industry + skills.
+    aboutText = await generatePortfolioBio(wd, user.id);
+    if (!aboutText) {
+      aboutText = `${wd.businessName || 'I'} — ${wd.industry || 'creative professional'}.`;
+    }
+  } else {
+    // Use the user's text verbatim — trimmed to 280 chars.
+    aboutText = raw.slice(0, 280);
+  }
+
+  const merged = { ...wd, aboutText };
+  await updateUserMetadata(user.id, { websiteData: merged });
+  user.metadata = { ...(user.metadata || {}), websiteData: merged };
+  await logMessage(user.id, `About: ${isSkip ? '(generated) ' : ''}${aboutText}`, 'assistant');
+
+  const ack = isSkip
+    ? `Got it — generated a starter bio for you. You can edit it from the summary later.`
+    : `Got it — saved your bio.`;
+  return smartAdvance(user, message, ack);
+}
+
+async function handleCollectProjectsAsk(user, message) {
+  const raw = (message.text || '').trim();
+  const wd = { ...(user.metadata?.websiteData || {}) };
+
+  const reaskProjectsAsk = 'Now, do you want to send your projects, or reply *skip* to use placeholders?';
+  if (raw) {
+    const fmt = await tryApplyContactFormat(user, raw);
+    if (fmt) {
+      await sendTextMessage(user.phone_number, await localize(`${fmt.ackPart} ${reaskProjectsAsk}`, user, raw));
+      await logMessage(user.id, 'Projects-ask step: applied contact format short-circuit', 'assistant');
+      return STATES.WEB_COLLECT_PROJECTS_ASK;
+    }
+  }
+  if (raw && raw.length >= 3) {
+    const sc = await tryApplySideChannel(user, 'projectsAsk', raw);
+    if (sc) {
+      await sendTextMessage(user.phone_number, await localize(`${sc.ackPart} ${reaskProjectsAsk}`, user, raw));
+      await logMessage(user.id, `Projects-ask step: applied side-channel ${sc.side.kind}`, 'assistant');
+      return STATES.WEB_COLLECT_PROJECTS_ASK;
+    }
+  }
+
+  const intent = await classifyProjectsAskTurn(raw, user.id);
+
+  if (intent === 'project') {
+    // User went straight to project content — skip the yes/skip ack and
+    // route into the details parser to handle the content.
+    const merged = { ...wd, projectsAskAnswered: true, projects: wd.projects || [] };
+    await updateUserMetadata(user.id, { websiteData: merged });
+    user.metadata = { ...(user.metadata || {}), websiteData: merged };
+    return handleCollectProjectsDetails(user, message);
+  }
+
+  if (intent === 'skip') {
+    const merged = { ...wd, projectsAskAnswered: true, projectsDetailsDone: true, projectsFlowDone: true, projects: [] };
+    await updateUserMetadata(user.id, { websiteData: merged });
+    user.metadata = { ...(user.metadata || {}), websiteData: merged };
+    await logMessage(user.id, 'Projects: skipped (using placeholders)', 'assistant');
+    return smartAdvance(user, message, "No problem — I'll use placeholder project cards. You can swap them out later.");
+  }
+
+  if (intent === 'yes') {
+    const merged = { ...wd, projectsAskAnswered: true, projects: wd.projects || [] };
+    await updateUserMetadata(user.id, { websiteData: merged });
+    user.metadata = { ...(user.metadata || {}), websiteData: merged };
+    await sendTextMessage(
+      user.phone_number,
+      await localize(questionForState(STATES.WEB_COLLECT_PROJECTS_DETAILS, merged), user, raw)
+    );
+    return STATES.WEB_COLLECT_PROJECTS_DETAILS;
+  }
+
+  // Unclear — re-ask
+  await sendTextMessage(
+    user.phone_number,
+    await localize(
+      'Just to confirm — *yes* to send your projects, or *skip* to use placeholders?',
+      user,
+      raw
+    )
+  );
+  return STATES.WEB_COLLECT_PROJECTS_ASK;
+}
+
+async function handleCollectProjectsDetails(user, message) {
+  const raw = (message.text || '').trim();
+  const wd = { ...(user.metadata?.websiteData || {}) };
+  const projects = Array.isArray(wd.projects) ? [...wd.projects] : [];
+
+  // Cross-field handling FIRST — if the user is volunteering contact info or
+  // correcting a prior field at this step, parseProjectText would otherwise
+  // produce a junk project entry.
+  const reaskProjects = 'Send your next project — natural language is fine, like *"BrandX rebrand 2024 — Lead Designer — behance.net/brandx"*. Or reply *done* to finish.';
+  if (raw) {
+    const fmt = await tryApplyContactFormat(user, raw);
+    if (fmt) {
+      await sendTextMessage(user.phone_number, await localize(`${fmt.ackPart} ${reaskProjects}`, user, raw));
+      await logMessage(user.id, 'Projects-details step: applied contact format short-circuit', 'assistant');
+      return STATES.WEB_COLLECT_PROJECTS_DETAILS;
+    }
+  }
+  if (raw && raw.length >= 3) {
+    const sc = await tryApplySideChannel(user, 'projectsDetails', raw);
+    if (sc) {
+      await sendTextMessage(user.phone_number, await localize(`${sc.ackPart} ${reaskProjects}`, user, raw));
+      await logMessage(user.id, `Projects-details step: applied side-channel ${sc.side.kind}`, 'assistant');
+      return STATES.WEB_COLLECT_PROJECTS_DETAILS;
+    }
+  }
+
+  // Pure-LLM intent: done / skip / project. No regex.
+  const turnIntent = await classifyProjectsDetailsTurn(raw, user.id);
+
+  if (turnIntent === 'skip') {
+    const merged = { ...wd, projects, projectsDetailsDone: true, projectsFlowDone: true };
+    await updateUserMetadata(user.id, { websiteData: merged });
+    user.metadata = { ...(user.metadata || {}), websiteData: merged };
+    return smartAdvance(user, message, projects.length ? `Got ${projects.length} project(s), using placeholders for the rest.` : "No problem — I'll use placeholder project cards.");
+  }
+
+  if (turnIntent === 'done') {
+    if (projects.length === 0) {
+      const merged = { ...wd, projectsDetailsDone: true, projectsFlowDone: true, projects: [] };
+      await updateUserMetadata(user.id, { websiteData: merged });
+      user.metadata = { ...(user.metadata || {}), websiteData: merged };
+      return smartAdvance(user, message, "No problem — I'll use placeholder project cards.");
+    }
+    const merged = { ...wd, projects, projectsDetailsDone: true };
+    await updateUserMetadata(user.id, { websiteData: merged });
+    user.metadata = { ...(user.metadata || {}), websiteData: merged };
+    await sendTextMessage(user.phone_number, questionForState(STATES.WEB_COLLECT_PROJECTS_PHOTOS, merged));
+    return STATES.WEB_COLLECT_PROJECTS_PHOTOS;
+  }
+
+  // Parse as project content.
+  const parsed = await parseProjectText(raw, user.id);
+  if (!parsed.title) {
+    await sendTextMessage(
+      user.phone_number,
+      'I couldn\'t pick up a project title. Try again like *"BrandX rebrand 2024 — Lead Designer — behance.net/brandx"* — or reply *done* to stop.'
+    );
+    return STATES.WEB_COLLECT_PROJECTS_DETAILS;
+  }
+
+  const project = {
+    title: parsed.title,
+    description: parsed.description || '',
+    role: parsed.role || '',
+    year: parsed.year || '',
+    link: parsed.link || '',
+    tools: parsed.tools || [],
+    photoUrl: null,
+  };
+  projects.push(project);
+
+  const reachedMax = projects.length >= MAX_PROJECTS;
+  const merged = { ...wd, projects };
+  if (reachedMax) merged.projectsDetailsDone = true;
+  await updateUserMetadata(user.id, { websiteData: merged });
+  user.metadata = { ...(user.metadata || {}), websiteData: merged };
+  await logMessage(user.id, `Project ${projects.length} captured: ${project.title}`, 'assistant');
+
+  const bits = [project.title];
+  if (project.role) bits.push(project.role);
+  if (project.year) bits.push(project.year);
+  const ack = `Got it — *${bits.join(' / ')}*${project.link ? ' (link saved)' : ''}.`;
+
+  if (reachedMax) {
+    await sendTextMessage(
+      user.phone_number,
+      `${ack}\n\nMax 6 reached — moving to photos.\n\n${questionForState(STATES.WEB_COLLECT_PROJECTS_PHOTOS, merged)}`
+    );
+    return STATES.WEB_COLLECT_PROJECTS_PHOTOS;
+  }
+
+  await sendTextMessage(user.phone_number, `${ack}\n\nSend the next project, or reply *done* to move on.`);
+  return STATES.WEB_COLLECT_PROJECTS_DETAILS;
+}
+
+async function handleCollectProjectsPhotos(user, message) {
+  const raw = (message.text || '').trim();
+  const wd = { ...(user.metadata?.websiteData || {}) };
+  const projects = Array.isArray(wd.projects) ? [...wd.projects] : [];
+
+  const pending = wd.pendingProjectPhotoAssign;
+  const reaskPhotos = 'Send a project cover image as an image (JPG / PNG), or reply *done* / *skip* to use stock visuals.';
+
+  // Cross-field handling — only when not awaiting an assignment number, so
+  // bare "1" / "2" still routes through assignment parsing.
+  if (raw && pending == null && !message.mediaId) {
+    const fmt = await tryApplyContactFormat(user, raw);
+    if (fmt) {
+      await sendTextMessage(user.phone_number, await localize(`${fmt.ackPart} ${reaskPhotos}`, user, raw));
+      await logMessage(user.id, 'Projects-photos step: applied contact format short-circuit', 'assistant');
+      return STATES.WEB_COLLECT_PROJECTS_PHOTOS;
+    }
+    if (raw.length >= 3) {
+      const sc = await tryApplySideChannel(user, 'projectsPhotos', raw);
+      if (sc) {
+        await sendTextMessage(user.phone_number, await localize(`${sc.ackPart} ${reaskPhotos}`, user, raw));
+        await logMessage(user.id, `Projects-photos step: applied side-channel ${sc.side.kind}`, 'assistant');
+        return STATES.WEB_COLLECT_PROJECTS_PHOTOS;
+      }
+    }
+  }
+
+  // Pure-LLM skip detection — same pattern as listings-photos.
+  let isSkip = false;
+  if (raw && raw.length <= 80 && !message.mediaId) {
+    try {
+      isSkip = await classifyDelegation(
+        raw,
+        'Send a project cover image, or reply skip / done for stock photos.'
+      );
+    } catch (err) {
+      logger.warn(`[PROJECTS-PHOTOS] classifyDelegation threw: ${err.message}`);
+    }
+  }
+
+  // Awaiting photo assignment — extract listing index via the same LLM helper
+  // we use for real-estate listings (already handles ordinals + skip).
+  if (pending != null) {
+    const verdict = await classifyPhotoAssignTurn(raw, projects.length, user.id);
+    if (!verdict) {
+      await sendTextMessage(user.phone_number, `Please tell me which project this image is for — reply with a number ${projects.map((_, i) => i + 1).join(', ')} (or "first", "second", etc.), or *skip*.`);
+      return STATES.WEB_COLLECT_PROJECTS_PHOTOS;
+    }
+    if (verdict.action === 'discard') {
+      const merged = { ...wd, pendingProjectPhotoAssign: null, pendingProjectPhotoMediaId: null };
+      await updateUserMetadata(user.id, { websiteData: merged });
+      user.metadata = { ...(user.metadata || {}), websiteData: merged };
+      await sendTextMessage(user.phone_number, 'Skipped. Send another image or reply *done* to finish.');
+      return STATES.WEB_COLLECT_PROJECTS_PHOTOS;
+    }
+    const n = verdict.n;
+    try {
+      const { uploadListingPhoto } = require('../../website-gen/listingPhotoUploader');
+      const { downloadMedia } = require('../../messages/sender');
+      const mediaId = wd.pendingProjectPhotoMediaId;
+      if (!mediaId) throw new Error('no pending media id');
+      const { buffer, mimeType } = await downloadMedia(mediaId);
+      const url = await uploadListingPhoto(buffer, mimeType || 'image/jpeg');
+      projects[n - 1].photoUrl = url;
+      const merged = { ...wd, projects, pendingProjectPhotoAssign: null, pendingProjectPhotoMediaId: null };
+      await updateUserMetadata(user.id, { websiteData: merged });
+      user.metadata = { ...(user.metadata || {}), websiteData: merged };
+      await logMessage(user.id, `Project ${n} cover uploaded: ${url}`, 'assistant');
+      await sendTextMessage(user.phone_number, `Attached to *${projects[n - 1].title}*. Send another image or reply *done* to finish.`);
+      return STATES.WEB_COLLECT_PROJECTS_PHOTOS;
+    } catch (err) {
+      logger.error('[PORTFOLIO-PROJECT] photo upload failed:', err);
+      const merged = { ...wd, pendingProjectPhotoAssign: null, pendingProjectPhotoMediaId: null };
+      await updateUserMetadata(user.id, { websiteData: merged });
+      user.metadata = { ...(user.metadata || {}), websiteData: merged };
+      await sendTextMessage(user.phone_number, 'Upload failed — stock visual will be used for that one. Try another, or reply *done*.');
+      return STATES.WEB_COLLECT_PROJECTS_PHOTOS;
+    }
+  }
+
+  // Image arrived: assign-or-auto-attach.
+  if (message.mediaId && message.type === 'image') {
+    if (projects.length === 1) {
+      try {
+        const { uploadListingPhoto } = require('../../website-gen/listingPhotoUploader');
+        const { downloadMedia } = require('../../messages/sender');
+        const { buffer, mimeType } = await downloadMedia(message.mediaId);
+        const url = await uploadListingPhoto(buffer, mimeType || 'image/jpeg');
+        projects[0].photoUrl = url;
+        const merged = { ...wd, projects };
+        await updateUserMetadata(user.id, { websiteData: merged });
+        user.metadata = { ...(user.metadata || {}), websiteData: merged };
+        await sendTextMessage(user.phone_number, `Attached to *${projects[0].title}*. Send another image or reply *done* to finish.`);
+        return STATES.WEB_COLLECT_PROJECTS_PHOTOS;
+      } catch (err) {
+        logger.error('[PORTFOLIO-PROJECT] photo upload failed:', err);
+        await sendTextMessage(user.phone_number, 'Upload failed — stock visual will be used. Reply *done* to continue.');
+        return STATES.WEB_COLLECT_PROJECTS_PHOTOS;
+      }
+    }
+    const merged = { ...wd, pendingProjectPhotoAssign: 0, pendingProjectPhotoMediaId: message.mediaId };
+    await updateUserMetadata(user.id, { websiteData: merged });
+    user.metadata = { ...(user.metadata || {}), websiteData: merged };
+    await sendTextMessage(user.phone_number, questionForState(STATES.WEB_COLLECT_PROJECTS_PHOTOS, merged));
+    return STATES.WEB_COLLECT_PROJECTS_PHOTOS;
+  }
+
+  if (isSkip) {
+    const merged = { ...wd, projectsFlowDone: true, pendingProjectPhotoAssign: null, pendingProjectPhotoMediaId: null };
+    await updateUserMetadata(user.id, { websiteData: merged });
+    user.metadata = { ...(user.metadata || {}), websiteData: merged };
+    const withPhotos = projects.filter((p) => p.photoUrl).length;
+    const ack = withPhotos > 0
+      ? `Got ${withPhotos} cover${withPhotos === 1 ? '' : 's'} — stock visuals for the rest.`
+      : 'Using professional stock visuals for all projects.';
+    return smartAdvance(user, message, ack);
+  }
+
+  await sendTextMessage(
+    user.phone_number,
+    'Send a project cover image, or reply *done* / *skip* to use stock visuals.'
+  );
+  return STATES.WEB_COLLECT_PROJECTS_PHOTOS;
+}
+
 /**
  * Parse a free-text contact blob into { contactEmail, contactPhone, contactAddress }.
  * Handles both labeled input ("email: x, phone: y, address: z") and unlabeled input.
@@ -3377,6 +3961,14 @@ async function showSummaryPeek(user) {
   if (wd.weeklyHours) lines.push(`*Hours:* set`);
   if (Array.isArray(wd.salonServices) && wd.salonServices.length) lines.push(`*Priced services:* ${wd.salonServices.length}`);
   if (wd.instagramHandle) lines.push(`*Instagram:* @${wd.instagramHandle}`);
+  // Portfolio extras — bio + project count so freelancers see what they've
+  // shared. Renders for any flow that populated these fields, regardless
+  // of detected industry — keeps the peek honest about stored data.
+  if (wd.aboutText) lines.push(`*Bio:* ${String(wd.aboutText).slice(0, 120)}${wd.aboutText.length > 120 ? '…' : ''}`);
+  if (Array.isArray(wd.projects) && wd.projects.length) {
+    const withCovers = wd.projects.filter((p) => p.photoUrl).length;
+    lines.push(`*Projects:* ${wd.projects.length}${withCovers ? ` (${withCovers} with covers)` : ''}`);
+  }
   lines.push(`*Contact:* ${contactInfo}`);
 
   // localize() handles the English-override safety net internally by
@@ -3453,6 +4045,17 @@ async function showConfirmSummary(user, prefix = '') {
     lines.push(`*Booking:* ${parts.join(' · ')}`);
   }
   if (wd.instagramHandle) lines.push(`*Instagram:* @${wd.instagramHandle}`);
+
+  // Portfolio extras — bio + projects with cover-count. Same fields as
+  // showSummaryPeek so the user sees consistent state across mid-flow
+  // peek and final confirm.
+  if (wd.aboutText) lines.push(`*Bio:* ${String(wd.aboutText).slice(0, 120)}${wd.aboutText.length > 120 ? '…' : ''}`);
+  if (Array.isArray(wd.projects) && wd.projects.length) {
+    const withCovers = wd.projects.filter((p) => p.photoUrl).length;
+    lines.push(`*Projects:* ${wd.projects.length}${withCovers ? ` (${withCovers} with covers)` : ''}`);
+  } else if (require('../../website-gen/templates').isPortfolio(wd.industry) && wd.projectsAskAnswered) {
+    lines.push(`*Projects:* placeholder cards`);
+  }
 
   lines.push(`*Contact:* ${contactInfo}`);
   lines.push(``, `Does everything look good? Reply *yes* to build it, or tell me what you'd like to change.`);
@@ -4156,7 +4759,11 @@ async function generateWebsite(user) {
     });
 
     // 1. Generate content with LLM
-    const templateId = isSalonIndustry(websiteData.industry) ? 'salon' : 'business-starter';
+    const { isPortfolio: isPortfolioInd } = require('../../website-gen/templates');
+    let templateId;
+    if (isSalonIndustry(websiteData.industry)) templateId = 'salon';
+    else if (isPortfolioInd(websiteData.industry)) templateId = 'portfolio';
+    else templateId = 'business-starter';
     const siteId = freshUser.metadata?.currentSiteId;
     logger.info(`[WEBGEN] Step 2/5: Generating website content via LLM for "${websiteData.businessName}" (template=${templateId})`);
 

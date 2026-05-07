@@ -5,6 +5,7 @@
 
 const { generateHvacPages } = require('./hvac');
 const { generateRealEstatePages } = require('./real-estate');
+const { generatePortfolioPages } = require('./portfolio');
 
 // ── Trade detection ────────────────────────────────────────────────────────
 // The HVAC template is used for ALL home-services businesses that share its
@@ -134,8 +135,39 @@ function isRealEstate(industry) {
   return false;
 }
 
+// Portfolio audiences — anyone showcasing personal work for hire / discovery.
+// Designers, developers, photographers, writers, freelancers, artists, etc.
+// Keyword detection mirrors the HVAC / real-estate pattern. Word-bounded
+// secondary checks gate ambiguous singletons (e.g. "designer cakes" is a
+// bakery, not a portfolio).
+const PORTFOLIO_KEYWORDS = [
+  'portfolio',
+  'designer', 'graphic design', 'graphic designer',
+  'ux designer', 'ui designer', 'ux/ui', 'ui/ux', 'product designer',
+  'web designer', 'illustrator', 'illustration',
+  'developer', 'web developer', 'frontend developer', 'backend developer',
+  'full-stack developer', 'fullstack developer', 'mobile developer',
+  'software engineer', 'software developer', 'programmer',
+  'photographer', 'photography', 'videographer', 'filmmaker',
+  'freelance', 'freelancer',
+  'writer', 'copywriter', 'content writer', 'journalist',
+  'architect', 'interior designer', 'animator', 'motion designer',
+  'creator', 'creative',
+];
+
+function isPortfolio(industry) {
+  const s = String(industry || '').toLowerCase();
+  if (PORTFOLIO_KEYWORDS.some((k) => s.includes(k))) return true;
+  // Catch a few patterns not in the keyword list — "I am a designer" / "I do
+  // photography" / etc. — bounded to avoid false positives like "designer
+  // cakes" or "photography studio" (which is a salon-adjacent business).
+  if (/\b(?:i\s+am\s+a|i'?m\s+a|i\s+do)\s+(designer|developer|photographer|writer|illustrator|artist|architect)\b/i.test(s)) return true;
+  return false;
+}
+
 // Industries that need a city + service-areas collection step. HVAC needs it
 // for emergency dispatch; real estate needs it for neighborhood pages.
+// Portfolio audiences don't need geographic areas (work is global by default).
 function needsAreaCollection(industry) {
   return isHvac(industry) || isRealEstate(industry);
 }
@@ -143,7 +175,8 @@ function needsAreaCollection(industry) {
 function pickTemplate(industry) {
   if (isHvac(industry)) return { id: 'hvac', generateAllPages: generateHvacPages };
   if (isRealEstate(industry)) return { id: 'real-estate', generateAllPages: generateRealEstatePages };
+  if (isPortfolio(industry)) return { id: 'portfolio', generateAllPages: generatePortfolioPages };
   return null; // caller falls back to the existing generic generator
 }
 
-module.exports = { pickTemplate, isHvac, isRealEstate, needsAreaCollection, resolveTrade };
+module.exports = { pickTemplate, isHvac, isRealEstate, isPortfolio, needsAreaCollection, resolveTrade };

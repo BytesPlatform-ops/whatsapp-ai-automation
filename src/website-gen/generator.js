@@ -102,6 +102,11 @@ async function generateWebsiteContent(businessData, extras = {}) {
     // present, these override the LLM-generated featuredListings so the
     // site shows real properties instead of hallucinated ones.
     listings: userListings,
+    // Portfolio-specific pass-through. aboutText is collected at
+    // WEB_COLLECT_ABOUT (or auto-generated when the user skips); projects
+    // come from the iterative WEB_COLLECT_PROJECTS_DETAILS flow.
+    aboutText: userAboutText,
+    projects: userProjects,
     // Caller-supplied hero image override. Skips the Unsplash API call
     // entirely — useful for demo fixtures and rate-limit recovery.
     heroImage: heroImageOverride,
@@ -522,6 +527,11 @@ Generate compelling website copy for this business. Return ONLY valid JSON.${lan
     calendlyUrl: calendlyUrl || null,
     neighborhoodImages,
     agentPlaceholderImage,
+    // Portfolio pass-through (harmless for non-portfolio templates). The
+    // template reads `projects` directly to render its work-grid; if absent
+    // the template generates LLM-hallucinated placeholders.
+    projects: Array.isArray(userProjects) && userProjects.length ? userProjects : null,
+    portfolioAbout: userAboutText || null,
   };
 
   logger.info(`Generated website content for ${businessName}${heroImage ? ' (with Unsplash hero)' : ''}`);

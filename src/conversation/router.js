@@ -126,6 +126,10 @@ const STATE_HANDLERS = {
   [STATES.SALON_HOURS]: handleWebDev,
   [STATES.SALON_SERVICE_DURATIONS]: handleWebDev,
   [STATES.WEB_AWAITING_FORM]: handleWebDev,
+  [STATES.WEB_COLLECT_ABOUT]: handleWebDev,
+  [STATES.WEB_COLLECT_PROJECTS_ASK]: handleWebDev,
+  [STATES.WEB_COLLECT_PROJECTS_DETAILS]: handleWebDev,
+  [STATES.WEB_COLLECT_PROJECTS_PHOTOS]: handleWebDev,
   [STATES.WEB_DOMAIN_CHOICE]: handleWebDev,
   [STATES.WEB_DOMAIN_OWN_INPUT]: handleWebDev,
   [STATES.WEB_DOMAIN_OWN_REGISTRAR]: handleWebDev,
@@ -230,6 +234,11 @@ const COLLECTION_STATES = new Set([
   STATES.SALON_SERVICE_DURATIONS,
   // Services-form awaiting state (user filling out web form)
   STATES.WEB_AWAITING_FORM,
+  // Portfolio sub-flow collection states
+  STATES.WEB_COLLECT_ABOUT,
+  STATES.WEB_COLLECT_PROJECTS_ASK,
+  STATES.WEB_COLLECT_PROJECTS_DETAILS,
+  STATES.WEB_COLLECT_PROJECTS_PHOTOS,
   // SEO post-audit chat
   STATES.SEO_COLLECT_URL,
   STATES.SEO_FOLLOW_UP,
@@ -278,6 +287,10 @@ const STATE_QUESTION = {
   [STATES.SALON_BOOKING_TOOL]: 'Do you use a booking tool (like Fresha, Vagaro) or want one built in?',
   [STATES.SALON_HOURS]: 'What are your opening hours for each day of the week?',
   [STATES.SALON_SERVICE_DURATIONS]: 'How long does each service take, and what does it cost?',
+  [STATES.WEB_COLLECT_ABOUT]: 'Write a short bio for your portfolio hero, or skip to auto-generate.',
+  [STATES.WEB_COLLECT_PROJECTS_ASK]: 'Want to feature your projects, or skip and use placeholder cards?',
+  [STATES.WEB_COLLECT_PROJECTS_DETAILS]: 'Send a project (title, role, year, link), or say done.',
+  [STATES.WEB_COLLECT_PROJECTS_PHOTOS]: 'Send a project cover image, or say done / skip for stock visuals.',
   [STATES.SEO_COLLECT_URL]: 'Please send your website URL to analyze',
   [STATES.SEO_FOLLOW_UP]: "Any questions about the audit — or want help fixing what we found?",
   [STATES.APP_COLLECT_REQUIREMENTS]: 'Tell me about your app idea - what does it do and who is it for?',

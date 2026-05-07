@@ -1,0 +1,27 @@
+{
+  "name": "portfolio-about-skip-auto-generates-bio",
+  "description": "Portfolio user at WEB_COLLECT_ABOUT replies *skip* — bot must auto-generate a hero bio from name + industry + skills via LLM and persist it as websiteData.aboutText, then advance out of the about state. Earlier behavior: there was no about state at all; the portfolio audience had no hero bio.",
+  "channel": "whatsapp",
+  "seed": {
+    "state": "WEB_COLLECT_ABOUT",
+    "metadata": {
+      "websiteData": {
+        "businessName": "Sara Khan",
+        "industry": "UX Designer",
+        "services": ["Figma", "Prototyping", "User Research"]
+      },
+      "websiteDemoTriggered": true,
+      "emailSkipped": true
+    }
+  },
+  "turns": [
+    {
+      "user": "skip",
+      "expect": {
+        "metadata.websiteData.aboutText": "*exists*",
+        "state_not": "WEB_COLLECT_ABOUT",
+        "sent_count_gte": 1
+      }
+    }
+  ]
+}

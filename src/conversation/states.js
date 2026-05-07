@@ -34,6 +34,13 @@ const STATES = {
   // for salon services or real-estate listings and is waiting for the
   // submission. Form POST advances state past the loop in one shot.
   WEB_AWAITING_FORM: 'WEB_AWAITING_FORM',
+  // Portfolio-specific collection (designer / developer / photographer / writer
+  // / freelancer / artist — anyone showcasing work). About paragraph + 3-phase
+  // iterative project collection (parallel to real-estate listings).
+  WEB_COLLECT_ABOUT: 'WEB_COLLECT_ABOUT',
+  WEB_COLLECT_PROJECTS_ASK: 'WEB_COLLECT_PROJECTS_ASK',
+  WEB_COLLECT_PROJECTS_DETAILS: 'WEB_COLLECT_PROJECTS_DETAILS',
+  WEB_COLLECT_PROJECTS_PHOTOS: 'WEB_COLLECT_PROJECTS_PHOTOS',
   // Domain choice happens BEFORE preview now — combined Stripe link at generation.
   WEB_DOMAIN_CHOICE: 'WEB_DOMAIN_CHOICE',
   WEB_DOMAIN_OWN_INPUT: 'WEB_DOMAIN_OWN_INPUT',
