@@ -165,6 +165,78 @@ router.get('/api/conversations/:userId/decisions', async (req, res) => {
   }
 });
 
+// Translate every message in the conversation to English in one batch
+// LLM call. Used by the conversation modal's "🌐 Translate to English"
+// toggle so admins can read non-English convos (Haitian Creole, Spanish,
+// Roman Urdu, etc.) without copy-pasting into a translator. Returns
+// { translations: [{ id, en }] }. Already-English messages pass through
+// unchanged. The frontend caches per-session — repeat toggles don't
+// re-hit this endpoint.
+router.post('/api/conversations/:userId/translate', async (req, res) => {
+  try {
+    const data = await queries.getConversation(req.params.userId);
+    const messages = (data && data.messages) || [];
+
+    // Skip empty + system-divider messages (those are admin-only logs
+    // like "── session restarted ──" — not user-facing content).
+    const translatable = messages.filter(
+      (m) => m && (m.role === 'user' || m.role === 'assistant') && m.message_text && String(m.message_text).trim()
+    );
+    if (translatable.length === 0) {
+      return res.json({ translations: [] });
+    }
+
+    // Build a single LLM input — index every message by its DB id so the
+    // frontend can match the result back. Truncate per-message to a
+    // sane upper bound so a runaway-long row doesn't blow the context.
+    const llmInput = translatable
+      .map((m, i) => `[#${i}] ${m.role}: ${String(m.message_text).slice(0, 800).replace(/\n/g, ' ')}`)
+      .join('\n');
+
+    const prompt = `You translate WhatsApp chat messages between a customer and an AI assistant into English. The conversation may already be in English, in which case copy the original verbatim.
+
+Below is the full message list, one per line, prefixed with [#index]. Translate EACH message into clear, natural English. Keep emails / phone numbers / URLs / @handles unchanged. Preserve any *bold* / _italic_ markdown. If a line is already English, return it as-is.
+
+Return ONLY valid JSON in this exact shape — no prose, no markdown fences:
+{"translations":[{"i":0,"en":"..."},{"i":1,"en":"..."}, ...]}
+
+The message list:
+${llmInput}`;
+
+    const { generateResponse } = require('../llm/provider');
+    let parsed;
+    try {
+      const resp = await generateResponse(
+        prompt,
+        [{ role: 'user', content: 'Translate now.' }],
+        { operation: 'admin_translate_convo', timeoutMs: 30_000 }
+      );
+      const m = String(resp || '').match(/\{[\s\S]*\}/);
+      if (!m) throw new Error('LLM returned no JSON');
+      parsed = JSON.parse(m[0]);
+    } catch (err) {
+      logger.warn(`[ADMIN-TRANSLATE] LLM call failed: ${err.message}`);
+      return res.status(502).json({ error: 'Translation failed', detail: err.message });
+    }
+
+    const arr = Array.isArray(parsed.translations) ? parsed.translations : [];
+    const translations = arr
+      .map((t) => {
+        const idx = Number(t && t.i);
+        if (!Number.isInteger(idx) || idx < 0 || idx >= translatable.length) return null;
+        const en = typeof t.en === 'string' ? t.en : '';
+        if (!en) return null;
+        return { id: translatable[idx].id, en };
+      })
+      .filter(Boolean);
+
+    res.json({ translations });
+  } catch (err) {
+    logger.error('[ADMIN] Translate conversation error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.post('/api/conversations/:userId/reply', async (req, res) => {
   try {
     const { messageText } = req.body;

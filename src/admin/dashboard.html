@@ -129,9 +129,12 @@
             <h3 id="conv-modal-title" class="font-bold text-lg">Conversation</h3>
             <p id="conv-modal-subtitle" class="text-sm text-gray-500"></p>
           </div>
-          <button onclick="closeConvModal()" class="p-2 hover:bg-gray-100 rounded-lg">
-            <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
-          </button>
+          <div class="flex items-center gap-2">
+            <button id="translate-btn" onclick="toggleTranslate()" class="hidden px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-300 hover:bg-gray-50 transition" title="Translate to English">🌐 Translate</button>
+            <button onclick="closeConvModal()" class="p-2 hover:bg-gray-100 rounded-lg">
+              <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+            </button>
+          </div>
         </div>
         <div id="conv-modal-body" class="flex-1 overflow-y-auto p-4 space-y-3"></div>
         <div class="border-t p-3 space-y-2">
@@ -715,8 +718,11 @@ var currentConvUserId = null;
 var currentConvPhone = null;
 var convPollInterval = null;
 var lastMsgCount = 0;
+var lastConvMessages = []; // cached messages for the open modal — used to re-render on translate toggle
+// Per-user translation cache. Key: userId. Value: { byId: { msgId: 'translated text' }, on: bool }
+var translationsByConv = {};
 
-function renderMessageContent(m) {
+function renderMessageContent(m, useTranslated) {
   var html = '';
   if (m.media_data && m.media_mime) {
     if (m.media_mime.indexOf('image') === 0) {
@@ -727,8 +733,19 @@ function renderMessageContent(m) {
       html += '<video controls class="rounded-lg max-w-full max-h-64 mb-1.5"><source src="' + m.media_data + '" type="' + m.media_mime + '"></video>';
     }
   }
-  if (m.message_text) {
-    html += '<p class="whitespace-pre-wrap">' + esc(m.message_text) + '</p>';
+  // When translation toggle is on AND we have a translation for this
+  // message id, render the translated text instead. The original is
+  // still stored in m.message_text — we don't mutate it, just swap
+  // what we display.
+  var bodyText = m.message_text || '';
+  if (useTranslated) {
+    var cache = translationsByConv[currentConvUserId];
+    if (cache && cache.byId && cache.byId[m.id]) {
+      bodyText = cache.byId[m.id];
+    }
+  }
+  if (bodyText) {
+    html += '<p class="whitespace-pre-wrap">' + esc(bodyText) + '</p>';
   }
   return html;
 }
@@ -798,6 +815,8 @@ function openConversation(userId, phone, name) {
       '<p class="text-gray-500">Calculating LLM cost...</p>' +
     '</div>';
 
+    var translateState = translationsByConv[userId] || {};
+    var useTranslated = !!translateState.on;
     msgs.forEach(function(m) {
       if (m.role === 'system') {
         // /reset sentinels and other system-role rows render as a
@@ -813,7 +832,7 @@ function openConversation(userId, phone, name) {
       }
       var isUser = m.role === 'user';
       html += '<div class="max-w-[85%] rounded-2xl px-4 py-2.5 text-sm ' + (isUser ? 'chat-user' : 'chat-bot') + '">' +
-        renderMessageContent(m) +
+        renderMessageContent(m, useTranslated) +
         '<p class="text-[10px] text-gray-400 mt-1">' + fmtDate(m.created_at) + '</p>' +
       '</div>';
     });
@@ -822,6 +841,15 @@ function openConversation(userId, phone, name) {
     document.getElementById('conv-modal-body').innerHTML = html;
     document.getElementById('conv-modal-body').scrollTop = document.getElementById('conv-modal-body').scrollHeight;
     lastMsgCount = msgs.length;
+    lastConvMessages = msgs;
+    // Show the translate toggle now that we have messages. Reflect cached
+    // state — if the user already toggled translation on for this convo
+    // earlier in the session, the button shows the active style.
+    var tBtn = document.getElementById('translate-btn');
+    if (tBtn) {
+      tBtn.classList.toggle('hidden', !msgs.length);
+      updateTranslateButtonState();
+    }
 
     // Start polling for new messages every 5s
     if (convPollInterval) clearInterval(convPollInterval);
@@ -987,7 +1015,10 @@ function pollConversation() {
   api('conversations/' + currentConvUserId).then(function(data) {
     var msgs = data.messages;
     if (msgs.length <= lastMsgCount) return;
-    // New messages — append only the new ones (slice from the end since msgs are oldest-first)
+    // New messages — append only the new ones (slice from the end since msgs are oldest-first).
+    // Note: newly-arrived messages are NOT yet translated. They render in
+    // their original language even if the toggle is on; the user can hit
+    // the toggle off-then-on to refresh the cache when they want.
     var body = document.getElementById('conv-modal-body');
     var newMsgs = msgs.slice(lastMsgCount);
     newMsgs.forEach(function(m) {
@@ -1004,13 +1035,133 @@ function pollConversation() {
       var isUser = m.role === 'user';
       var div = document.createElement('div');
       div.className = 'max-w-[85%] rounded-2xl px-4 py-2.5 text-sm ' + (isUser ? 'chat-user' : 'chat-bot');
-      div.innerHTML = renderMessageContent(m) +
+      div.innerHTML = renderMessageContent(m, false) +
         '<p class="text-[10px] text-gray-400 mt-1">' + fmtDate(m.created_at) + '</p>';
       body.appendChild(div);
     });
     body.scrollTop = body.scrollHeight;
     lastMsgCount = msgs.length;
+    lastConvMessages = msgs;
   }).catch(function() {});
+}
+
+// Re-render the conversation modal body using cached messages, applying
+// the current translation toggle state. Used by toggleTranslate so we
+// don't re-fetch from the server.
+function rerenderConversationBody() {
+  var body = document.getElementById('conv-modal-body');
+  if (!body || !lastConvMessages || !lastConvMessages.length) return;
+  var translateState = translationsByConv[currentConvUserId] || {};
+  var useTranslated = !!translateState.on;
+  var html = '';
+  // Preserve the banner / state-info / cost-panel divs already at the top
+  // of the modal body. We re-render only the message bubbles section.
+  // Since the original openConversation builds banner+messages in one
+  // pass, the simplest reliable approach is to walk the body's children
+  // and only swap the message bubbles. We'll just rebuild messages
+  // section by removing existing bubbles and appending fresh ones.
+  // Find the index after the cost panel — keep everything up to and
+  // including that node, drop the rest, then append fresh message DOM.
+  var costPanel = document.getElementById('conv-llm-cost');
+  if (costPanel && costPanel.parentNode === body) {
+    // Remove all siblings AFTER the cost panel.
+    while (costPanel.nextSibling) body.removeChild(costPanel.nextSibling);
+  } else {
+    // Fallback: if we can't find the panel anchor, full re-render is
+    // safer than risking duplicated bubbles.
+    body.innerHTML = '';
+  }
+  lastConvMessages.forEach(function(m) {
+    if (m.role === 'system') {
+      var sysDiv = document.createElement('div');
+      sysDiv.className = 'flex items-center gap-2 my-3 text-[11px] text-gray-400 uppercase tracking-wider';
+      sysDiv.innerHTML =
+        '<div class="flex-1 h-px bg-gray-200"></div>' +
+        '<span>' + esc(m.message_text || 'system') + '</span>' +
+        '<div class="flex-1 h-px bg-gray-200"></div>';
+      body.appendChild(sysDiv);
+      return;
+    }
+    var isUser = m.role === 'user';
+    var div = document.createElement('div');
+    div.className = 'max-w-[85%] rounded-2xl px-4 py-2.5 text-sm ' + (isUser ? 'chat-user' : 'chat-bot');
+    div.innerHTML = renderMessageContent(m, useTranslated) +
+      '<p class="text-[10px] text-gray-400 mt-1">' + fmtDate(m.created_at) + '</p>';
+    body.appendChild(div);
+  });
+  // Re-attach classifier traces (stored in a cache by loadClassifierTraces) —
+  // if you've already loaded them, calling loadClassifierTraces again
+  // re-uses the cached result and reattaches the trace toggles cleanly.
+  loadClassifierTraces(currentConvUserId, lastConvMessages);
+}
+
+function updateTranslateButtonState() {
+  var btn = document.getElementById('translate-btn');
+  if (!btn) return;
+  var translateState = translationsByConv[currentConvUserId] || {};
+  if (translateState.loading) {
+    btn.textContent = '🌐 Translating…';
+    btn.disabled = true;
+    btn.classList.remove('bg-indigo-600', 'text-white', 'border-indigo-600');
+    btn.classList.add('opacity-60');
+    return;
+  }
+  btn.disabled = false;
+  btn.classList.remove('opacity-60');
+  if (translateState.on) {
+    btn.textContent = '🌐 Show Original';
+    btn.classList.add('bg-indigo-600', 'text-white', 'border-indigo-600');
+    btn.classList.remove('hover:bg-gray-50');
+  } else {
+    btn.textContent = '🌐 Translate';
+    btn.classList.remove('bg-indigo-600', 'text-white', 'border-indigo-600');
+    btn.classList.add('hover:bg-gray-50');
+  }
+}
+
+// Toggle: original ⇄ English. First toggle-on per-convo fetches from the
+// server; subsequent toggles use the in-memory cache and are instant.
+function toggleTranslate() {
+  if (!currentConvUserId) return;
+  var state = translationsByConv[currentConvUserId];
+  // Already-loaded → instant flip
+  if (state && state.byId) {
+    state.on = !state.on;
+    translationsByConv[currentConvUserId] = state;
+    updateTranslateButtonState();
+    rerenderConversationBody();
+    return;
+  }
+  // First-time fetch
+  translationsByConv[currentConvUserId] = { on: false, byId: null, loading: true };
+  updateTranslateButtonState();
+  var userId = currentConvUserId;
+  fetch('/admin/api/conversations/' + userId + '/translate', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+  }).then(function(r) {
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    return r.json();
+  }).then(function(data) {
+    var byId = {};
+    (data.translations || []).forEach(function(t) {
+      if (t && t.id) byId[t.id] = t.en;
+    });
+    // Only update if the user is still looking at the same convo. If they
+    // closed the modal mid-fetch, drop the result silently.
+    if (currentConvUserId !== userId) {
+      // Still cache it for if they reopen the same convo.
+      translationsByConv[userId] = { on: false, byId: byId, loading: false };
+      return;
+    }
+    translationsByConv[userId] = { on: true, byId: byId, loading: false };
+    updateTranslateButtonState();
+    rerenderConversationBody();
+  }).catch(function(err) {
+    if (translationsByConv[userId]) translationsByConv[userId].loading = false;
+    if (currentConvUserId === userId) updateTranslateButtonState();
+    alert('Translation failed: ' + (err && err.message ? err.message : 'unknown error'));
+  });
 }
 
 function closeConvModal() {
@@ -1020,6 +1171,10 @@ function closeConvModal() {
   modal.classList.remove('flex');
   currentConvUserId = null;
   currentConvPhone = null;
+  lastConvMessages = [];
+  // Hide translate button so it doesn't flash before the next modal opens.
+  var tBtn = document.getElementById('translate-btn');
+  if (tBtn) tBtn.classList.add('hidden');
 }
 
 function sendAdminReply(e) {
