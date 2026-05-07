@@ -1,0 +1,37 @@
+{
+  "name": "address-volunteered-at-logo-step-saved-not-lost",
+  "description": "User at WEB_COLLECT_LOGO types their address ('Address zamzama road karachi') instead of uploading a logo or replying skip. Bot must side-channel the address into contactAddress AND stay at WEB_COLLECT_LOGO to keep asking for the logo. Earlier behavior: side-channel LLM returned unclear, the bot replied 'I didn't catch an image', and the address was lost — even though the user explicitly prefixed it with the word 'Address'. Strengthened the side-channel prompt to be more generous on contact_update detection (explicit label patterns + street/road/sector keyword + place name = address).",
+  "channel": "whatsapp",
+  "seed": {
+    "state": "WEB_COLLECT_LOGO",
+    "metadata": {
+      "websiteData": {
+        "businessName": "Umair Salon",
+        "industry": "Salon",
+        "primaryCity": "Karachi",
+        "serviceAreas": ["Clifton"],
+        "services": ["Manicure", "Pedicure", "Hair Cut"],
+        "contactEmail": "umair@example.com",
+        "contactPhone": "03353279708",
+        "bookingMode": "native"
+      },
+      "websiteDemoTriggered": true,
+      "emailSkipped": true,
+      "contactSkipped": true,
+      "currentSiteId": "fake-site-address-at-logo-test"
+    }
+  },
+  "turns": [
+    {
+      "user": "Address zamzama road karachi",
+      "expect": {
+        "metadata.websiteData.contactAddress": "*exists*",
+        "state": "WEB_COLLECT_LOGO",
+        "reply_not_contains": [
+          "I didn't catch an image"
+        ],
+        "sent_count_gte": 1
+      }
+    }
+  ]
+}

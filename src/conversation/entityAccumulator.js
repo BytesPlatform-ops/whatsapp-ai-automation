@@ -129,7 +129,11 @@ Return JSON like {"industry":"HVAC","primaryCity":"Austin"} or {} if nothing fou
           const cleaned = v
             .map((x) => (typeof x === 'string' ? x.trim() : ''))
             .filter((x) => x && x.length < 80);
-          if (cleaned.length) out[k] = cleaned;
+          if (cleaned.length) {
+            out[k] = k === 'services'
+              ? cleaned.map((x) => normalizeBusinessName(x))
+              : cleaned;
+          }
         }
       }
       // Post-filter: if the LLM returned a "services" list whose only
@@ -317,7 +321,8 @@ Return ONLY a JSON array like ["Service 1", "Service 2"] or []. No commentary.`;
     if (!Array.isArray(parsed)) return [];
     return parsed
       .map((s) => String(s).trim().replace(/^["']|["']$/g, ''))
-      .filter((s) => s && s.length < 80);
+      .filter((s) => s && s.length < 80)
+      .map((s) => normalizeBusinessName(s));
   } catch (err) {
     logger.warn(`[ENTITY-ACC] extractServices failed: ${err.message}`);
     return null;

@@ -1,0 +1,40 @@
+{
+  "name": "confirm-add-service-appends-not-replaces",
+  "description": "DATA-CORRUPTION regression. At WEB_CONFIRM with services=[Facials, Manicure, Pedicure, Haircuts, Massage], user says 'Add hair transformation'. Bot must APPEND 'Hair Transformation' to the existing list — NOT replace the whole list with just that one service. Earlier behavior: detectFieldEditsLLM emitted only field+value (no op), mutateWdForField did blind replace, all 5 prior services were wiped. Real tester from May 7 — bot reply was '✅ Services → *hair transformation*' and summary became 'Services: hair transformation' alone. Now LLM emits op=add and applyListOpLocal preserves the rest.",
+  "channel": "whatsapp",
+  "seed": {
+    "state": "WEB_CONFIRM",
+    "metadata": {
+      "websiteData": {
+        "businessName": "Ansh Barber",
+        "industry": "Barber",
+        "services": ["Facials", "Manicure", "Pedicure", "Haircuts", "Massage"],
+        "contactEmail": "bytes@bytes.com",
+        "bookingMode": "native",
+        "weeklyHours": {
+          "mon": [{"open": "09:00", "close": "20:00"}],
+          "tue": [{"open": "09:00", "close": "20:00"}],
+          "wed": [{"open": "09:00", "close": "20:00"}],
+          "thu": [{"open": "09:00", "close": "20:00"}],
+          "fri": [{"open": "09:00", "close": "20:00"}],
+          "sat": [{"open": "09:00", "close": "20:00"}],
+          "sun": []
+        }
+      },
+      "websiteDemoTriggered": true,
+      "emailSkipped": true,
+      "contactSkipped": true,
+      "currentSiteId": "fake-site-add-service-test"
+    }
+  },
+  "turns": [
+    {
+      "user": "Add hair transformation",
+      "expect": {
+        "metadata.websiteData.services": ["Facials", "Manicure", "Pedicure", "Haircuts", "Massage", "Hair Transformation"],
+        "state": "WEB_CONFIRM",
+        "sent_count_gte": 1
+      }
+    }
+  ]
+}

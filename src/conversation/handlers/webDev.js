@@ -61,8 +61,9 @@ async function tryApplySideChannel(user, currentField, userText) {
 
   if (side.kind === 'service_add' && Array.isArray(side.services) && side.services.length > 0) {
     const existing = Array.isArray(before.services) ? before.services : [];
-    patch = { ...before, services: [...existing, ...side.services] };
-    ackPart = `Got it — added *${side.services.join(', ')}* to your services.`;
+    const normalizedAdds = side.services.map((s) => normalizeBusinessName(s));
+    patch = { ...before, services: [...existing, ...normalizedAdds] };
+    ackPart = `Got it — added *${normalizedAdds.join(', ')}* to your services.`;
   } else if (side.kind === 'name_change' && side.value) {
     const normalized = normalizeBusinessName(side.value);
     patch = { ...before, businessName: normalized };
@@ -146,22 +147,45 @@ async function tryApplyContactFormat(user, text) {
 // state machine + pings the user proactively. See src/services-form/.
 // ═══════════════════════════════════════════════════════════════════════════
 
+function getFormBaseUrl() {
+  // Match the convention used elsewhere (lead routes, payments, salon
+  // templates): PUBLIC_API_BASE_URL is the canonical override, with
+  // env.chatbot.baseUrl (CHATBOT_BASE_URL) as the fallback that's already
+  // configured in production deploys.
+  const { env } = require('../../config/env');
+  const base = process.env.PUBLIC_API_BASE_URL || env.chatbot?.baseUrl || '';
+  return String(base).replace(/\/$/, '');
+}
+
 function buildFormUrl(token) {
-  const base = (process.env.PUBLIC_BASE_URL || process.env.BASE_URL || '').replace(/\/$/, '');
+  const base = getFormBaseUrl();
   return base ? `${base}/services-form/${token}` : `/services-form/${token}`;
 }
 
 async function offerServicesForm(user, kind) {
   const wd = { ...(user.metadata?.websiteData || {}) };
+  const fallbackState = kind === 'salon'
+    ? STATES.WEB_COLLECT_SERVICES
+    : STATES.WEB_COLLECT_LISTINGS_ASK;
+
+  // No public base URL configured: a relative link won't open from
+  // WhatsApp/Messenger. Skip the offer and ask the bare chat question
+  // so the conversation isn't blocked behind a broken link.
+  if (!getFormBaseUrl()) {
+    logger.warn('[WEBDEV-FORM] PUBLIC_BASE_URL not set — skipping form offer, falling back to chat');
+    await sendTextMessage(
+      user.phone_number,
+      await localize(questionForState(fallbackState, wd), user)
+    );
+    return fallbackState;
+  }
+
   let token;
   try {
     const row = await createServiceFormToken(user.id, kind);
     token = row.token;
   } catch (err) {
     logger.warn(`[WEBDEV-FORM] token create failed: ${err.message} — falling back to chat`);
-    const fallbackState = kind === 'salon'
-      ? STATES.WEB_COLLECT_SERVICES
-      : STATES.WEB_COLLECT_LISTINGS_ASK;
     await sendTextMessage(
       user.phone_number,
       await localize(questionForState(fallbackState, wd), user)
@@ -1307,7 +1331,8 @@ async function handleCollectServices(user, message) {
     services = servicesText
       .split(/\s*,\s*|\s+(?:and|&)\s+/i)
       .map((s) => s.trim())
-      .filter(Boolean);
+      .filter(Boolean)
+      .map((s) => normalizeBusinessName(s));
   }
 
   // Empty services result is ambiguous: it could be a genuine skip
@@ -1356,6 +1381,28 @@ async function handleCollectAgentProfile(user, message) {
   const industry = wd.industry || '';
   const colors = getColorsForIndustry(industry);
 
+  // Cross-field handling. A bare phone / email / address would otherwise
+  // get eaten by the agent-profile extractor (returning empty profile +
+  // advancing). Same applies to name / industry / service corrections.
+  // Same pattern as LOGO + salon states.
+  const reaskAgent = 'Now, what is your brokerage, years in real estate, and any designations (CRS, ABR, etc.)? Or reply *skip* if you\'d rather not say.';
+  if (raw) {
+    const fmt = await tryApplyContactFormat(user, raw);
+    if (fmt) {
+      await sendTextMessage(user.phone_number, await localize(`${fmt.ackPart} ${reaskAgent}`, user, raw));
+      await logMessage(user.id, 'Agent-profile step: applied contact format short-circuit', 'assistant');
+      return STATES.WEB_COLLECT_AGENT_PROFILE;
+    }
+  }
+  if (raw && raw.length >= 3) {
+    const sc = await tryApplySideChannel(user, 'agentProfile', raw);
+    if (sc) {
+      await sendTextMessage(user.phone_number, await localize(`${sc.ackPart} ${reaskAgent}`, user, raw));
+      await logMessage(user.id, `Agent-profile step: applied side-channel ${sc.side.kind}`, 'assistant');
+      return STATES.WEB_COLLECT_AGENT_PROFILE;
+    }
+  }
+
   // Fast regex + LLM fallback covers both the short "skip / idk" phrasings
   // and natural prose like "i have no idea about this" / "just use whatever
   // sounds right" that the regex can't enumerate.
@@ -1374,48 +1421,46 @@ async function handleCollectAgentProfile(user, message) {
     return smartAdvance(user, message, "No problem, we'll go with solo / no designations. You can add details from the summary later.");
   }
 
-  // Regex pre-pass for years (common patterns: "10 years", "10+ years", "a decade").
+  // Regex pre-pass for years — pure FORMAT shape ("10 years", "10+ years"),
+  // not intent. The keyword "decade" is left to the LLM extractor below.
   let yearsExperience = null;
   const yrsMatch = raw.match(/(\d{1,2})\s*\+?\s*(?:years?|yrs?|y\b)/i);
   if (yrsMatch) {
     const n = parseInt(yrsMatch[1], 10);
     if (n > 0 && n < 80) yearsExperience = n;
-  } else if (/\bdecade\b/i.test(raw)) {
-    yearsExperience = 10;
   }
 
-  // Regex pre-pass for well-known designation tokens.
+  // Regex pre-pass for well-known designation tokens — FORMAT (curated
+  // acronym list, same pattern as the HVAC/AC/LLC acronym set in
+  // normalizeBusinessName). The "no designations" intent is left to the
+  // LLM extractor; the regex only catches the format-shape acronyms.
   const DESIGNATION_RX = /\b(CRS|ABR|SRS|GRI|SRES|RENE|e-?Pro|CIPS|SFR|MRP|ABRM|CCIM|AHWD|CPM|CRB)\b/gi;
   let designations = [];
   const designMatches = raw.match(DESIGNATION_RX);
   if (designMatches) {
     designations = Array.from(new Set(designMatches.map((d) => d.toUpperCase().replace('-', ''))));
-  } else if (/\b(no|none)\s+(?:designations?|creds?|certifications?)?\b/i.test(raw) || /^none\b/i.test(raw)) {
-    designations = [];
   }
 
-  // Brokerage: solo vs named. Look for "solo", "independent", "by myself", or a
-  // quoted/clear name. Fallback: LLM extraction.
+  // brokerageName: pure LLM extraction. The prompt below knows that
+  // solo/independent/by-myself/freelance/self-employed all map to null,
+  // in any language. No keyword regex.
   let brokerageName = null;
-  if (/\b(solo|independent|by myself|on my own|no brokerage|freelance|self[- ]employed)\b/i.test(raw)) {
-    brokerageName = null; // explicit solo — keep null
-  }
 
-  // LLM extraction for anything missing (especially brokerageName which is hard
-  // to pattern-match reliably).
-  const needsLlm = brokerageName === null && !/\b(solo|independent)\b/i.test(raw);
-  if (needsLlm || yearsExperience == null || (!designations.length && !/\bnone\b/i.test(raw))) {
+  // Always run the LLM pass — it fills in anything the format regex
+  // didn't catch (decade → 10 years, "no creds" → designations=[], etc.)
+  // AND is the sole source for brokerageName.
+  if (raw && raw.length > 0) {
     try {
       const extractPrompt = `You are a structured-data extractor for a real-estate agent onboarding flow. Read the agent's message and return ONLY JSON with these fields:
 
 {
-  "brokerageName": "<the brokerage/firm name they work at, or null if they said solo/independent, or null if not mentioned>",
-  "yearsExperience": <integer if clearly stated, otherwise null>,
-  "designations": ["CRS", "ABR", ...] (common ones: CRS, ABR, SRS, GRI, SRES, RENE, ePro, CIPS, SFR, MRP, ABRM, CCIM). Return [] if they said none. Omit the field if not mentioned at all.
+  "brokerageName": "<the brokerage/firm name they work at, or null if they said solo/independent/by-myself/freelance/self-employed/no brokerage, or null if not mentioned>",
+  "yearsExperience": <integer if clearly stated — accept any phrasing in any language: "10 years", "a decade" (=10), "two decades" (=20), "half a decade" (=5), "since 2015", "saal" + number, etc. Otherwise null>,
+  "designations": ["CRS", "ABR", ...] (common ones: CRS, ABR, SRS, GRI, SRES, RENE, ePro, CIPS, SFR, MRP, ABRM, CCIM). Return [] if they said none / no designations / no creds. Omit the field if designations weren't mentioned at all.
 }
 
 Rules:
-- brokerageName: real firm names only. "solo", "independent", "by myself" → null.
+- brokerageName: real firm names only. ANY phrasing of solo/independent/freelance/self-employed/no-brokerage/by-myself in ANY language maps to null. Examples that ALL → null: "solo", "independent", "by myself", "on my own", "freelance", "self-employed", "no brokerage", "akela", "khud", "yo solo", "tout seul", "indépendant", "وحدي".
 - Never invent data. Omit unknown fields.
 - Keep brokerageName under 60 chars.`;
       const response = await generateResponse(
@@ -1466,7 +1511,6 @@ Rules:
 
   const ackBits = [];
   if (brokerageName) ackBits.push(`at *${brokerageName}*`);
-  else if (/\b(solo|independent)\b/i.test(raw)) ackBits.push('*solo agent*');
   if (yearsExperience != null) ackBits.push(`*${yearsExperience} years* in real estate`);
   if (designations.length) ackBits.push(`designations: *${designations.join(', ')}*`);
   const ackPrefix = ackBits.length ? `Got it — ${ackBits.join(', ')}.` : 'Thanks for the details.';
@@ -1606,11 +1650,9 @@ async function parseListingText(raw, user) {
     const n = parseInt(sqftMatch[1].replace(/,/g, ''), 10);
     if (n >= 200 && n <= 20000) out.sqft = n;
   }
-  // Status
-  if (/\bpending\b/i.test(text)) out.status = 'Pending';
-  else if (/\b(just\s*listed|new\s*listing)\b/i.test(text)) out.status = 'Just Listed';
-  else if (/\bsold\b/i.test(text)) out.status = 'Sold';
-  else if (/\bfor\s*sale\b/i.test(text)) out.status = 'For Sale';
+  // Status is INTENT (pending vs just-listed vs sold vs for-sale) — left
+  // entirely to the LLM extraction below. Avoids brittle keyword regex
+  // that misses non-English phrasings ("foroshi" / "venta" / "à vendre").
 
   // LLM pass for address (and anything missing). Always run — regex can't
   // reliably find street addresses.
@@ -1681,22 +1723,19 @@ Return like {"address":"45 Elm St","price":525000,"currency":"USD","beds":4,"bat
 async function classifyYesSkip(text, userId) {
   const t = String(text || '').trim();
   if (!t) return 'unclear';
-  // Long free-text almost always carries real content (a listing, a
-  // question, a long refusal). Treat as unclear so the handler either
-  // re-asks or the structured-listing fast-path picks it up first.
-  if (t.length > 80) return 'unclear';
 
   try {
-    const prompt = `A chatbot just asked the user: "Do you want to send your property listings now, or skip and use placeholder listings?"
+    const prompt = `A chatbot just asked a real-estate agent: "Do you want to send your property listings now, or skip and use placeholder listings?"
 
 Classify the user's reply into ONE of:
-- "yes": user wants to send / share / add their listings (in any language — "yes", "yeah add them", "haan bhai bhejta hoon", "sí, los tengo", "oui je veux", "نعم, أريد").
-- "skip": user wants to skip / use placeholders / doesn't have listings / not now (in any language — "skip", "skip kar do", "no", "nahi", "later", "no thanks", "dont have any", "saltar", "non merci", "لا, تخطى").
-- "unclear": anything else — a question, garbage text, "?", an off-topic reply, or anything ambiguous.
+- "yes": user wants to send / share / add their listings without yet pasting any details — short consent like "yes", "yeah add them", "haan bhai bhejta hoon", "sí, los tengo", "oui je veux", "نعم, أريد", "let me send them".
+- "skip": user wants to skip / use placeholders / doesn't have listings / not now (any language: "skip", "skip kar do", "no", "nahi", "later", "no thanks", "dont have any", "saltar", "non merci", "لا, تخطى").
+- "listing": the user IS already providing actual listing content (address, price, beds/baths, sqft, neighborhood, property type) without explicit yes/skip framing. Examples: "45 Elm St $525k 4bed 3bath", "3 bedroom flat Clifton 50 lakhs", "kothi defence phase 5 12 crore", "casa en zona norte $200k". A long message containing property details, even mixed with prose, → listing.
+- "unclear": anything else — questions back, off-topic chatter, gibberish, "?".
 
 The user said: "${t}"
 
-Respond with ONLY one word: yes, skip, or unclear.`;
+Respond with ONLY one word: yes, skip, listing, or unclear.`;
 
     const response = await generateResponse(
       prompt,
@@ -1704,8 +1743,7 @@ Respond with ONLY one word: yes, skip, or unclear.`;
       { userId, operation: 'yes_skip_classify' }
     );
     const clean = String(response || '').trim().toLowerCase().replace(/[^a-z]/g, '');
-    if (clean === 'yes') return 'yes';
-    if (clean === 'skip') return 'skip';
+    if (clean === 'yes' || clean === 'skip' || clean === 'listing') return clean;
     return 'unclear';
   } catch (err) {
     logger.warn(`[YES_SKIP] LLM classify failed: ${err.message}`);
@@ -1841,22 +1879,35 @@ Available fields: businessName, industry, services, areas, email, phone, address
 Current values:
 ${present.length ? present.map((f) => '- ' + f).join('\n') : '(none yet)'}
 
-Rules:
-1. Extract ONLY when the user is clearly asking to change / update / set / write / replace a field.
-2. Understand typos and casual language — "write services too nails, makeup, hairs" → field=services, value="nails, makeup, hairs" (the "too" is a typo for "to"; do NOT include "o" or "too" in the value).
+Each edit object has THREE parts:
+- field: one of the available fields
+- op: "add" | "remove" | "replace" — for list fields ONLY (services, areas). Scalar fields (businessName, industry, email, phone, address, contact) always use "replace" — omit op for them.
+- value: the new value (string)
+
+Op rules for list fields:
+- "Add X" / "include X too" / "we also do Y" / "X bhi rakho" → op=add, value="X"
+- "Remove X" / "drop X" / "take X out" / "X hata do" / "no more X" → op=remove, value="X"
+- "Change services to X, Y, Z" / "set services as X, Y" / "services to X" → op=replace, value="X, Y, Z"
+- When unsure between add and replace on a list field, prefer add for single-item ("hair transformation") and replace for multi-item ("nails, makeup, hairs").
+
+General rules:
+1. Extract ONLY when the user is clearly asking to change / update / set / write / add / remove a field.
+2. Understand typos and casual language — "write services too nails, makeup, hairs" → field=services, op=replace, value="nails, makeup, hairs" (the "too" is a typo for "to"; do NOT include "o" or "too" in the value).
 3. Multi-field edits are supported: a single message can contain multiple edits — return ALL of them.
-4. Distinguish "services" (what the business DOES — e.g. haircuts, plumbing) from "areas" (WHERE it operates — neighborhoods, cities). "Service areas" = areas, NOT services.
-5. For lists (services / areas), keep the comma/and-separated list AS-IS as the value (e.g. "nails, makeup, hairs"). Do NOT trim items.
+4. Distinguish "services" (what the business DOES) from "areas" (WHERE it operates). "Service areas" = areas.
+5. For list values, keep the comma/and-separated list AS-IS as the value. Do NOT trim items.
 6. Preserve emails / phone numbers / URLs / addresses exactly as written.
-7. Understand any language: English, Roman Urdu, Urdu, Hindi, Spanish, French, Arabic, etc. ("address ko Gulshan Iqbal kr do", "cambia el email a foo@bar.com").
+7. Understand any language: English, Roman Urdu, Urdu, Hindi, Spanish, French, Arabic, etc. ("address ko Gulshan Iqbal kr do", "cambia el email a foo@bar.com", "haircut ko services may add krdo").
 8. If the user is NOT trying to change anything (saying "yes", "looks good", "cancel", "build it", a question, off-topic), return {"edits": []}.
 
 User said: "${t}"
 
 Return JSON ONLY. No prose. Examples:
 {"edits": [{"field": "address", "value": "Gulshan Iqbal, Karachi"}]}
-{"edits": [{"field": "businessName", "value": "MyCo"}, {"field": "services", "value": "design, SEO"}]}
-{"edits": [{"field": "services", "value": "nails, makeup, hairs"}]}
+{"edits": [{"field": "businessName", "value": "MyCo"}, {"field": "services", "op": "replace", "value": "design, SEO"}]}
+{"edits": [{"field": "services", "op": "add", "value": "hair transformation"}]}
+{"edits": [{"field": "services", "op": "remove", "value": "waxing"}]}
+{"edits": [{"field": "services", "op": "replace", "value": "nails, makeup, hairs"}]}
 {"edits": []}`;
 
   try {
@@ -1869,9 +1920,15 @@ Return JSON ONLY. No prose. Examples:
     if (!m) return [];
     const parsed = JSON.parse(m[0]);
     if (!Array.isArray(parsed.edits)) return [];
-    return parsed.edits.filter(
-      (e) => e && typeof e.field === 'string' && e.field && (typeof e.value === 'string' || Array.isArray(e.value)) && String(e.value).trim()
-    );
+    return parsed.edits
+      .filter((e) => e && typeof e.field === 'string' && e.field && (typeof e.value === 'string' || Array.isArray(e.value)) && String(e.value).trim())
+      .map((e) => {
+        const out = { field: e.field, value: e.value };
+        if (typeof e.op === 'string' && ['add', 'remove', 'replace'].includes(e.op.toLowerCase())) {
+          out.op = e.op.toLowerCase();
+        }
+        return out;
+      });
   } catch (err) {
     logger.warn(`[WEBDEV-CONFIRM] detectFieldEditsLLM threw: ${err.message}`);
     return [];
@@ -1965,6 +2022,48 @@ Respond with ONLY: yes or no.`;
   }
 }
 
+/**
+ * One LLM call covers all three intents at WEB_COLLECT_LISTINGS_DETAILS:
+ *   done    — user is signaling "no more listings, move on" ("done", "that's
+ *             all", "khatam", "fini", "ya basta", "no more").
+ *   skip    — user wants to abandon the listings flow, use placeholders
+ *             ("skip", "skip kar do", "rehne do", "salta esto", "I don't
+ *             want to add any").
+ *   listing — user is providing actual listing content (address / price /
+ *             beds / etc.) — caller should run parseListingText next.
+ *   unclear — anything else (off-topic, gibberish). Caller treats as listing
+ *             so the parser can attempt to extract whatever's there.
+ * Replaces the previous doneWords + skipWords regex pre-checks.
+ */
+async function classifyListingsDetailsTurn(text, userId) {
+  const t = String(text || '').trim();
+  if (!t) return 'unclear';
+  // Long messages are almost always listing content.
+  if (t.length > 140) return 'listing';
+  try {
+    const resp = await generateResponse(
+      `A real-estate agent is iteratively sending property listings to a chatbot. We just asked them: "Send your next listing details, or reply done to move on." Classify their reply into ONE of: done, skip, listing.
+
+- done: they're telling us they're finished sending listings and want to move on. Any phrasing in any language: "done", "that's all", "finished", "no more", "stop", "enough", "that's it", "khatam", "bas", "ho gaya", "ya basta", "fini", "c'est tout", "تم", "no more listings".
+- skip: they want to abandon listing collection entirely and use placeholders / they don't have listings. Any phrasing: "skip", "skip it", "use placeholders", "i don't have any", "nahi hai", "rehne do", "salta", "sauter", "تخطى".
+- listing: they're sending actual property details (address, price, beds/baths, sqft, status, neighborhood). If the message contains a street address, dollar amount, bed/bath count, or any property specifics — return listing.
+- (Treat ambiguous / off-topic as listing so the parser gets to try; the parser handles "no usable fields" with its own re-ask.)
+
+The user said: "${t}"
+
+Reply with ONLY one word: done, skip, or listing.`,
+      [{ role: 'user', content: t }],
+      { userId, operation: 'listings_details_turn' }
+    );
+    const clean = String(resp || '').trim().toLowerCase().replace(/[^a-z]/g, '');
+    if (clean === 'done' || clean === 'skip' || clean === 'listing') return clean;
+    return 'listing';
+  } catch (err) {
+    logger.warn(`[LISTINGS-DETAILS-TURN] LLM threw: ${err.message}`);
+    return 'listing';
+  }
+}
+
 async function handleCollectListingsAsk(user, message) {
   const raw = (message.text || '').trim();
   const wd = { ...(user.metadata?.websiteData || {}) };
@@ -2005,24 +2104,42 @@ async function handleCollectListingsAsk(user, message) {
     }
   }
 
-  // Classify the user's reply as yes / skip / unclear. We use the LLM so
-  // this works for ANY language the user might reply in ("skip kar do",
-  // "sí, los tengo", "لا", "non merci", "haan bhai", etc.) without a
-  // language-by-language regex list. Long messages that look like actual
-  // listings (addresses, prices, bed/bath counts) bypass the classifier
-  // and drop straight into the details parser.
-  const looksLikeListing =
-    /\$|\d+\s*(bed|bd|ba|sqft|sf)\b/i.test(raw) ||
-    /\b(listing|property|home|house|condo)\b/i.test(raw);
+  // Cross-field handling. Phone / email / address volunteered here, or a
+  // name / industry / contact correction at this step, is otherwise lost.
+  const reaskListings = 'Now, do you want to send your property listings, or reply *skip* to use professional placeholder listings?';
+  if (raw) {
+    const fmt = await tryApplyContactFormat(user, raw);
+    if (fmt) {
+      await sendTextMessage(user.phone_number, await localize(`${fmt.ackPart} ${reaskListings}`, user, raw));
+      await logMessage(user.id, 'Listings-ask step: applied contact format short-circuit', 'assistant');
+      return STATES.WEB_COLLECT_LISTINGS_ASK;
+    }
+  }
+  if (raw && raw.length >= 3) {
+    const sc = await tryApplySideChannel(user, 'listingsAsk', raw);
+    if (sc) {
+      await sendTextMessage(user.phone_number, await localize(`${sc.ackPart} ${reaskListings}`, user, raw));
+      await logMessage(user.id, `Listings-ask step: applied side-channel ${sc.side.kind}`, 'assistant');
+      return STATES.WEB_COLLECT_LISTINGS_ASK;
+    }
+  }
 
-  if (looksLikeListing) {
+  // Pure-LLM intent classification. classifyYesSkip now returns one of
+  // yes / skip / listing / unclear in a single call — replaces the
+  // prior `looksLikeListing` regex pre-check that missed non-English
+  // property terms ("kothi", "makaan", "ghar", "casa", etc.) and only
+  // recognized $ / bed / bath as listing markers.
+  const intent = await classifyYesSkip(raw, user.id);
+
+  if (intent === 'listing') {
+    // User went straight to listing content — skip the yes/skip ack and
+    // route into the details parser, which will extract whatever fields
+    // are present.
     const merged = { ...wd, listingsAskAnswered: true, listings: wd.listings || [] };
     await updateUserMetadata(user.id, { websiteData: merged });
     user.metadata = { ...(user.metadata || {}), websiteData: merged };
     return handleCollectListingsDetails(user, message);
   }
-
-  const intent = await classifyYesSkip(raw, user.id);
 
   if (intent === 'skip') {
     const merged = { ...wd, listingsAskAnswered: true, listingsDetailsDone: true, listingsFlowDone: true, listings: [] };
@@ -2060,26 +2177,37 @@ async function handleCollectListingsDetails(user, message) {
   const raw = (message.text || '').trim();
   const wd = { ...(user.metadata?.websiteData || {}) };
   const listings = Array.isArray(wd.listings) ? [...wd.listings] : [];
-  const doneWords = /^(done|finished|that'?s (it|all)|stop|enough|no more|bas|khatam)$/i;
-  const skipWords = /^(skip|cancel)$/i;
 
-  // LLM fallback for skip phrasings the narrow regex doesn't catch
-  // ("skip it", "i want to skip these", "salta esto", "rehne do", etc.).
-  // Gated to short replies that aren't already a clear done-signal so we
-  // don't fire LLM calls on every listing description.
-  let isSkip = skipWords.test(raw);
-  if (!isSkip && raw && raw.length <= 60 && !doneWords.test(raw)) {
-    try {
-      isSkip = await classifyDelegation(
-        raw,
-        'Send your listing details, or skip to use placeholder listings.'
-      );
-    } catch (err) {
-      logger.warn(`[WEBDEV-LISTINGS] classifyDelegation threw: ${err.message}`);
+  // Cross-field handling. Run BEFORE the listing-intent classifier below —
+  // if the user is volunteering contact info ("phone is +123") or
+  // correcting a prior field ("change name to X") at this step, those
+  // cross-field intents would otherwise get fed to the listing parser
+  // and produce nothing useful.
+  const reaskListings = 'Send your next listing details (e.g. *45 Elm St, $525k, 4 bed 3 bath, 2200 sqft*), or reply *done* to finish.';
+  if (raw) {
+    const fmt = await tryApplyContactFormat(user, raw);
+    if (fmt) {
+      await sendTextMessage(user.phone_number, await localize(`${fmt.ackPart} ${reaskListings}`, user, raw));
+      await logMessage(user.id, 'Listings-details step: applied contact format short-circuit', 'assistant');
+      return STATES.WEB_COLLECT_LISTINGS_DETAILS;
+    }
+  }
+  if (raw && raw.length >= 3) {
+    const sc = await tryApplySideChannel(user, 'listingsDetails', raw);
+    if (sc) {
+      await sendTextMessage(user.phone_number, await localize(`${sc.ackPart} ${reaskListings}`, user, raw));
+      await logMessage(user.id, `Listings-details step: applied side-channel ${sc.side.kind}`, 'assistant');
+      return STATES.WEB_COLLECT_LISTINGS_DETAILS;
     }
   }
 
-  if (isSkip) {
+  // Pure-LLM intent classification for the listings-details turn.
+  // Replaces the prior doneWords / skipWords regex + classifyDelegation
+  // fallback. One call covers any language and any phrasing of done /
+  // skip / providing-listing-content.
+  const turnIntent = await classifyListingsDetailsTurn(raw, user.id);
+
+  if (turnIntent === 'skip') {
     // Skip mid-flow — keep what we have (if any), fall back for the rest.
     const merged = { ...wd, listings, listingsDetailsDone: true, listingsFlowDone: true };
     await updateUserMetadata(user.id, { websiteData: merged });
@@ -2087,7 +2215,7 @@ async function handleCollectListingsDetails(user, message) {
     return smartAdvance(user, message, listings.length ? `Got ${listings.length} listing(s), using defaults for the rest.` : 'No problem — using professional placeholder listings.');
   }
 
-  if (doneWords.test(raw)) {
+  if (turnIntent === 'done') {
     if (listings.length === 0) {
       // User said "done" with zero listings — treat as skip
       const merged = { ...wd, listingsDetailsDone: true, listingsFlowDone: true, listings: [] };
@@ -2149,17 +2277,80 @@ async function handleCollectListingsDetails(user, message) {
   return STATES.WEB_COLLECT_LISTINGS_DETAILS;
 }
 
+/**
+ * One LLM call extracts the user's intent at the photo-assignment turn:
+ *   { action: 'discard' }       — skip / discard this photo
+ *   { action: 'assign', n: N }  — assign to listing N (1..listingsCount)
+ *   null                        — couldn't tell, caller re-asks
+ *
+ * Replaces the `^[1-9]$` regex + literal "skip"/"discard" string match,
+ * so natural phrasings like "the first one", "1st", "ek wala", "primero",
+ * "skip kar do" all resolve cleanly.
+ */
+async function classifyPhotoAssignTurn(text, listingsCount, userId) {
+  const t = String(text || '').trim();
+  if (!t) return null;
+  try {
+    const resp = await generateResponse(
+      `A real-estate agent just sent us a property photo. They have ${listingsCount} listings (numbered 1 through ${listingsCount}). We asked: "Which listing is this photo for? Reply with the number, or *skip*."
+
+Their reply: "${t}"
+
+Classify into JSON ONLY: {"action": "skip" | "assign", "n": <integer 1..${listingsCount} or null>}
+- skip: user wants to discard this photo / not assign it / cancel. Any language: "skip", "discard", "skip kar do", "salta", "تخطى", "rehne do", "no need".
+- assign: user is naming a listing index — bare number ("1") OR ordinal in any language ("first", "the first one", "1st", "second", "third", "ek wala", "doosra", "primero", "deuxième", "الأول"). Set n to the 1-based listing index.
+- If you can't tell: {"action": "skip", "n": null}
+
+Return ONLY the JSON.`,
+      [{ role: 'user', content: t }],
+      { userId, operation: 'photo_assign_turn' }
+    );
+    const m = String(resp || '').match(/\{[\s\S]*\}/);
+    if (!m) return null;
+    const parsed = JSON.parse(m[0]);
+    if (parsed.action === 'skip') return { action: 'discard' };
+    if (parsed.action === 'assign' && Number.isInteger(parsed.n) && parsed.n >= 1 && parsed.n <= listingsCount) {
+      return { action: 'assign', n: parsed.n };
+    }
+    return null;
+  } catch (err) {
+    logger.warn(`[PHOTO-ASSIGN-TURN] LLM threw: ${err.message}`);
+    return null;
+  }
+}
+
 async function handleCollectListingsPhotos(user, message) {
   const raw = (message.text || '').trim();
   const wd = { ...(user.metadata?.websiteData || {}) };
   const listings = Array.isArray(wd.listings) ? [...wd.listings] : [];
-  const skipWords = /^(skip|done|no more|bas|khatam|stock|use stock|placeholder)$/i;
-  // LLM fallback for skip phrasings the narrow regex doesn't catch
-  // ("skip it", "i want to skip the photos", "use stock photos please",
-  // any-language equivalents). Computed once up front so the existing
-  // `skipWords.test(raw)` site below uses the LLM-aware result.
-  let isSkip = skipWords.test(raw);
-  if (!isSkip && raw && raw.length <= 60 && !message.mediaId) {
+
+  // Cross-field handling. Skip when we're awaiting a listing-assignment
+  // number (pendingPhotoAssign) — at that point a bare "1" / "2" must
+  // route through the assignment parser, not the side-channel.
+  const pendingForSideChannel = wd.pendingPhotoAssign;
+  const reaskPhotos = 'Send a listing photo as an image (JPG / PNG), or reply *done* / *skip* to use stock photos.';
+  if (raw && pendingForSideChannel == null && !message.mediaId) {
+    const fmt = await tryApplyContactFormat(user, raw);
+    if (fmt) {
+      await sendTextMessage(user.phone_number, await localize(`${fmt.ackPart} ${reaskPhotos}`, user, raw));
+      await logMessage(user.id, 'Listings-photos step: applied contact format short-circuit', 'assistant');
+      return STATES.WEB_COLLECT_LISTINGS_PHOTOS;
+    }
+    if (raw.length >= 3) {
+      const sc = await tryApplySideChannel(user, 'listingsPhotos', raw);
+      if (sc) {
+        await sendTextMessage(user.phone_number, await localize(`${sc.ackPart} ${reaskPhotos}`, user, raw));
+        await logMessage(user.id, `Listings-photos step: applied side-channel ${sc.side.kind}`, 'assistant');
+        return STATES.WEB_COLLECT_LISTINGS_PHOTOS;
+      }
+    }
+  }
+  // Pure-LLM skip detection. classifyDelegation handles any phrasing in
+  // any language ("skip", "skip it", "use stock photos", "rehne do",
+  // "salta esto", "fini", etc.) — replaces the prior whole-string
+  // skipWords regex which only matched a curated list of literal tokens.
+  let isSkip = false;
+  if (raw && raw.length <= 80 && !message.mediaId) {
     try {
       isSkip = await classifyDelegation(
         raw,
@@ -2171,25 +2362,24 @@ async function handleCollectListingsPhotos(user, message) {
   }
   const pendingIdx = wd.pendingPhotoAssign; // null when waiting for next image
 
-  // If we're waiting for an assignment number ("1", "2", "3", or skip)
+  // If we're waiting for an assignment number ("1", "2", "3", or skip):
+  // pure-LLM intent classification covers bare numbers, ordinals
+  // ("first", "the second one", "1st", "ek wala", "primero"), and any
+  // skip/discard phrasing.
   if (pendingIdx != null) {
-    if (/^skip$/i.test(raw) || /^discard$/i.test(raw)) {
+    const verdict = await classifyPhotoAssignTurn(raw, listings.length, user.id);
+    if (!verdict) {
+      await sendTextMessage(user.phone_number, `Please tell me which listing this is for — reply with a number ${listings.map((_, i) => i + 1).join(', ')} (or "first", "second", etc.), or *skip*.`);
+      return STATES.WEB_COLLECT_LISTINGS_PHOTOS;
+    }
+    if (verdict.action === 'discard') {
       const merged = { ...wd, pendingPhotoAssign: null };
       await updateUserMetadata(user.id, { websiteData: merged });
       user.metadata = { ...(user.metadata || {}), websiteData: merged };
       await sendTextMessage(user.phone_number, 'Skipped. Send another photo or reply *done* to finish.');
       return STATES.WEB_COLLECT_LISTINGS_PHOTOS;
     }
-    const numMatch = raw.match(/^([1-9])$/);
-    if (!numMatch) {
-      await sendTextMessage(user.phone_number, `Please reply with just a number: ${listings.map((_, i) => i + 1).join(', ')}, or *skip*.`);
-      return STATES.WEB_COLLECT_LISTINGS_PHOTOS;
-    }
-    const n = parseInt(numMatch[1], 10);
-    if (n < 1 || n > listings.length) {
-      await sendTextMessage(user.phone_number, `Pick a valid number: ${listings.map((_, i) => i + 1).join(', ')}, or *skip*.`);
-      return STATES.WEB_COLLECT_LISTINGS_PHOTOS;
-    }
+    const n = verdict.n;
     // Upload the stored buffer to Supabase now that we know where it belongs.
     try {
       const { uploadListingPhoto } = require('../../website-gen/listingPhotoUploader');
@@ -2364,9 +2554,15 @@ Return ONLY JSON in this exact shape:
 {"intent": "embed" | "native" | "unclear", "url": "<full https://… URL or null>", "reason": "<short>"}
 
 Decision tree:
-1. **intent: "embed"** when the user IS providing an existing booking tool — they paste or mention a URL (Fresha/Booksy/Vagaro/Calendly/Square/Acuity/Setmore/Schedulicity/Mindbody/etc.), or name one of those services with enough detail to embed (the URL takes priority — only return "embed" with url:null if they clearly named a service but didn't paste the link, in which case ask them in the reason). Pull the cleanest http(s):// URL from the message into "url".
+1. **intent: "embed"** when the user IS providing a real booking-tool URL or naming a real booking service — Fresha, Booksy, Vagaro, Calendly, Square Appointments, Acuity, Setmore, Schedulicity, Mindbody, SimplyBook, Picktime, Goldie, Boulevard, GlossGenius, Squire, Schedulista, Timely, etc. The URL takes priority. If the user types a domain WITHOUT a protocol ("fresha.com/glow-studio"), still output it in the url field WITH the https:// prefix prepended ("https://fresha.com/glow-studio") — bare-domain pastes are common and we should accept them. Only return "embed" with url:null if they clearly named a real booking service but didn't paste the link, in which case explain in the reason.
+
 2. **intent: "native"** when the user wants the built-in booking system: any "no" / "I don't have one" / "build me one" / "we don't use any" / "abhi nahi" / "rehne do" / "no thanks" / "skip" / delegation phrases / "whatever you suggest" / "you decide" — including when they explicitly mention NOT using the named services ("I don't use calendly or fresha", "no booking tool yet").
-3. **intent: "unclear"** ONLY when the message is irrelevant (smalltalk, off-topic, a question back, gibberish) and you genuinely cannot tell what they want.
+
+3. **intent: "unclear"** when:
+   - The message is irrelevant (smalltalk, off-topic, a question back, gibberish) and you genuinely cannot tell what they want.
+   - The user pasted a URL that is NOT a booking tool — social media (instagram.com, facebook.com, twitter.com, x.com, tiktok.com, youtube.com, linkedin.com, snapchat.com), their own salon's website (their general site, not a booking page), Google Maps links, WhatsApp links, generic landing pages, etc. These are NOT booking tools — return unclear with reason explaining what they sent and asking for an actual booking-tool link or "no". DO NOT set url even if a URL was present; setting url means embed-mode, which would put a useless page on their booking page.
+
+Hard rule: if the URL host is a known social-media or general-website host (instagram, facebook, twitter, x.com, tiktok, youtube, linkedin, snapchat, google.com/maps, wa.me, the salon's own .com/.net), it is NEVER a booking tool — return unclear, not embed.
 
 When in doubt between "embed" and "native", lean "native" (the user can always paste a link later). Never guess a URL — set url:null unless one is literally present in the text.`,
       [{ role: 'user', content: text }],
@@ -2481,11 +2677,20 @@ async function handleSalonHours(user, message) {
     }
   }
 
+  const { parseWeeklyHours, formatHoursForDisplay } = require('../../website-gen/hoursParser');
+  const { hours, usedDefault } = await parseWeeklyHours(text);
+
   // LLM side-channel for richer cross-field corrections (name /
-  // industry / service / contact-with-prose) that format checks
-  // can't catch. Skip on the obvious delegation phrases — the parser
-  // handles those — to keep latency down.
-  if (text && text.length >= 3 && !isDelegation(text)) {
+  // industry / service / contact-with-prose) that format checks can't
+  // catch. ONLY runs when the hours parser bailed (usedDefault=true)
+  // AND the user didn't explicitly delegate. This ordering matters:
+  // a multilingual hours answer ("subah 9 baje se shaam 9 baje tak,
+  // tue-sat") parses cleanly via the parser's own LLM, so we trust
+  // that result and skip the side-channel call. Side-channel only
+  // fires when the user clearly didn't give us hours — at which point
+  // the question is "what DID they say?" (cross-field correction,
+  // contact info, etc.) and the side-channel is the right tool.
+  if (usedDefault && text && text.length >= 3 && !isDelegation(text)) {
     const sc = await tryApplySideChannel(user, 'salonHours', text);
     if (sc) {
       await sendTextMessage(user.phone_number, await localize(`${sc.ackPart} ${reaskHours}`, user, text));
@@ -2494,8 +2699,6 @@ async function handleSalonHours(user, message) {
     }
   }
 
-  const { parseWeeklyHours, formatHoursForDisplay } = require('../../website-gen/hoursParser');
-  const { hours, usedDefault } = await parseWeeklyHours(text);
   wd.weeklyHours = hours;
   await updateUserMetadata(user.id, { websiteData: wd });
   await logMessage(user.id, `Hours${usedDefault ? ' (default)' : ''}:\n${formatHoursForDisplay(hours)}`, 'assistant');
@@ -2544,23 +2747,46 @@ async function handleSalonHours(user, message) {
  * On any failure (LLM error, malformed JSON, network), falls back to the
  * standard default of 30min/no-price per service so the flow never stalls.
  */
-async function parseServiceDurations(text, servicesList, userId) {
+async function parseServiceDurations(text, servicesList, userId, existingSalonServices = []) {
   const services = Array.isArray(servicesList) ? servicesList : [];
-  const fallback = () => services.map((s) => ({ name: s, durationMinutes: 30, priceText: '' }));
+  const fallback = () => services.map((s) => ({ name: s, durationMinutes: 30, priceText: '', addressed: false }));
   if (!services.length) return [];
   if (!text || !String(text).trim()) return fallback();
+
+  // Prior-state context. Lets the LLM understand iterative inputs like
+  // "the rest are default" / "baki sab 30min" — apply defaults to
+  // services that DON'T already have explicit values, leave the
+  // already-addressed ones alone.
+  const prior = Array.isArray(existingSalonServices) ? existingSalonServices : [];
+  const priorByName = {};
+  for (const e of prior) {
+    if (e && typeof e.name === 'string') priorByName[e.name.toLowerCase()] = e;
+  }
+  const priorLines = services.map((s) => {
+    const p = priorByName[s.toLowerCase()];
+    if (p && p.addressed) {
+      return `- ${s}: addressed=true (${p.durationMinutes}min${p.priceText ? ', ' + p.priceText : ', no price'})`;
+    }
+    return `- ${s}: addressed=false (no value yet)`;
+  }).join('\n');
 
   const systemPrompt =
     `You extract per-service duration (in minutes) and price (as the user wrote it, including currency) from a salon owner's free-text reply.\n\n` +
     `The salon offers these services in this exact order: ${JSON.stringify(services)}\n\n` +
-    `Return ONLY a JSON object: {"services": [{"name": "<exact name from list>", "durationMinutes": <int>, "priceText": "<currency+amount or empty string>"}, ...]}\n\n` +
+    `Prior state — what's been collected so far:\n${priorLines}\n\n` +
+    `Return ONLY a JSON object: {"services": [{"name": "<exact name from list>", "durationMinutes": <int>, "priceText": "<currency+amount or empty string>", "addressed": <true|false>}, ...]}\n\n` +
     `Rules:\n` +
     `- Always return one entry per service in the SAME ORDER as the input list.\n` +
     `- name MUST exactly match the input service name — do not rename, pluralize, or reorder.\n` +
     `- durationMinutes must be a positive integer 1-600. If the user didn't specify a duration for a service, use 30 (the default).\n` +
     `- priceText keeps the user's original currency symbol and amount (e.g. "$25", "€30", "Rs 500", "25 euros"). Empty string if no price was stated for that service.\n` +
-    `- If the user says "all 30min no price" / "default" / "same for all" / a bare number, apply that uniformly across every service.\n` +
-    `- Accept any language and currency.\n` +
+    `- addressed: TRUE if the user's reply explicitly addresses this service in this turn, OR if a uniform phrase covers it (see below). FALSE if the user named some other service(s) and this one wasn't covered AND no uniform phrase applies.\n` +
+    `\nUNIFORM phrases cover ALL services — apply default 30min/no-price across every service AND mark all addressed=true:\n` +
+    `  • "all 30min" / "30 min for everything" / "default" / "same for all" / "every service" / "use defaults" / a bare number\n` +
+    `\n"REST" phrases cover ONLY services where prior addressed=false — apply default 30min/no-price to those, mark them addressed=true; for prior-addressed services, keep their existing duration+price+addressed=true:\n` +
+    `  • "the rest are default" / "others are default" / "remaining 30min" / "baki sab default" / "baki 30min" / "rest 30 mins no price" / "los demás default" / "set the unaddressed to 30min" / "make the rest 30"\n` +
+    `\nFor REST phrases, you MUST output the existing values for prior-addressed services exactly (durationMinutes + priceText from the prior state) — do NOT overwrite them with defaults.\n` +
+    `\n- Accept any language and currency.\n` +
     `- Never invent durations or prices the user didn't state — emit defaults instead.`;
 
   try {
@@ -2590,7 +2816,8 @@ async function parseServiceDurations(text, servicesList, userId) {
       const priceText = hit && typeof hit.priceText === 'string'
         ? hit.priceText.trim().slice(0, 40)
         : '';
-      return { name: s, durationMinutes: dur, priceText };
+      const addressed = !!(hit && hit.addressed === true);
+      return { name: s, durationMinutes: dur, priceText, addressed };
     });
   } catch (err) {
     logger.warn(`[SALON-DURATIONS] Extraction failed: ${err.message} — using defaults`);
@@ -2629,33 +2856,72 @@ async function handleSalonServiceDurations(user, message) {
   }
 
   // Delegation ("whatever you think" / "default" / "idk" / etc.) means
-  // "apply 30min-no-price across every service" — skip the LLM call.
+  // "fill the rest with 30min/no-price" on a FOLLOW-UP turn — but it
+  // must NOT overwrite a service the user explicitly set earlier.
+  // Compute the existing-by-name map first so the delegation branch
+  // can preserve previously-addressed entries.
   const useDefault = isDelegation(text);
-  const salonServices = useDefault
-    ? services.map((s) => ({ name: s, durationMinutes: 30, priceText: '' }))
-    : await parseServiceDurations(text, services, user.id);
-  wd.salonServices = salonServices;
+  const existing = Array.isArray(wd.salonServices) ? wd.salonServices : [];
+  const existingByName = {};
+  for (const e of existing) {
+    if (e && typeof e.name === 'string') existingByName[e.name.toLowerCase()] = e;
+  }
+  const newParsed = useDefault
+    ? services.map((s) => {
+        const prev = existingByName[s.toLowerCase()];
+        if (prev && prev.addressed) return { ...prev, addressed: true };
+        return { name: s, durationMinutes: 30, priceText: '', addressed: true };
+      })
+    : await parseServiceDurations(text, services, user.id, existing);
+
+  // Iterative collection: merge newly-addressed entries onto whatever we
+  // already had from earlier turns. A user typing "Facials are 1 hour
+  // at $50" addresses ONE service — we should save that and ask about
+  // the rest, not silently default the others. Only mark services
+  // addressed when the LLM (or delegation) confirms it.
+  const merged = newParsed.map((entry) => {
+    const prev = existingByName[entry.name.toLowerCase()];
+    if (entry.addressed) return { name: entry.name, durationMinutes: entry.durationMinutes, priceText: entry.priceText, addressed: true };
+    if (prev && prev.addressed) return { ...prev, addressed: true };
+    return { name: entry.name, durationMinutes: 30, priceText: '', addressed: false };
+  });
+  wd.salonServices = merged;
   await updateUserMetadata(user.id, { websiteData: wd });
   await logMessage(
     user.id,
-    `Salon services: ${salonServices.map((s) => `${s.name} ${s.durationMinutes}m${s.priceText ? ' ' + s.priceText : ''}`).join(', ')}`,
+    `Salon services: ${merged.map((s) => `${s.name} ${s.durationMinutes}m${s.priceText ? ' ' + s.priceText : ''}${s.addressed ? '' : ' (default)'}`).join(', ')}`,
     'assistant'
   );
 
-  // Announce what we picked so the user isn't left wondering what got saved.
-  let ackMsg;
-  if (useDefault) {
-    ackMsg = `Got it, I'll set every service to *30 minutes with no price listed*. You can tweak durations and prices later from the summary.`;
-  } else {
-    const preview = salonServices
-      .slice(0, 3)
-      .map((s) => `${s.name} ${s.durationMinutes}m${s.priceText ? ' ' + s.priceText : ''}`)
-      .join(', ');
-    ackMsg = `Got it — ${preview}${salonServices.length > 3 ? '…' : ''}.`;
-  }
-  await sendTextMessage(user.phone_number, await localize(ackMsg, user, text));
+  const remaining = merged.filter((s) => !s.addressed);
+  const justAddressed = merged.filter((s) => s.addressed && newParsed.find((n) => n.name === s.name && n.addressed));
 
-  return finishSalonFlow(user);
+  // If the user delegated OR everything is now addressed, we're done.
+  if (useDefault || remaining.length === 0) {
+    let ackMsg;
+    if (useDefault) {
+      ackMsg = `Got it, I'll set every service to *30 minutes with no price listed*. You can tweak durations and prices later from the summary.`;
+    } else {
+      const preview = merged
+        .slice(0, 3)
+        .map((s) => `${s.name} ${s.durationMinutes}m${s.priceText ? ' ' + s.priceText : ''}`)
+        .join(', ');
+      ackMsg = `Got it — ${preview}${merged.length > 3 ? '…' : ''}.`;
+    }
+    await sendTextMessage(user.phone_number, await localize(ackMsg, user, text));
+    return finishSalonFlow(user);
+  }
+
+  // Partial coverage — ack what we got, ask about the rest, stay in
+  // SALON_SERVICE_DURATIONS so the user can keep adding one-by-one.
+  // Reply *default* on a follow-up turn fills the rest at 30min/no-price.
+  const ackParts = justAddressed.map((s) => `${s.name} ${s.durationMinutes}m${s.priceText ? ' ' + s.priceText : ''}`);
+  const remainingNames = remaining.map((s) => s.name).join(', ');
+  const ackMsg = ackParts.length
+    ? `Got it — ${ackParts.join(', ')}. What about ${remainingNames}? Send durations + prices, or reply *default* to set them at 30min with no price.`
+    : `Couldn't pull a duration from that — could you give it like *"${remaining[0].name} 30min $25"*? Or reply *default* for 30min/no-price across all.`;
+  await sendTextMessage(user.phone_number, await localize(ackMsg, user, text));
+  return STATES.SALON_SERVICE_DURATIONS;
 }
 
 /**
@@ -2940,18 +3206,65 @@ async function handleCollectContact(user, message) {
   );
   const effectiveContact = userExplicitlySkipped ? contactData : mergedContact;
   const mergedWebsiteData = { ...prevWd, ...effectiveContact };
-  // Mark the contact step completed so nextMissingWebDevState doesn't loop
-  // back on users who provided only an address (or skipped). Setting this
-  // unconditionally once handleCollectContact finishes is safe — we've
-  // asked the user once, that's the UX contract.
+
+  // Iterative contact collection: if the user gave only some fields
+  // (e.g. email only), don't immediately mark contactSkipped and leave
+  // for the logo step — they may have been about to follow up with
+  // their phone or address. Save what they gave, then ask once more.
+  // The follow-up turn (tracked via contactFollowupAsked) finalizes —
+  // whatever's there at that point is what they want.
+  const alreadyAskedFollowup = !!user.metadata?.contactFollowupAsked;
+  const fieldsHave = [
+    !!effectiveContact.contactEmail && 'email',
+    !!effectiveContact.contactPhone && 'phone',
+    !!effectiveContact.contactAddress && 'address',
+  ].filter(Boolean);
+  const allThreePresent = fieldsHave.length >= 3;
+  const shouldAskFollowup =
+    !alreadyAskedFollowup &&
+    !userExplicitlySkipped &&
+    !allThreePresent &&
+    fieldsHave.length >= 1;
+
+  if (shouldAskFollowup) {
+    // Save the partial contact, set the follow-up flag, ask for more.
+    await updateUserMetadata(user.id, {
+      websiteData: mergedWebsiteData,
+      contactFollowupAsked: true,
+    });
+    user.metadata = {
+      ...(user.metadata || {}),
+      websiteData: mergedWebsiteData,
+      contactFollowupAsked: true,
+    };
+    const haveLine = fieldsHave.map((f) => `*${f}*`).join(' and ');
+    const missingFields = ['email', 'phone', 'address'].filter((f) => !fieldsHave.includes(f));
+    const missingLine = missingFields.join(' or ');
+    await sendTextMessage(
+      user.phone_number,
+      await localize(
+        `Got your ${haveLine}. Want to add a ${missingLine} too — or reply *skip* to move on with just what you've shared?`,
+        user,
+        contactText
+      )
+    );
+    await logMessage(user.id, `Contact: partial (${fieldsHave.join(', ')}), asked follow-up`, 'assistant');
+    return STATES.WEB_COLLECT_CONTACT;
+  }
+
+  // Either the user gave all three, explicitly skipped, or this is the
+  // follow-up turn — finalize and move on. Clear the follow-up flag
+  // either way so a future re-entry doesn't get stuck.
   await updateUserMetadata(user.id, {
     websiteData: mergedWebsiteData,
     contactSkipped: true,
+    contactFollowupAsked: false,
   });
   user.metadata = {
     ...(user.metadata || {}),
     websiteData: mergedWebsiteData,
     contactSkipped: true,
+    contactFollowupAsked: false,
   };
 
   // Optional logo step — runs between contact and the confirmation summary
@@ -3507,54 +3820,133 @@ async function handleConfirm(user, message) {
   // path.
   const llmEdits = await detectFieldEditsLLM(originalText, wd, user.id);
 
-  // Mutates wd in place for one field. Returns a short ack string like
-  // "business name → *MyCo*" or null if the value wasn't applicable. Shared
-  // by the single-edit and multi-edit paths below.
-  const mutateWdForField = (field, value) => {
+  // Helper: split a comma/and-separated value into clean items + title-case
+  // each one. Used for list fields below.
+  const splitListValue = (v, normalize = true) =>
+    String(v)
+      .split(/\s*,\s*|\s+(?:and|&|aur|y|et|und)\s+/i)
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .map((s) => (normalize ? normalizeBusinessName(s) : s));
+
+  // Helper: apply add/remove/replace op to a list field. Returns the new
+  // list AND an "affected" subset for the ack message. Mirrors the
+  // applyListOp helper used by the late-revisions edit path so confirm-edit
+  // and revisions-edit have identical semantics.
+  const applyListOpLocal = (existing, items, op) => {
+    const existingArr = Array.isArray(existing) ? existing : [];
+    if (op === 'add') {
+      const lower = new Set(existingArr.map((s) => String(s).toLowerCase().trim()));
+      const fresh = items.filter((s) => !lower.has(s.toLowerCase().trim()));
+      return { next: [...existingArr, ...fresh], affected: fresh, kind: 'add' };
+    }
+    if (op === 'remove') {
+      const lower = new Set(items.map((s) => String(s).toLowerCase().trim()));
+      const next = existingArr.filter((s) => !lower.has(String(s).toLowerCase().trim()));
+      const affected = existingArr.filter((s) => lower.has(String(s).toLowerCase().trim()));
+      return { next, affected, kind: 'remove' };
+    }
+    return { next: items, affected: items, kind: 'replace' };
+  };
+
+  // Keep wd.salonServices in lock-step with wd.services. Confirm-edit
+  // can append/remove/replace the services list at any time; without
+  // this sync the salonServices array goes stale (count mismatch in
+  // summary, missing duration entries for newly-added services on the
+  // generated salon site). Existing entries are preserved by name;
+  // freshly-added services get the standard 30min/no-price defaults
+  // (with addressed:false so the salon flow can ask about them later
+  // if the user re-enters durations collection).
+  const syncSalonServices = () => {
+    if (!Array.isArray(wd.services)) return;
+    const prev = Array.isArray(wd.salonServices) ? wd.salonServices : [];
+    const prevByName = {};
+    for (const e of prev) {
+      if (e && typeof e.name === 'string') prevByName[e.name.toLowerCase()] = e;
+    }
+    wd.salonServices = wd.services.map((name) => {
+      const hit = prevByName[name.toLowerCase()];
+      return hit || { name, durationMinutes: 30, priceText: '', addressed: false };
+    });
+  };
+
+  // Mutates wd in place for one field. Returns { label, kind } or null.
+  //   kind: 'change' = real mutation, ack with ✅
+  //   kind: 'noop'   = nothing changed (e.g. "add X" when X already there) —
+  //                    inform the user without a checkmark
+  // Shared by the single-edit and multi-edit paths below. List fields
+  // (services, serviceAreas) honor an `op` parameter (add / remove /
+  // replace); scalars always replace.
+  const mutateWdForField = (field, value, op) => {
     const v = String(value || '').trim();
     if (!v) return null;
     switch (field) {
       case 'businessName':
       case 'name':
         wd.businessName = normalizeBusinessName(v);
-        return `business name → *${wd.businessName}*`;
+        return { label: `business name → *${wd.businessName}*`, kind: 'change' };
       case 'industry':
         wd.industry = v;
-        return `industry → *${wd.industry}*`;
-      case 'services':
-        wd.services = v
-          .split(/\s*,\s*|\s+(?:and|&|aur|y|et|und)\s+/i)
-          .map((s) => s.trim())
-          .filter(Boolean);
-        return `services → *${wd.services.join(', ')}*`;
+        return { label: `industry → *${wd.industry}*`, kind: 'change' };
+      case 'services': {
+        const items = splitListValue(v);
+        if (!items.length) return null;
+        const effectiveOp = op || 'replace';
+        const { next, affected, kind } = applyListOpLocal(wd.services, items, effectiveOp);
+        // No-op feedback: tell the user the requested change was already
+        // satisfied (or the item wasn't there to remove). Earlier the
+        // bot returned null and the caller fell through to a confusing
+        // "what would you like to change?" hint.
+        if (kind !== 'replace' && affected.length === 0) {
+          const itemList = items.join(', ');
+          if (kind === 'add') return { label: `*${itemList}* already in your services`, kind: 'noop' };
+          if (kind === 'remove') return { label: `*${itemList}* wasn't in your services`, kind: 'noop' };
+        }
+        wd.services = next;
+        syncSalonServices();
+        const preview = (affected.length ? affected : next).join(', ');
+        if (kind === 'add') return { label: `services + *${preview}* (now: ${next.join(', ')})`, kind: 'change' };
+        if (kind === 'remove') return { label: `services − *${preview}* (now: ${next.join(', ')})`, kind: 'change' };
+        return { label: `services → *${next.join(', ')}*`, kind: 'change' };
+      }
       case 'areas':
-      case 'serviceAreas':
-        wd.serviceAreas = v
-          .split(/\s*,\s*|\s+(?:and|&|aur|y|et|und)\s+/i)
-          .map((s) => s.trim())
-          .filter(Boolean);
-        return `service areas → *${wd.serviceAreas.join(', ')}*`;
+      case 'serviceAreas': {
+        const items = splitListValue(v, false);
+        if (!items.length) return null;
+        const effectiveOp = op || 'replace';
+        const { next, affected, kind } = applyListOpLocal(wd.serviceAreas, items, effectiveOp);
+        if (kind !== 'replace' && affected.length === 0) {
+          const itemList = items.join(', ');
+          if (kind === 'add') return { label: `*${itemList}* already in your service areas`, kind: 'noop' };
+          if (kind === 'remove') return { label: `*${itemList}* wasn't in your service areas`, kind: 'noop' };
+        }
+        wd.serviceAreas = next;
+        const preview = (affected.length ? affected : next).join(', ');
+        if (kind === 'add') return { label: `service areas + *${preview}*`, kind: 'change' };
+        if (kind === 'remove') return { label: `service areas − *${preview}*`, kind: 'change' };
+        return { label: `service areas → *${next.join(', ')}*`, kind: 'change' };
+      }
       case 'email':
       case 'contactEmail': {
         const m = v.match(/[\w.-]+@[\w.-]+\.\w+/);
         wd.contactEmail = m ? m[0] : v;
-        return `email → *${wd.contactEmail}*`;
+        return { label: `email → *${wd.contactEmail}*`, kind: 'change' };
       }
       case 'phone':
       case 'contactPhone':
         wd.contactPhone = v;
-        return `phone → *${wd.contactPhone}*`;
+        return { label: `phone → *${wd.contactPhone}*`, kind: 'change' };
       case 'address':
       case 'contactAddress':
         wd.contactAddress = v;
-        return `address → *${wd.contactAddress}*`;
+        return { label: `address → *${wd.contactAddress}*`, kind: 'change' };
       case 'contact': {
         const parsed = parseContactFields(v);
         const applied = [];
         if (parsed.contactEmail) { wd.contactEmail = parsed.contactEmail; applied.push(`email → *${wd.contactEmail}*`); }
         if (parsed.contactPhone) { wd.contactPhone = parsed.contactPhone; applied.push(`phone → *${wd.contactPhone}*`); }
         if (parsed.contactAddress) { wd.contactAddress = parsed.contactAddress; applied.push(`address → *${wd.contactAddress}*`); }
-        return applied.length ? applied.join('; ') : null;
+        return applied.length ? { label: applied.join('; '), kind: 'change' } : null;
       }
       default:
         return null;
@@ -3585,9 +3977,11 @@ async function handleConfirm(user, message) {
       }
       return applyAndReshow(`Industry updated to *${wd.industry}*`);
     }
-    const label = mutateWdForField(field, value);
-    if (!label) return null;
-    return applyAndReshow(label.charAt(0).toUpperCase() + label.slice(1));
+    const result = mutateWdForField(field, value);
+    if (!result) return null;
+    const { label, kind } = result;
+    const prefix = kind === 'noop' ? 'ℹ️' : '✅';
+    return applyAndReshow(`${prefix} ${label.charAt(0).toUpperCase() + label.slice(1)}`);
   };
 
   // Apply LLM-detected edits as a batch. Supports multi-field replies
@@ -3608,15 +4002,29 @@ async function handleConfirm(user, message) {
       if (r !== null) return r;
     }
 
-    const labels = [];
+    const changes = [];
+    const noops = [];
     for (const m of llmEdits) {
-      const label = mutateWdForField(m.field, m.value);
-      if (label) labels.push(label);
+      const result = mutateWdForField(m.field, m.value, m.op);
+      if (!result) continue;
+      if (result.kind === 'change') changes.push(result.label);
+      else if (result.kind === 'noop') noops.push(result.label);
     }
-    if (labels.length > 0) {
-      const ackPrefix = labels.length === 1
-        ? `✅ ${labels[0].charAt(0).toUpperCase() + labels[0].slice(1)}. Here's the updated summary:`
-        : `✅ Updated ${labels.length} fields: ${labels.join('; ')}. Here's the updated summary:`;
+    if (changes.length > 0 || noops.length > 0) {
+      // Build prefix: real changes get a checkmark, no-ops an info icon.
+      // Mixed (some changed, some already-there) gets both for clarity.
+      const parts = [];
+      if (changes.length === 1) {
+        parts.push(`✅ ${changes[0].charAt(0).toUpperCase() + changes[0].slice(1)}`);
+      } else if (changes.length > 1) {
+        parts.push(`✅ Updated ${changes.length} fields: ${changes.join('; ')}`);
+      }
+      if (noops.length === 1) {
+        parts.push(`ℹ️ ${noops[0].charAt(0).toUpperCase() + noops[0].slice(1)}`);
+      } else if (noops.length > 1) {
+        parts.push(`ℹ️ ${noops.join('; ')}`);
+      }
+      const ackPrefix = `${parts.join('. ')}. Here's the ${changes.length ? 'updated' : 'current'} summary:`;
       await updateUserMetadata(user.id, { websiteData: wd });
       user.metadata = { ...(user.metadata || {}), websiteData: wd };
       return showConfirmSummary(user, ackPrefix);
@@ -6716,8 +7124,15 @@ async function applyFieldCorrection(user, field, rawValue, op = 'replace') {
   let ack = null;
 
   // Helper: split a comma-separated value into clean items.
+  // Title-case each item (services + areas use this) so user input
+  // like "manicure, pedicure" lands as "Manicure, Pedicure" — matches
+  // how the LLM extractor normalizes the initial collection too.
   const splitItems = (v) =>
-    String(v).split(/\s*,\s*|\s+(?:and|&)\s+/i).map((s) => s.trim()).filter(Boolean);
+    String(v)
+      .split(/\s*,\s*|\s+(?:and|&)\s+/i)
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .map((s) => normalizeBusinessName(s));
 
   // Helper: apply add/remove/replace to a list field.
   const applyListOp = (existing, items, op) => {

@@ -1,0 +1,30 @@
+{
+  "name": "name-correction-at-listings-ask-applies-and-reasks",
+  "description": "Real-estate flow. User at WEB_COLLECT_LISTINGS_ASK says 'actually our name should be Sarah Pro Realty'. Bot must apply the name correction via the LLM side-channel AND continue asking about listings. Earlier: handler only had yes/skip/listing classifier; cross-field corrections were lost.",
+  "channel": "whatsapp",
+  "seed": {
+    "state": "WEB_COLLECT_LISTINGS_ASK",
+    "metadata": {
+      "websiteData": {
+        "businessName": "Sarah Khan Realty",
+        "industry": "Real Estate",
+        "primaryCity": "Karachi",
+        "serviceAreas": ["Clifton"],
+        "agentProfileCollected": true,
+        "yearsExperience": 8
+      },
+      "websiteDemoTriggered": true,
+      "emailSkipped": true
+    }
+  },
+  "turns": [
+    {
+      "user": "actually our name should be Sarah Pro Realty",
+      "expect": {
+        "metadata.websiteData.businessName": "Sarah Pro Realty",
+        "state": "WEB_COLLECT_LISTINGS_ASK",
+        "sent_count_gte": 1
+      }
+    }
+  ]
+}

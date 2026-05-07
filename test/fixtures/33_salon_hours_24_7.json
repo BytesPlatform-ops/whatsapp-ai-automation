@@ -1,0 +1,32 @@
+{
+  "name": "salon-hours-24-7-always-open",
+  "description": "User at SALON_HOURS types '24/7' or 'always open' — should be parsed into all-day-every-day hours by the LLM hours parser, NOT bailed to the standard Tue-Sat 9-7 default. Tests the parser's ability to handle the always-open edge case. Some salon spas / 24h walk-in chains DO operate this way.",
+  "channel": "whatsapp",
+  "seed": {
+    "state": "SALON_HOURS",
+    "metadata": {
+      "websiteData": {
+        "businessName": "Glow 24h Spa",
+        "industry": "Salon",
+        "primaryCity": "Karachi",
+        "serviceAreas": ["Clifton"],
+        "services": ["Haircut", "Massage"],
+        "bookingMode": "native"
+      },
+      "websiteDemoTriggered": true,
+      "emailSkipped": true,
+      "contactSkipped": true,
+      "currentSiteId": "fake-site-salon-24-7-test"
+    }
+  },
+  "turns": [
+    {
+      "user": "24/7 always open",
+      "expect": {
+        "metadata.websiteData.weeklyHours": "*exists*",
+        "state": "SALON_SERVICE_DURATIONS",
+        "sent_count_gte": 1
+      }
+    }
+  ]
+}

@@ -1,0 +1,34 @@
+{
+  "name": "salon-question-at-booking-tool-doesnt-crash",
+  "description": "Confused user at SALON_BOOKING_TOOL asks a question instead of answering — 'which booking tools do you support?'. Bot must NOT crash, NOT silently advance to native mode, NOT lose context. Acceptable behaviors: (a) re-ask the booking question naturally, (b) answer the question via side-channel and re-ask, or (c) treat as 'unclear' and re-prompt with the supported list. The key invariant: state stays SALON_BOOKING_TOOL and bot doesn't auto-pick a mode.",
+  "channel": "whatsapp",
+  "seed": {
+    "state": "SALON_BOOKING_TOOL",
+    "metadata": {
+      "websiteData": {
+        "businessName": "Glow Studio",
+        "industry": "Salon",
+        "primaryCity": "Karachi",
+        "serviceAreas": ["Clifton"],
+        "services": ["Haircut", "Color"]
+      },
+      "websiteDemoTriggered": true,
+      "emailSkipped": true,
+      "contactSkipped": true,
+      "currentSiteId": "fake-site-salon-question-test"
+    }
+  },
+  "turns": [
+    {
+      "user": "which booking tools do you support?",
+      "expect": {
+        "state": "SALON_BOOKING_TOOL",
+        "metadata.websiteData.bookingMode": "*missing*",
+        "reply_not_contains": [
+          "Nothing to go back to"
+        ],
+        "sent_count_gte": 1
+      }
+    }
+  ]
+}

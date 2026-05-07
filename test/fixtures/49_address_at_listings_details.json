@@ -1,0 +1,32 @@
+{
+  "name": "address-volunteered-at-listings-details-saved-not-lost",
+  "description": "Real-estate flow. User at WEB_COLLECT_LISTINGS_DETAILS types their CONTACT address ('Address: 5 main street, austin') — NOT a property listing. Bot must side-channel the address into websiteData.contactAddress AND stay at WEB_COLLECT_LISTINGS_DETAILS to keep collecting listings. Earlier behavior: parseListingText would try to interpret '5 main street' as a property address with no price/beds/baths and produce a junk listing entry. The address was lost from contact info AND a bad listing was created.",
+  "channel": "whatsapp",
+  "seed": {
+    "state": "WEB_COLLECT_LISTINGS_DETAILS",
+    "metadata": {
+      "websiteData": {
+        "businessName": "Sarah Khan Realty",
+        "industry": "Real Estate",
+        "primaryCity": "Karachi",
+        "serviceAreas": ["Clifton"],
+        "agentProfileCollected": true,
+        "yearsExperience": 8,
+        "listingsAskAnswered": true,
+        "listings": []
+      },
+      "websiteDemoTriggered": true,
+      "emailSkipped": true
+    }
+  },
+  "turns": [
+    {
+      "user": "Address: 5 main street, austin",
+      "expect": {
+        "metadata.websiteData.contactAddress": "*exists*",
+        "state": "WEB_COLLECT_LISTINGS_DETAILS",
+        "sent_count_gte": 1
+      }
+    }
+  ]
+}
