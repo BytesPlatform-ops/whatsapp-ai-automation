@@ -1,0 +1,32 @@
+{
+  "name": "short-place-plus-city-address-detected",
+  "description": "Regression for the May 8 bug: at WEB_COLLECT_LOGO the user typed 'Abc karachi' (no street/road keyword, no Address: prefix — just a place name + city). The sideChannel LLM returned unclear and the bot replied 'I didn\\'t catch an image' — address lost. Now the HARD RULE explicitly covers 2-5 word phrases ending in a recognizable city name (Karachi / Lahore / Mumbai / etc.) as contact_update with address.",
+  "channel": "whatsapp",
+  "seed": {
+    "state": "WEB_COLLECT_LOGO",
+    "metadata": {
+      "websiteData": {
+        "businessName": "Noman Siddiqui",
+        "industry": "Full stack developer",
+        "services": ["React"],
+        "contactEmail": "noman@example.com",
+        "contactPhone": "03354279708"
+      },
+      "websiteDemoTriggered": true,
+      "emailSkipped": true,
+      "contactSkipped": true,
+      "currentSiteId": "fake-site-place-city-address-test"
+    }
+  },
+  "turns": [
+    {
+      "user": "Abc karachi",
+      "expect": {
+        "metadata.websiteData.contactAddress": "*exists*",
+        "state": "WEB_COLLECT_LOGO",
+        "reply_not_contains": ["I didn't catch an image"],
+        "sent_count_gte": 1
+      }
+    }
+  ]
+}

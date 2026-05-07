@@ -319,9 +319,19 @@ Return ONLY a JSON array like ["Service 1", "Service 2"] or []. No commentary.`;
     if (!match) return [];
     const parsed = JSON.parse(match[0]);
     if (!Array.isArray(parsed)) return [];
+    // Meta-word filter — "projects" / "work" / "cases" etc. are website-
+    // section references, NOT skills. Drop them when they sneak into the
+    // services list (common when the user says "yes my projects" right
+    // before the bot asks for skills). Same list used in salesBot's
+    // trigger-tag post-filter.
+    const META_SERVICE_WORDS = new Set([
+      'projects', 'project', 'work', 'works', 'cases', 'case studies',
+      'case study', 'portfolio', 'samples', 'examples',
+    ]);
     return parsed
       .map((s) => String(s).trim().replace(/^["']|["']$/g, ''))
       .filter((s) => s && s.length < 80)
+      .filter((s) => !META_SERVICE_WORDS.has(s.toLowerCase()))
       .map((s) => normalizeBusinessName(s));
   } catch (err) {
     logger.warn(`[ENTITY-ACC] extractServices failed: ${err.message}`);

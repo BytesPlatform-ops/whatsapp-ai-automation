@@ -1,0 +1,32 @@
+{
+  "name": "portfolio-multi-url-one-message-becomes-N-projects",
+  "description": "Real tester from May 8: at WEB_COLLECT_PROJECTS_DETAILS, user pastes three URLs on separate lines ('pixiebot.co\\nbytesplatform.com\\nbytesplatform.info') expecting three project cards. Earlier bot: parseProjectText returned a single project ('Pixiebot'), other two URLs lost. User complained 'I gave you three links' which the bot couldn't parse either — total data loss for 2 of 3 projects. Now parseProjectText returns an array; the handler appends each entry as its own project, capped at MAX_PROJECTS.",
+  "channel": "whatsapp",
+  "seed": {
+    "state": "WEB_COLLECT_PROJECTS_DETAILS",
+    "metadata": {
+      "websiteData": {
+        "businessName": "Noman Siddiqui",
+        "industry": "Full stack developer",
+        "services": ["React", "Node.js"],
+        "aboutText": "Full stack developer building things.",
+        "projectsAskAnswered": true,
+        "projects": []
+      },
+      "websiteDemoTriggered": true,
+      "emailSkipped": true
+    }
+  },
+  "turns": [
+    {
+      "user": "pixiebot.co\nbytesplatform.com\nbytesplatform.info",
+      "expect": {
+        "metadata.websiteData.projects.0.title": "*exists*",
+        "metadata.websiteData.projects.1.title": "*exists*",
+        "metadata.websiteData.projects.2.title": "*exists*",
+        "state": "WEB_COLLECT_PROJECTS_DETAILS",
+        "sent_count_gte": 1
+      }
+    }
+  ]
+}

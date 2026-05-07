@@ -91,12 +91,15 @@ They replied: "${raw.slice(0, 400)}"
 
 Their reply did NOT cleanly answer the current question. Classify what they actually meant. Reply in ANY language is OK — read the meaning, not just keywords. Return ONLY valid JSON.
 
-HARD RULE — anti-"unclear" bias for contact info: if the message contains ANY of (a) the literal word "Address" / "Email" / "Phone" / "Mobile" / "Tel" / "Number" followed by a value, OR (b) an at-sign with text on both sides, OR (c) a run of 6+ digits, OR (d) a street/road/avenue/lane/block/sector/colony/nagar/society keyword followed by a place token — you MUST return contact_update with the matching field set. Do NOT return unclear for these cases. Examples that are ALL contact_update, never unclear:
+HARD RULE — anti-"unclear" bias for contact info: if the message contains ANY of (a) the literal word "Address" / "Email" / "Phone" / "Mobile" / "Tel" / "Number" followed by a value, OR (b) an at-sign with text on both sides, OR (c) a run of 6+ digits, OR (d) a street/road/avenue/lane/block/sector/colony/nagar/society keyword followed by a place token, OR (e) a short 2-5 word phrase ending with a recognizable city / region / country name (Karachi / Lahore / Islamabad / Mumbai / Delhi / Bangalore / Dubai / London / NYC / Austin / Toronto / etc.) — you MUST return contact_update with the matching field set. Do NOT return unclear for these cases. Examples that are ALL contact_update, never unclear:
    - "Address zamzama road karachi" → {"kind":"contact_update","address":"zamzama road karachi","email":null,"phone":null}
    - "Phone 03353279708" → {"kind":"contact_update","phone":"03353279708","email":null,"address":null}
    - "Email is foo@bar.com" → {"kind":"contact_update","email":"foo@bar.com","phone":null,"address":null}
    - "5 jail road, lahore" → {"kind":"contact_update","address":"5 jail road, lahore","email":null,"phone":null}
    - "Block 4 gulshan-e-iqbal" → {"kind":"contact_update","address":"Block 4 gulshan-e-iqbal","email":null,"phone":null}
+   - "Abc karachi" → {"kind":"contact_update","address":"Abc karachi","email":null,"phone":null}
+   - "F-7 Markaz Islamabad" → {"kind":"contact_update","address":"F-7 Markaz Islamabad","email":null,"phone":null}
+   - "Andheri east mumbai" → {"kind":"contact_update","address":"Andheri east mumbai","email":null,"phone":null}
 
 CONTEXT (do not re-add fields the user already gave):
 - Business name: ${knownName ? `"${knownName}"` : 'unknown'}

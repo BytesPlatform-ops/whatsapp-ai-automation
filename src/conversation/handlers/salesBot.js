@@ -351,6 +351,29 @@ async function handleSalesBot(user, message) {
       }
     }
   }
+  // Meta-word filter: when the user says something like "yes my projects"
+  // in response to "what should the site highlight?", the LLM emits
+  // services=["projects"] from the trigger tag — but "projects" is a
+  // META-reference (a website section), not an actual skill or service.
+  // Same for "work" / "cases" / "case studies" / "portfolio". Drop these
+  // so the downstream skills step asks the user properly. Only fires
+  // when the WHOLE list is meta-words; mixed lists ("Figma, projects")
+  // would land at the per-entry filter below.
+  if (Array.isArray(websiteDemoServices) && websiteDemoServices.length > 0) {
+    const metaWords = new Set(['projects', 'project', 'work', 'works', 'cases', 'case studies', 'case study', 'portfolio', 'samples', 'examples']);
+    const allMeta = websiteDemoServices.every((s) => metaWords.has(String(s || '').toLowerCase().trim()));
+    if (allMeta) {
+      logger.info(`[SALES] Dropping meta-word services ${JSON.stringify(websiteDemoServices)} — these are website-section references, not actual skills`);
+      websiteDemoServices = null;
+    } else {
+      // Mixed list: drop only the meta entries, keep the rest.
+      const filtered = websiteDemoServices.filter((s) => !metaWords.has(String(s || '').toLowerCase().trim()));
+      if (filtered.length !== websiteDemoServices.length) {
+        logger.info(`[SALES] Stripped meta-word entries from services list — kept ${JSON.stringify(filtered)}`);
+        websiteDemoServices = filtered.length ? filtered : null;
+      }
+    }
+  }
   let chatbotDemoTrigger = cleanText.includes('[TRIGGER_CHATBOT_DEMO]');
   let adGeneratorTrigger = cleanText.includes('[TRIGGER_AD_GENERATOR]');
   let logoMakerTrigger = cleanText.includes('[TRIGGER_LOGO_MAKER]');

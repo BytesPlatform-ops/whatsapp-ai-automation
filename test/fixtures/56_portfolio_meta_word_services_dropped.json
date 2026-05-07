@@ -1,0 +1,26 @@
+{
+  "name": "portfolio-meta-word-services-dropped-by-extractor",
+  "description": "Regression for the May 8 bug: user said 'Yes my projects' at SALES_CHAT after the bot asked what to highlight. The salesBot trigger tag carried services=['projects'] and stored it as websiteData.services, so the confirm summary later read 'Services: projects' — wrong, since 'projects' is a website-section reference, not an actual skill. Now both the salesBot trigger post-filter AND extractServices drop pure meta-words (projects/work/cases/portfolio/etc.). This fixture exercises the extractServices path: at WEB_COLLECT_SERVICES, the user reply 'projects' should NOT land as services=['Projects'] — the meta-word filter strips it.",
+  "channel": "whatsapp",
+  "seed": {
+    "state": "WEB_COLLECT_SERVICES",
+    "metadata": {
+      "websiteData": {
+        "businessName": "Noman Siddiqui",
+        "industry": "Full stack developer"
+      },
+      "websiteDemoTriggered": true,
+      "emailSkipped": true
+    }
+  },
+  "turns": [
+    {
+      "user": "projects",
+      "expect": {
+        "metadata.websiteData.services": [],
+        "state_not": "WEB_COLLECT_SERVICES",
+        "sent_count_gte": 1
+      }
+    }
+  ]
+}
