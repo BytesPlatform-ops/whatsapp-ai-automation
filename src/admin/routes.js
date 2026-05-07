@@ -237,6 +237,73 @@ ${llmInput}`;
   }
 });
 
+// Detect the dominant language of the user's inbound messages and cache
+// it in user.metadata.detectedLanguage so subsequent opens are instant
+// AND the conversation list view can show a language badge without
+// re-running detection. Cheap: one tiny LLM call on the first 3 user
+// messages, ~$0.0001 per convo. Safe to no-op if there are no inbound
+// messages yet (unknown language → null in metadata, retried later).
+router.post('/api/conversations/:userId/detect-language', async (req, res) => {
+  try {
+    const userId = req.params.userId;
+    const data = await queries.getConversation(userId);
+    const user = data && data.user;
+    if (!user) return res.status(404).json({ error: 'user not found' });
+
+    const messages = (data && data.messages) || [];
+    const userMessages = messages
+      .filter((m) => m && m.role === 'user' && m.message_text && String(m.message_text).trim())
+      .map((m) => String(m.message_text).slice(0, 300))
+      .slice(0, 3); // first 3 inbound msgs are plenty for language detection
+
+    if (userMessages.length === 0) {
+      return res.json({ language: null, reason: 'no inbound messages yet' });
+    }
+
+    const prompt = `Identify the dominant language of these WhatsApp messages from one user. Reply with ONLY a short JSON object — no prose, no markdown.
+
+{"language": "<the human-readable language name in English, e.g. 'English', 'Roman Urdu', 'Spanish', 'Haitian Creole', 'Arabic', 'Hindi', 'French'. If the user mixes two languages roughly equally, write them with a slash like 'Roman Urdu / English mix'. If you can't tell from the input, return null.>","code": "<2-letter ISO 639-1 code if applicable (en, es, fr, hi, ar, ur, ht, etc.) or null>"}
+
+Messages (one per line):
+${userMessages.map((m, i) => `${i + 1}. ${m.replace(/\n/g, ' ')}`).join('\n')}`;
+
+    const { generateResponse } = require('../llm/provider');
+    let parsed;
+    try {
+      const resp = await generateResponse(
+        prompt,
+        [{ role: 'user', content: 'Detect now.' }],
+        { operation: 'admin_detect_language', timeoutMs: 12_000 }
+      );
+      const m = String(resp || '').match(/\{[\s\S]*\}/);
+      if (!m) throw new Error('LLM returned no JSON');
+      parsed = JSON.parse(m[0]);
+    } catch (err) {
+      logger.warn(`[ADMIN-LANG] LLM call failed: ${err.message}`);
+      return res.status(502).json({ error: 'Detection failed', detail: err.message });
+    }
+
+    const language = (typeof parsed.language === 'string' && parsed.language.trim()) ? parsed.language.trim().slice(0, 60) : null;
+    const code = (typeof parsed.code === 'string' && /^[a-z]{2,3}$/i.test(parsed.code.trim())) ? parsed.code.trim().toLowerCase() : null;
+
+    // Cache in user.metadata.detectedLanguage so we don't re-run this LLM
+    // on every modal open. The list view also reads from metadata.
+    if (language) {
+      try {
+        const { updateUserMetadata } = require('../db/users');
+        await updateUserMetadata(userId, { detectedLanguage: { name: language, code, detectedAt: new Date().toISOString() } });
+      } catch (err) {
+        logger.warn(`[ADMIN-LANG] cache write failed: ${err.message}`);
+      }
+    }
+
+    res.json({ language, code });
+  } catch (err) {
+    logger.error('[ADMIN] Detect language error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.post('/api/conversations/:userId/reply', async (req, res) => {
   try {
     const { messageText } = req.body;
