@@ -162,6 +162,32 @@ function buildFormUrl(token) {
   return base ? `${base}/services-form/${token}` : `/services-form/${token}`;
 }
 
+// Returns 'salon' | 'real_estate' | null. Used by both `smartAdvance` and
+// `startWebdevFlow` to decide whether the bot should fork into the services
+// form at this transition. Mirrors the salon-by-name fallback that the
+// existing `looksLikeSalon` salon-detour uses, so users whose industry
+// hasn't been explicitly set yet but whose businessName is "X Salon" /
+// "Y Beauty" still get offered the form.
+function shouldOfferServicesForm(nextState, websiteData) {
+  const wd = websiteData || {};
+  const isSalonByContext =
+    isSalonIndustry(wd.industry) || isSalonIndustry(wd.businessName);
+  if (
+    nextState === STATES.WEB_COLLECT_SERVICES &&
+    isSalonByContext &&
+    !wd.servicesFormOffered
+  ) {
+    return 'salon';
+  }
+  if (
+    nextState === STATES.WEB_COLLECT_LISTINGS_ASK &&
+    !wd.listingsFormOffered
+  ) {
+    return 'real_estate';
+  }
+  return null;
+}
+
 async function offerServicesForm(user, kind) {
   const wd = { ...(user.metadata?.websiteData || {}) };
   const fallbackState = kind === 'salon'
@@ -172,7 +198,7 @@ async function offerServicesForm(user, kind) {
   // WhatsApp/Messenger. Skip the offer and ask the bare chat question
   // so the conversation isn't blocked behind a broken link.
   if (!getFormBaseUrl()) {
-    logger.warn('[WEBDEV-FORM] PUBLIC_BASE_URL not set — skipping form offer, falling back to chat');
+    logger.warn('[WEBDEV-FORM] PUBLIC_API_BASE_URL / CHATBOT_BASE_URL not set — skipping form offer, falling back to chat');
     await sendTextMessage(
       user.phone_number,
       await localize(questionForState(fallbackState, wd), user)
@@ -396,19 +422,13 @@ async function smartAdvance(user, message, ackPrefix = null) {
   // states for the first time, offer the services-form web link instead
   // of asking the bare chat question. The user can fill out the form, type
   // in chat, or reply *chat* to switch. See offerServicesForm above.
-  const offerForSalon =
-    nextState === STATES.WEB_COLLECT_SERVICES &&
-    isSalonIndustry(merged.industry) &&
-    !merged.servicesFormOffered;
-  const offerForRealEstate =
-    nextState === STATES.WEB_COLLECT_LISTINGS_ASK &&
-    !merged.listingsFormOffered;
-  if (offerForSalon || offerForRealEstate) {
+  const offerKind = shouldOfferServicesForm(nextState, merged);
+  if (offerKind) {
     const userReply = (message && message.text) || '';
     if (ack) {
       await sendTextMessage(user.phone_number, await localize(ack, user, userReply));
     }
-    return offerServicesForm(user, offerForSalon ? 'salon' : 'real_estate');
+    return offerServicesForm(user, offerKind);
   }
 
   const nextQuestion = questionForState(nextState, merged);
@@ -7730,6 +7750,16 @@ async function startWebdevFlow(user) {
     // Everything's already collected — jump to the confirm summary.
     await logMessage(user.id, `Resuming webdev with full context, showing confirm`, 'assistant');
     return showConfirmSummary(user);
+  }
+
+  // Form-offer fork: same condition as smartAdvance. If we're transitioning
+  // into one of the loopy states for a salon (by industry OR businessName)
+  // or any real-estate user, send the form CTA instead of the bare chat
+  // question. Without this hook, salesBot trigger-driven flows always took
+  // the chat path because they go through startWebdevFlow, not smartAdvance.
+  const offerKind = shouldOfferServicesForm(nextState, wd);
+  if (offerKind) {
+    return offerServicesForm(user, offerKind);
   }
 
   const question = questionForState(nextState, wd);
