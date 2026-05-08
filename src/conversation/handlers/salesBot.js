@@ -1063,17 +1063,37 @@ async function handleSalesBot(user, message) {
       // answer industry first and services next.
       const haveServices = Array.isArray(services) && services.length > 0;
       if (!haveServices) {
+        // Send a brief ack first, then fork into the services-form offer.
+        // The offer message itself includes the question ("Quick choice —
+        // easier in chat or in a quick form? …"), so no separate question
+        // send is needed. Without this fork, salesBot's hardcoded "what
+        // services?" message bypasses both smartAdvance and startWebdevFlow
+        // (the form-offer hook lives in those) and the user never sees
+        // the form link even for an obvious salon site.
+        const { shouldOfferServicesForm, offerServicesForm } = require('./webDev');
+        await sendTextMessage(
+          user.phone_number,
+          await localize(`Nice, *${businessName}* — let's get you set up.`, user, text)
+        );
+        const offerKind = shouldOfferServicesForm(STATES.WEB_COLLECT_SERVICES, websiteData);
+        if (offerKind) {
+          await logMessage(user.id, 'Website demo → salon flow (form offer)', 'assistant');
+          return offerServicesForm(user, offerKind);
+        }
+        // Fallback: env not set or token-create failure inside the helper —
+        // keep the original chat question so the conversation doesn't
+        // dead-end on a broken offer.
         await sendTextMessage(
           user.phone_number,
           await localize(
-            `Nice, *${businessName}* — let's get you set up. First, what services do you offer? List them separated by commas (e.g. *waxing, facials, nails, haircuts*).`,
+            `First, what services do you offer? List them separated by commas (e.g. *waxing, facials, nails, haircuts*).`,
             user,
             text
           )
         );
         await logMessage(
           user.id,
-          'Website demo → salon flow (need services first; deferred startSalonFlow)',
+          'Website demo → salon flow (chat fallback; offer skipped)',
           'assistant'
         );
         return STATES.WEB_COLLECT_SERVICES;

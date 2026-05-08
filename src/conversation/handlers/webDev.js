@@ -7919,6 +7919,12 @@ module.exports = {
   // Exposed so the services-form POST handler can reuse the same transition
   // logic (extract → next-state → send-question) the chat path uses.
   smartAdvance,
+  // Exposed so salesBot's TRIGGER_WEBSITE_DEMO handler can fork into the
+  // services-form offer instead of asking its hardcoded "what services?"
+  // chat question. salesBot bypasses both smartAdvance and startWebdevFlow,
+  // so it needs direct access to the offer helpers.
+  shouldOfferServicesForm,
+  offerServicesForm,
   // Cross-state correction handler — called from the router when
   // correctionDetector flags a previously-answered field.
   applyFieldCorrection,
