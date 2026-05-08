@@ -87,7 +87,7 @@ const env = {
   // Sales bot
   calendlyUrl: process.env.CALENDLY_URL || 'https://calendly.com/bytes-platform',
   portfolio: {
-    website1: process.env.PORTFOLIO_WEBSITE_1 || 'https://quantiva-hq.vercel.app/',
+    website1: process.env.PORTFOLIO_WEBSITE_1 || 'https://preview-1776447034475.netlify.app/',
     website2: process.env.PORTFOLIO_WEBSITE_2 || 'https://bytesplatform.info',
   },
   // Stripe

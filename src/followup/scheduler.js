@@ -56,6 +56,19 @@ const SEO_FOLLOWUP_LADDER = [
   { step: 'seo_followup_24h', afterHours: 24 },
 ];
 
+// "Said hello, ghosted" ladder. Users who landed in SALES_CHAT, said hi, and
+// never engaged with any flow (no business name, no domain, no demo trigger,
+// no payment context) are silently skipped by FOLLOWUP_LADDER's
+// engagedWithWebdev gate. This ladder fills that gap with three low-pressure
+// touches inside the 24h WhatsApp window. Each step is designed to spark a
+// reply — a reply re-opens the window AND lets salesBot pick the conversation
+// back up, often firing [TRIGGER_WEBSITE_DEMO] into WEB_COLLECT_NAME.
+const EXPLORATORY_LADDER = [
+  { step: 'expl_2h_soft',  afterHours: 2  },
+  { step: 'expl_8h_value', afterHours: 8  },
+  { step: 'expl_20h_last', afterHours: 20 },
+];
+
 // Discount follow-up copy per personality. One step only — no ladder, no
 // split payment offers. Amount placeholders (${newTotal}, ${originalTotal})
 // get filled in at send time once we compute the per-user discount.
@@ -137,6 +150,52 @@ function renderDiscountMessage(personalityMode, newTotal, originalTotal, discoun
     .replace(/\$\{newTotal\}/g, String(newTotal))
     .replace(/\$\{originalTotal\}/g, String(originalTotal))
     .replace(/\$\{discountPct\}/g, String(discountPct));
+}
+
+// Exploratory-ladder copy keyed by step + personality. English only here —
+// per-user translation happens at send time via the localizer (cache hits
+// for English speakers, one LLM call for non-English). Placeholders:
+//   ${portfolioUrl}  — recent work to show the user
+//   ${calendlyUrl}   — meeting-booking fallback for the final rung
+const EXPLORATORY_MESSAGES = {
+  expl_2h_soft: {
+    COOL: "yo still around? quick q — existing biz or starting fresh?",
+    PROFESSIONAL: "Hi! Quick question — are you setting up a new website, or refreshing an existing one?",
+    UNSURE: "hey 👋 just checking in — happy to help whenever you're ready 😊",
+    NEGOTIATOR: "still in? one q: new biz or existing?",
+    DEFAULT: "Hey 👋 just checking — what kind of website were you thinking about?",
+  },
+  expl_8h_value: {
+    COOL: "btw here's recent work: ${portfolioUrl}. i can spin up a free demo of YOUR site in ~5 mins — just drop your business name. no payment till you see it 🔥",
+    PROFESSIONAL: "Sample of recent work: ${portfolioUrl}. I can put together a free demo of your business website in about 5 minutes — just send me your business name. No payment required until you see the live preview.",
+    UNSURE: "hey! sharing a sample of recent work in case it helps: ${portfolioUrl}. happy to spin up a free demo of yours too — just send your business name 😊 no payment till you see it",
+    NEGOTIATOR: "recent work: ${portfolioUrl}. free demo of yours in 5 min. send business name. no payment till you see it.",
+    DEFAULT: "Here's a sample of recent work: ${portfolioUrl}. I can spin up a free demo of YOUR business website in ~5 mins — just send your business name. No payment till you see it live.",
+  },
+  expl_20h_last: {
+    COOL: "last nudge from me 🙏 want a free demo? if chat isn't your thing, grab 15 min: ${calendlyUrl}. after today i'll stop messaging unless you reach out",
+    PROFESSIONAL: "Last follow-up from my side. If you'd like a free demo, just reply with your business name. If chat isn't ideal, you can also book a 15-minute slot here: ${calendlyUrl}. After today I'll stop reaching out unless you message first.",
+    UNSURE: "hey, last note from me 😊 free demo if you want one — or grab 15 min on my calendar: ${calendlyUrl}. either way no pressure, won't message again unless you do",
+    NEGOTIATOR: "last nudge. free demo? or book 15 min: ${calendlyUrl}. silent after today.",
+    DEFAULT: "Last nudge from me — want a free demo? If chat isn't your thing, grab a 15-min slot: ${calendlyUrl}. After today I'll stop messaging unless you reach out 👍",
+  },
+};
+
+/**
+ * Render an exploratory-ladder message in English with portfolio/calendly
+ * URLs filled in. Returns null for unknown step keys so callers can skip
+ * cleanly. Pass the result through the localizer before sending.
+ */
+function renderExploratoryMessage(stepKey, personalityMode, env) {
+  const bucket = EXPLORATORY_MESSAGES[stepKey];
+  if (!bucket) return null;
+  const mode = (personalityMode || '').toUpperCase();
+  const template = bucket[mode] || bucket.DEFAULT;
+  const portfolioUrl = (env && env.portfolio && env.portfolio.website1) || 'https://preview-1776447034475.netlify.app/';
+  const calendlyUrl = (env && env.calendlyUrl) || 'https://calendly.com/bytes-platform';
+  return template
+    .replace(/\$\{portfolioUrl\}/g, portfolioUrl)
+    .replace(/\$\{calendlyUrl\}/g, calendlyUrl);
 }
 
 /**
@@ -337,21 +396,39 @@ async function processUserFollowup(user) {
   // active ones are inside the window).
   const channel = user.channel || 'whatsapp';
   if (channel === 'whatsapp' && !isWithinWaWindow(lastMsg.created_at)) {
-    const completedSteps = metadata.followupSteps || [];
-    const seoCompleted = metadata.seoFollowupSteps || [];
     const isSeoLead = metadata.seoAuditTriggered && !metadata.domainChoice;
-    const completed = isSeoLead ? seoCompleted : completedSteps;
-    const ladder = isSeoLead ? SEO_FOLLOWUP_LADDER : FOLLOWUP_LADDER;
-    // If there are still un-completed steps, mark them all complete so
-    // we don't keep re-checking this user every cycle.
+    const wd = metadata.websiteData || {};
+    const isEngagedWebdev =
+      !!wd.businessName ||
+      !!metadata.selectedDomain ||
+      !!metadata.websiteDemoTriggered ||
+      !!metadata.paymentLinkSentAt ||
+      !!metadata.lastPaymentAmount;
+
+    // Pick the ladder this user belongs to so we mark the right field
+    // complete. Exploratory users (said hello, never engaged) need the
+    // same treatment as the other ladders or the scheduler keeps
+    // re-checking them every cycle for the rest of their lifetime.
+    let completed, ladder, patchKey;
+    if (isSeoLead) {
+      completed = metadata.seoFollowupSteps || [];
+      ladder = SEO_FOLLOWUP_LADDER;
+      patchKey = 'seoFollowupSteps';
+    } else if (isEngagedWebdev) {
+      completed = metadata.followupSteps || [];
+      ladder = FOLLOWUP_LADDER;
+      patchKey = 'followupSteps';
+    } else {
+      completed = metadata.exploratorySteps || [];
+      ladder = EXPLORATORY_LADDER;
+      patchKey = 'exploratorySteps';
+    }
+
     if (completed.length < ladder.length) {
       const allSteps = ladder.map((r) => r.step);
-      const patch = isSeoLead
-        ? { seoFollowupSteps: allSteps }
-        : { followupSteps: allSteps };
-      await updateUserMetadata(user.id, patch);
+      await updateUserMetadata(user.id, { [patchKey]: allSteps });
       logger.info(
-        `[FOLLOWUP] Skipping ${user.phone_number} — past 24h WhatsApp window (last inbound: ${lastMsg.created_at}). All remaining steps marked complete.`
+        `[FOLLOWUP] Skipping ${user.phone_number} — past 24h WhatsApp window (last inbound: ${lastMsg.created_at}). All ${patchKey} marked complete.`
       );
     }
     return;
@@ -402,9 +479,8 @@ async function processUserFollowup(user) {
   //   - websiteDemoTriggered: sales bot fired [TRIGGER_WEBSITE_DEMO]
   //   - paymentLinkSentAt / lastPaymentAmount: a link/payment exists
   //
-  // If none apply, skip silently. We could send a different soft nudge
-  // for exploratory users later, but radio silence is better than a
-  // wrong payment prompt.
+  // If none apply, route to the exploratory ladder below — three soft
+  // re-engagement nudges inside the 24h window aimed at sparking a reply.
   const wd = metadata.websiteData || {};
   const engagedWithWebdev =
     !!wd.businessName ||
@@ -412,8 +488,53 @@ async function processUserFollowup(user) {
     !!metadata.websiteDemoTriggered ||
     !!metadata.paymentLinkSentAt ||
     !!metadata.lastPaymentAmount;
+
   if (!engagedWithWebdev) {
-    logger.debug(`[FOLLOWUP] Skipping website-payment ladder for ${user.phone_number} — no webdev engagement signals`);
+    // Kill switch + per-step hour overrides via admin_settings. Reuses the
+    // same getSetting/getNumberSetting pattern applyWebsiteDiscount uses.
+    const { getSetting, getNumberSetting } = require('../db/settings');
+    const disabled = await getSetting('exploratory_disabled', false);
+    if (disabled) return;
+
+    const explCompleted = metadata.exploratorySteps || [];
+    if (explCompleted.length >= EXPLORATORY_LADDER.length) return;
+
+    const h1 = await getNumberSetting('exploratory_step1_hours', 2);
+    const h2 = await getNumberSetting('exploratory_step2_hours', 8);
+    const h3 = await getNumberSetting('exploratory_step3_hours', 20);
+    const tunedLadder = [
+      { step: 'expl_2h_soft',  afterHours: h1 },
+      { step: 'expl_8h_value', afterHours: h2 },
+      { step: 'expl_20h_last', afterHours: h3 },
+    ];
+
+    const nextStep = getNextFollowup(lastMsg.created_at, explCompleted, leadTemp, tunedLadder);
+    if (!nextStep) return;
+
+    const personality = metadata.leadBrief
+      ? extractPersonalityFromBrief(metadata.leadBrief)
+      : (metadata.personalityMode || 'DEFAULT');
+
+    const { env: envCfg } = require('../config/env');
+    const englishMsg = renderExploratoryMessage(nextStep.step, personality, envCfg);
+    if (!englishMsg) return;
+
+    // Localize for non-English users. Cached language detection avoids an
+    // LLM call after the first turn; English users return verbatim.
+    const { localize } = require('../utils/localizer');
+    const message = await localize(englishMsg, user, null);
+
+    logger.info(
+      `[EXPL] Sending ${nextStep.step} to ${user.phone_number} ` +
+        `(mode: ${personality}, temp: ${leadTemp}, lang: ${metadata.preferredLanguage || 'english'})`
+    );
+
+    await sendTextMessage(user.phone_number, message);
+    await logMessage(user.id, message, 'assistant');
+
+    await updateUserMetadata(user.id, {
+      exploratorySteps: [...explCompleted, nextStep.step],
+    });
     return;
   }
 
