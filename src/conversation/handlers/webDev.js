@@ -200,16 +200,21 @@ async function offerServicesForm(user, kind, opts = {}) {
     ? opts.prefixAck.trim()
     : '';
 
-  // No public base URL configured: a relative link won't open from
-  // WhatsApp/Messenger. Skip the offer and ask the bare chat question
-  // so the conversation isn't blocked behind a broken link.
-  if (!getFormBaseUrl()) {
-    logger.warn('[WEBDEV-FORM] PUBLIC_API_BASE_URL / CHATBOT_BASE_URL not set — skipping form offer, falling back to chat');
-    const fallbackMsg = prefixAck
+  // Internal fallback when we can't issue a working form link (env unset
+  // or token-create failure). Sends the bare chat question for the state
+  // so the conversation doesn't dead-end behind a broken offer.
+  const sendChatFallback = async () => {
+    const msg = prefixAck
       ? `${prefixAck}\n\n${questionForState(fallbackState, wd)}`
       : questionForState(fallbackState, wd);
-    await sendTextMessage(user.phone_number, await localize(fallbackMsg, user));
+    await sendTextMessage(user.phone_number, await localize(msg, user));
     return fallbackState;
+  };
+
+  // No public base URL configured: a relative link won't open from WhatsApp.
+  if (!getFormBaseUrl()) {
+    logger.warn('[WEBDEV-FORM] PUBLIC_API_BASE_URL / CHATBOT_BASE_URL not set — skipping form offer, falling back to chat');
+    return sendChatFallback();
   }
 
   let token;
@@ -218,11 +223,7 @@ async function offerServicesForm(user, kind, opts = {}) {
     token = row.token;
   } catch (err) {
     logger.warn(`[WEBDEV-FORM] token create failed: ${err.message} — falling back to chat`);
-    const fallbackMsg = prefixAck
-      ? `${prefixAck}\n\n${questionForState(fallbackState, wd)}`
-      : questionForState(fallbackState, wd);
-    await sendTextMessage(user.phone_number, await localize(fallbackMsg, user));
-    return fallbackState;
+    return sendChatFallback();
   }
   const url = buildFormUrl(token);
   const offerBody = kind === 'salon'
@@ -7956,8 +7957,7 @@ module.exports = {
   // Exposed so salesBot's TRIGGER_WEBSITE_DEMO handler can fork into the
   // services-form offer instead of asking its hardcoded "what services?"
   // chat question. salesBot bypasses both smartAdvance and startWebdevFlow,
-  // so it needs direct access to the offer helpers.
-  shouldOfferServicesForm,
+  // so it needs direct access to the offer helper.
   offerServicesForm,
   // Cross-state correction handler — called from the router when
   // correctionDetector flags a previously-answered field.

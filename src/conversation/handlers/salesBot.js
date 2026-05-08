@@ -1067,34 +1067,13 @@ async function handleSalesBot(user, message) {
         // already includes the question ("Quick choice — easier in chat
         // or in a quick form? …"), so we pass the friendly ack as a
         // prefix and the helper sends one combined message instead of two.
-        // Without this fork, salesBot's hardcoded "what services?" path
-        // bypasses both smartAdvance and startWebdevFlow (the form-offer
-        // hook lives in those) and the user never sees the form link
-        // even for an obvious salon site.
-        const { shouldOfferServicesForm, offerServicesForm } = require('./webDev');
+        // offerServicesForm is internal-fallback-safe — if PUBLIC_API_BASE_URL
+        // is missing or token creation fails, it sends the bare chat question
+        // itself, so no outer fallback is needed.
+        const { offerServicesForm } = require('./webDev');
         const ack = `Nice, *${businessName}* — let's get you set up.`;
-        const offerKind = shouldOfferServicesForm(STATES.WEB_COLLECT_SERVICES, websiteData);
-        if (offerKind) {
-          await logMessage(user.id, 'Website demo → salon flow (form offer)', 'assistant');
-          return offerServicesForm(user, offerKind, { prefixAck: ack });
-        }
-        // Fallback: shouldOfferServicesForm shouldn't return null here
-        // since we just confirmed it's a salon, but keep the original
-        // chat question as a safety net.
-        await sendTextMessage(
-          user.phone_number,
-          await localize(
-            `${ack}\n\nFirst, what services do you offer? List them separated by commas (e.g. *waxing, facials, nails, haircuts*).`,
-            user,
-            text
-          )
-        );
-        await logMessage(
-          user.id,
-          'Website demo → salon flow (chat fallback; offer skipped)',
-          'assistant'
-        );
-        return STATES.WEB_COLLECT_SERVICES;
+        await logMessage(user.id, 'Website demo → salon flow (form offer)', 'assistant');
+        return offerServicesForm(user, 'salon', { prefixAck: ack });
       }
       await sendTextMessage(
         user.phone_number,

@@ -14,7 +14,6 @@ const { getActiveToken, markSubmitted } = require('../db/serviceFormTokens');
 const { updateUserMetadata, updateUserState } = require('../db/users');
 const { logMessage } = require('../db/conversations');
 const { uploadListingPhoto } = require('../website-gen/listingPhotoUploader');
-const { uploadSalonServicePhoto } = require('./photoUploader');
 const { renderSalonForm } = require('./templates/salon');
 const { renderRealEstateForm } = require('./templates/realEstate');
 const { infoPage } = require('./templates/common');
@@ -132,9 +131,11 @@ function consentGranted(body) {
 
 async function uploadPhoto(file, kind) {
   if (!file || !file.buffer || !file.size) return null;
+  const opts = kind === 'real_estate'
+    ? { bucket: 'listing-photos', tag: 'LISTING-UPLOAD' }
+    : { bucket: 'salon-service-photos', tag: 'SALON-PHOTO-UPLOAD' };
   try {
-    const fn = kind === 'real_estate' ? uploadListingPhoto : uploadSalonServicePhoto;
-    return await fn(file.buffer, file.mimetype || 'image/jpeg');
+    return await uploadListingPhoto(file.buffer, file.mimetype || 'image/jpeg', opts);
   } catch (err) {
     logger.warn(`[SERVICES-FORM] photo upload skipped (${kind}): ${err.message}`);
     return null;
