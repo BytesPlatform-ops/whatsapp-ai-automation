@@ -1063,30 +1063,28 @@ async function handleSalesBot(user, message) {
       // answer industry first and services next.
       const haveServices = Array.isArray(services) && services.length > 0;
       if (!haveServices) {
-        // Send a brief ack first, then fork into the services-form offer.
-        // The offer message itself includes the question ("Quick choice —
-        // easier in chat or in a quick form? …"), so no separate question
-        // send is needed. Without this fork, salesBot's hardcoded "what
-        // services?" message bypasses both smartAdvance and startWebdevFlow
-        // (the form-offer hook lives in those) and the user never sees
-        // the form link even for an obvious salon site.
+        // Fork into the services-form offer for salon. The offer body
+        // already includes the question ("Quick choice — easier in chat
+        // or in a quick form? …"), so we pass the friendly ack as a
+        // prefix and the helper sends one combined message instead of two.
+        // Without this fork, salesBot's hardcoded "what services?" path
+        // bypasses both smartAdvance and startWebdevFlow (the form-offer
+        // hook lives in those) and the user never sees the form link
+        // even for an obvious salon site.
         const { shouldOfferServicesForm, offerServicesForm } = require('./webDev');
-        await sendTextMessage(
-          user.phone_number,
-          await localize(`Nice, *${businessName}* — let's get you set up.`, user, text)
-        );
+        const ack = `Nice, *${businessName}* — let's get you set up.`;
         const offerKind = shouldOfferServicesForm(STATES.WEB_COLLECT_SERVICES, websiteData);
         if (offerKind) {
           await logMessage(user.id, 'Website demo → salon flow (form offer)', 'assistant');
-          return offerServicesForm(user, offerKind);
+          return offerServicesForm(user, offerKind, { prefixAck: ack });
         }
-        // Fallback: env not set or token-create failure inside the helper —
-        // keep the original chat question so the conversation doesn't
-        // dead-end on a broken offer.
+        // Fallback: shouldOfferServicesForm shouldn't return null here
+        // since we just confirmed it's a salon, but keep the original
+        // chat question as a safety net.
         await sendTextMessage(
           user.phone_number,
           await localize(
-            `First, what services do you offer? List them separated by commas (e.g. *waxing, facials, nails, haircuts*).`,
+            `${ack}\n\nFirst, what services do you offer? List them separated by commas (e.g. *waxing, facials, nails, haircuts*).`,
             user,
             text
           )

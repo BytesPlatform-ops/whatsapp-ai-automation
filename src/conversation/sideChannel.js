@@ -114,6 +114,21 @@ Possible classifications:
 2. **name_change** — user wants to update the business name. Phrases like "actually it's called X", "name should be X", "change name to X".
    Shape: {"kind":"name_change","value":"<new name>"}
 
+   IMPORTANT — typo / substring corrections preserve the rest of the existing name.
+   When the user is fixing a TYPO inside the existing knownName (phrasings like
+   "its not X, its Y" / "Sorry, Y" / "I meant Y" / "no, Y" — where Y is similar
+   in spelling/phonetics to a word already in knownName), return the COMPLETE
+   corrected name preserving every word of knownName that they aren't replacing.
+   Do NOT return just the corrected token alone.
+
+   Examples (knownName carries info to preserve):
+   - knownName="Ansh Salin", user="its not Salin, its Salon"  → {"kind":"name_change","value":"Ansh Salon"}
+   - knownName="Ansh Salin", user="Sorry, Ansh Salon"          → {"kind":"name_change","value":"Ansh Salon"}
+   - knownName="Bytes Platfrom", user="Sorry, Bytes Platform"  → {"kind":"name_change","value":"Bytes Platform"}
+   - knownName="Lion Cafe", user="its Lion Café not Cafe"      → {"kind":"name_change","value":"Lion Café"}
+   - knownName="Ansh Salin", user="actually call it Vibe"      → {"kind":"name_change","value":"Vibe"}   (full replace — explicit rename, NOT a typo correction)
+   - knownName="Ansh Salin", user="change name to Vibe Studio" → {"kind":"name_change","value":"Vibe Studio"}  (full replace — explicit rename)
+
 3. **industry_change** — user wants to update the industry / niche.
    Shape: {"kind":"industry_change","value":"<new industry>"}
 

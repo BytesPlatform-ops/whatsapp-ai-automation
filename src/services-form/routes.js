@@ -78,27 +78,48 @@ router.get('/services-form/:token', async (req, res) => {
   }
 });
 
-// Bracket-notation parser: turns flat keys like `services[0][name]` and
-// the matching file fieldnames into a nested array of objects keyed by
-// numeric row index. Skips holes (caller may have removed a row).
+// Stitch text fields + uploaded photos into a flat array of row objects.
+// Multer 2.x auto-parses bracket-notation TEXT fields (`services[0][name]`)
+// into nested arrays — `body.services` arrives as `[{name,priceText,…},…]`.
+// FILE fields keep their literal fieldname, so `req.files[N].fieldname` is
+// still `services[0][photo]` and we attach by regex.
 function collectRows(body, files, prefix) {
-  const fieldRx = new RegExp(`^${prefix}\\[(\\d+)\\]\\[([a-zA-Z]+)\\]$`);
   const rowsByIdx = new Map();
-  for (const [key, val] of Object.entries(body || {})) {
-    const m = key.match(fieldRx);
-    if (!m) continue;
-    const idx = parseInt(m[1], 10);
-    const field = m[2];
-    if (!rowsByIdx.has(idx)) rowsByIdx.set(idx, {});
-    rowsByIdx.get(idx)[field] = typeof val === 'string' ? val.trim() : val;
+  const nested = body && body[prefix];
+
+  // Text fields: pull each row object out of the multer-parsed nested
+  // structure. It can be an Array (most common) or a plain object keyed
+  // by numeric strings (sparse rows after a remove).
+  if (Array.isArray(nested)) {
+    nested.forEach((row, idx) => {
+      if (row && typeof row === 'object') rowsByIdx.set(idx, { ...row });
+    });
+  } else if (nested && typeof nested === 'object') {
+    for (const [k, row] of Object.entries(nested)) {
+      const idx = parseInt(k, 10);
+      if (Number.isInteger(idx) && row && typeof row === 'object') {
+        rowsByIdx.set(idx, { ...row });
+      }
+    }
   }
+
+  // Trim string values inside each row.
+  for (const row of rowsByIdx.values()) {
+    for (const [k, v] of Object.entries(row)) {
+      if (typeof v === 'string') row[k] = v.trim();
+    }
+  }
+
+  // File fields: still flat-keyed by fieldname. Attach to the matching row.
+  const fileRx = new RegExp(`^${prefix}\\[(\\d+)\\]\\[([a-zA-Z]+)\\]$`);
   for (const file of files || []) {
-    const m = (file.fieldname || '').match(fieldRx);
+    const m = (file.fieldname || '').match(fileRx);
     if (!m) continue;
     const idx = parseInt(m[1], 10);
     if (!rowsByIdx.has(idx)) rowsByIdx.set(idx, {});
     rowsByIdx.get(idx).__photo = file;
   }
+
   return Array.from(rowsByIdx.entries())
     .sort((a, b) => a[0] - b[0])
     .map(([, row]) => row);

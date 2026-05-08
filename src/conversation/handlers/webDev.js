@@ -188,21 +188,27 @@ function shouldOfferServicesForm(nextState, websiteData) {
   return null;
 }
 
-async function offerServicesForm(user, kind) {
+async function offerServicesForm(user, kind, opts = {}) {
   const wd = { ...(user.metadata?.websiteData || {}) };
   const fallbackState = kind === 'salon'
     ? STATES.WEB_COLLECT_SERVICES
     : STATES.WEB_COLLECT_LISTINGS_ASK;
+  // Optional ack to prepend to the offer message so the bot sends one
+  // combined message instead of two stacked ones (smartAdvance / salesBot
+  // both pass an "ack" line that used to go out as a separate sendTextMessage).
+  const prefixAck = (opts && typeof opts.prefixAck === 'string' && opts.prefixAck.trim())
+    ? opts.prefixAck.trim()
+    : '';
 
   // No public base URL configured: a relative link won't open from
   // WhatsApp/Messenger. Skip the offer and ask the bare chat question
   // so the conversation isn't blocked behind a broken link.
   if (!getFormBaseUrl()) {
     logger.warn('[WEBDEV-FORM] PUBLIC_API_BASE_URL / CHATBOT_BASE_URL not set — skipping form offer, falling back to chat');
-    await sendTextMessage(
-      user.phone_number,
-      await localize(questionForState(fallbackState, wd), user)
-    );
+    const fallbackMsg = prefixAck
+      ? `${prefixAck}\n\n${questionForState(fallbackState, wd)}`
+      : questionForState(fallbackState, wd);
+    await sendTextMessage(user.phone_number, await localize(fallbackMsg, user));
     return fallbackState;
   }
 
@@ -212,16 +218,17 @@ async function offerServicesForm(user, kind) {
     token = row.token;
   } catch (err) {
     logger.warn(`[WEBDEV-FORM] token create failed: ${err.message} — falling back to chat`);
-    await sendTextMessage(
-      user.phone_number,
-      await localize(questionForState(fallbackState, wd), user)
-    );
+    const fallbackMsg = prefixAck
+      ? `${prefixAck}\n\n${questionForState(fallbackState, wd)}`
+      : questionForState(fallbackState, wd);
+    await sendTextMessage(user.phone_number, await localize(fallbackMsg, user));
     return fallbackState;
   }
   const url = buildFormUrl(token);
-  const intro = kind === 'salon'
+  const offerBody = kind === 'salon'
     ? `Quick choice — easier in chat or in a quick form?\n\n📋 Open the form: ${url}\n\nOr just type your services here (e.g. *Haircut $40, Color $120, Manicure $30…*).\nReply *chat* if you'd rather type them out one by one.`
     : `Quick choice — easier in chat or in a quick form?\n\n📋 Open the form: ${url}\n\nOr reply *yes* to send your listings here in chat, *skip* to use placeholder listings, or *chat* to switch to typing them out.`;
+  const intro = prefixAck ? `${prefixAck}\n\n${offerBody}` : offerBody;
 
   const flagPatch = kind === 'salon'
     ? { servicesFormOffered: true, servicesFormToken: token }
@@ -421,14 +428,12 @@ async function smartAdvance(user, message, ackPrefix = null) {
   // Form-offer fork: when transitioning into one of the loopy collection
   // states for the first time, offer the services-form web link instead
   // of asking the bare chat question. The user can fill out the form, type
-  // in chat, or reply *chat* to switch. See offerServicesForm above.
+  // in chat, or reply *chat* to switch. See offerServicesForm above. The
+  // ack is passed as `prefixAck` so it lands in the same message as the
+  // offer body (one bot message per turn instead of two stacked ones).
   const offerKind = shouldOfferServicesForm(nextState, merged);
   if (offerKind) {
-    const userReply = (message && message.text) || '';
-    if (ack) {
-      await sendTextMessage(user.phone_number, await localize(ack, user, userReply));
-    }
-    return offerServicesForm(user, offerKind);
+    return offerServicesForm(user, offerKind, { prefixAck: ack });
   }
 
   const nextQuestion = questionForState(nextState, merged);
