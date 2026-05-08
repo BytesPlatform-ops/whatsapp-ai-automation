@@ -193,6 +193,9 @@ async function handleSalonSubmit(user, parsed) {
       name: row.name,
       durationMinutes: row.durationMinutes,
       priceText: row.priceText,
+      // Mark as user-provided so the chat-side iterative-default logic in
+      // handleSalonServiceDurations never overwrites these on a later turn.
+      addressed: true,
     };
     if (photoUrl) {
       entry.image = {

@@ -2541,6 +2541,25 @@ async function handleCollectListingsPhotos(user, message) {
 // Flow: services -> booking tool -> instagram -> (if native) hours -> durations -> contact
 // ═══════════════════════════════════════════════════════════════════════════
 
+// Returns true when every name in wd.services has a matching salonServices
+// entry with a positive durationMinutes — i.e. the form already filled in
+// the durations + prices that handleSalonServiceDurations would otherwise
+// ask for. Lets handleSalonHours skip SALON_SERVICE_DURATIONS entirely.
+function isSalonServicesComplete(wd) {
+  const services = Array.isArray(wd?.services) ? wd.services : [];
+  const salon = Array.isArray(wd?.salonServices) ? wd.salonServices : [];
+  if (services.length === 0 || salon.length === 0) return false;
+  const byName = new Map(
+    salon.map((s) => [String(s?.name || '').toLowerCase().trim(), s])
+  );
+  return services.every((name) => {
+    const entry = byName.get(String(name || '').toLowerCase().trim());
+    return !!entry
+      && Number.isFinite(Number(entry.durationMinutes))
+      && Number(entry.durationMinutes) > 0;
+  });
+}
+
 async function startSalonFlow(user) {
   // Mark this site as using the salon template so the deployer picks the salon renderer.
   const siteId = user.metadata?.currentSiteId;
@@ -2807,6 +2826,16 @@ async function handleSalonHours(user, message) {
     await sendTextMessage(user.phone_number, await localize(prefix.trim(), user, text));
     return finishSalonFlow(user);
   }
+  // Form short-circuit: if the services-form already populated durations +
+  // prices for every service, skip SALON_SERVICE_DURATIONS entirely. The
+  // user typed it once on the web form — asking again in chat breaks the
+  // implicit "fill once, never again" promise of the form fork.
+  if (isSalonServicesComplete(wd)) {
+    await sendTextMessage(user.phone_number, await localize(prefix.trim(), user, text));
+    await logMessage(user.id, 'Salon durations: skipped (form-populated)', 'assistant');
+    return finishSalonFlow(user);
+  }
+
   const fullMsg = prefix +
     `How long does each service take, and what's the price?\n\n` +
     `Example: *"Haircut 30min €25, Colour 90min €85, Nails 45min €35"*.\n\n` +
