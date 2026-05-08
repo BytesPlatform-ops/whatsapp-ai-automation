@@ -9,7 +9,7 @@ function renderRealEstateForm({ token, businessName }) {
 <h1>${title}</h1>
 <p class="sub">Add up to 3 listings to feature on your homepage. A photo is optional — if you skip it we'll use a professional stock photo.</p>
 
-<form id="services-form" method="POST" action="/services-form/${escapeHtml(token)}" enctype="multipart/form-data" novalidate>
+<form id="services-form" method="POST" action="/services-form/${escapeHtml(token)}" enctype="multipart/form-data">
   <div id="rows"></div>
   <button type="button" class="add-btn" id="add-btn">+ Add another listing</button>
 

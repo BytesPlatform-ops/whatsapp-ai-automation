@@ -9,7 +9,7 @@ function renderSalonForm({ token, businessName }) {
 <h1>${title}</h1>
 <p class="sub">Add each service with how long it takes and what it costs. A photo is optional — if you skip it we'll auto-pick a stock photo for you.</p>
 
-<form id="services-form" method="POST" action="/services-form/${escapeHtml(token)}" enctype="multipart/form-data" novalidate>
+<form id="services-form" method="POST" action="/services-form/${escapeHtml(token)}" enctype="multipart/form-data">
   <div id="rows"></div>
   <button type="button" class="add-btn" id="add-btn">+ Add another service</button>
 
