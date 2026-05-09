@@ -219,10 +219,14 @@ async function handleSalesBot(user, message) {
   // Add the current user message
   messages.push({ role: 'user', content: text });
 
-  // Determine ad source from user metadata (set externally via UTM / ad tracking)
+  // Determine ad source + ad industry from user metadata (set by router.js
+  // when the inbound message carries a Meta `referral` payload from a
+  // click-to-WhatsApp ad). adIndustry drives which preview-site URL the
+  // greeting uses (salon / hvac / real-estate / generic fallback).
   const adSource = user.metadata?.adSource || 'generic';
+  const adIndustry = user.metadata?.adIndustry || 'generic';
 
-  let systemPrompt = buildSalesPrompt(env.calendlyUrl, env.portfolio, adSource);
+  let systemPrompt = buildSalesPrompt(env.calendlyUrl, env.portfolio, adSource, adIndustry);
   systemPrompt += buildSummaryContext(user);
   systemPrompt += buildKnownContext(user);
 

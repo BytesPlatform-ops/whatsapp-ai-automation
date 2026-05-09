@@ -23,6 +23,40 @@ const NETLIFY_API = 'https://api.netlify.com/api/v1';
 // flow silently hangs in WEB_GENERATING state.
 const NETLIFY_TIMEOUT_MS = 60_000;
 
+// Netlify deploy rate-limit retry: their per-minute cap (3 deploys/site)
+// occasionally bites users when several builds land in a row. Without this
+// retry, a single 429 fails the whole webdev flow and the user sees a
+// generic "issue generating your website" message. We wait through the
+// minute window with exponential backoff (30s, 60s, 120s — max 3.5 min
+// total, well under the 5-min stuck threshold in handleGenerating). On
+// final failure, the error gets `code: 'NETLIFY_RATE_LIMITED'` so the
+// upstream catch can show a rate-limit-specific message.
+const NETLIFY_429_BACKOFF_MS = [30_000, 60_000, 120_000];
+
+async function retryOn429(operation, label) {
+  const maxAttempts = NETLIFY_429_BACKOFF_MS.length + 1;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      return await operation();
+    } catch (err) {
+      const status = err?.response?.status;
+      const isRateLimit = status === 429;
+      if (!isRateLimit || attempt === maxAttempts) {
+        if (isRateLimit) {
+          err.code = 'NETLIFY_RATE_LIMITED';
+          logger.warn(`[NETLIFY] ${label} hit 429 ${maxAttempts} times — giving up.`);
+        }
+        throw err;
+      }
+      const delayMs = NETLIFY_429_BACKOFF_MS[attempt - 1];
+      logger.warn(
+        `[NETLIFY] ${label} hit 429 (attempt ${attempt}/${maxAttempts}). Backing off ${Math.round(delayMs / 1000)}s before retry…`
+      );
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
+  }
+}
+
 // Route a siteConfig to the right template's page generator.
 function renderAllPagesForTemplate(siteConfig, watermark) {
   if (siteConfig.templateId === 'salon') {
@@ -54,7 +88,10 @@ async function deployToNetlify(siteConfig, existingSiteId = null, { watermark = 
     } else {
       // Create a new site
       logger.info('[NETLIFY] Creating new site...');
-      const siteResponse = await axios.post(`${NETLIFY_API}/sites`, { name: `preview-${Date.now()}` }, { headers, timeout: NETLIFY_TIMEOUT_MS });
+      const siteResponse = await retryOn429(
+        () => axios.post(`${NETLIFY_API}/sites`, { name: `preview-${Date.now()}` }, { headers, timeout: NETLIFY_TIMEOUT_MS }),
+        'create-site'
+      );
       siteId = siteResponse.data.id;
       siteName = siteResponse.data.name;
       logger.info(`[NETLIFY] Site created: ${siteName} (${siteId})`);
@@ -75,10 +112,13 @@ async function deployToNetlify(siteConfig, existingSiteId = null, { watermark = 
       fileDigests[fp] = crypto.createHash('sha1').update(buf).digest('hex');
     }
     logger.info(`[NETLIFY] Creating deploy with ${Object.keys(files).length} file(s)...`);
-    const deployResponse = await axios.post(
-      `${NETLIFY_API}/sites/${siteId}/deploys`,
-      { files: fileDigests },
-      { headers, timeout: NETLIFY_TIMEOUT_MS }
+    const deployResponse = await retryOn429(
+      () => axios.post(
+        `${NETLIFY_API}/sites/${siteId}/deploys`,
+        { files: fileDigests },
+        { headers, timeout: NETLIFY_TIMEOUT_MS }
+      ),
+      'create-deploy'
     );
     const deployId = deployResponse.data.id;
     const requiredShas = deployResponse.data.required || [];

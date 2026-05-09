@@ -333,19 +333,51 @@ heroTextOverride values:
 Return ONLY valid JSON. No explanation outside the JSON.`;
 
 /**
+ * Resolve the industry-specific preview-site URL for the salesBot's first
+ * reply. Pulls from env vars set per industry, falls back to a generic one
+ * if no industry-specific URL is configured for the matched industry. If
+ * nothing is set at all, returns null and the greeting omits the link line.
+ *
+ * Configurable env vars:
+ *   PREVIEW_URL_SALON, PREVIEW_URL_HVAC, PREVIEW_URL_REAL_ESTATE,
+ *   PREVIEW_URL_GENERIC
+ */
+function getAdPreviewUrl(adIndustry) {
+  const map = {
+    salon: process.env.PREVIEW_URL_SALON,
+    hvac: process.env.PREVIEW_URL_HVAC,
+    real_estate: process.env.PREVIEW_URL_REAL_ESTATE,
+  };
+  const direct = map[adIndustry];
+  return direct || process.env.PREVIEW_URL_GENERIC || null;
+}
+
+/**
  * Build the Pixie sales bot system prompt.
  * @param {string} calendlyUrl - Booking link injected into the prompt
  * @param {object} portfolio - { website1, website2 }
- * @param {string} [adSource] - 'web'|'seo'|'smm'|'generic'
+ * @param {string} [adSource] - 'web'|'seo'|'smm'|'generic' (which product the ad pitched)
+ * @param {string} [adIndustry] - 'salon'|'hvac'|'real_estate'|'generic' (which industry the ad targeted)
  * @returns {string}
  */
-function buildSalesPrompt(calendlyUrl, portfolio = {}, adSource = 'generic') {
+function buildSalesPrompt(calendlyUrl, portfolio = {}, adSource = 'generic', adIndustry = 'generic') {
   const { enabledServicesPretty, disabledServicesPretty } = require('../config/services');
   const enabledList = enabledServicesPretty() || 'none';
   const disabledList = disabledServicesPretty() || 'none';
 
+  // Web-ad greeting: industry-aware. We send a sample preview link from
+  // an already-deployed example site so the user sees real value in the
+  // first message, before they've shared any details. The URL is resolved
+  // from env (PREVIEW_URL_<INDUSTRY>) so admin can swap demos without a
+  // code change. Falls back to PREVIEW_URL_GENERIC when no industry match,
+  // and drops the link line entirely if nothing is configured.
+  const previewUrl = getAdPreviewUrl(adIndustry);
+  const webGreeting = previewUrl
+    ? `The user clicked one of our website ads. Open with this exact wording (translate to the user's language if their first message isn't in English, but keep the URL exactly as-is and keep the 💚 emoji):\n\n"Hey! 💚 I am Pixie, an AI Assistant. I build business websites in about 60 seconds, right here in this chat. Here's one I made yesterday: ${previewUrl}\n\nWant yours? Just drop your business name and I'll start building. Free to preview!"\n\nNo other questions, no upsell, no industry probing — just this opener verbatim. The next user reply (their business name) is what triggers the wizard.`
+    : `The user clicked one of our website ads. Open with: "Hey! 💚 I am Pixie, an AI Assistant. I build business websites in about 60 seconds, right here in this chat. Want yours? Just drop your business name and I'll start building. Free to preview!" (Translate to the user's language if needed, keep the 💚 emoji.) No other questions.`;
+
   const greetingBySource = {
-    web: 'The user clicked an ad about websites. Introduce yourself as "Pixie, an AI assistant ", acknowledge the website ad, ask if they need a redesign or a new site. 1-2 short sentences.',
+    web: webGreeting,
     seo: 'The user clicked an ad about SEO/Google rankings. Introduce yourself as "Pixie, an AI assistant", briefly note that SEO is handled by a human from our team and offer to connect them, OR pivot to a website if that fits. 1-2 short sentences.',
     smm: 'The user clicked an ad about social media. Introduce yourself as "Pixie, an AI assistant", briefly note that social media is handled by a human from our team and offer to connect them, OR pivot to a website if that fits. 1-2 short sentences.',
     generic: 'The user reached out organically. Introduce yourself as "Pixie, an AI assistant", ask what they need help with. 1-2 short sentences. Do NOT list services.',

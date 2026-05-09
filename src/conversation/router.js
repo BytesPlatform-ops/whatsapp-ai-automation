@@ -81,6 +81,19 @@ function identifyProduct(adBody) {
   return 'generic';
 }
 
+/**
+ * Identify which industry the ad is targeting based on headline + body text.
+ * Returns one of 'salon' | 'hvac' | 'real_estate' | 'generic'. Used to pick
+ * an industry-appropriate preview-site URL for the salesBot's first reply.
+ */
+function identifyAdIndustry(adText) {
+  const t = (adText || '').toLowerCase();
+  if (/\b(salon|beauty|barber|spa|nail|hair|lash|brow|makeup|stylist)\b/i.test(t)) return 'salon';
+  if (/\b(hvac|heating|cooling|ac repair|air conditioning|plumb|plumber|electric(?:al|ian)?|roof(?:ing|er)?|locksmith|garage door|pest control|tree service|water damage|appliance repair)\b/i.test(t)) return 'hvac';
+  if (/\b(real(?:[ -]?estate)?|realtor|realty|listing|property|properties|broker|brokerage|home(?:s)? for sale|house hunt)\b/i.test(t)) return 'real_estate';
+  return 'generic';
+}
+
 // Import handlers
 const { handleWelcome } = require('./handlers/welcome');
 const { handleServiceSelection } = require('./handlers/serviceSelection');
@@ -1000,9 +1013,12 @@ async function _routeMessage(message) {
   // Store ad referral data on first interaction (if present)
   if (message.referral && !user.metadata?.adSource) {
     const ref = message.referral;
+    const adText = `${ref.headline || ''} ${ref.body || ''}`.trim();
     const product = identifyProduct(ref.body || ref.headline || '');
+    const adIndustry = identifyAdIndustry(adText);
     await updateUserMetadata(user.id, {
       adSource: product,
+      adIndustry,
       adReferral: {
         sourceId: ref.sourceId,
         sourceType: ref.sourceType,
@@ -1013,8 +1029,8 @@ async function _routeMessage(message) {
         timestamp: new Date().toISOString(),
       },
     });
-    user.metadata = { ...user.metadata, adSource: product, adReferral: ref };
-    logger.info(`[AD TRACKING] Platform: ${channel} | Product: ${product} | Ad: ${ref.headline || 'N/A'} | User: ${from}`);
+    user.metadata = { ...user.metadata, adSource: product, adIndustry, adReferral: ref };
+    logger.info(`[AD TRACKING] Platform: ${channel} | Product: ${product} | Industry: ${adIndustry} | Ad: ${ref.headline || 'N/A'} | User: ${from}`);
   }
 
   // Redact any pasted secrets (API keys, JWTs, private-key blocks, etc.)

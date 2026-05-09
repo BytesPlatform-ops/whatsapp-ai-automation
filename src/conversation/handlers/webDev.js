@@ -5050,16 +5050,28 @@ async function generateWebsite(user) {
       stack: error.stack,
     });
 
-    await sendTextMessage(
-      user.phone_number,
-      '😔 Sorry, there was an issue generating your website. Our team has been notified.\n\n' +
-        'Would you like to try again or chat with our team?'
-    );
+    // Distinguish "deploy provider rate-limited us" from a true generation
+    // failure. The deployer's retryOn429 attaches code='NETLIFY_RATE_LIMITED'
+    // when all backoff retries fail; the response.status check is a fallback
+    // for any 429 that escaped the inner retry (e.g. on a code path we
+    // haven't wrapped).
+    const isRateLimited =
+      error?.code === 'NETLIFY_RATE_LIMITED' || error?.response?.status === 429;
+
+    const failureMsg = isRateLimited
+      ? "Looks like our deploy provider is rate-limiting us right now (we've published a few sites in a row). Should clear in 2-3 minutes — message me back then or tap *Try Again* below and I'll retry."
+      : '😔 Sorry, there was an issue generating your website. Our team has been notified.\n\nWould you like to try again or chat with our team?';
+
+    await sendTextMessage(user.phone_number, failureMsg);
     await sendInteractiveButtons(user.phone_number, 'What would you like to do?', [
       { id: 'web_retry', title: '🔄 Try Again' },
       { id: 'svc_general', title: '💬 Chat with Us' },
     ]);
-    await logMessage(user.id, 'Website generation failed', 'assistant');
+    await logMessage(
+      user.id,
+      isRateLimited ? 'Website generation failed (Netlify rate-limited)' : 'Website generation failed',
+      'assistant'
+    );
     return STATES.WEB_GENERATION_FAILED;
   }
 }
