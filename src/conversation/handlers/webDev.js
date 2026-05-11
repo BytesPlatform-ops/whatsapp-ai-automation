@@ -148,12 +148,11 @@ async function tryApplyContactFormat(user, text) {
 // ═══════════════════════════════════════════════════════════════════════════
 
 function getFormBaseUrl() {
-  // Match the convention used elsewhere (lead routes, payments, salon
-  // templates): PUBLIC_API_BASE_URL is the canonical override, with
-  // env.chatbot.baseUrl (CHATBOT_BASE_URL) as the fallback that's already
-  // configured in production deploys.
-  const { env } = require('../../config/env');
-  const base = process.env.PUBLIC_API_BASE_URL || env.chatbot?.baseUrl || '';
+  // The form URL we send to users should be on the brand domain. Vercel
+  // rewrites pixiebot.co/services-form/* to the Render backend, so this
+  // works without any infra changes. FORMS_PUBLIC_BASE_URL lets us point
+  // somewhere else if the brand domain ever moves.
+  const base = process.env.FORMS_PUBLIC_BASE_URL || 'https://pixiebot.co';
   return String(base).replace(/\/$/, '');
 }
 
