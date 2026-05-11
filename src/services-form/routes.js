@@ -8,6 +8,8 @@
 
 const express = require('express');
 const multer = require('multer');
+const fs = require('fs');
+const path = require('path');
 const { logger } = require('../utils/logger');
 const { supabase } = require('../config/database');
 const { getActiveToken, markSubmitted } = require('../db/serviceFormTokens');
@@ -40,6 +42,24 @@ async function fetchUser(userId) {
 function htmlResponse(res, status, html) {
   res.status(status).setHeader('Content-Type', 'text/html; charset=utf-8').send(html);
 }
+
+// Static asset — Pixie logo used by the form header. Served by this backend
+// (not the landing CDN) so the form renders identically whether reached via
+// the Render origin or proxied through pixiebot.co. PNG is read once and
+// kept in-memory.
+const LOGO_BUF = (() => {
+  try {
+    return fs.readFileSync(path.join(__dirname, 'assets', 'pixie-logo.png'));
+  } catch {
+    return null;
+  }
+})();
+router.get('/services-form/assets/pixie-logo.png', (_req, res) => {
+  if (!LOGO_BUF) return res.status(404).end();
+  res.setHeader('Content-Type', 'image/png');
+  res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+  res.send(LOGO_BUF);
+});
 
 router.get('/services-form/:token', async (req, res) => {
   try {

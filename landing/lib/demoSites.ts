@@ -35,10 +35,10 @@ export const DEMO_SITES: DemoSite[] = [
     "id": "salon",
     "label": "Salon",
     "prompt": "I run a hair salon in Miami Beach. I need a website with online booking, an Instagram feed, and pricing for cuts and color.",
-    "businessName": "Luna Beauty Studio",
+    "businessName": "Blush Bar",
     "industry": "Hair Salon",
     "city": "Miami Beach, FL",
-    "url": "https://preview-1776447956800.netlify.app"
+    "url": "https://preview-1778539528740.netlify.app"
   },
   {
     "id": "generic",

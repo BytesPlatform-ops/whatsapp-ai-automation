@@ -6,8 +6,11 @@ function renderRealEstateForm({ token, businessName }) {
     : 'Add your featured listings';
 
   const body = `
-<h1>${title}</h1>
-<p class="sub">Add up to 3 listings to feature on your homepage. A photo is optional — if you skip it we'll use a professional stock photo.</p>
+<div class="hero">
+  <span class="badge">Featured listings · setup</span>
+  <h1>${title}</h1>
+  <p class="sub">Add up to 3 listings to feature on your homepage. A photo is optional — if you skip it we'll use a professional stock photo.</p>
+</div>
 
 <form id="services-form" method="POST" action="/services-form/${escapeHtml(token)}" enctype="multipart/form-data">
   <div id="rows"></div>

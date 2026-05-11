@@ -9,7 +9,7 @@ module.exports = {
   prompt:
     'I run a hair salon in Miami Beach. I need a website with online booking, an Instagram feed, and pricing for cuts and color.',
   businessData: {
-    businessName: 'Luna Beauty Studio',
+    businessName: 'Blush Bar',
     industry: 'Hair Salon',
     services: [
       'Haircut',
@@ -28,7 +28,7 @@ module.exports = {
       { name: 'Bridal Styling', durationMinutes: 90, price: 150 },
     ],
     bookingMode: 'native',
-    instagramHandle: 'lunabeautystudio',
+    instagramHandle: 'blushbar',
     // Each day is an array of open/close slots so the salon template can
     // render split shifts if needed. Empty array = closed.
     weeklyHours: {
@@ -41,7 +41,7 @@ module.exports = {
       sun: [{ open: '10:00', close: '17:00' }],
     },
     timezone: 'America/New_York',
-    contactEmail: 'hello@lunabeautystudio.com',
+    contactEmail: 'hello@blushbar.com',
     contactPhone: '+1 (305) 555-5862',
     contactAddress: '1243 Collins Ave, Miami Beach, FL 33139',
     // Salon palette — deep plum + rose gold accent

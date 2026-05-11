@@ -51,7 +51,7 @@ const TEMPLATES = [
   },
   {
     id: 'salon',
-    businessName: 'TEST — Luna Beauty Studio',
+    businessName: 'TEST — Blush Bar',
     payload: {
       'first-name': 'Aria',
       'last-name': 'Garcia (Salon test)',

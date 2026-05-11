@@ -6,8 +6,11 @@ function renderSalonForm({ token, businessName }) {
     : 'Add your salon services';
 
   const body = `
-<h1>${title}</h1>
-<p class="sub">Add each service with how long it takes and what it costs. A photo is optional — if you skip it we'll auto-pick a stock photo for you.</p>
+<div class="hero">
+  <span class="badge">Salon services · setup</span>
+  <h1>${title}</h1>
+  <p class="sub">Add each service with how long it takes and what it costs. A photo is optional — if you skip it we'll auto-pick a stock photo for you.</p>
+</div>
 
 <form id="services-form" method="POST" action="/services-form/${escapeHtml(token)}" enctype="multipart/form-data">
   <div id="rows"></div>

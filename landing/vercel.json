@@ -1,0 +1,9 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "rewrites": [
+    {
+      "source": "/services-form/:path*",
+      "destination": "https://whatsapp-ai-automation-h3y0.onrender.com/services-form/:path*"
+    }
+  ]
+}
