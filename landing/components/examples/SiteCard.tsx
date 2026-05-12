@@ -6,20 +6,30 @@ import type { DemoSite } from '@/lib/demoSites';
 
 // Screenshot via Microlink's free embed API. Generates a fresh capture
 // server-side so the card always reflects the live site's current state.
-// Bump CACHE_KEY when you need to force re-capture (Microlink CDN caches
-// by full query string for 24h, so any param change is a new cache key).
-const CACHE_KEY = 'v2';
+// Microlink CDN caches by full query string for ~24h. To force a fresh
+// capture for a specific site (e.g. after fixing its cert), add it to
+// CACHE_BUST_HOSTS — those URLs get a versioned ?_v param appended.
+const CACHE_BUST_HOSTS: Record<string, string> = {
+  'austinclimate.pixiebot.co': 'v2',
+  'sarahmitchell.pixiebot.co': 'v2',
+  'bytecoffee.pixiebot.co': 'v2',
+};
 function screenshotUrl(url: string) {
-  const params = new URLSearchParams({
+  const params: Record<string, string> = {
     url,
     screenshot: 'true',
     embed: 'screenshot.url',
     waitUntil: 'networkidle0',
     viewport: JSON.stringify({ width: 1280, height: 800, deviceScaleFactor: 1 }),
     meta: 'false',
-    _v: CACHE_KEY,
-  });
-  return `https://api.microlink.io?${params.toString()}`;
+  };
+  try {
+    const host = new URL(url).host;
+    if (CACHE_BUST_HOSTS[host]) params._v = CACHE_BUST_HOSTS[host];
+  } catch {
+    // bad url — fall through with no cache bust
+  }
+  return `https://api.microlink.io?${new URLSearchParams(params).toString()}`;
 }
 
 const INDUSTRY_ACCENT: Record<string, string> = {
