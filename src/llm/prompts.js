@@ -334,22 +334,28 @@ Return ONLY valid JSON. No explanation outside the JSON.`;
 
 /**
  * Resolve the industry-specific preview-site URL for the salesBot's first
- * reply. Pulls from env vars set per industry, falls back to a generic one
- * if no industry-specific URL is configured for the matched industry. If
- * nothing is set at all, returns null and the greeting omits the link line.
+ * reply. Defaults to the branded pixiebot.co subdomain for each demo. Env
+ * vars override per-industry if admin needs to swap a demo without a deploy.
  *
- * Configurable env vars:
+ * Optional env overrides:
  *   PREVIEW_URL_SALON, PREVIEW_URL_HVAC, PREVIEW_URL_REAL_ESTATE,
  *   PREVIEW_URL_GENERIC
  */
+const DEFAULT_PREVIEW_URLS = {
+  salon: 'https://blushbar.pixiebot.co',
+  hvac: 'https://austinclimate.pixiebot.co',
+  real_estate: 'https://sarahmitchell.pixiebot.co',
+  generic: 'https://bytecoffee.pixiebot.co',
+};
+
 function getAdPreviewUrl(adIndustry) {
   const map = {
-    salon: process.env.PREVIEW_URL_SALON,
-    hvac: process.env.PREVIEW_URL_HVAC,
-    real_estate: process.env.PREVIEW_URL_REAL_ESTATE,
+    salon: process.env.PREVIEW_URL_SALON || DEFAULT_PREVIEW_URLS.salon,
+    hvac: process.env.PREVIEW_URL_HVAC || DEFAULT_PREVIEW_URLS.hvac,
+    real_estate: process.env.PREVIEW_URL_REAL_ESTATE || DEFAULT_PREVIEW_URLS.real_estate,
   };
   const direct = map[adIndustry];
-  return direct || process.env.PREVIEW_URL_GENERIC || null;
+  return direct || process.env.PREVIEW_URL_GENERIC || DEFAULT_PREVIEW_URLS.generic;
 }
 
 /**

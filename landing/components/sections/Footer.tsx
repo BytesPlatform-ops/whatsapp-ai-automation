@@ -12,7 +12,7 @@ export function Footer() {
           />
         </div>
         <p className="text-sm text-ink-400">
-          © {new Date().getFullYear()} {siteConfig.brand}. Built with WhatsApp.
+          © {new Date().getFullYear()} PixieBytes. Built with WhatsApp.
         </p>
         <div className="flex items-center gap-6 text-sm">
           <a href="mailto:{siteConfig.supportEmail}" className="text-ink-500 transition hover:text-ink-900">

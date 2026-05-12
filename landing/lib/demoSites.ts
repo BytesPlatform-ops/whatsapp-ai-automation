@@ -20,7 +20,7 @@ export const DEMO_SITES: DemoSite[] = [
     "businessName": "Austin Climate Pros",
     "industry": "HVAC",
     "city": "Austin, TX",
-    "url": "https://preview-1776447034475.netlify.app"
+    "url": "https://austinclimate.pixiebot.co"
   },
   {
     "id": "real-estate",
@@ -29,7 +29,7 @@ export const DEMO_SITES: DemoSite[] = [
     "businessName": "Sarah Mitchell",
     "industry": "Real Estate",
     "city": "Austin, TX",
-    "url": "https://preview-1776447076417.netlify.app"
+    "url": "https://sarahmitchell.pixiebot.co"
   },
   {
     "id": "salon",
@@ -38,7 +38,7 @@ export const DEMO_SITES: DemoSite[] = [
     "businessName": "Blush Bar",
     "industry": "Hair Salon",
     "city": "Miami Beach, FL",
-    "url": "https://preview-1778539528740.netlify.app"
+    "url": "https://blushbar.pixiebot.co"
   },
   {
     "id": "generic",
@@ -47,6 +47,6 @@ export const DEMO_SITES: DemoSite[] = [
     "businessName": "Byte Coffee Co.",
     "industry": "Specialty coffee shop",
     "city": "Portland, OR",
-    "url": "https://preview-1776447150399.netlify.app"
+    "url": "https://bytecoffee.pixiebot.co"
   }
 ];
