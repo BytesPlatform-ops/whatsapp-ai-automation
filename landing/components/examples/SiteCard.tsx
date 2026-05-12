@@ -6,6 +6,9 @@ import type { DemoSite } from '@/lib/demoSites';
 
 // Screenshot via Microlink's free embed API. Generates a fresh capture
 // server-side so the card always reflects the live site's current state.
+// Bump CACHE_KEY when you need to force re-capture (Microlink CDN caches
+// by full query string for 24h, so any param change is a new cache key).
+const CACHE_KEY = 'v2';
 function screenshotUrl(url: string) {
   const params = new URLSearchParams({
     url,
@@ -14,6 +17,7 @@ function screenshotUrl(url: string) {
     waitUntil: 'networkidle0',
     viewport: JSON.stringify({ width: 1280, height: 800, deviceScaleFactor: 1 }),
     meta: 'false',
+    _v: CACHE_KEY,
   });
   return `https://api.microlink.io?${params.toString()}`;
 }
