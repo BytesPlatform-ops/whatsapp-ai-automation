@@ -19,6 +19,7 @@ const { runWithChannel, runWithContext } = require('../messages/channelContext')
 const { logMessage } = require('../db/conversations');
 const { updateUserMetadata } = require('../db/users');
 const { handleConfirmedPayment } = require('../payments/postPayment');
+const { sendEmail } = require('../notifications/email');
 const { logger } = require('../utils/logger');
 const { STATES } = require('../conversation/states');
 
@@ -67,6 +68,23 @@ const EXPLORATORY_LADDER = [
   { step: 'expl_2h_soft',  afterHours: 2  },
   { step: 'expl_8h_value', afterHours: 8  },
   { step: 'expl_20h_last', afterHours: 20 },
+];
+
+// Email-based follow-up ladder. Fires for users whose WhatsApp 24h window
+// has closed (free-form WA outbound blocked) but who reached the contact
+// step and left an email on file. Anchored to paymentLinkSentAt — the
+// strongest signal we delivered a real preview + Stripe link they could
+// have acted on. Steps run independent of the WA ladders (their own
+// metadata key + their own cadence in days, not hours).
+//
+// Cold-lead recovery used to be zero: WA window closes → silently mark
+// all WA steps complete → never message again. Real SMB sales cycle is
+// 30–60 days, so day-3 / day-7 / day-30 reaches buyers who needed
+// breathing room. PIXIE_RESEARCH_CONTEXT.md item #2.
+const EMAIL_FOLLOWUP_LADDER = [
+  { step: 'email_day3',  afterDays: 3,  subject: (biz) => `Your ${biz} preview is still saved` },
+  { step: 'email_day7',  afterDays: 7,  subject: (biz) => `Last call for ${biz} this week` },
+  { step: 'email_day30', afterDays: 30, subject: (biz) => `${biz} site is still here if you want it` },
 ];
 
 // Discount follow-up copy per personality. One step only — no ladder, no
@@ -137,6 +155,231 @@ function renderSeoFollowupMessage(personalityMode, topFix, url, seoFloor = 200) 
   return hasFix
     ? `Following up on your SEO audit${site} — *${fix}* was the biggest opportunity I flagged. Want me to handle the top 5 fixes from the report for ${px}?`
     : `Following up on your SEO audit${site} — want me to handle the top 5 fixes from the report for ${px}?`;
+}
+
+/**
+ * Build the HTML + plain-text body for one rung of the email follow-up
+ * ladder. Tone shifts per step: day-3 "still waiting," day-7 "last call,"
+ * day-30 "still here if you want it." Restoration framing — users respond
+ * to "your work is saved" better than "buy now."
+ *
+ * Note: `previewUrl` and `paymentLinkUrl` are accepted for back-compat but
+ * deliberately NOT rendered. By day-3 both are dead:
+ *   - Netlify previews self-destruct at 23h (src/jobs/siteCleanup.js, line 39)
+ *   - Stripe Checkout sessions expire 24h after creation
+ * The build data itself is preserved in the `generated_sites` row though
+ * (status flips to a non-preview value when the site is deleted but the
+ * payload stays), so restoration is fast — we just need the user to reply,
+ * and the team can rebuild from the stored config in seconds. CTAs use a
+ * `mailto:` deep link with pre-filled subject so the team's inbox shows a
+ * clean "restore X" thread on every reply.
+ */
+function renderFollowupEmailContent(step, { businessName /* , previewUrl, paymentLinkUrl */ }) {
+  const copyByStep = {
+    email_day3: {
+      headlineLine1: 'Your build is',
+      headlineAccent: 'still waiting',
+      body: `Hey — Pixie here.\n\nI built ${businessName} a few days back and parked it on the shelf. Whenever you're ready to bring it online, reply to this email and I'll have it back up in under a minute.`,
+      ctaLabel: 'Restore my preview',
+      subjectPrefill: `Restore ${businessName}`,
+    },
+    email_day7: {
+      headlineLine1: 'Last call —',
+      headlineAccent: businessName,
+      body: `Closing out this week's queue.\n\nI'll archive ${businessName} for good unless I hear from you. If you still want it live, just hit the button below (or reply to this email) and it's back in 60 seconds.`,
+      ctaLabel: 'Bring it back',
+      subjectPrefill: `Restore ${businessName} — last call`,
+    },
+    email_day30: {
+      headlineLine1: 'Still here',
+      headlineAccent: 'if you want it',
+      body: `Been about a month since I built ${businessName}.\n\nI'm not chasing — just letting you know it's still safely stored. If timing's better now, reply and I'll bring it back online for you.`,
+      ctaLabel: 'Bring it back',
+      subjectPrefill: `Restore ${businessName}`,
+    },
+  };
+  const copy = copyByStep[step] || copyByStep.email_day3;
+
+  const ctaHref =
+    `mailto:bytesuite@bytesplatform.com` +
+    `?subject=${encodeURIComponent(copy.subjectPrefill)}` +
+    `&body=${encodeURIComponent(`Hi Pixie team,\n\nPlease restore my ${businessName} preview.\n\nThanks.`)}`;
+
+  // Inline-styled, table-based — bulletproof across Gmail / Apple Mail /
+  // Outlook web. The header gradient bar + gradient text on the accent
+  // word use `background-image: linear-gradient(...)` which renders in
+  // every modern client (Outlook desktop falls back to solid colour, which
+  // is fine — the rest of the layout still holds up).
+  const html = `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${copy.headlineLine1} ${copy.headlineAccent}</title>
+</head>
+<body style="margin:0;padding:0;background:#06060A;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Inter',Helvetica,Arial,sans-serif;color:#F5F5F7;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;">
+  <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background:#06060A;">
+    <tr><td align="center" style="padding:48px 16px;">
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="600" style="max-width:600px;width:100%;">
+
+        <!-- Gradient accent bar -->
+        <tr><td height="4" style="height:4px;line-height:1px;font-size:1px;background-color:#4F46E5;background-image:linear-gradient(90deg,#4F46E5 0%,#7C3AED 30%,#EC4899 65%,#06B6D4 100%);border-radius:16px 16px 0 0;">&nbsp;</td></tr>
+
+        <!-- Main card -->
+        <tr><td style="background-color:#0E0E14;border:1px solid rgba(255,255,255,0.06);border-top:0;border-radius:0 0 16px 16px;padding:48px 44px;">
+
+          <!-- Brand mark -->
+          <p style="margin:0 0 36px;font-family:'SF Mono',Menlo,Consolas,monospace;font-size:11px;letter-spacing:0.14em;color:#6E6E76;text-transform:uppercase;">
+            <span style="color:#818CF8;">/</span>&nbsp;Pixie&nbsp;·&nbsp;Bytes&nbsp;Platform
+          </p>
+
+          <!-- Display headline -->
+          <h1 style="margin:0 0 28px;font-size:36px;font-weight:600;letter-spacing:-0.035em;line-height:1.05;color:#F5F5F7;">
+            ${copy.headlineLine1}<br>
+            <span style="background-color:#A78BFA;background-image:linear-gradient(135deg,#818CF8 0%,#A78BFA 45%,#F472B6 100%);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:transparent;">${copy.headlineAccent}</span>
+          </h1>
+
+          <!-- Body copy -->
+          <p style="margin:0 0 32px;font-size:15px;line-height:1.7;color:#A6A6AE;white-space:pre-line;">${copy.body}</p>
+
+          <!-- Build status card -->
+          <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color:#15151D;border:1px solid rgba(255,255,255,0.07);border-radius:12px;margin:0 0 36px;">
+            <tr><td style="padding:20px 22px;">
+              <p style="margin:0 0 6px;font-family:'SF Mono',Menlo,Consolas,monospace;font-size:11px;letter-spacing:0.10em;color:#6E6E76;text-transform:uppercase;">Your build</p>
+              <p style="margin:0;font-size:17px;font-weight:500;color:#F5F5F7;letter-spacing:-0.015em;">${businessName}</p>
+              <p style="margin:10px 0 0;font-family:'SF Mono',Menlo,Consolas,monospace;font-size:12px;color:#A78BFA;letter-spacing:0.04em;">
+                <span style="display:inline-block;width:7px;height:7px;border-radius:50%;background-color:#34D399;margin-right:8px;vertical-align:middle;"></span>ARCHIVED&nbsp;·&nbsp;restorable in 60s
+              </p>
+            </td></tr>
+          </table>
+
+          <!-- Bulletproof gradient CTA -->
+          <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0;">
+            <tr><td style="border-radius:10px;background-color:#4F46E5;background-image:linear-gradient(135deg,#4F46E5 0%,#7C3AED 50%,#EC4899 100%);">
+              <a href="${ctaHref}" style="display:inline-block;color:#FFFFFF;text-decoration:none;padding:16px 30px;font-size:15px;font-weight:600;letter-spacing:-0.01em;line-height:1;">${copy.ctaLabel}&nbsp;&nbsp;→</a>
+            </td></tr>
+          </table>
+
+          <p style="margin:20px 0 0;font-size:13px;line-height:1.65;color:#6E6E76;">
+            Or just reply to this email — it goes straight to the team and we'll have it back up before you finish reading.
+          </p>
+
+          <!-- Footer -->
+          <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:56px 0 0;border-top:1px solid rgba(255,255,255,0.06);">
+            <tr><td style="padding:24px 0 0;">
+              <p style="margin:0 0 6px;font-family:'SF Mono',Menlo,Consolas,monospace;font-size:11px;letter-spacing:0.06em;color:#6E6E76;">Pixie&nbsp;·&nbsp;Bytes&nbsp;Platform&nbsp;·&nbsp;bytesplatform.com</p>
+              <p style="margin:0;font-size:11px;line-height:1.5;color:#4D4D54;">To stop these, reply "stop following up" — we'll hear you.</p>
+            </td></tr>
+          </table>
+
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+
+  const text =
+    `${copy.headlineLine1} ${copy.headlineAccent}\n` +
+    `Pixie · Bytes Platform\n\n` +
+    `${copy.body}\n\n` +
+    `Your build: ${businessName} (archived — restorable in 60s)\n\n` +
+    `${copy.ctaLabel}: ${ctaHref}\n\n` +
+    `Or just reply to this email.\n\n` +
+    `— Pixie · Bytes Platform\n` +
+    `Reply "stop following up" to opt out.`;
+
+  return { html, text };
+}
+
+/**
+ * Run the email follow-up ladder for one user. Cheap to call repeatedly —
+ * checks completion state + anchor age, fires at most one email per pass,
+ * silently no-ops when nothing is due. Independent of the WhatsApp
+ * ladders (own metadata key, own anchor, own cadence).
+ */
+async function processEmailFollowup(user) {
+  const metadata = user.metadata || {};
+
+  // Same exit gates as the WA flow — closed leads, converted customers,
+  // explicit opt-outs, human-takeover. Re-checking these here means the
+  // email ladder respects the same boundaries the chat ladders do.
+  if (metadata.leadClosed) return;
+  if (metadata.meetingBooked) return;
+  if (metadata.paymentConfirmed) return;
+  if (metadata.followupOptOut) return;
+  if (metadata.humanTakeover) return;
+
+  // Need an email address. The WEB_COLLECT_CONTACT step at the end of the
+  // wizard collects this; users who dropped off before that step won't have
+  // one on file and silently skip — which is correct, we can't email them.
+  const email =
+    metadata.email ||
+    (metadata.websiteData && metadata.websiteData.contactEmail) ||
+    null;
+  if (!email) return;
+
+  // Anchor: when the Stripe link was sent. Strongest "real value delivered"
+  // signal we have. Without this anchor there's nothing concrete to follow
+  // up about — exploratory-only leads (said hello, never engaged) are not
+  // candidates for the email ladder.
+  const anchorIso = metadata.paymentLinkSentAt;
+  if (!anchorIso) return;
+
+  const elapsedDays = (Date.now() - new Date(anchorIso).getTime()) / (1000 * 60 * 60 * 24);
+  const completed = Array.isArray(metadata.emailFollowupSteps) ? metadata.emailFollowupSteps : [];
+
+  // Walk the ladder and pick the LATEST step that's due. Walking
+  // latest-first means a user we picked up after a missed cycle still
+  // gets the most-current step (e.g. day-7 if we missed day-3).
+  let nextStep = null;
+  for (let i = EMAIL_FOLLOWUP_LADDER.length - 1; i >= 0; i--) {
+    const rung = EMAIL_FOLLOWUP_LADDER[i];
+    if (elapsedDays >= rung.afterDays && !completed.includes(rung.step)) {
+      nextStep = rung;
+      break;
+    }
+  }
+  if (!nextStep) return;
+
+  const websiteData = metadata.websiteData || {};
+  const businessName = websiteData.businessName || 'your business';
+  const previewUrl = metadata.currentSitePreviewUrl || metadata.previewUrl || null;
+  const paymentLinkUrl = metadata.lastPaymentLinkUrl || metadata.paymentLinkUrl || null;
+
+  const { html, text } = renderFollowupEmailContent(nextStep.step, {
+    businessName,
+    previewUrl,
+    paymentLinkUrl,
+  });
+
+  const ok = await sendEmail({
+    to: email,
+    subject: nextStep.subject(businessName),
+    html,
+    text,
+  });
+
+  if (ok) {
+    // Mark every step at-or-before the one we just sent as completed. If
+    // we sent day-7 because we missed day-3, day-3 is also "done" — we're
+    // not going to retroactively send it now.
+    const sentIdx = EMAIL_FOLLOWUP_LADDER.findIndex((r) => r.step === nextStep.step);
+    const newCompleted = Array.from(new Set([
+      ...completed,
+      ...EMAIL_FOLLOWUP_LADDER.slice(0, sentIdx + 1).map((r) => r.step),
+    ]));
+    await updateUserMetadata(user.id, {
+      emailFollowupSteps: newCompleted,
+      lastEmailFollowupAt: new Date().toISOString(),
+    });
+    logger.info(
+      `[FOLLOWUP-EMAIL] Sent ${nextStep.step} to ${email} (user ${user.phone_number}, ` +
+        `anchor ${anchorIso}, ${elapsedDays.toFixed(1)}d elapsed)`
+    );
+  } else {
+    logger.warn(`[FOLLOWUP-EMAIL] Send failed for ${email} (step ${nextStep.step}, user ${user.phone_number})`);
+  }
 }
 
 /**
@@ -335,9 +578,18 @@ async function runFollowupCycle() {
     if (!users || users.length === 0) return;
 
     for (const user of users) {
-      // Skip Messenger/Instagram — Meta blocks messages outside the 24h interaction window
       const channel = user.channel || 'whatsapp';
-      if (channel === 'messenger' || channel === 'instagram') continue;
+      // Messenger / Instagram: Meta's 24h-interaction-window rule blocks
+      // free-form outbound regardless of intent. Chat follow-up is out,
+      // but email is fair game — try the email ladder for those users.
+      if (channel === 'messenger' || channel === 'instagram') {
+        try {
+          await processEmailFollowup(user);
+        } catch (err) {
+          logger.warn(`[FOLLOWUP-EMAIL] ${channel} branch failed for ${user.phone_number}: ${err.message}`);
+        }
+        continue;
+      }
 
       try {
         // Reply on whichever of our WhatsApp numbers the user originally
@@ -430,6 +682,13 @@ async function processUserFollowup(user) {
       logger.info(
         `[FOLLOWUP] Skipping ${user.phone_number} — past 24h WhatsApp window (last inbound: ${lastMsg.created_at}). All ${patchKey} marked complete.`
       );
+    }
+    // WA window is closed — chat is out, but kick off / continue the email
+    // ladder if the user left an email + reached the preview/payment stage.
+    try {
+      await processEmailFollowup(user);
+    } catch (err) {
+      logger.warn(`[FOLLOWUP-EMAIL] WA-closed branch failed for ${user.phone_number}: ${err.message}`);
     }
     return;
   }
@@ -847,4 +1106,13 @@ function startFollowupScheduler(intervalMs = 30 * 60 * 1000) {
   return { followupTimer, reminderTimer, paymentTimer };
 }
 
-module.exports = { startFollowupScheduler, runFollowupCycle, runMeetingReminders, runPaymentPolling };
+module.exports = {
+  startFollowupScheduler,
+  runFollowupCycle,
+  runMeetingReminders,
+  runPaymentPolling,
+  // Exported for preview/test scripts (e.g. scripts/_send-followup-emails.js)
+  EMAIL_FOLLOWUP_LADDER,
+  renderFollowupEmailContent,
+  processEmailFollowup,
+};

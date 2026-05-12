@@ -285,15 +285,17 @@ async function handleAwaitingForm(user, message) {
 }
 
 // Walk the website-dev checklist and return the first state whose field
-// is still missing. Used to fast-forward past steps already covered. Email
-// is stored at top-level metadata.email by the legacy handler, so we accept
-// either location as "collected".
+// is still missing. Used to fast-forward past steps already covered.
+//
+// Email is no longer asked as a separate early step (was WEB_COLLECT_EMAIL).
+// It now comes in only at WEB_COLLECT_CONTACT at the end of the wizard,
+// alongside phone — collecting email upfront before any value-delivery was
+// adding ~25% form-abandonment friction (PIXIE_RESEARCH_CONTEXT.md item #4).
+// The legacy WEB_COLLECT_EMAIL state and its handler stay registered so any
+// users mid-flow when this ships gracefully complete.
 function nextMissingWebDevState(websiteData, fullMetadata = {}) {
   const { needsAreaCollection, isRealEstate, isPortfolio } = require('../../website-gen/templates');
   if (!websiteData.businessName) return STATES.WEB_COLLECT_NAME;
-  const emailCollected =
-    fullMetadata.email != null || websiteData.contactEmail != null || websiteData.email != null || fullMetadata.emailSkipped === true;
-  if (!emailCollected) return STATES.WEB_COLLECT_EMAIL;
   if (!websiteData.industry) return STATES.WEB_COLLECT_INDUSTRY;
   // HVAC + real-estate templates both need a SERVICE AREAS list (neighborhoods
   // served), not just a primary city. "We serve Karachi" leaves the coverage
