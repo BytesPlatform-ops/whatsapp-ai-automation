@@ -333,15 +333,12 @@ heroTextOverride values:
 Return ONLY valid JSON. No explanation outside the JSON.`;
 
 /**
- * Resolve the industry-specific preview-site URL for the salesBot's first
- * reply. Defaults to the branded pixiebot.co subdomain for each demo. Env
- * vars override per-industry if admin needs to swap a demo without a deploy.
- *
- * Optional env overrides:
- *   PREVIEW_URL_SALON, PREVIEW_URL_HVAC, PREVIEW_URL_REAL_ESTATE,
- *   PREVIEW_URL_GENERIC
+ * Industry-specific preview-site URL for the salesBot. Hardcoded to the
+ * branded pixiebot.co subdomains — env-var overrides were removed because
+ * stale PREVIEW_URL_* values on Render were keeping netlify.app links in
+ * customer-facing greetings.
  */
-const DEFAULT_PREVIEW_URLS = {
+const PREVIEW_URLS = {
   salon: 'https://blushbar.pixiebot.co',
   hvac: 'https://austinclimate.pixiebot.co',
   real_estate: 'https://sarahmitchell.pixiebot.co',
@@ -349,13 +346,7 @@ const DEFAULT_PREVIEW_URLS = {
 };
 
 function getAdPreviewUrl(adIndustry) {
-  const map = {
-    salon: process.env.PREVIEW_URL_SALON || DEFAULT_PREVIEW_URLS.salon,
-    hvac: process.env.PREVIEW_URL_HVAC || DEFAULT_PREVIEW_URLS.hvac,
-    real_estate: process.env.PREVIEW_URL_REAL_ESTATE || DEFAULT_PREVIEW_URLS.real_estate,
-  };
-  const direct = map[adIndustry];
-  return direct || process.env.PREVIEW_URL_GENERIC || DEFAULT_PREVIEW_URLS.generic;
+  return PREVIEW_URLS[adIndustry] || PREVIEW_URLS.generic;
 }
 
 /**

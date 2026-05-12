@@ -434,7 +434,10 @@ function renderExploratoryMessage(stepKey, personalityMode, env) {
   if (!bucket) return null;
   const mode = (personalityMode || '').toUpperCase();
   const template = bucket[mode] || bucket.DEFAULT;
-  const portfolioUrl = (env && env.portfolio && env.portfolio.website1) || 'https://austinclimate.pixiebot.co';
+  // Hardcoded to the branded URL — env override removed because stale
+  // PORTFOLIO_WEBSITE_1 values on Render were keeping netlify.app links
+  // in followup messages.
+  const portfolioUrl = 'https://austinclimate.pixiebot.co';
   const calendlyUrl = (env && env.calendlyUrl) || 'https://calendly.com/bytes-platform';
   return template
     .replace(/\$\{portfolioUrl\}/g, portfolioUrl)
