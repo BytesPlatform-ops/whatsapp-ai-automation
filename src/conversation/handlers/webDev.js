@@ -3646,8 +3646,10 @@ function parseContactFields(text) {
   };
 
   let addressValue = '';
+  let addressWasLabeled = false;
   if (labeledAddressMatch) {
     addressValue = stripAddressSeparator(labeledAddressMatch[1].trim());
+    addressWasLabeled = true;
   } else {
     // Fallback: strip the matched email/phone and any leftover label words, return the rest.
     // Expanded label list includes "contact" (common when users write
@@ -3662,9 +3664,11 @@ function parseContactFields(text) {
     addressValue = stripAddressSeparator(addressValue);
   }
 
-  // Final junk filter: if what we captured doesn't look like a real address,
-  // discard it rather than showing "contact =" in the summary.
-  if (!isPlausibleAddress(addressValue)) addressValue = '';
+  // Junk filter: discard unlabeled residue that doesn't look like a real
+  // address. When the user explicitly wrote "address is …" we trust them
+  // — place names like "USA, Texas" or "Lahore, Pakistan" have no digits
+  // or street keywords but are perfectly valid addresses.
+  if (!addressWasLabeled && !isPlausibleAddress(addressValue)) addressValue = '';
 
   return {
     contactEmail: emailMatch?.[0] || '',

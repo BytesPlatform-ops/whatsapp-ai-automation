@@ -117,6 +117,7 @@ const BASE_STYLES = `
   .photo-label:hover{border-color:${BRAND.green};background:#F0FFF6;color:${BRAND.greenDark}}
   .photo-label input{display:none}
   .photo-name{font-size:12px;color:${BRAND.ink400};max-width:60%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .photo-clear{background:none;border:none;padding:0;font-size:12px;color:${BRAND.ink400};cursor:pointer;text-decoration:underline;}
 
   .add-btn{
     display:block;width:100%;padding:15px;

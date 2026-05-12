@@ -50,6 +50,7 @@ function renderSalonForm({ token, businessName }) {
           📎 Choose photo
         </label>
         <span class="photo-name"></span>
+        <button type="button" class="photo-clear" hidden>✕ Remove</button>
       </div>
     </div>
   </div>
@@ -86,8 +87,16 @@ function renderSalonForm({ token, businessName }) {
     });
     var fileInput = card.querySelector('input[type=file]');
     var nameSpan = card.querySelector('.photo-name');
+    var clearBtn = card.querySelector('.photo-clear');
     fileInput.addEventListener('change', function(){
-      nameSpan.textContent = fileInput.files && fileInput.files[0] ? fileInput.files[0].name : '';
+      var hasFile = fileInput.files && fileInput.files[0];
+      nameSpan.textContent = hasFile ? fileInput.files[0].name : '';
+      clearBtn.hidden = !hasFile;
+    });
+    clearBtn.addEventListener('click', function(){
+      fileInput.value = '';
+      nameSpan.textContent = '';
+      clearBtn.hidden = true;
     });
     renumber();
   }
