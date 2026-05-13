@@ -27,6 +27,7 @@ const { saveLeadSummary } = require('../../db/leadSummaries');
 const { buildSummaryContext } = require('../summaryManager');
 const { hydrateWebsiteData } = require('../entityAccumulator');
 const { localize } = require('../../utils/localizer');
+const { dynamicPhrase } = require('../../utils/dynamicPhrase');
 const { normalizeBusinessName } = require('../../utils/normalizeName');
 const { isServiceEnabled, findServiceByKey } = require('../../config/services');
 const { handoffToHuman } = require('../handoff');
@@ -1121,16 +1122,22 @@ async function handleSalesBot(user, message) {
         // is missing or token creation fails, it sends the bare chat question
         // itself, so no outer fallback is needed.
         const { offerServicesForm } = require('./webDev');
-        const ack = `Nice, *${businessName}* — let's get you set up.`;
+        const ack = await dynamicPhrase(
+          `Nice, *${businessName}* — let's get you set up.`,
+          user,
+          text,
+          { intent: `Acknowledge that we're starting to build for ${businessName} (a salon) before showing the services-form offer` }
+        );
         await logMessage(user.id, 'Website demo → salon flow (form offer)', 'assistant');
         return offerServicesForm(user, 'salon', { prefixAck: ack });
       }
       await sendTextMessage(
         user.phone_number,
-        await localize(
+        await dynamicPhrase(
           `Nice, let's get *${businessName}* set up. Just a couple more things to personalize your site.`,
           user,
-          text
+          text,
+          { intent: `Acknowledge we're starting to build for the salon ${businessName}, and warn there are a few personalization questions coming` }
         )
       );
       await logMessage(user.id, `Website demo → salon flow (name + industry pre-filled)`, 'assistant');
@@ -1147,10 +1154,11 @@ async function handleSalesBot(user, message) {
     if (nextState === STATES.WEB_CONFIRM) {
       await sendTextMessage(
         user.phone_number,
-        await localize(
+        await dynamicPhrase(
           `Perfect, I've got everything I need for *${businessName}*. Pulling up the summary.`,
           user,
-          text
+          text,
+          { intent: `Confirm we have all info for ${businessName} and announce we're showing the summary next` }
         )
       );
       await logMessage(user.id, `Website demo → confirm (all pre-filled from sales chat)`, 'assistant');
@@ -1172,7 +1180,12 @@ async function handleSalesBot(user, message) {
 
     const question = questionForState(nextState, websiteData);
     const outgoing = `${contextLine}\n\n${question}`;
-    await sendTextMessage(user.phone_number, await localize(outgoing, user, text));
+    await sendTextMessage(
+      user.phone_number,
+      await dynamicPhrase(outgoing, user, text, {
+        intent: `Acknowledge what we already know about ${businessName} and ask the next wizard question`,
+      })
+    );
     await logMessage(
       user.id,
       `Website demo → ${nextState} (pre-filled: name${industry ? ', industry' : ''}${services ? ', services' : ''}${hasContact ? ', contact' : ''})`,

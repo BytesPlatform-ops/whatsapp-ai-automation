@@ -21,6 +21,7 @@ const {
 } = require('../entityAccumulator');
 const { isDelegation, classifyDelegation } = require('../../config/smartDefaults');
 const { localize } = require('../../utils/localizer');
+const { dynamicPhrase } = require('../../utils/dynamicPhrase');
 const { normalizeBusinessName } = require('../../utils/normalizeName');
 const { classifySideChannelInCollection } = require('../sideChannel');
 
@@ -7783,12 +7784,12 @@ async function startWebdevFlow(user) {
   const shared = getSharedBusinessContext(user);
 
   if (!shared.businessName) {
-    await sendWithMenuButton(
-      user.phone_number,
-      '🌐 *Website Development*\n\n' +
-        "I'll help you create a professional website! I just need a few details about your business.\n\n" +
-        "First, what's your *business name*?"
-    );
+    const canonical =
+      "🌐 *Website Development*\n\nI'll help you create a professional website! I just need a few details about your business.\n\nFirst, what's your *business name*?";
+    const phrased = await dynamicPhrase(canonical, user, '', {
+      intent: 'Greet the user who just entered the website-builder flow and ask for their business name',
+    });
+    await sendWithMenuButton(user.phone_number, phrased);
     await logMessage(user.id, 'Starting website development flow', 'assistant');
     return STATES.WEB_COLLECT_NAME;
   }
