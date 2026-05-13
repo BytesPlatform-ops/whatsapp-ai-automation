@@ -3897,42 +3897,59 @@ async function handleCollectContact(user, message) {
   // The follow-up turn (tracked via contactFollowupAsked) finalizes —
   // whatever's there at that point is what they want.
   const alreadyAskedFollowup = !!user.metadata?.contactFollowupAsked;
-  const fieldsHave = [
-    !!effectiveContact.contactEmail && 'email',
-    !!effectiveContact.contactPhone && 'phone',
-    !!effectiveContact.contactAddress && 'address',
+
+  // Decide based on what the user typed *this turn* (contactData), not the
+  // merged result. Cached contactPhone/contactAddress from earlier in the
+  // convo would otherwise make all-three look present and skip the
+  // follow-up even when the user only volunteered email here.
+  const turnFieldsHave = [
+    !!contactData.contactEmail && 'email',
+    !!contactData.contactPhone && 'phone',
+    !!contactData.contactAddress && 'address',
   ].filter(Boolean);
-  const allThreePresent = fieldsHave.length >= 3;
+  const turnAllThree = turnFieldsHave.length >= 3;
   const shouldAskFollowup =
     !alreadyAskedFollowup &&
     !userExplicitlySkipped &&
-    !allThreePresent &&
-    fieldsHave.length >= 1;
+    !turnAllThree &&
+    turnFieldsHave.length >= 1;
 
   if (shouldAskFollowup) {
-    // Save the partial contact, set the follow-up flag, ask for more.
-    await updateUserMetadata(user.id, {
-      websiteData: mergedWebsiteData,
-      contactFollowupAsked: true,
-    });
-    user.metadata = {
-      ...(user.metadata || {}),
-      websiteData: mergedWebsiteData,
-      contactFollowupAsked: true,
-    };
-    const haveLine = fieldsHave.map((f) => `*${f}*`).join(' and ');
-    const missingFields = ['email', 'phone', 'address'].filter((f) => !fieldsHave.includes(f));
-    const missingLine = missingFields.join(' or ');
-    await sendTextMessage(
-      user.phone_number,
-      await localize(
-        `Got your ${haveLine}. Want to add a ${missingLine} too — or reply *skip* to move on with just what you've shared?`,
-        user,
-        contactText
-      )
-    );
-    await logMessage(user.id, `Contact: partial (${fieldsHave.join(', ')}), asked follow-up`, 'assistant');
-    return STATES.WEB_COLLECT_CONTACT;
+    // Only ask about fields we *still* don't have anywhere (turn ∪ cache).
+    // If the user gave email this turn and phone/address are already cached,
+    // missingFields is empty — finalize instead of asking a confusing
+    // "want to add a … too?" with nothing left to fill.
+    const mergedFields = [
+      !!mergedContact.contactEmail && 'email',
+      !!mergedContact.contactPhone && 'phone',
+      !!mergedContact.contactAddress && 'address',
+    ].filter(Boolean);
+    const missingFields = ['email', 'phone', 'address'].filter((f) => !mergedFields.includes(f));
+
+    if (missingFields.length > 0) {
+      await updateUserMetadata(user.id, {
+        websiteData: mergedWebsiteData,
+        contactFollowupAsked: true,
+      });
+      user.metadata = {
+        ...(user.metadata || {}),
+        websiteData: mergedWebsiteData,
+        contactFollowupAsked: true,
+      };
+      const haveLine = turnFieldsHave.map((f) => `*${f}*`).join(' and ');
+      const missingLine = missingFields.join(' or ');
+      await sendTextMessage(
+        user.phone_number,
+        await localize(
+          `Got your ${haveLine}. Want to add a ${missingLine} too — or reply *skip* to move on with just what you've shared?`,
+          user,
+          contactText
+        )
+      );
+      await logMessage(user.id, `Contact: partial (${turnFieldsHave.join(', ')}), asked follow-up`, 'assistant');
+      return STATES.WEB_COLLECT_CONTACT;
+    }
+    // else: nothing actually missing — fall through to finalize.
   }
 
   // Either the user gave all three, explicitly skipped, or this is the
@@ -4503,9 +4520,34 @@ async function handleConfirm(user, message) {
   // summary — earlier it was two sends, and if the second (summary) ever
   // failed the user was left staring at "Here's the updated summary:" with
   // nothing underneath, unable to proceed.
+  // If a salon service was just added without a duration/price (services
+  // added via edit-intent default to addressed:false), ask for it before
+  // re-showing the summary. The follow-up answer routes through
+  // SALON_SERVICE_DURATIONS, whose completion path (finishSalonFlow) sees
+  // salonFlowOrigin === 'CONFIRM' and returns to showConfirmSummary.
+  const maybeAskNewServicePricing = async (ackText) => {
+    const unaddressed = (Array.isArray(wd.salonServices) ? wd.salonServices : [])
+      .filter((s) => s && s.addressed === false)
+      .map((s) => s.name);
+    if (unaddressed.length === 0) return null;
+
+    await updateUserMetadata(user.id, { websiteData: wd, salonFlowOrigin: 'CONFIRM' });
+    user.metadata = { ...(user.metadata || {}), websiteData: wd, salonFlowOrigin: 'CONFIRM' };
+
+    const namesLine = unaddressed.map((n) => `*${n}*`).join(' and ');
+    const ask = unaddressed.length === 1
+      ? `${ackText}\n\nHow long does ${namesLine} take, and what's the price?\n\nExample: *"30min €35"*. Or reply *default* for 30min with no price.`
+      : `${ackText}\n\nHow long do ${namesLine} take, and what are the prices?\n\nExample: *"Pedicure 45min €35, Manicure 30min €25"*. Or reply *default* for 30min with no price across all.`;
+    await sendTextMessage(user.phone_number, await localize(ask, user, originalText));
+    await logMessage(user.id, `Salon durations: prompted for newly-added (${unaddressed.join(', ')})`, 'assistant');
+    return STATES.SALON_SERVICE_DURATIONS;
+  };
+
   const applyAndReshow = async (ackLabel) => {
     await updateUserMetadata(user.id, { websiteData: wd });
     user.metadata = { ...(user.metadata || {}), websiteData: wd };
+    const reroute = await maybeAskNewServicePricing(`✅ ${ackLabel}.`);
+    if (reroute) return reroute;
     const ackPrefix = `✅ ${ackLabel}. Here's the updated summary:`;
     return showConfirmSummary(user, ackPrefix);
   };
@@ -4729,6 +4771,8 @@ async function handleConfirm(user, message) {
       const ackPrefix = `${parts.join('. ')}. Here's the ${changes.length ? 'updated' : 'current'} summary:`;
       await updateUserMetadata(user.id, { websiteData: wd });
       user.metadata = { ...(user.metadata || {}), websiteData: wd };
+      const reroute = await maybeAskNewServicePricing(`${parts.join('. ')}.`);
+      if (reroute) return reroute;
       return showConfirmSummary(user, ackPrefix);
     }
   }

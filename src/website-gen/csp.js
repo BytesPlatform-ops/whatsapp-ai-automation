@@ -13,6 +13,25 @@
 // in templates), so hashing them at build time costs nothing.
 
 const crypto = require('crypto');
+const { env } = require('../config/env');
+
+// The deployed site's booking widget (salon), lead-form posts (real-estate /
+// hvac / portfolio), and Stripe-checkout-redirect handler all fetch from the
+// Pixie server. Without this in connect-src the browser blocks the call with
+// no network-tab entry — surfaces in the page as "Network error: Failed to
+// fetch". Resolved at module-load time from the same env the templates use,
+// so the policy and the baked-in widget URL stay in sync.
+function publicApiOrigin() {
+  const raw = process.env.PUBLIC_API_BASE_URL || env.chatbot?.baseUrl || '';
+  if (!raw) return '';
+  try {
+    const u = new URL(raw);
+    return `${u.protocol}//${u.host}`;
+  } catch {
+    return '';
+  }
+}
+const PUBLIC_API_ORIGIN = publicApiOrigin();
 
 // Match an inline <script> block. Skips external scripts (those with
 // src=...) since those load from same-origin / allowlisted hosts and
@@ -62,7 +81,7 @@ function buildPolicy(extraScriptHashes) {
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.tailwindcss.com",
     "img-src 'self' data: https:",
     "font-src 'self' data: https://fonts.gstatic.com",
-    "connect-src 'self' https://api.stripe.com",
+    `connect-src 'self' https://api.stripe.com${PUBLIC_API_ORIGIN ? ' ' + PUBLIC_API_ORIGIN : ''}`,
     "frame-src https://www.google.com https://js.stripe.com https://*.stripe.com https://calendly.com https://*.calendly.com",
     "form-action 'self' https://*.stripe.com",
     "base-uri 'self'",
