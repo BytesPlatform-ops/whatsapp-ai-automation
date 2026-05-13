@@ -369,8 +369,13 @@ function buildSalesPrompt(calendlyUrl, portfolio = {}, adSource = 'generic', adI
   // code change. Falls back to PREVIEW_URL_GENERIC when no industry match,
   // and drops the link line entirely if nothing is configured.
   const previewUrl = getAdPreviewUrl(adIndustry);
+  // The [SEND_SAMPLE_IMAGE: industry=X] tag tells the bot to send a screenshot
+  // of the sample site as a WhatsApp image RIGHT BEFORE the text reply. The
+  // tag is stripped before the message ships to the user. Append it on the
+  // same line as the preview URL so it can never be omitted by accident.
+  const sampleTag = `[SEND_SAMPLE_IMAGE: industry=${adIndustry || 'generic'}]`;
   const webGreeting = previewUrl
-    ? `The user clicked one of our website ads. Open with this exact wording (translate to the user's language if their first message isn't in English, but keep the URL exactly as-is and keep the 💚 emoji):\n\n"Hey! 💚 I am Pixie, an AI. I build business websites in about 60 seconds, right here in this chat. Here's one I made yesterday: ${previewUrl}\n\nWant yours? Just drop your business name and I'll start building. Free to preview!"\n\nNo other questions, no upsell, no industry probing — just this opener verbatim. The next user reply (their business name) is what triggers the wizard.`
+    ? `The user clicked one of our website ads. Open with this exact wording (translate to the user's language if their first message isn't in English, but keep the URL exactly as-is and keep the 💚 emoji):\n\n"Hey! 💚 I am Pixie, an AI. I build business websites in about 60 seconds, right here in this chat. Here's one I made yesterday: ${previewUrl} ${sampleTag}\n\nWant yours? Just drop your business name and I'll start building. Free to preview!"\n\nNo other questions, no upsell, no industry probing — just this opener verbatim. The next user reply (their business name) is what triggers the wizard.`
     : `The user clicked one of our website ads. Open with: "Hey! 💚 I am Pixie, an AI. I build business websites in about 60 seconds, right here in this chat. Want yours? Just drop your business name and I'll start building. Free to preview!" (Translate to the user's language if needed, keep the 💚 emoji.) No other questions.`;
 
   // Organic / non-ad inbound. These leads tend to be higher-intent than ad
@@ -379,7 +384,7 @@ function buildSalesPrompt(calendlyUrl, portfolio = {}, adSource = 'generic', adI
   // "how can I help" opener leaks high-intent traffic. Falls back to a
   // no-link variant if no demo preview URL is configured.
   const organicGreeting = previewUrl
-    ? `The user reached out organically. Open with this exact wording (translate to the user's language if their first message isn't in English, but keep the URL exactly as-is and keep the 💚 emoji):\n\n"Hey! 💚 I'm Pixie, an AI. I build real business websites in ~60 seconds, right here in chat. Here's a recent one: ${previewUrl}\n\nWant me to build one for your business? Just drop your business name and I'll start."\n\nNo other questions, no service menu, no upsell — just this opener verbatim. The next user reply (their business name) is what triggers the wizard.`
+    ? `The user reached out organically. Open with this exact wording (translate to the user's language if their first message isn't in English, but keep the URL exactly as-is and keep the 💚 emoji):\n\n"Hey! 💚 I'm Pixie, an AI. I build real business websites in ~60 seconds, right here in chat. Here's a recent one: ${previewUrl} ${sampleTag}\n\nWant me to build one for your business? Just drop your business name and I'll start."\n\nNo other questions, no service menu, no upsell — just this opener verbatim. The next user reply (their business name) is what triggers the wizard.`
     : `The user reached out organically. Open with: "Hey! 💚 I'm Pixie, an AI. I build real business websites in ~60 seconds, right here in chat. Want me to build one for your business? Just drop your business name and I'll start." (Translate to the user's language if needed, keep the 💚 emoji.) No service menu, no upsell.`;
 
   const greetingBySource = {
@@ -632,6 +637,13 @@ When they explicitly agree to a price+package, confirm scope briefly and emit:
 
 Example: "Perfect — $400 for a 2-3 page site with basic SEO. Sending the link now." then [SEND_PAYMENT: amount=400, service=website, tier=mid, description=2-3 page website with basic SEO]
 Rules: only when explicitly agreed, once per package, never with Calendly link in same message. If payment plan applies ($1000+), clarify first-payment amount.
+
+### Sample-image tag
+ANY time you share a sample/example/preview URL of one of our past websites (the URLs that look like \`https://<name>.pixiebot.co\`), append the tag below on the SAME line, right after the URL. The system strips the tag and attaches a screenshot of the example as a WhatsApp image right before the text. Without this tag the user only sees a bare URL — emitting it is what makes the screenshot show up.
+
+\`[SEND_SAMPLE_IMAGE: industry=<salon|hvac|real_estate|generic>]\`
+
+Pick the industry that matches the URL you're sharing: \`blushbar\` → salon, \`austinclimate\` → hvac, \`sarahmitchell\` → real_estate, \`bytecoffee\` → generic. If unsure, use \`generic\`. Emit this in the FIRST greeting (the wording above already includes it), AND any later turn where you mention one of these example URLs — e.g. user asks "got any samples?" / "show me your work" / "what does it look like" → share one URL + the tag. Never emit the tag without a URL on the same message. Do NOT mention the tag to the user; it's stripped before send.
 
 ### Call booking
 Only offer Calendly (${calendlyUrl}) when: they explicitly ask for a call, scope genuinely needs a conversation, or they're hesitant to pay and want reassurance. NEVER offer a call if they've already agreed to pay.

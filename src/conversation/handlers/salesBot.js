@@ -1,4 +1,4 @@
-const { sendTextMessage, sendCTAButton } = require('../../messages/sender');
+const { sendTextMessage, sendCTAButton, sendImage } = require('../../messages/sender');
 const { logMessage, getConversationHistory } = require('../../db/conversations');
 const { generateResponse } = require('../../llm/provider');
 const { classifyIntent } = require('../../llm/intentClassifier');
@@ -30,6 +30,21 @@ const { localize } = require('../../utils/localizer');
 const { normalizeBusinessName } = require('../../utils/normalizeName');
 const { isServiceEnabled, findServiceByKey } = require('../../config/services');
 const { handoffToHuman } = require('../handoff');
+
+// Static screenshots of the 4 branded demo sites — sent ahead of any
+// chat message that includes the sample preview URL. Vercel serves these
+// from landing/public/<file>.png. Industry key is normalized (e.g.
+// "real-estate" / "Real Estate" → "real_estate") before lookup.
+const SAMPLE_SCREENSHOT_URLS = {
+  salon: 'https://pixiebot.co/salon.png',
+  hvac: 'https://pixiebot.co/HVAC.png',
+  real_estate: 'https://pixiebot.co/Real-Estate.png',
+  generic: 'https://pixiebot.co/generic.png',
+};
+function getSampleScreenshotUrl(industry) {
+  const key = String(industry || '').toLowerCase().replace(/[-\s]+/g, '_');
+  return SAMPLE_SCREENSHOT_URLS[key] || SAMPLE_SCREENSHOT_URLS.generic;
+}
 
 /**
  * Extract and strip the [LEAD_BRIEF]...[/LEAD_BRIEF] block from the LLM response.
@@ -387,6 +402,13 @@ async function handleSalesBot(user, message) {
   // service label ("chatbot", "SEO audit", "ad design", etc.).
   const humanHandoffMatch = cleanText.match(/\[TRIGGER_HUMAN_HANDOFF:\s*([^\]]+)\]/i);
 
+  // [SEND_SAMPLE_IMAGE: industry=salon] — LLM emits this whenever it
+  // shares the sample preview URL (in the first greeting, or when a
+  // user asks for examples mid-chat). We send the matching screenshot
+  // as a WhatsApp image right before the text reply.
+  const sampleImageMatch = cleanText.match(/\[SEND_SAMPLE_IMAGE(?::\s*industry=([a-z_]+))?\]/i);
+  const sampleImageIndustry = sampleImageMatch ? (sampleImageMatch[1] || adIndustry || 'generic') : null;
+
   // Internal-signal tag from the INPUT SAFETY section of the prompt. The
   // LLM appends [SECURITY_FLAGS: <comma,labels>] when it detects injection
   // attempts, pasted secrets, requests for other users' data, etc. We
@@ -619,6 +641,7 @@ async function handleSalesBot(user, message) {
     .replace(/\[TRIGGER_HUMAN_HANDOFF:[^\]]*\]/gi, '')
     .replace(/\[SEND_PAYMENT:[^\]]*\]/g, '')
     .replace(/\[SECURITY_FLAGS:[^\]]*\]/gi, '')
+    .replace(/\[SEND_SAMPLE_IMAGE[^\]]*\]/gi, '')
     .trim();
 
   // Persist any security flags collected this turn (from JS detectors +
@@ -672,6 +695,17 @@ async function handleSalesBot(user, message) {
     || handoffWillFire;
 
   const formatted = formatWhatsApp(textWithoutLink);
+  // Sample-screenshot send: precedes the text so the user sees the image
+  // first, with the preview URL appearing in the caption-equivalent text
+  // right below. Non-fatal — if WhatsApp/Messenger image send fails the
+  // text still goes out so the conversation continues.
+  if (sampleImageMatch && !skipLlmResponse) {
+    try {
+      await sendImage(user.phone_number, getSampleScreenshotUrl(sampleImageIndustry));
+    } catch (err) {
+      logger.warn(`[SAMPLE] sendImage failed (industry=${sampleImageIndustry}): ${err.message}`);
+    }
+  }
   if (formatted && !skipLlmResponse) {
     // sendTextMessage auto-logs via autoLogOutbound (sender.js) — calling
     // logMessage here would create a duplicate conversations row that
