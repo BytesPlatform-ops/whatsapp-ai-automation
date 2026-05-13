@@ -85,11 +85,10 @@ async function handleServiceSelection(user, message) {
     return STATES.INFORMATIVE_CHAT;
   }
   if (svcId === 'svc_general') {
-    await sendWithMenuButton(
-      user.phone_number,
-      "💬 Sure! I'm Pixie. What can I help you with?"
-    );
-    await logMessage(user.id, 'Entering sales chat', 'assistant');
+    // Silent entry into the sales chat — no canned greeting. The user's
+    // NEXT inbound triggers the proper LLM-driven first reply (with the
+    // AI-assistant disclosure). See PIXIE_CHAT_FLOW_PLAN.md Section A.0.
+    await logMessage(user.id, '[STATE] Entering sales chat (silent)', 'system');
     return STATES.SALES_CHAT;
   }
 

@@ -1249,10 +1249,11 @@ async function _routeMessage(message) {
       logger.warn(`[RESET] Failed to persist lastResetAt: ${err.message}`);
     }
 
-    // Send a deterministic Pixie greeting so /reset never produces a
-    // greeting-less response. Stopping here also saves an LLM call.
-    // sendTextMessage auto-logs (sender.js); avoid duplicate row in conversations table.
-    await sendTextMessage(user.phone_number, "Hi! I'm Pixie. What can I help you with today?");
+    // Silent reset: no outbound message. The next user inbound triggers
+    // salesBot's LLM-driven first-reply (with the mandatory AI-assistant
+    // disclosure). Avoids a hardcoded "greeting" overlapping with the
+    // proper LLM greeting. See PIXIE_CHAT_FLOW_PLAN.md Section A.0 + D.
+    await logMessage(user.id, '[RESET] State + metadata cleared (silent)', 'system');
     return;
   }
 
