@@ -123,6 +123,15 @@ function extractLeadBrief(text) {
 async function handleSalesBot(user, message) {
   let text = (message.text || '').trim();
 
+  // Hard opt-out gate — once a user emits stop/unsubscribe/etc., we never
+  // message them again. WABA quality rating + every privacy regime depends
+  // on honoring this without exception. The bot is silent forever.
+  // See PIXIE_CHAT_FLOW_PLAN.md Section A.0.1.
+  if (user.metadata?.optedOut) {
+    logger.info(`[OPT_OUT] Skipping reply to ${user.phone_number} — user previously opted out`);
+    return STATES.SALES_CHAT;
+  }
+
   if (!text) {
     await sendTextMessage(
       user.phone_number,
@@ -242,7 +251,12 @@ async function handleSalesBot(user, message) {
   const adSource = user.metadata?.adSource || 'generic';
   const adIndustry = user.metadata?.adIndustry || 'generic';
 
-  let systemPrompt = buildSalesPrompt(env.calendlyUrl, env.portfolio, adSource, adIndustry);
+  // Lever-rotation state — the prompt tells the LLM which lever names it
+  // used in its last 1-2 assistant turns so it picks a different one this
+  // turn. See PIXIE_CHAT_FLOW_PLAN.md Section B "Lever rotation rule".
+  const recentLevers = Array.isArray(user.metadata?.recentLevers) ? user.metadata.recentLevers.slice(-2) : [];
+
+  let systemPrompt = buildSalesPrompt(env.calendlyUrl, env.portfolio, adSource, adIndustry, recentLevers);
   systemPrompt += buildSummaryContext(user);
   systemPrompt += buildKnownContext(user);
 
@@ -402,6 +416,19 @@ async function handleSalesBot(user, message) {
   // service this chat doesn't currently handle. Payload is a free-form
   // service label ("chatbot", "SEO audit", "ad design", etc.).
   const humanHandoffMatch = cleanText.match(/\[TRIGGER_HUMAN_HANDOFF:\s*([^\]]+)\]/i);
+
+  // [LEVER: <name>] — emitted by the LLM at the end of every reply, names
+  // the persuasion lever used (Reciprocity, Curiosity gap, Authority, etc.).
+  // See PIXIE_CHAT_FLOW_PLAN.md Section B. Stripped from text before send;
+  // stored in metadata.recentLevers so the NEXT prompt build can ban it.
+  const leverMatch = cleanText.match(/\[LEVER:\s*([^\]]+)\]/i);
+  const leverThisTurn = leverMatch ? leverMatch[1].trim() : null;
+
+  // [OPT_OUT] — user said stop/unsubscribe/block. The LLM emits the tag,
+  // we record permanent opt-out and silence the bot for this user. The
+  // single polite acknowledgment in the same response is the LAST message
+  // they'll ever get from us. See PIXIE_CHAT_FLOW_PLAN.md Section A.0.1.
+  const optOutRequested = /\[OPT_OUT\]/i.test(cleanText);
 
   // [SEND_SAMPLE_IMAGE: industry=salon] — LLM emits this whenever it
   // shares a sample preview URL (in the first greeting, or when a user
@@ -653,6 +680,8 @@ async function handleSalesBot(user, message) {
     .replace(/\[SEND_PAYMENT:[^\]]*\]/g, '')
     .replace(/\[SECURITY_FLAGS:[^\]]*\]/gi, '')
     .replace(/\[SEND_SAMPLE_IMAGE[^\]]*\]/gi, '')
+    .replace(/\[LEVER:[^\]]*\]/gi, '')
+    .replace(/\[OPT_OUT\]/gi, '')
     .trim();
 
   // Persist any security flags collected this turn (from JS detectors +
@@ -725,6 +754,44 @@ async function handleSalesBot(user, message) {
     // surfaces as a visible duplicate in the admin transcript and as
     // duplicated history in subsequent LLM calls.
     await sendTextMessage(user.phone_number, formatted);
+  }
+
+  // Persist the lever this turn used so the NEXT prompt build can ban it.
+  // Keep only the most recent 2 — that matches the rotation rule in the
+  // chat-flow plan. See PIXIE_CHAT_FLOW_PLAN.md Section B.
+  if (leverThisTurn && !skipLlmResponse) {
+    const existing = Array.isArray(user.metadata?.recentLevers) ? user.metadata.recentLevers : [];
+    const nextLevers = [...existing, leverThisTurn].slice(-2);
+    try {
+      await updateUserMetadata(user.id, { recentLevers: nextLevers });
+      user.metadata = { ...(user.metadata || {}), recentLevers: nextLevers };
+      logger.info(`[LEVER] ${user.phone_number} used "${leverThisTurn}" (rolling: ${nextLevers.join(' → ')})`);
+    } catch (err) {
+      logger.warn(`[LEVER] Failed to persist lever for ${user.phone_number}: ${err.message}`);
+    }
+  }
+
+  // Opt-out: flip the optOut flag + the followup-stop flag so neither the
+  // bot nor the scheduler ever messages this user again. The single polite
+  // acknowledgment in this turn is the last message they'll get.
+  if (optOutRequested && !skipLlmResponse) {
+    try {
+      await updateUserMetadata(user.id, {
+        optedOut: true,
+        optedOutAt: new Date().toISOString(),
+        followupsStopped: true,
+      });
+      user.metadata = {
+        ...(user.metadata || {}),
+        optedOut: true,
+        optedOutAt: new Date().toISOString(),
+        followupsStopped: true,
+      };
+      await logMessage(user.id, '[OPT_OUT] User opted out — bot silenced, followups stopped', 'system');
+      logger.info(`[OPT_OUT] ${user.phone_number} opted out — bot silenced`);
+    } catch (err) {
+      logger.error(`[OPT_OUT] Failed to record opt-out for ${user.phone_number}: ${err.message}`);
+    }
   }
 
   // Negative-sentiment nudge — when the user's message reads as
