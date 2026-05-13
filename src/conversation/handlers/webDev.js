@@ -207,7 +207,7 @@ async function offerServicesForm(user, kind, opts = {}) {
     const msg = prefixAck
       ? `${prefixAck}\n\n${questionForState(fallbackState, wd)}`
       : questionForState(fallbackState, wd);
-    await sendTextMessage(user.phone_number, await localize(msg, user));
+    await sendTextMessage(user.phone_number, await dynamicPhrase(msg, user));
     return fallbackState;
   };
 
@@ -238,7 +238,7 @@ async function offerServicesForm(user, kind, opts = {}) {
   await updateUserMetadata(user.id, { websiteData: merged });
   user.metadata = { ...(user.metadata || {}), websiteData: merged };
 
-  await sendTextMessage(user.phone_number, await localize(intro, user));
+  await sendTextMessage(user.phone_number, await dynamicPhrase(intro, user));
   return kind === 'salon' ? STATES.WEB_COLLECT_SERVICES : STATES.WEB_COLLECT_LISTINGS_ASK;
 }
 
@@ -268,7 +268,7 @@ async function handleAwaitingForm(user, message) {
       : STATES.WEB_COLLECT_LISTINGS_ASK;
     await sendTextMessage(
       user.phone_number,
-      await localize(
+      await dynamicPhrase(
         `No problem — let's do it in chat.\n\n${questionForState(fallbackState, cleared)}`,
         user,
         text
@@ -281,7 +281,7 @@ async function handleAwaitingForm(user, message) {
   const reminder = url
     ? `Still here whenever you're ready — your form link: ${url}\n\nReply *chat* if you'd rather type it all out instead.`
     : `Still here whenever you're ready. Reply *chat* to type it all out instead.`;
-  await sendTextMessage(user.phone_number, await localize(reminder, user, text));
+  await sendTextMessage(user.phone_number, await dynamicPhrase(reminder, user, text));
   return STATES.WEB_AWAITING_FORM;
 }
 
@@ -446,7 +446,7 @@ async function smartAdvance(user, message, ackPrefix = null) {
   // other than English. Hardcoded questions like "What's your business
   // name?" get translated to Urdu / Spanish / Arabic / etc. to match.
   const userReply = (message && message.text) || '';
-  const localized = await localize(fullMsg, user, userReply);
+  const localized = await dynamicPhrase(fullMsg, user, userReply);
 
   await sendTextMessage(user.phone_number, localized);
   return nextState;
@@ -662,7 +662,7 @@ async function handleWebDev(user, message) {
       // knows we haven't jumped states and can keep answering.
       const currentQuestion = questionForState(user.state, user.metadata?.websiteData || {});
       if (currentQuestion) {
-        await sendTextMessage(user.phone_number, await localize(currentQuestion, user, text));
+        await sendTextMessage(user.phone_number, await dynamicPhrase(currentQuestion, user, text));
       }
       return user.state;
     }
@@ -737,7 +737,7 @@ async function handleCollectName(user, message) {
   if (!text || text.length < 2) {
     await sendTextMessage(
       user.phone_number,
-      await localize('Please enter your business name:', user, message.text)
+      await dynamicPhrase('Please enter your business name:', user, message.text)
     );
     return STATES.WEB_COLLECT_NAME;
   }
@@ -757,7 +757,7 @@ async function handleCollectName(user, message) {
       );
       await sendTextMessage(
         user.phone_number,
-        await localize(
+        await dynamicPhrase(
           `You've hit the daily limit on free preview websites (${gate.limit} in ${gate.windowHours} hours). This resets in ${resetIn}.\n\nIf you'd like to keep building, you can activate one of your existing previews — just reply with the site link and I'll send you the activation link. 💡`,
           user,
           message.text
@@ -845,13 +845,13 @@ async function handleCollectEmail(user, message) {
         const reask = "Now, what's your email address? (or reply *skip*)";
         await sendTextMessage(
           user.phone_number,
-          await localize(`${sc.ackPart} ${reask}`, user, text)
+          await dynamicPhrase(`${sc.ackPart} ${reask}`, user, text)
         );
         return STATES.WEB_COLLECT_EMAIL;
       }
       await sendTextMessage(
         user.phone_number,
-        await localize(
+        await dynamicPhrase(
           "That doesn't look like an email address. Could you double-check? Or just skip to continue without it.",
           user,
           text
@@ -877,7 +877,7 @@ async function handleCollectIndustry(user, message) {
   if (!rawInput) {
     await sendTextMessage(
       user.phone_number,
-      await localize('Please select or type your industry:', user, message.text)
+      await dynamicPhrase('Please select or type your industry:', user, message.text)
     );
     return STATES.WEB_COLLECT_INDUSTRY;
   }
@@ -922,14 +922,14 @@ async function handleCollectIndustry(user, message) {
       const reask = `Now, what industry are you in?`;
       await sendTextMessage(
         user.phone_number,
-        await localize(`${sc.ackPart} ${reask}`, user, rawInput)
+        await dynamicPhrase(`${sc.ackPart} ${reask}`, user, rawInput)
       );
       return STATES.WEB_COLLECT_INDUSTRY;
     }
     industry = 'General Business';
     await sendTextMessage(
       user.phone_number,
-      await localize(
+      await dynamicPhrase(
         "No worries, I'll go with a general business setup. You can tell me the industry later from the summary if you want to change it.",
         user,
         rawInput
@@ -944,7 +944,7 @@ async function handleCollectIndustry(user, message) {
     // can catch it if the normalization was off.
     await sendTextMessage(
       user.phone_number,
-      await localize(`Got it, I'll go with *${industry}*.`, user, rawInput)
+      await dynamicPhrase(`Got it, I'll go with *${industry}*.`, user, rawInput)
     );
     announcedByFallback = true;
   }
@@ -1085,7 +1085,7 @@ Decision tree:
       const reaskCity = `Now, what *city* are you based in? Just type the name of your main city.`;
       await sendTextMessage(
         user.phone_number,
-        await localize(`${sc.ackPart} ${reaskCity}`, user, raw)
+        await dynamicPhrase(`${sc.ackPart} ${reaskCity}`, user, raw)
       );
       return STATES.WEB_COLLECT_AREAS;
     }
@@ -1117,7 +1117,7 @@ Decision tree:
 
     await sendTextMessage(
       user.phone_number,
-      await localize(fallbackMsg, user, raw)
+      await dynamicPhrase(fallbackMsg, user, raw)
     );
     return STATES.WEB_COLLECT_AREAS;
   }
@@ -1355,7 +1355,7 @@ async function handleCollectServices(user, message) {
       user.metadata = { ...(user.metadata || {}), websiteData: cleared };
       await sendTextMessage(
         user.phone_number,
-        await localize(questionForState(STATES.WEB_COLLECT_SERVICES, cleared), user, servicesText)
+        await dynamicPhrase(questionForState(STATES.WEB_COLLECT_SERVICES, cleared), user, servicesText)
       );
       return STATES.WEB_COLLECT_SERVICES;
     }
@@ -1371,7 +1371,7 @@ async function handleCollectServices(user, message) {
       const msg = url
         ? `Great — fill out the form here whenever you're ready: ${url}\n\nReply *chat* anytime to switch back to typing.`
         : `Great — opening the form. Reply *chat* anytime to switch back to typing.`;
-      await sendTextMessage(user.phone_number, await localize(msg, user, servicesText));
+      await sendTextMessage(user.phone_number, await dynamicPhrase(msg, user, servicesText));
       return STATES.WEB_AWAITING_FORM;
     }
     if (servicesText) {
@@ -1384,7 +1384,7 @@ async function handleCollectServices(user, message) {
   if (!servicesText || servicesText.length < 2) {
     await sendTextMessage(
       user.phone_number,
-      await localize(
+      await dynamicPhrase(
         "Please list your services/products separated by commas, or skip if you don't have specific ones:",
         user,
         message.text
@@ -1430,7 +1430,7 @@ async function handleCollectServices(user, message) {
       const reask = "Now, what services or products do you offer? (comma-separated, or *skip*)";
       await sendTextMessage(
         user.phone_number,
-        await localize(`${sc.ackPart} ${reask}`, user, servicesText)
+        await dynamicPhrase(`${sc.ackPart} ${reask}`, user, servicesText)
       );
       return STATES.WEB_COLLECT_SERVICES;
     }
@@ -1474,7 +1474,7 @@ async function handleCollectAgentProfile(user, message) {
   if (raw) {
     const fmt = await tryApplyContactFormat(user, raw);
     if (fmt) {
-      await sendTextMessage(user.phone_number, await localize(`${fmt.ackPart} ${reaskAgent}`, user, raw));
+      await sendTextMessage(user.phone_number, await dynamicPhrase(`${fmt.ackPart} ${reaskAgent}`, user, raw));
       await logMessage(user.id, 'Agent-profile step: applied contact format short-circuit', 'assistant');
       return STATES.WEB_COLLECT_AGENT_PROFILE;
     }
@@ -1482,7 +1482,7 @@ async function handleCollectAgentProfile(user, message) {
   if (raw && raw.length >= 3) {
     const sc = await tryApplySideChannel(user, 'agentProfile', raw);
     if (sc) {
-      await sendTextMessage(user.phone_number, await localize(`${sc.ackPart} ${reaskAgent}`, user, raw));
+      await sendTextMessage(user.phone_number, await dynamicPhrase(`${sc.ackPart} ${reaskAgent}`, user, raw));
       await logMessage(user.id, `Agent-profile step: applied side-channel ${sc.side.kind}`, 'assistant');
       return STATES.WEB_COLLECT_AGENT_PROFILE;
     }
@@ -2162,7 +2162,7 @@ async function handleCollectListingsAsk(user, message) {
       user.metadata = { ...(user.metadata || {}), websiteData: cleared };
       await sendTextMessage(
         user.phone_number,
-        await localize(questionForState(STATES.WEB_COLLECT_LISTINGS_ASK, cleared), user, raw)
+        await dynamicPhrase(questionForState(STATES.WEB_COLLECT_LISTINGS_ASK, cleared), user, raw)
       );
       return STATES.WEB_COLLECT_LISTINGS_ASK;
     }
@@ -2178,7 +2178,7 @@ async function handleCollectListingsAsk(user, message) {
       const msg = url
         ? `Great — fill out the form here whenever you're ready: ${url}\n\nReply *chat* anytime to switch back to typing.`
         : `Great — opening the form. Reply *chat* anytime to switch back to typing.`;
-      await sendTextMessage(user.phone_number, await localize(msg, user, raw));
+      await sendTextMessage(user.phone_number, await dynamicPhrase(msg, user, raw));
       return STATES.WEB_AWAITING_FORM;
     }
     if (raw) {
@@ -2195,7 +2195,7 @@ async function handleCollectListingsAsk(user, message) {
   if (raw) {
     const fmt = await tryApplyContactFormat(user, raw);
     if (fmt) {
-      await sendTextMessage(user.phone_number, await localize(`${fmt.ackPart} ${reaskListings}`, user, raw));
+      await sendTextMessage(user.phone_number, await dynamicPhrase(`${fmt.ackPart} ${reaskListings}`, user, raw));
       await logMessage(user.id, 'Listings-ask step: applied contact format short-circuit', 'assistant');
       return STATES.WEB_COLLECT_LISTINGS_ASK;
     }
@@ -2203,7 +2203,7 @@ async function handleCollectListingsAsk(user, message) {
   if (raw && raw.length >= 3) {
     const sc = await tryApplySideChannel(user, 'listingsAsk', raw);
     if (sc) {
-      await sendTextMessage(user.phone_number, await localize(`${sc.ackPart} ${reaskListings}`, user, raw));
+      await sendTextMessage(user.phone_number, await dynamicPhrase(`${sc.ackPart} ${reaskListings}`, user, raw));
       await logMessage(user.id, `Listings-ask step: applied side-channel ${sc.side.kind}`, 'assistant');
       return STATES.WEB_COLLECT_LISTINGS_ASK;
     }
@@ -2240,7 +2240,7 @@ async function handleCollectListingsAsk(user, message) {
     user.metadata = { ...(user.metadata || {}), websiteData: merged };
     await sendTextMessage(
       user.phone_number,
-      await localize(questionForState(STATES.WEB_COLLECT_LISTINGS_DETAILS, merged), user, raw)
+      await dynamicPhrase(questionForState(STATES.WEB_COLLECT_LISTINGS_DETAILS, merged), user, raw)
     );
     return STATES.WEB_COLLECT_LISTINGS_DETAILS;
   }
@@ -2249,7 +2249,7 @@ async function handleCollectListingsAsk(user, message) {
   // English mid-conversation when the user is chatting in Roman Urdu / etc.
   await sendTextMessage(
     user.phone_number,
-    await localize(
+    await dynamicPhrase(
       'Just to confirm — *yes* to send your listings, or *skip* to use professional placeholder listings?',
       user,
       raw
@@ -2272,7 +2272,7 @@ async function handleCollectListingsDetails(user, message) {
   if (raw) {
     const fmt = await tryApplyContactFormat(user, raw);
     if (fmt) {
-      await sendTextMessage(user.phone_number, await localize(`${fmt.ackPart} ${reaskListings}`, user, raw));
+      await sendTextMessage(user.phone_number, await dynamicPhrase(`${fmt.ackPart} ${reaskListings}`, user, raw));
       await logMessage(user.id, 'Listings-details step: applied contact format short-circuit', 'assistant');
       return STATES.WEB_COLLECT_LISTINGS_DETAILS;
     }
@@ -2280,7 +2280,7 @@ async function handleCollectListingsDetails(user, message) {
   if (raw && raw.length >= 3) {
     const sc = await tryApplySideChannel(user, 'listingsDetails', raw);
     if (sc) {
-      await sendTextMessage(user.phone_number, await localize(`${sc.ackPart} ${reaskListings}`, user, raw));
+      await sendTextMessage(user.phone_number, await dynamicPhrase(`${sc.ackPart} ${reaskListings}`, user, raw));
       await logMessage(user.id, `Listings-details step: applied side-channel ${sc.side.kind}`, 'assistant');
       return STATES.WEB_COLLECT_LISTINGS_DETAILS;
     }
@@ -2417,14 +2417,14 @@ async function handleCollectListingsPhotos(user, message) {
   if (raw && pendingForSideChannel == null && !message.mediaId) {
     const fmt = await tryApplyContactFormat(user, raw);
     if (fmt) {
-      await sendTextMessage(user.phone_number, await localize(`${fmt.ackPart} ${reaskPhotos}`, user, raw));
+      await sendTextMessage(user.phone_number, await dynamicPhrase(`${fmt.ackPart} ${reaskPhotos}`, user, raw));
       await logMessage(user.id, 'Listings-photos step: applied contact format short-circuit', 'assistant');
       return STATES.WEB_COLLECT_LISTINGS_PHOTOS;
     }
     if (raw.length >= 3) {
       const sc = await tryApplySideChannel(user, 'listingsPhotos', raw);
       if (sc) {
-        await sendTextMessage(user.phone_number, await localize(`${sc.ackPart} ${reaskPhotos}`, user, raw));
+        await sendTextMessage(user.phone_number, await dynamicPhrase(`${sc.ackPart} ${reaskPhotos}`, user, raw));
         await logMessage(user.id, `Listings-photos step: applied side-channel ${sc.side.kind}`, 'assistant');
         return STATES.WEB_COLLECT_LISTINGS_PHOTOS;
       }
@@ -2576,7 +2576,7 @@ async function startSalonFlow(user) {
   const msg = 'Do you already use a booking tool (Fresha, Booksy, Vagaro, Calendly, etc.)?\n\n' +
     '• If yes, just paste the link and we\'ll embed it on your site.\n' +
     '• If not, type *"no"* and we\'ll build a built-in booking system for you.';
-  await sendTextMessage(user.phone_number, await localize(msg, user));
+  await sendTextMessage(user.phone_number, await dynamicPhrase(msg, user));
   return STATES.SALON_BOOKING_TOOL;
 }
 
@@ -2604,7 +2604,7 @@ async function finishSalonFlow(user) {
 
   await sendTextMessage(
     user.phone_number,
-    await localize(
+    await dynamicPhrase(
       "Last thing — what contact info do you want on the site? Just send your email, phone, and/or address.",
       user
     )
@@ -2619,7 +2619,7 @@ async function handleSalonBookingTool(user, message) {
   if (!text) {
     await sendTextMessage(
       user.phone_number,
-      await localize(
+      await dynamicPhrase(
         'Do you already use a booking tool (Fresha, Booksy, Vagaro, Calendly, etc.)? Paste the link if yes, or just type *"no"* and we\'ll build one for you.',
         user
       )
@@ -2635,7 +2635,7 @@ async function handleSalonBookingTool(user, message) {
   const reaskBooking = 'Now, do you already use a booking tool (Fresha / Booksy / Vagaro / Calendly / etc.)? Paste the link if yes, or type *"no"* and we\'ll build one for you.';
   const fmt = await tryApplyContactFormat(user, text);
   if (fmt) {
-    await sendTextMessage(user.phone_number, await localize(`${fmt.ackPart} ${reaskBooking}`, user, text));
+    await sendTextMessage(user.phone_number, await dynamicPhrase(`${fmt.ackPart} ${reaskBooking}`, user, text));
     await logMessage(user.id, 'Salon booking step: applied contact format short-circuit', 'assistant');
     return STATES.SALON_BOOKING_TOOL;
   }
@@ -2696,7 +2696,7 @@ When in doubt between "embed" and "native", lean "native" (the user can always p
     await logMessage(user.id, `Booking mode: embed (${wd.bookingUrl})`, 'assistant');
     await sendTextMessage(
       user.phone_number,
-      await localize(`Got it, we'll embed *${wd.bookingUrl}* on your booking page.`, user, text)
+      await dynamicPhrase(`Got it, we'll embed *${wd.bookingUrl}* on your booking page.`, user, text)
     );
     // Embed mode skips hours / durations — the booking widget owns scheduling.
     return finishSalonFlow(user);
@@ -2708,7 +2708,7 @@ When in doubt between "embed" and "native", lean "native" (the user can always p
     await logMessage(user.id, 'Booking mode: native', 'assistant');
     await sendTextMessage(
       user.phone_number,
-      await localize(
+      await dynamicPhrase(
         `Perfect, we'll build you a booking system.\n\nWhat are your opening hours? A quick line is fine — for example: *"Tue-Sat 9-7, Sun-Mon closed"*.\n\nOr just reply *default* for standard salon hours (Tue-Sat 9-7).`,
         user,
         text
@@ -2724,7 +2724,7 @@ When in doubt between "embed" and "native", lean "native" (the user can always p
   if (text && text.length >= 3) {
     const sc = await tryApplySideChannel(user, 'bookingTool', text);
     if (sc) {
-      await sendTextMessage(user.phone_number, await localize(`${sc.ackPart} ${reaskBooking}`, user, text));
+      await sendTextMessage(user.phone_number, await dynamicPhrase(`${sc.ackPart} ${reaskBooking}`, user, text));
       await logMessage(user.id, `Salon booking step: applied side-channel ${sc.side.kind}`, 'assistant');
       return STATES.SALON_BOOKING_TOOL;
     }
@@ -2737,7 +2737,7 @@ When in doubt between "embed" and "native", lean "native" (the user can always p
   }
   await sendTextMessage(
     user.phone_number,
-    await localize(
+    await dynamicPhrase(
       'Got you — just need a clearer answer. Either *paste your booking tool link* (Fresha / Booksy / Vagaro / Calendly / etc.) or type *"no"* and we\'ll build one in.',
       user,
       text
@@ -2758,7 +2758,7 @@ async function handleSalonHours(user, message) {
   if (!text && !message.buttonId && !message.listId) {
     await sendTextMessage(
       user.phone_number,
-      await localize(
+      await dynamicPhrase(
         'What are your opening hours? A quick line is fine — for example: *"Tue-Sat 9-7, Sun-Mon closed"*.\n\nOr just reply *default* for standard salon hours (Tue-Sat 9-7).',
         user
       )
@@ -2775,7 +2775,7 @@ async function handleSalonHours(user, message) {
   if (text) {
     const fmt = await tryApplyContactFormat(user, text);
     if (fmt) {
-      await sendTextMessage(user.phone_number, await localize(`${fmt.ackPart} ${reaskHours}`, user, text));
+      await sendTextMessage(user.phone_number, await dynamicPhrase(`${fmt.ackPart} ${reaskHours}`, user, text));
       await logMessage(user.id, 'Salon hours step: applied contact format short-circuit', 'assistant');
       return STATES.SALON_HOURS;
     }
@@ -2797,7 +2797,7 @@ async function handleSalonHours(user, message) {
   if (usedDefault && text && text.length >= 3 && !isDelegation(text)) {
     const sc = await tryApplySideChannel(user, 'salonHours', text);
     if (sc) {
-      await sendTextMessage(user.phone_number, await localize(`${sc.ackPart} ${reaskHours}`, user, text));
+      await sendTextMessage(user.phone_number, await dynamicPhrase(`${sc.ackPart} ${reaskHours}`, user, text));
       await logMessage(user.id, `Salon hours step: applied side-channel ${sc.side.kind}`, 'assistant');
       return STATES.SALON_HOURS;
     }
@@ -2826,7 +2826,7 @@ async function handleSalonHours(user, message) {
         `(state=${user.state}, businessName=${wd.businessName || '?'}, industry=${wd.industry || '?'}). ` +
         `Some upstream path bypassed services collection — investigate.`
     );
-    await sendTextMessage(user.phone_number, await localize(prefix.trim(), user, text));
+    await sendTextMessage(user.phone_number, await dynamicPhrase(prefix.trim(), user, text));
     return finishSalonFlow(user);
   }
   // Form short-circuit: if the services-form already populated durations +
@@ -2834,7 +2834,7 @@ async function handleSalonHours(user, message) {
   // user typed it once on the web form — asking again in chat breaks the
   // implicit "fill once, never again" promise of the form fork.
   if (isSalonServicesComplete(wd)) {
-    await sendTextMessage(user.phone_number, await localize(prefix.trim(), user, text));
+    await sendTextMessage(user.phone_number, await dynamicPhrase(prefix.trim(), user, text));
     await logMessage(user.id, 'Salon durations: skipped (form-populated)', 'assistant');
     return finishSalonFlow(user);
   }
@@ -2844,7 +2844,7 @@ async function handleSalonHours(user, message) {
     `Example: *"Haircut 30min €25, Colour 90min €85, Nails 45min €35"*.\n\n` +
     `Your services: ${services.join(', ')}.\n\n` +
     `Or just reply *default* to use 30min with no price.`;
-  await sendTextMessage(user.phone_number, await localize(fullMsg, user, text));
+  await sendTextMessage(user.phone_number, await dynamicPhrase(fullMsg, user, text));
   return STATES.SALON_SERVICE_DURATIONS;
 }
 
@@ -2955,7 +2955,7 @@ async function handleSalonServiceDurations(user, message) {
   if (text) {
     const fmt = await tryApplyContactFormat(user, text);
     if (fmt) {
-      await sendTextMessage(user.phone_number, await localize(`${fmt.ackPart} ${reaskDurations}`, user, text));
+      await sendTextMessage(user.phone_number, await dynamicPhrase(`${fmt.ackPart} ${reaskDurations}`, user, text));
       await logMessage(user.id, 'Salon durations step: applied contact format short-circuit', 'assistant');
       return STATES.SALON_SERVICE_DURATIONS;
     }
@@ -2963,7 +2963,7 @@ async function handleSalonServiceDurations(user, message) {
   if (text && text.length >= 3 && !isDelegation(text)) {
     const sc = await tryApplySideChannel(user, 'salonDurations', text);
     if (sc) {
-      await sendTextMessage(user.phone_number, await localize(`${sc.ackPart} ${reaskDurations}`, user, text));
+      await sendTextMessage(user.phone_number, await dynamicPhrase(`${sc.ackPart} ${reaskDurations}`, user, text));
       await logMessage(user.id, `Salon durations step: applied side-channel ${sc.side.kind}`, 'assistant');
       return STATES.SALON_SERVICE_DURATIONS;
     }
@@ -3022,7 +3022,7 @@ async function handleSalonServiceDurations(user, message) {
         .join(', ');
       ackMsg = `Got it — ${preview}${merged.length > 3 ? '…' : ''}.`;
     }
-    await sendTextMessage(user.phone_number, await localize(ackMsg, user, text));
+    await sendTextMessage(user.phone_number, await dynamicPhrase(ackMsg, user, text));
     return finishSalonFlow(user);
   }
 
@@ -3034,7 +3034,7 @@ async function handleSalonServiceDurations(user, message) {
   const ackMsg = ackParts.length
     ? `Got it — ${ackParts.join(', ')}. What about ${remainingNames}? Send durations + prices, or reply *default* to set them at 30min with no price.`
     : `Couldn't pull a duration from that — could you give it like *"${remaining[0].name} 30min $25"*? Or reply *default* for 30min/no-price across all.`;
-  await sendTextMessage(user.phone_number, await localize(ackMsg, user, text));
+  await sendTextMessage(user.phone_number, await dynamicPhrase(ackMsg, user, text));
   return STATES.SALON_SERVICE_DURATIONS;
 }
 
@@ -3250,7 +3250,7 @@ async function handleCollectAbout(user, message) {
   if (raw) {
     const fmt = await tryApplyContactFormat(user, raw);
     if (fmt) {
-      await sendTextMessage(user.phone_number, await localize(`${fmt.ackPart} ${reaskAbout}`, user, raw));
+      await sendTextMessage(user.phone_number, await dynamicPhrase(`${fmt.ackPart} ${reaskAbout}`, user, raw));
       await logMessage(user.id, 'About step: applied contact format short-circuit', 'assistant');
       return STATES.WEB_COLLECT_ABOUT;
     }
@@ -3258,7 +3258,7 @@ async function handleCollectAbout(user, message) {
   if (raw && raw.length >= 3) {
     const sc = await tryApplySideChannel(user, 'about', raw);
     if (sc) {
-      await sendTextMessage(user.phone_number, await localize(`${sc.ackPart} ${reaskAbout}`, user, raw));
+      await sendTextMessage(user.phone_number, await dynamicPhrase(`${sc.ackPart} ${reaskAbout}`, user, raw));
       await logMessage(user.id, `About step: applied side-channel ${sc.side.kind}`, 'assistant');
       return STATES.WEB_COLLECT_ABOUT;
     }
@@ -3306,7 +3306,7 @@ async function handleCollectProjectsAsk(user, message) {
   if (raw) {
     const fmt = await tryApplyContactFormat(user, raw);
     if (fmt) {
-      await sendTextMessage(user.phone_number, await localize(`${fmt.ackPart} ${reaskProjectsAsk}`, user, raw));
+      await sendTextMessage(user.phone_number, await dynamicPhrase(`${fmt.ackPart} ${reaskProjectsAsk}`, user, raw));
       await logMessage(user.id, 'Projects-ask step: applied contact format short-circuit', 'assistant');
       return STATES.WEB_COLLECT_PROJECTS_ASK;
     }
@@ -3314,7 +3314,7 @@ async function handleCollectProjectsAsk(user, message) {
   if (raw && raw.length >= 3) {
     const sc = await tryApplySideChannel(user, 'projectsAsk', raw);
     if (sc) {
-      await sendTextMessage(user.phone_number, await localize(`${sc.ackPart} ${reaskProjectsAsk}`, user, raw));
+      await sendTextMessage(user.phone_number, await dynamicPhrase(`${sc.ackPart} ${reaskProjectsAsk}`, user, raw));
       await logMessage(user.id, `Projects-ask step: applied side-channel ${sc.side.kind}`, 'assistant');
       return STATES.WEB_COLLECT_PROJECTS_ASK;
     }
@@ -3345,7 +3345,7 @@ async function handleCollectProjectsAsk(user, message) {
     user.metadata = { ...(user.metadata || {}), websiteData: merged };
     await sendTextMessage(
       user.phone_number,
-      await localize(questionForState(STATES.WEB_COLLECT_PROJECTS_DETAILS, merged), user, raw)
+      await dynamicPhrase(questionForState(STATES.WEB_COLLECT_PROJECTS_DETAILS, merged), user, raw)
     );
     return STATES.WEB_COLLECT_PROJECTS_DETAILS;
   }
@@ -3353,7 +3353,7 @@ async function handleCollectProjectsAsk(user, message) {
   // Unclear — re-ask
   await sendTextMessage(
     user.phone_number,
-    await localize(
+    await dynamicPhrase(
       'Just to confirm — *yes* to send your projects, or *skip* to use placeholders?',
       user,
       raw
@@ -3374,7 +3374,7 @@ async function handleCollectProjectsDetails(user, message) {
   if (raw) {
     const fmt = await tryApplyContactFormat(user, raw);
     if (fmt) {
-      await sendTextMessage(user.phone_number, await localize(`${fmt.ackPart} ${reaskProjects}`, user, raw));
+      await sendTextMessage(user.phone_number, await dynamicPhrase(`${fmt.ackPart} ${reaskProjects}`, user, raw));
       await logMessage(user.id, 'Projects-details step: applied contact format short-circuit', 'assistant');
       return STATES.WEB_COLLECT_PROJECTS_DETAILS;
     }
@@ -3382,7 +3382,7 @@ async function handleCollectProjectsDetails(user, message) {
   if (raw && raw.length >= 3) {
     const sc = await tryApplySideChannel(user, 'projectsDetails', raw);
     if (sc) {
-      await sendTextMessage(user.phone_number, await localize(`${sc.ackPart} ${reaskProjects}`, user, raw));
+      await sendTextMessage(user.phone_number, await dynamicPhrase(`${sc.ackPart} ${reaskProjects}`, user, raw));
       await logMessage(user.id, `Projects-details step: applied side-channel ${sc.side.kind}`, 'assistant');
       return STATES.WEB_COLLECT_PROJECTS_DETAILS;
     }
@@ -3491,14 +3491,14 @@ async function handleCollectProjectsPhotos(user, message) {
   if (raw && pending == null && !message.mediaId) {
     const fmt = await tryApplyContactFormat(user, raw);
     if (fmt) {
-      await sendTextMessage(user.phone_number, await localize(`${fmt.ackPart} ${reaskPhotos}`, user, raw));
+      await sendTextMessage(user.phone_number, await dynamicPhrase(`${fmt.ackPart} ${reaskPhotos}`, user, raw));
       await logMessage(user.id, 'Projects-photos step: applied contact format short-circuit', 'assistant');
       return STATES.WEB_COLLECT_PROJECTS_PHOTOS;
     }
     if (raw.length >= 3) {
       const sc = await tryApplySideChannel(user, 'projectsPhotos', raw);
       if (sc) {
-        await sendTextMessage(user.phone_number, await localize(`${sc.ackPart} ${reaskPhotos}`, user, raw));
+        await sendTextMessage(user.phone_number, await dynamicPhrase(`${sc.ackPart} ${reaskPhotos}`, user, raw));
         await logMessage(user.id, `Projects-photos step: applied side-channel ${sc.side.kind}`, 'assistant');
         return STATES.WEB_COLLECT_PROJECTS_PHOTOS;
       }
@@ -3723,7 +3723,7 @@ async function handleCollectContact(user, message) {
       await logMessage(user.id, `Contact phone: ${wd.contactPhone} (user asked to reuse WhatsApp number)`, 'assistant');
       await sendTextMessage(
         user.phone_number,
-        await localize(
+        await dynamicPhrase(
           `Got it — using *${wd.contactPhone}* as the contact number on your site.`,
           user,
           contactText
@@ -3734,7 +3734,7 @@ async function handleCollectContact(user, message) {
       if (!wd.contactEmail && !wd.contactAddress) {
         await sendTextMessage(
           user.phone_number,
-          await localize(
+          await dynamicPhrase(
             'Anything else you want on the site — email or address? Or reply *skip* to use just the phone number.',
             user,
             contactText
@@ -3784,7 +3784,7 @@ async function handleCollectContact(user, message) {
       user.metadata = { ...(user.metadata || {}), websiteData: wd, contactSkipped: true };
       await sendTextMessage(
         user.phone_number,
-        await localize(
+        await dynamicPhrase(
           `No problem, I'll leave contact details off the site. You can add them later from the summary.`,
           user,
           contactText
@@ -3809,7 +3809,7 @@ async function handleCollectContact(user, message) {
     if (sc && kind && kind !== 'contact_update' && kind !== 'question' && kind !== 'unclear') {
       await sendTextMessage(
         user.phone_number,
-        await localize(
+        await dynamicPhrase(
           `${sc.ackPart} Let's take one more look before we build.`,
           user,
           contactText
@@ -3851,13 +3851,13 @@ async function handleCollectContact(user, message) {
         const reask = `Now, what contact info do you want on the site? (email, phone, and/or address — or *skip*)`;
         await sendTextMessage(
           user.phone_number,
-          await localize(`${sc.ackPart} ${reask}`, user, contactText)
+          await dynamicPhrase(`${sc.ackPart} ${reask}`, user, contactText)
         );
         return STATES.WEB_COLLECT_CONTACT;
       }
       await sendTextMessage(
         user.phone_number,
-        await localize(
+        await dynamicPhrase(
           "Didn't catch any contact info there. Send your email, phone, and/or address — any format is fine, or just skip if you'd rather not add contact details.",
           user,
           contactText
@@ -3940,7 +3940,7 @@ async function handleCollectContact(user, message) {
       const missingLine = missingFields.join(' or ');
       await sendTextMessage(
         user.phone_number,
-        await localize(
+        await dynamicPhrase(
           `Got your ${haveLine}. Want to add a ${missingLine} too — or reply *skip* to move on with just what you've shared?`,
           user,
           contactText
@@ -3974,7 +3974,7 @@ async function handleCollectContact(user, message) {
   const wdAfter = user.metadata.websiteData;
   if (!wdAfter.logoUrl && !wdAfter.logoSkipped) {
     const prompt = "Got a logo? Send it as an image (JPG or PNG) — I'll clean up the background automatically. Or reply *skip* and I'll use a text logo with your brand initial.";
-    await sendTextMessage(user.phone_number, await localize(prompt, user));
+    await sendTextMessage(user.phone_number, await dynamicPhrase(prompt, user));
     await logMessage(user.id, 'Asking for logo upload', 'assistant');
     return STATES.WEB_COLLECT_LOGO;
   }
@@ -4090,7 +4090,7 @@ async function showSummaryPeek(user) {
   // localize() handles the English-override safety net internally by
   // fetching the latest user message when none is passed.
   const summary = lines.join('\n');
-  const localized = await localize(summary, user);
+  const localized = await dynamicPhrase(summary, user);
   await sendTextMessage(user.phone_number, localized);
   // Log the actual peek text so the admin conversation page shows what the
   // user saw on WhatsApp, not a placeholder label.
@@ -4190,7 +4190,7 @@ async function showConfirmSummary(user, prefix = '') {
   // into the wrong language.
   const summary = lines.join('\n');
   const combined = prefix ? `${prefix.trim()}\n\n${summary}` : summary;
-  const localized = await localize(combined, user);
+  const localized = await dynamicPhrase(combined, user);
   await sendTextMessage(user.phone_number, localized);
   // sendTextMessage now auto-logs the outbound text via the sender
   // facade's autoLogOutbound (channelContext + db/conversations). The
@@ -4323,7 +4323,7 @@ Return ONLY one word: skip, generate, or other.`,
       wd.logoSkipped = true;
       await updateUserMetadata(user.id, { websiteData: wd });
       user.metadata = { ...(user.metadata || {}), websiteData: wd };
-      await sendTextMessage(user.phone_number, await localize("No problem — I'll use a clean text logo with your brand initial.", user, text));
+      await sendTextMessage(user.phone_number, await dynamicPhrase("No problem — I'll use a clean text logo with your brand initial.", user, text));
       await logMessage(user.id, 'User skipped logo upload', 'assistant');
       return smartAdvance(user, message, null);
     }
@@ -4331,7 +4331,7 @@ Return ONLY one word: skip, generate, or other.`,
     if (intent === 'generate') {
       await sendTextMessage(
         user.phone_number,
-        await localize(
+        await dynamicPhrase(
           "I can't auto-generate the logo here — this step is upload-or-skip only.\n\n" +
             "• Reply *skip* and I'll use a clean text logo with your brand initial (looks great on most sites, and you can swap it later)\n" +
             "• Or send your logo as an image (JPG or PNG)\n\n" +
@@ -4354,13 +4354,13 @@ Return ONLY one word: skip, generate, or other.`,
       const reaskLogo = "Now, got a logo? Send it as an image (JPG or PNG), or reply *skip* to use a text logo.";
       const fmt = await tryApplyContactFormat(user, text);
       if (fmt) {
-        await sendTextMessage(user.phone_number, await localize(`${fmt.ackPart} ${reaskLogo}`, user, text));
+        await sendTextMessage(user.phone_number, await dynamicPhrase(`${fmt.ackPart} ${reaskLogo}`, user, text));
         await logMessage(user.id, `Logo step: applied contact format short-circuit`, 'assistant');
         return STATES.WEB_COLLECT_LOGO;
       }
       const sc = await tryApplySideChannel(user, 'logo', text);
       if (sc) {
-        await sendTextMessage(user.phone_number, await localize(`${sc.ackPart} ${reaskLogo}`, user, text));
+        await sendTextMessage(user.phone_number, await dynamicPhrase(`${sc.ackPart} ${reaskLogo}`, user, text));
         await logMessage(user.id, `Logo step: applied side-channel ${sc.side.kind}`, 'assistant');
         return STATES.WEB_COLLECT_LOGO;
       }
@@ -4368,7 +4368,7 @@ Return ONLY one word: skip, generate, or other.`,
 
     await sendTextMessage(
       user.phone_number,
-      await localize(
+      await dynamicPhrase(
         "I didn't catch an image there. Send your logo as an image (JPG or PNG), or reply *skip* to use a text logo.",
         user,
         text
@@ -4377,7 +4377,7 @@ Return ONLY one word: skip, generate, or other.`,
     return STATES.WEB_COLLECT_LOGO;
   }
 
-  await sendTextMessage(user.phone_number, await localize('Got it — processing your logo...', user, text));
+  await sendTextMessage(user.phone_number, await dynamicPhrase('Got it — processing your logo...', user, text));
 
   let mediaBuffer = null;
   let mediaMime = 'image/png';
@@ -4401,7 +4401,7 @@ Return ONLY one word: skip, generate, or other.`,
   if (unsafeReason) {
     await sendTextMessage(
       user.phone_number,
-      await localize(
+      await dynamicPhrase(
         "I can't accept that image format. Please send your logo as a JPG, PNG, or WebP — or reply *skip* to use a text logo.",
         user,
         text
@@ -4413,7 +4413,7 @@ Return ONLY one word: skip, generate, or other.`,
   if (!mediaBuffer) {
     await sendTextMessage(
       user.phone_number,
-      await localize(
+      await dynamicPhrase(
         "I couldn't download that image — can you try sending it again? Or reply *skip* to move on without a logo.",
         user,
         text
@@ -4440,7 +4440,7 @@ Return ONLY one word: skip, generate, or other.`,
     user.metadata = { ...(user.metadata || {}), websiteData: wd };
     await sendTextMessage(
       user.phone_number,
-      await localize("Something went wrong processing that image — I'll use a text logo for now. You can always send one later.", user, text)
+      await dynamicPhrase("Something went wrong processing that image — I'll use a text logo for now. You can always send one later.", user, text)
     );
     return smartAdvance(user, message, null);
   }
@@ -4454,7 +4454,7 @@ Return ONLY one word: skip, generate, or other.`,
   const ack = result.wasProcessed
     ? "Logo saved — background cleaned up and ready to go."
     : "Logo saved.";
-  await sendTextMessage(user.phone_number, await localize(ack, user, text));
+  await sendTextMessage(user.phone_number, await dynamicPhrase(ack, user, text));
   await logMessage(user.id, `Logo uploaded (${result.source})`, 'assistant');
   return smartAdvance(user, message, null);
 }
@@ -4500,7 +4500,7 @@ async function handleConfirm(user, message) {
       await updateUserState(user.id, STATES.WEB_COLLECT_LOGO);
       await sendTextMessage(
         user.phone_number,
-        await localize(
+        await dynamicPhrase(
           "Sure — send your logo as an image (JPG or PNG) and I'll add it to the site. Or reply *skip* if you change your mind.",
           user,
           originalText
@@ -4716,7 +4716,7 @@ async function handleConfirm(user, message) {
         await updateUserMetadata(user.id, { websiteData: wd, salonFlowOrigin: 'CONFIRM' });
         user.metadata = { ...(user.metadata || {}), websiteData: wd };
         const txt = `Updated industry to *${v}* — a few quick salon-specific questions, then we'll build it.`;
-        await sendTextMessage(user.phone_number, await localize(txt, user, originalText));
+        await sendTextMessage(user.phone_number, await dynamicPhrase(txt, user, originalText));
         return startSalonFlow(user);
       }
       return applyAndReshow(`Industry updated to *${wd.industry}*`);
@@ -4826,7 +4826,7 @@ async function handleConfirm(user, message) {
     '• "Phone to +1 555 123 4567"\n' +
     '• "Address to 123 Main St, City"\n\n' +
     'Or just reply *yes* to proceed with the current details.';
-  await sendTextMessage(user.phone_number, await localize(fallback, user, originalText));
+  await sendTextMessage(user.phone_number, await dynamicPhrase(fallback, user, originalText));
   return STATES.WEB_CONFIRM;
 }
 
@@ -5938,7 +5938,7 @@ Reply with ONLY one word: swap, feedback, or unclear.`,
           const example = domainExampleFor(user.metadata?.websiteData?.businessName);
           await sendTextMessage(
             user.phone_number,
-            await localize(
+            await dynamicPhrase(
               `🎉 *Awesome!* Your website is approved.\n\nWould you like to put it on your own custom domain? (e.g., ${example})\n\nReply *yes* and I'll help you find one, or *no* to skip it for now.`,
               user,
               revisionText
@@ -6320,7 +6320,7 @@ async function askDomainChoice(user) {
 
   await sendTextMessage(
     user.phone_number,
-    await localize(
+    await dynamicPhrase(
       `Before I build — what do you want to do about a domain?\n\n` +
         `• *new* — I'll find one for you (e.g. ${example})\n` +
         `• *own* — you already have a domain\n` +
@@ -6343,7 +6343,7 @@ async function proceedSkipDomain(user, raw) {
   });
   await sendTextMessage(
     user.phone_number,
-    await localize("No problem — going straight to building.", user, raw)
+    await dynamicPhrase("No problem — going straight to building.", user, raw)
   );
   await logMessage(user.id, 'Domain choice: skip', 'assistant');
   return generateWebsite(user);
@@ -6355,7 +6355,7 @@ async function proceedAskForOwnDomain(user, raw) {
   await updateUserState(user.id, STATES.WEB_DOMAIN_OWN_INPUT);
   await sendTextMessage(
     user.phone_number,
-    await localize("Great — what's your domain? (e.g. glowstudio.com)", user, raw)
+    await dynamicPhrase("Great — what's your domain? (e.g. glowstudio.com)", user, raw)
   );
   return STATES.WEB_DOMAIN_OWN_INPUT;
 }
@@ -6377,7 +6377,7 @@ async function proceedSearchNewDomain(user, raw, searchBase) {
   await updateUserState(user.id, STATES.WEB_DOMAIN_SEARCH);
   await sendTextMessage(
     user.phone_number,
-    await localize("What name should I search for? (e.g. mybusiness)", user, raw)
+    await dynamicPhrase("What name should I search for? (e.g. mybusiness)", user, raw)
   );
   return STATES.WEB_DOMAIN_SEARCH;
 }
@@ -6489,7 +6489,7 @@ async function handleDomainChoice(user, message) {
 
   await sendTextMessage(
     user.phone_number,
-    await localize(
+    await dynamicPhrase(
       "Want me to find you a *new domain*, do you *already own one*, or *skip* for now? You can also just type the domain you want.",
       user,
       raw
@@ -6517,13 +6517,13 @@ async function handleDomainOwnInput(user, message) {
       await updateUserState(user.id, STATES.WEB_REVISIONS);
       await sendTextMessage(
         user.phone_number,
-        await localize("No problem — sticking with the current setup. Let me know any other tweaks!", user, raw)
+        await dynamicPhrase("No problem — sticking with the current setup. Let me know any other tweaks!", user, raw)
       );
       return STATES.WEB_REVISIONS;
     }
     await sendTextMessage(
       user.phone_number,
-      await localize("All good — skipping the domain and building now.", user, raw)
+      await dynamicPhrase("All good — skipping the domain and building now.", user, raw)
     );
     return generateWebsite(user);
   }
@@ -6556,7 +6556,7 @@ async function handleDomainOwnInput(user, message) {
 
   await sendTextMessage(
     user.phone_number,
-    await localize(
+    await dynamicPhrase(
       "Doesn't look like a domain. Try something like *glowstudio.com* — or reply *skip*. Or say *find me one* if you'd rather we search.",
       user,
       raw
@@ -6580,7 +6580,7 @@ async function saveOwnDomain(user, domain) {
   const { registrarOptionsList } = require('../../website-gen/dnsInstructions');
   await sendTextMessage(
     user.phone_number,
-    await localize(
+    await dynamicPhrase(
       `Got it — *${domain}*. Where did you buy it? (e.g. *${registrarOptionsList()}*, or type whatever you're using)\n\n` +
         `After payment I'll send step-by-step DNS instructions for that registrar.`,
       user
@@ -6599,7 +6599,7 @@ async function handleDomainOwnRegistrar(user, message) {
     await updateUserMetadata(user.id, { domainRegistrar: null });
     await sendTextMessage(
       user.phone_number,
-      await localize("No problem — I'll send generic DNS steps after payment. Building now...", user, raw)
+      await dynamicPhrase("No problem — I'll send generic DNS steps after payment. Building now...", user, raw)
     );
     return generateWebsite(user);
   }
@@ -6609,7 +6609,7 @@ async function handleDomainOwnRegistrar(user, message) {
   if (raw.length < 2 || raw.length > 60) {
     await sendTextMessage(
       user.phone_number,
-      await localize(
+      await dynamicPhrase(
         `Just type the registrar name — e.g. *GoDaddy*, *Namecheap*, *Cloudflare*, or whatever you use. Or reply *skip* for generic steps.`,
         user,
         raw
@@ -6635,7 +6635,7 @@ async function handleDomainOwnRegistrar(user, message) {
 
   await sendTextMessage(
     user.phone_number,
-    await localize(
+    await dynamicPhrase(
       `Perfect — *${registrar}* noted. I'll send step-by-step DNS instructions right after payment. Building your site now...`,
       user,
       raw
@@ -6659,7 +6659,7 @@ async function handleDomainSearch(user, message) {
     });
     await sendTextMessage(
       user.phone_number,
-      await localize("No problem — skipping domain and building now.", user, raw)
+      await dynamicPhrase("No problem — skipping domain and building now.", user, raw)
     );
     return generateWebsite(user);
   }
@@ -6689,7 +6689,7 @@ async function handleDomainSearch(user, message) {
   if (domainOptions.length === 1 && negativeConfirm.test(text)) {
     await sendTextMessage(
       user.phone_number,
-      await localize(
+      await dynamicPhrase(
         "No problem — type a different domain name (e.g. *mybiz.ai* or just a base like *mybiz*), or reply *skip* to launch on the free preview URL.",
         user,
         raw
@@ -6708,7 +6708,7 @@ async function handleDomainSearch(user, message) {
     }
     await sendTextMessage(
       user.phone_number,
-      await localize("That one's not available. Try another number or a new name.", user, raw)
+      await dynamicPhrase("That one's not available. Try another number or a new name.", user, raw)
     );
     return STATES.WEB_DOMAIN_SEARCH;
   }
@@ -6757,7 +6757,7 @@ async function handleDomainSearch(user, message) {
 
   await sendTextMessage(
     user.phone_number,
-    await localize(
+    await dynamicPhrase(
       "Reply with the *number* of a domain above, type a new name to search, or say *I have my own* if you'd rather use an existing domain.",
       user,
       raw
@@ -6920,7 +6920,7 @@ async function runDomainSearchInline(user, baseName) {
   await updateUserState(user.id, STATES.WEB_DOMAIN_SEARCH);
   await sendTextMessage(
     user.phone_number,
-    await localize(`Checking domain availability for *${baseName}*...`, user)
+    await dynamicPhrase(`Checking domain availability for *${baseName}*...`, user)
   );
 
   let results = [];
@@ -6938,7 +6938,7 @@ async function runDomainSearchInline(user, baseName) {
       await updateUserState(user.id, STATES.WEB_DOMAIN_CHOICE);
       await sendTextMessage(
         user.phone_number,
-        await localize(
+        await dynamicPhrase(
           "Our domain registrar is temporarily unreachable so I can't pull live prices right now.\n\n" +
             "I don't want to quote a price we can't honor — two options:\n\n" +
             "• *own* — use a domain you already own (just needs DNS pointing after payment)\n" +
@@ -6952,7 +6952,7 @@ async function runDomainSearchInline(user, baseName) {
     // Generic failure (network blip) — let user retry with a different name.
     await sendTextMessage(
       user.phone_number,
-      await localize(
+      await dynamicPhrase(
         "Couldn't reach the registrar right now. Try a different name, or reply *skip* / *own* to proceed without a new domain.",
         user
       )
@@ -6969,7 +6969,7 @@ async function runDomainSearchInline(user, baseName) {
   if (top.length === 0) {
     await sendTextMessage(
       user.phone_number,
-      await localize(
+      await dynamicPhrase(
         `*${baseName}* is all taken. Let me find you something close…`,
         user
       )
@@ -6980,7 +6980,7 @@ async function runDomainSearchInline(user, baseName) {
     if (top.length === 0) {
       await sendTextMessage(
         user.phone_number,
-        await localize(
+        await dynamicPhrase(
           `Couldn't find good alternatives either. Try typing a different base name, or reply *skip*.`,
           user
         )
@@ -6996,7 +6996,7 @@ async function runDomainSearchInline(user, baseName) {
   });
   msg += '\nReply with a *number* to pick one, or type a specific domain (e.g. *mybiz.ai*) and I\'ll look up its price. Or *skip*.';
 
-  await sendTextMessage(user.phone_number, await localize(msg, user));
+  await sendTextMessage(user.phone_number, await dynamicPhrase(msg, user));
   // Save only the top 5 to domainOptions — that's the list the user sees
   // and can reference by number. Keeps index math consistent.
   await updateUserMetadata(user.id, {
@@ -7026,7 +7026,7 @@ async function runSpecificDomainLookup(user, domain) {
   await updateUserState(user.id, STATES.WEB_DOMAIN_SEARCH);
   await sendTextMessage(
     user.phone_number,
-    await localize(`Checking *${domain}*...`, user)
+    await dynamicPhrase(`Checking *${domain}*...`, user)
   );
 
   let result;
@@ -7037,7 +7037,7 @@ async function runSpecificDomainLookup(user, domain) {
     logger.error(`[WEBDEV-DOMAIN] specific lookup failed for ${domain}: ${err.message}`);
     await sendTextMessage(
       user.phone_number,
-      await localize(
+      await dynamicPhrase(
         `Couldn't check *${domain}* right now. Try a different domain or reply *skip*.`,
         user
       )
@@ -7048,7 +7048,7 @@ async function runSpecificDomainLookup(user, domain) {
   if (!result || !result.available) {
     await sendTextMessage(
       user.phone_number,
-      await localize(
+      await dynamicPhrase(
         `*${domain}* isn't available. Pick one from the list above, or try a different name.`,
         user
       )
@@ -7059,7 +7059,7 @@ async function runSpecificDomainLookup(user, domain) {
   if (result.premium) {
     await sendTextMessage(
       user.phone_number,
-      await localize(
+      await dynamicPhrase(
         `*${domain}* is a premium domain — I can't auto-register those. Pick from the list above or try a different name.`,
         user
       )
@@ -7089,7 +7089,7 @@ async function runSpecificDomainLookup(user, domain) {
 
   await sendTextMessage(
     user.phone_number,
-    await localize(
+    await dynamicPhrase(
       `1. ✅ *${result.domain}* — *$${price.toFixed(2)}/yr*${expensiveNote}\n\n` +
         `Reply *yes* (or *1*) to pick it, type a different domain, or *skip*.`,
       user
@@ -7112,7 +7112,7 @@ async function selectDomainInline(user, option) {
   const priceLabel = price > 0 ? `$${price.toFixed(2)}` : 'free';
   await sendTextMessage(
     user.phone_number,
-    await localize(
+    await dynamicPhrase(
       `Locked in *${option.domain}* — ${priceLabel}/yr. Building your site now…`,
       user
     )
@@ -7256,7 +7256,7 @@ async function handleDomainChangeStart(user, originalText, action) {
 
   await sendTextMessage(
     user.phone_number,
-    await localize(
+    await dynamicPhrase(
       `Got it — clearing the previous domain. Let me set up a new one.`,
       user,
       originalText
@@ -7269,7 +7269,7 @@ async function handleDomainChangeStart(user, originalText, action) {
     await updateUserState(user.id, STATES.WEB_DOMAIN_OWN_INPUT);
     await sendTextMessage(
       user.phone_number,
-      await localize(
+      await dynamicPhrase(
         "What's your domain? Type it like *yourbiz.com*.",
         user
       )
@@ -7290,7 +7290,7 @@ async function handleDomainChangeStart(user, originalText, action) {
     await updateUserMetadata(user.id, { domainOptions: [], domainSearchName: '' });
     await sendTextMessage(
       user.phone_number,
-      await localize(
+      await dynamicPhrase(
         "What domain name should I look up? Type something like *toorphor* or *toorphorplumbing* and I'll show you what's available.",
         user
       )
@@ -7435,7 +7435,7 @@ async function handleLateDomainStart(user, originalText) {
   if (!cleanedBase) {
     await sendTextMessage(
       user.phone_number,
-      await localize(
+      await dynamicPhrase(
         "Sure — what domain name should I look up? Type something like *toorphor* or *toorphorplumbing* and I'll show you what's available.",
         user,
         originalText
@@ -7467,7 +7467,7 @@ async function runLateDomainSearchInline(user, baseName) {
   await updateUserState(user.id, STATES.WEB_DOMAIN_LATE_SEARCH);
   await sendTextMessage(
     user.phone_number,
-    await localize(`On it — checking domain availability for *${baseName}*...`, user)
+    await dynamicPhrase(`On it — checking domain availability for *${baseName}*...`, user)
   );
 
   let results = [];
@@ -7478,7 +7478,7 @@ async function runLateDomainSearchInline(user, baseName) {
     if (err.code === 'DOMAIN_LOOKUP_UNAVAILABLE') {
       await sendTextMessage(
         user.phone_number,
-        await localize(
+        await dynamicPhrase(
           "Our domain registrar is temporarily unreachable so I can't pull live prices right now. Try again in a few minutes, or stick with the preview URL for now.",
           user
         )
@@ -7488,7 +7488,7 @@ async function runLateDomainSearchInline(user, baseName) {
     }
     await sendTextMessage(
       user.phone_number,
-      await localize(
+      await dynamicPhrase(
         "Couldn't reach the registrar right now. Try a different name, or reply *skip* to keep the site without a domain for now.",
         user
       )
@@ -7500,14 +7500,14 @@ async function runLateDomainSearchInline(user, baseName) {
   if (top.length === 0) {
     await sendTextMessage(
       user.phone_number,
-      await localize(`*${baseName}* is all taken. Let me find you something close…`, user)
+      await dynamicPhrase(`*${baseName}* is all taken. Let me find you something close…`, user)
     );
     const industry = user.metadata?.websiteData?.industry || '';
     top = await findAlternativeDomains(baseName, industry);
     if (top.length === 0) {
       await sendTextMessage(
         user.phone_number,
-        await localize(
+        await dynamicPhrase(
           `Couldn't find good alternatives either. Try typing a different base name, or reply *skip* to keep the site as-is.`,
           user
         )
@@ -7523,7 +7523,7 @@ async function runLateDomainSearchInline(user, baseName) {
   });
   msg += '\nReply with a *number* to pick one, or type a specific domain (e.g. *mybiz.ai*) and I\'ll look up its price. Or *skip* to keep the site as-is.';
 
-  await sendTextMessage(user.phone_number, await localize(msg, user));
+  await sendTextMessage(user.phone_number, await dynamicPhrase(msg, user));
   await updateUserMetadata(user.id, { domainOptions: top, domainSearchName: baseName });
   await logMessage(
     user.id,
@@ -7550,7 +7550,7 @@ async function handleLateDomainSearch(user, message) {
     await updateUserState(user.id, STATES.WEB_REVISIONS);
     await sendTextMessage(
       user.phone_number,
-      await localize("No problem — sticking with the current setup. Let me know any other tweaks!", user, raw)
+      await dynamicPhrase("No problem — sticking with the current setup. Let me know any other tweaks!", user, raw)
     );
     return STATES.WEB_REVISIONS;
   }
@@ -7572,7 +7572,7 @@ async function handleLateDomainSearch(user, message) {
   if (domainOptions.length === 1 && negativeConfirmLate.test(text)) {
     await sendTextMessage(
       user.phone_number,
-      await localize(
+      await dynamicPhrase(
         "No problem — type a different domain name (e.g. *mybiz.ai* or a base like *mybiz*), or reply *skip* to keep the current preview URL.",
         user,
         raw
@@ -7591,7 +7591,7 @@ async function handleLateDomainSearch(user, message) {
     }
     await sendTextMessage(
       user.phone_number,
-      await localize("That one's not available. Try another number or a new name.", user, raw)
+      await dynamicPhrase("That one's not available. Try another number or a new name.", user, raw)
     );
     return STATES.WEB_DOMAIN_LATE_SEARCH;
   }
@@ -7642,7 +7642,7 @@ async function handleLateDomainSearch(user, message) {
       await updateUserState(user.id, STATES.WEB_DOMAIN_OWN_INPUT);
       await sendTextMessage(
         user.phone_number,
-        await localize("Got it — what's the domain? Type it like *yourbiz.com*.", user, raw)
+        await dynamicPhrase("Got it — what's the domain? Type it like *yourbiz.com*.", user, raw)
       );
       return STATES.WEB_DOMAIN_OWN_INPUT;
     }
@@ -7650,7 +7650,7 @@ async function handleLateDomainSearch(user, message) {
 
   await sendTextMessage(
     user.phone_number,
-    await localize(
+    await dynamicPhrase(
       "Reply with the *number* of a domain above, type a different name to search, say *I have my own* to use an existing domain, or *skip* to keep the site as-is.",
       user,
       raw
@@ -7735,7 +7735,7 @@ async function selectLateDomainInline(user, option) {
 
       await sendTextMessage(
         user.phone_number,
-        await localize(
+        await dynamicPhrase(
           `Locked in *${domain}* — ${priceLabel}/yr.\n\n` +
             `Your new total is *$${total}* (website $${websitePrice} + domain $${price}).\n\n` +
             `Activate to go live on *${domain}*:\n\n👉 ${newUrl}\n\n` +
@@ -7752,7 +7752,7 @@ async function selectLateDomainInline(user, option) {
       logger.error(`[LATE-DOMAIN] Pre-paid link creation failed: ${err.message}`);
       await sendTextMessage(
         user.phone_number,
-        await localize(
+        await dynamicPhrase(
           `I locked in *${domain}* but had trouble updating the payment link. Try saying "send me the new link" or message us and we'll resend.`,
           user
         )
@@ -7783,7 +7783,7 @@ async function selectLateDomainInline(user, option) {
 
     await sendTextMessage(
       user.phone_number,
-      await localize(
+      await dynamicPhrase(
         `Got it — *${domain}* (${priceLabel}/yr).\n\n` +
           `Your website's already activated, so this is a separate charge for just the domain.\n\n` +
           `Pay below and I'll register *${domain}* + point it at your site automatically:\n\n👉 ${newUrl}\n\n` +
@@ -7800,7 +7800,7 @@ async function selectLateDomainInline(user, option) {
     logger.error(`[LATE-DOMAIN] Post-paid addon link failed: ${err.message}`);
     await sendTextMessage(
       user.phone_number,
-      await localize(
+      await dynamicPhrase(
         `I picked *${domain}* but had trouble creating the payment link. Message us and we'll resend.`,
         user
       )

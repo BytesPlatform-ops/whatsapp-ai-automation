@@ -46,7 +46,9 @@ async function dynamicPhrase(canonical, user, latestUserMessage, opts = {}) {
     ? `\nPhrasings you have already used in this conversation (DO NOT repeat their wording — pick something different):\n${opts.recent.slice(-4).map((m) => `  - ${String(m).slice(0, 200)}`).join('\n')}`
     : '';
 
-  const sysPrompt = `You are rephrasing a single message from a WhatsApp sales bot named Pixie. Make it sound natural, casual, and human — like a person typing on their phone, not a script.
+  const sysPrompt = `You are rephrasing a single message from a WhatsApp sales bot named Pixie. The source message below is a TEMPLATE — your job is to rewrite it in your own words so it feels human and never identical to last time. Make it sound natural, casual, and human — like a person typing on their phone, not a script.
+
+**The output MUST be different from the source phrasing.** Do not return the input verbatim. Reorder beats, switch synonyms, drop filler words, shift formality up or down — but always end with the same effective ask the source has.
 
 Rules:
 - Reply in ${targetLang}.${isRoman ? ' Use Latin/Roman script (NOT the native alphabet).' : ''}
