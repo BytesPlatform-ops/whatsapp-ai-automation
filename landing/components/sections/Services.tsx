@@ -51,7 +51,7 @@ const services: {
   {
     icon: Globe,
     tag: 'Websites',
-    title: 'A live website in 3 minutes.',
+    title: 'A live website in 60 seconds.',
     body: 'Tell the bot your business and vibe. Get a production-ready preview link — real domain, mobile-ready, yours to approve.',
     points: ['Custom branding & content', 'Mobile-first layouts', 'Live preview link you can share', 'Connect your own domain'],
     cta: 'Build my site',

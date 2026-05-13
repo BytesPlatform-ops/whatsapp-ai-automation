@@ -110,7 +110,7 @@ export function Hero() {
               className="mt-6 max-w-xl text-lg leading-relaxed text-white/75 mx-auto lg:mx-0"
             >
               Text our AI bot. Get a live website, a marketing ad creative, or a free SEO audit
-              in under 3 minutes. No coding, no designer, no meetings.
+              in under 60 seconds. No coding, no designer, no meetings.
             </motion.p>
 
             <motion.div
@@ -159,7 +159,7 @@ export function Hero() {
             <div className="pointer-events-none absolute left-0 top-1/3 z-10 hidden -translate-x-4 rounded-2xl bg-white/95 px-3 py-2 shadow-card backdrop-blur lg:block">
               <div className="flex items-center gap-2 text-xs font-semibold text-ink-900">
                 <Sparkles className="h-4 w-4 text-wa-green" />
-                Live preview in 3 min
+                Live preview in 60 sec
               </div>
             </div>
             <div className="pointer-events-none absolute bottom-10 right-0 z-10 hidden translate-x-4 rounded-2xl bg-white/95 px-3 py-2 shadow-card backdrop-blur lg:block">

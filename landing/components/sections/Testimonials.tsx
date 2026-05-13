@@ -7,7 +7,7 @@ import { Section, SectionHeading } from '@/components/Section';
 const testimonials = [
   {
     quote:
-      "I built my salon's website in 3 minutes over WhatsApp. We now get 5 bookings a day directly through chat. What two designers couldn't deliver, the bot did in one afternoon.",
+      "I built my salon's website in 60 seconds over WhatsApp. We now get 5 bookings a day directly through chat. What two designers couldn't deliver, the bot did in one afternoon.",
     name: 'Sarah Mitchell',
     role: 'Owner · Glow Studio Salon',
     avatar: 'SM',

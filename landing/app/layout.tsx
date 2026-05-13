@@ -19,7 +19,7 @@ export const metadata: Metadata = {
   metadataBase: new URL('https://pixiebot.co'),
   title: 'Pixie — Your website, built by a WhatsApp chat',
   description:
-    'Text our WhatsApp bot. Get a live website, AI-generated ads, or a free SEO audit in under 3 minutes. No coding, no designer, no meetings.',
+    'Text our WhatsApp bot. Get a live website, AI-generated ads, or a free SEO audit in under 60 seconds. No coding, no designer, no meetings.',
   keywords: [
     'WhatsApp bot',
     'AI website builder',
@@ -31,14 +31,14 @@ export const metadata: Metadata = {
   openGraph: {
     title: 'Your website, built by a WhatsApp chat',
     description:
-      'Text our AI bot on WhatsApp and get a live website in 3 minutes. No signup, no code.',
+      'Text our AI bot on WhatsApp and get a live website in 60 seconds. No signup, no code.',
     type: 'website',
     siteName: 'Pixie',
   },
   twitter: {
     card: 'summary_large_image',
     title: 'Your website, built by a WhatsApp chat',
-    description: 'Text our AI bot on WhatsApp and get a live website in 3 minutes.',
+    description: 'Text our AI bot on WhatsApp and get a live website in 60 seconds.',
   },
   robots: { index: true, follow: true },
 };

@@ -12,7 +12,7 @@ const faqs = [
   },
   {
     q: 'How long does it take?',
-    a: 'A website preview takes about 3 minutes. Ad creatives take under 2 minutes. SEO audits take 4–6 minutes depending on your site size. All delivered directly in WhatsApp.',
+    a: 'A website preview takes about 60 seconds. Ad creatives take under 2 minutes. SEO audits take 4–6 minutes depending on your site size. All delivered directly in WhatsApp.',
   },
   {
     q: 'Can I chat with the bot in my own language?',

@@ -137,7 +137,7 @@ export function SiteCard({ site, index }: SiteCardProps) {
 
         {/* Visit CTA */}
         <div className="mt-5 flex items-center justify-between">
-          <span className="text-sm text-white/50">Built in under 3 minutes</span>
+          <span className="text-sm text-white/50">Built in under 60 seconds</span>
           <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-wa-green transition group-hover:gap-2.5">
             Visit live site
             <ArrowUpRight className="h-4 w-4" />

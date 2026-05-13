@@ -22,7 +22,7 @@ const STEPS: Step[] = [
   {
     title: 'Your site goes live',
     desc: "We're deploying your site to Pixie's global network right now. The preview link lands in WhatsApp the moment it's ready.",
-    time: '2–3 min',
+    time: '60 sec',
     state: 'active',
   },
   {

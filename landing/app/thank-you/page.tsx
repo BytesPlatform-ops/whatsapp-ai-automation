@@ -53,7 +53,7 @@ const TIER_LABEL: Record<string, string> = {
 const FAQS: Array<{ q: string; a: string }> = [
   {
     q: 'When will I get my site?',
-    a: "Most sites deploy within 2–3 minutes. If you selected a custom domain, DNS propagation can add another 15–30 minutes — Pixie will message you the moment it's live.",
+    a: "Most sites deploy within 60 seconds. If you selected a custom domain, DNS propagation can add another 15–30 minutes — Pixie will message you the moment it's live.",
   },
   {
     q: 'Can I still make changes?',

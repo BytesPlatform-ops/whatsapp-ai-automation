@@ -9,16 +9,32 @@ import { DEMO_SITES } from '@/lib/demoSites';
 // actually works. 4 real Netlify sites, clickable thumbnails via the
 // same Microlink screenshot pipeline as the /examples page.
 
+// Microlink CDN caches by full query string for ~24h. The 3 hosts below
+// had their screenshots captured while Let's Encrypt was still provisioning
+// their certs, so the cached PNG shows a "Your connection is not private"
+// page. Bumping a versioned ?_v param routes to a fresh cache key —
+// Microlink recaptures from the now-working sites on first request.
+const CACHE_BUST_HOSTS: Record<string, string> = {
+  'austinclimate.pixiebot.co': 'v2',
+  'sarahmitchell.pixiebot.co': 'v2',
+  'bytecoffee.pixiebot.co': 'v2',
+};
 function screenshotUrl(url: string) {
-  const params = new URLSearchParams({
+  const params: Record<string, string> = {
     url,
     screenshot: 'true',
     embed: 'screenshot.url',
     waitUntil: 'networkidle0',
     viewport: JSON.stringify({ width: 1280, height: 800, deviceScaleFactor: 1 }),
     meta: 'false',
-  });
-  return `https://api.microlink.io?${params.toString()}`;
+  };
+  try {
+    const host = new URL(url).host;
+    if (CACHE_BUST_HOSTS[host]) params._v = CACHE_BUST_HOSTS[host];
+  } catch {
+    // bad url — fall through with no cache bust
+  }
+  return `https://api.microlink.io?${new URLSearchParams(params).toString()}`;
 }
 
 const INDUSTRY_ACCENT: Record<string, string> = {
@@ -120,7 +136,7 @@ export function ExamplesPreview() {
             Real sites. <span className="text-wa-teal">Real businesses.</span> All from WhatsApp.
           </h2>
           <p className="mx-auto mt-4 max-w-xl text-lg leading-relaxed text-ink-500">
-            Each of these was built in under 3 minutes from one chat. Tap any to open the live site.
+            Each of these was built in under 60 seconds from one chat. Tap any to open the live site.
           </p>
         </motion.div>
 

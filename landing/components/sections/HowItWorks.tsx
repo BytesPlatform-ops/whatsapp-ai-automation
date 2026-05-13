@@ -32,7 +32,7 @@ export function HowItWorks() {
         eyebrow="How it works"
         title={
           <>
-            From <span className="text-wa-teal">message</span> to <span className="text-wa-teal">live website</span> in 3 minutes.
+            From <span className="text-wa-teal">message</span> to <span className="text-wa-teal">live website</span> in 60 seconds.
           </>
         }
         subtitle="Not a SaaS dashboard. Not a 30-minute demo. Just one honest conversation on a channel you already use."

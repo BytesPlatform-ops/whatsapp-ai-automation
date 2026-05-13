@@ -15,7 +15,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: `Built by ${siteConfig.brand}`,
     description:
-      'Real sites for real businesses — each one built from a WhatsApp chat in under 3 minutes.',
+      'Real sites for real businesses — each one built from a WhatsApp chat in under 60 seconds.',
   },
 };
 
