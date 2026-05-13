@@ -403,11 +403,21 @@ async function handleSalesBot(user, message) {
   const humanHandoffMatch = cleanText.match(/\[TRIGGER_HUMAN_HANDOFF:\s*([^\]]+)\]/i);
 
   // [SEND_SAMPLE_IMAGE: industry=salon] — LLM emits this whenever it
-  // shares the sample preview URL (in the first greeting, or when a
-  // user asks for examples mid-chat). We send the matching screenshot
-  // as a WhatsApp image right before the text reply.
-  const sampleImageMatch = cleanText.match(/\[SEND_SAMPLE_IMAGE(?::\s*industry=([a-z_]+))?\]/i);
-  const sampleImageIndustry = sampleImageMatch ? (sampleImageMatch[1] || adIndustry || 'generic') : null;
+  // shares a sample preview URL (in the first greeting, or when a user
+  // asks for examples mid-chat). We send the matching screenshot as a
+  // WhatsApp image right before the text reply. The LLM can emit the
+  // tag multiple times in one message (e.g. two samples when the user
+  // hasn't disclosed their industry yet) — we collect all of them and
+  // send each image in order. De-duped so the same industry never
+  // sends twice in one turn.
+  const sampleImageMatches = Array.from(
+    cleanText.matchAll(/\[SEND_SAMPLE_IMAGE(?::\s*industry=([a-z_]+))?\]/gi)
+  );
+  const sampleImageIndustries = [];
+  for (const m of sampleImageMatches) {
+    const ind = (m[1] || adIndustry || 'generic').toLowerCase();
+    if (!sampleImageIndustries.includes(ind)) sampleImageIndustries.push(ind);
+  }
 
   // Internal-signal tag from the INPUT SAFETY section of the prompt. The
   // LLM appends [SECURITY_FLAGS: <comma,labels>] when it detects injection
@@ -695,15 +705,17 @@ async function handleSalesBot(user, message) {
     || handoffWillFire;
 
   const formatted = formatWhatsApp(textWithoutLink);
-  // Sample-screenshot send: precedes the text so the user sees the image
-  // first, with the preview URL appearing in the caption-equivalent text
+  // Sample-screenshot send: precedes the text so the user sees the image(s)
+  // first, with the preview URL(s) appearing in the caption-equivalent text
   // right below. Non-fatal — if WhatsApp/Messenger image send fails the
   // text still goes out so the conversation continues.
-  if (sampleImageMatch && !skipLlmResponse) {
-    try {
-      await sendImage(user.phone_number, getSampleScreenshotUrl(sampleImageIndustry));
-    } catch (err) {
-      logger.warn(`[SAMPLE] sendImage failed (industry=${sampleImageIndustry}): ${err.message}`);
+  if (sampleImageIndustries.length > 0 && !skipLlmResponse) {
+    for (const industry of sampleImageIndustries) {
+      try {
+        await sendImage(user.phone_number, getSampleScreenshotUrl(industry));
+      } catch (err) {
+        logger.warn(`[SAMPLE] sendImage failed (industry=${industry}): ${err.message}`);
+      }
     }
   }
   if (formatted && !skipLlmResponse) {
