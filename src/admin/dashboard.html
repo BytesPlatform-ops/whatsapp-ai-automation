@@ -599,6 +599,10 @@ function convListItems(leads) {
     if (convTypeFilter === 'manual' && !l.has_manual) return false;
     if (convTypeFilter === 'ai' && l.has_manual) return false;
     return true;
+  }).sort(function(a, b) {
+    var ta = a.last_message_at ? new Date(a.last_message_at).getTime() : 0;
+    var tb = b.last_message_at ? new Date(b.last_message_at).getTime() : 0;
+    return tb - ta;
   }).map(function(l) {
     // Strong amber tint + thick left-border accent for conversations with at
     // least one manual (operator-sent) reply. Also adds a clear "Manual"
