@@ -4702,6 +4702,29 @@ async function handleConfirm(user, message) {
   // list AND an "affected" subset for the ack message. Mirrors the
   // applyListOp helper used by the late-revisions edit path so confirm-edit
   // and revisions-edit have identical semantics.
+  // Simple Levenshtein for fuzzy remove matching (typos in stored service names).
+  const levenshtein = (a, b) => {
+    const m = a.length, n = b.length;
+    const d = Array.from({ length: m + 1 }, (_, i) =>
+      Array.from({ length: n + 1 }, (_, j) => (i === 0 ? j : j === 0 ? i : 0))
+    );
+    for (let i = 1; i <= m; i++)
+      for (let j = 1; j <= n; j++)
+        d[i][j] =
+          a[i - 1] === b[j - 1]
+            ? d[i - 1][j - 1]
+            : 1 + Math.min(d[i - 1][j], d[i][j - 1], d[i - 1][j - 1]);
+    return d[m][n];
+  };
+  const fuzzyRemoveMatch = (existing, removeItem) => {
+    const r = removeItem.toLowerCase().trim();
+    const e = existing.toLowerCase().trim();
+    if (e === r) return true;
+    const maxLen = Math.max(e.length, r.length);
+    const threshold = maxLen >= 10 ? 2 : maxLen >= 5 ? 1 : 0;
+    return threshold > 0 && levenshtein(e, r) <= threshold;
+  };
+
   const applyListOpLocal = (existing, items, op) => {
     const existingArr = Array.isArray(existing) ? existing : [];
     if (op === 'add') {
@@ -4710,9 +4733,8 @@ async function handleConfirm(user, message) {
       return { next: [...existingArr, ...fresh], affected: fresh, kind: 'add' };
     }
     if (op === 'remove') {
-      const lower = new Set(items.map((s) => String(s).toLowerCase().trim()));
-      const next = existingArr.filter((s) => !lower.has(String(s).toLowerCase().trim()));
-      const affected = existingArr.filter((s) => lower.has(String(s).toLowerCase().trim()));
+      const next = existingArr.filter((e) => !items.some((r) => fuzzyRemoveMatch(String(e), r)));
+      const affected = existingArr.filter((e) => items.some((r) => fuzzyRemoveMatch(String(e), r)));
       return { next, affected, kind: 'remove' };
     }
     return { next: items, affected: items, kind: 'replace' };
