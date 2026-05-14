@@ -47,6 +47,27 @@ function getSampleScreenshotUrl(industry) {
   return SAMPLE_SCREENSHOT_URLS[key] || SAMPLE_SCREENSHOT_URLS.generic;
 }
 
+// Trade / industry words that should NEVER appear as a business "name" in
+// the trigger tag — when the LLM grabs e.g. "Salon" off "I have a salon"
+// and passes it as name, the wizard builds a site branded "Welcome to
+// Salon". Block it server-side so we re-ask the user for a real name.
+// Match is case-insensitive; whole-word; allows simple plurals.
+const TRADE_WORDS = new Set([
+  'salon', 'salons', 'hair salon', 'beauty salon', 'barber', 'barbershop', 'barbers',
+  'plumber', 'plumbers', 'plumbing', 'hvac', 'electrician', 'electricians', 'electrical',
+  'landscaper', 'landscapers', 'landscaping', 'roofer', 'roofers', 'roofing',
+  'cleaner', 'cleaners', 'cleaning',
+  'restaurant', 'restaurants', 'cafe', 'café', 'coffee shop', 'bakery',
+  'shop', 'store', 'retail', 'boutique',
+  'realtor', 'real estate', 'real-estate', 'agent', 'real estate agent',
+  'doctor', 'dentist', 'clinic', 'gym', 'studio',
+  'business', 'company', 'service', 'services',
+]);
+function isTradeWord(s) {
+  const norm = String(s || '').trim().toLowerCase().replace(/\s+/g, ' ');
+  return TRADE_WORDS.has(norm);
+}
+
 /**
  * Extract and strip the [LEAD_BRIEF]...[/LEAD_BRIEF] block from the LLM response.
  * Returns { leadBrief: string|null, cleanText: string }
@@ -330,9 +351,14 @@ async function handleSalesBot(user, message) {
         if (key === 'name' || key === 'business') {
           // Drop the field on validation failure rather than blocking the
           // whole trigger — the wizard will re-ask for what's missing.
+          // Also reject when the LLM passed the TRADE (industry word) as
+          // the business name — that's a known LLM error that ships sites
+          // branded "Welcome to Salon" instead of the real business name.
           const v = validateBusinessName(val);
-          if (v.ok && v.value.length <= 60) {
+          if (v.ok && v.value.length <= 60 && !isTradeWord(v.value)) {
             websiteDemoBusinessName = v.value;
+          } else if (v.ok && isTradeWord(v.value)) {
+            logger.warn(`[SALES] Dropping trade-word business name from trigger tag: "${v.value}" — will re-ask user`);
           } else {
             logger.warn(`[SALES] Dropping invalid business name from trigger tag (${v.ok ? 'too_long_for_trigger' : v.reason})`);
           }
@@ -350,8 +376,10 @@ async function handleSalesBot(user, message) {
       const name = clean(payload);
       if (name) {
         const v = validateBusinessName(name);
-        if (v.ok && v.value.length <= 60) {
+        if (v.ok && v.value.length <= 60 && !isTradeWord(v.value)) {
           websiteDemoBusinessName = v.value;
+        } else if (v.ok && isTradeWord(v.value)) {
+          logger.warn(`[SALES] Dropping trade-word bare name from trigger tag: "${v.value}" — will re-ask user`);
         } else {
           logger.warn(`[SALES] Dropping invalid bare business name from trigger tag (${v.ok ? 'too_long_for_trigger' : v.reason})`);
         }

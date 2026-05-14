@@ -1686,8 +1686,15 @@ async function _routeMessage(message) {
       const asidePrompt = scopedAside ? WEB_REVISIONS_ASIDE_PROMPT : GENERAL_CHAT_PROMPT;
       let asideSent = false;
       try {
+        // Inject the current-state question into the aside system prompt so
+        // the LLM can answer the user's question AND fold the re-prompt
+        // into the same reply — instead of us sending a second "back to
+        // where we were" message after. One message, no flood.
+        const asideSystemPrompt = currentQuestion
+          ? `${asidePrompt}\n\n## CURRENT FLOW CONTEXT (use to close your reply)\nThe user is in the middle of a flow and the question they need to answer is:\n  "${currentQuestion}"\n\nAfter answering their off-topic question in 1-3 sentences, **close your reply in the SAME message** by gently bringing them back to the question above — paraphrase it in your own words (do NOT copy it verbatim, do NOT prefix with "back to where we were", do NOT split into a second message). One reply, two beats: answer → bring them back. Never two separate messages.`
+          : asidePrompt;
         const aside = await generateResponse(
-          asidePrompt,
+          asideSystemPrompt,
           [{ role: 'user', content: text }],
           { userId: user.id, operation: 'off_topic_aside' }
         );
@@ -1698,16 +1705,13 @@ async function _routeMessage(message) {
         logger.warn(`[ROUTER] Off-topic aside LLM call failed for ${from}: ${err.message}`);
       }
 
-      // Skip the re-prompt when:
-      //   • a session recap already fired this turn — its trailing
-      //     "what's next?" is a better-worded version of the re-prompt
-      //     and stacking both reads as a three-message flood;
-      //   • we used a scoped aside that already invites the next
-      //     action (WEB_REVISIONS) — re-asking is redundant.
-      // If STATE_QUESTION has no entry for this state, skip too
-      // (better silence than "Now, back to where we were - undefined").
-      const suppressRePrompt = recapFired || (asideSent && scopedAside);
-      if (currentQuestion && !suppressRePrompt) {
+      // Re-prompt is only sent as a FALLBACK now — when the aside LLM
+      // call failed and we have nothing else to say. The normal happy
+      // path is: aside reply already includes the re-prompt (per the
+      // system-prompt injection above) so we never send a second message.
+      // Also skipped when a session recap fired (its trailing "what's
+      // next?" already covers re-prompting).
+      if (!asideSent && currentQuestion && !recapFired) {
         await sendWithMenuButton(
           user.phone_number,
           `Now, back to where we were - ${currentQuestion}`

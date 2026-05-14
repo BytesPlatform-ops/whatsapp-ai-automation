@@ -2573,10 +2573,16 @@ async function startSalonFlow(user) {
       logger.warn(`[SALON] Could not update template_id on site ${siteId}: ${err.message}`);
     }
   }
-  const msg = 'Do you already use a booking tool (Fresha, Booksy, Vagaro, Calendly, etc.)?\n\n' +
-    '• If yes, just paste the link and we\'ll embed it on your site.\n' +
-    '• If not, type *"no"* and we\'ll build a built-in booking system for you.';
-  await sendTextMessage(user.phone_number, await dynamicPhrase(msg, user));
+  // Conversational phrasing — no bullets. dynamicPhrase preserves bullet
+  // structure if it sees one, so the canonical itself must read like a
+  // single human sentence for the rephrase to feel chatty.
+  const msg = 'Do you already use a booking tool like Fresha, Booksy, Vagaro, or Calendly? If you do, just paste the link and I\'ll embed it on your site. Otherwise reply "no" and I\'ll build a booking system right into the site.';
+  await sendTextMessage(
+    user.phone_number,
+    await dynamicPhrase(msg, user, '', {
+      intent: 'Ask the salon owner whether they already use an external booking tool (so we embed it) or want one built into the site. Conversational, one short paragraph, no bullet points.',
+    })
+  );
   return STATES.SALON_BOOKING_TOOL;
 }
 
