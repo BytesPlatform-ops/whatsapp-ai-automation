@@ -304,6 +304,7 @@ Extract the services as a JSON array of clean, normalized service names.
 Rules:
 - Normalize, don't echo the user's prose. "we just rent trucks" → ["Truck rental"]. "we offer haircut, nails and facials" → ["Haircut", "Nails", "Facials"]. "hair cuts and transplant" → ["Haircut", "Hair transplant"]. "yeah they're waxing, facials, nails, and haircuts" → ["Waxing", "Facials", "Nails", "Haircuts"].
 - Drop filler words and conversational lead-ins ("we do", "we offer", "basically", "just", "also", "yeah", "yes", "ok", "well", "so", "like", "um", "they're", "they are", "and" / "or" before a service).
+- Strip price tokens — if a service has a price attached ("Haircut $40", "Color 120 dollars", "Nails for Rs 500"), output ONLY the clean service name without the price ("Haircut", "Color", "Nails"). Prices are handled separately.
 - If the user is delegating ("whatever", "skip", "idk", "you pick"), return an empty array: []
 - If the reply doesn't describe services at all (nonsense, greeting), return an empty array: []
 
@@ -336,6 +337,57 @@ Return ONLY a JSON array like ["Service 1", "Service 2"] or []. No commentary.`;
   } catch (err) {
     logger.warn(`[ENTITY-ACC] extractServices failed: ${err.message}`);
     return null;
+  }
+}
+
+/**
+ * Salon-specific upgrade of extractServices. When a salon owner answers
+ * the services question with prices baked in ("Haircut $40, Color $120,
+ * Manicure $30"), we want to capture the prices so the durations step
+ * doesn't redundantly re-ask. Returns a map { [serviceName]: priceText }
+ * — empty when the user didn't include any prices. Always returns an
+ * object (never throws or returns null) so the caller can safely spread
+ * its result. Falls back to an empty map on any LLM failure — the
+ * downstream durations step will then ask normally.
+ */
+async function extractPricesByService(userReply, services, userId) {
+  const raw = String(userReply || '').trim();
+  if (!raw || !Array.isArray(services) || services.length === 0) return {};
+
+  const prompt = `A salon owner listed their services as: ${JSON.stringify(services)}
+
+Their original reply was: "${raw.slice(0, 600)}"
+
+Did they include a price for any of these services in their reply? Extract per-service prices ONLY when explicitly stated. Return ONLY JSON: {"prices": {"<service name from the list>": "<price text the user wrote, with currency symbol>", ...}}
+
+Rules:
+- Keys MUST exactly match service names from the list (case-sensitive).
+- Values keep the user's original currency symbol and amount ("$40", "€120", "Rs 500", "120 dollars").
+- ONLY include services where a price is clearly attached to that service. If the user wrote "Haircut $40, Color, Manicure $30", emit {"Haircut": "$40", "Manicure": "$30"} — omit "Color" (no price stated).
+- If no prices were stated at all, return {"prices": {}}.
+- Never invent or guess prices.`;
+
+  try {
+    const response = await generateResponse(
+      prompt,
+      [{ role: 'user', content: raw }],
+      { userId, operation: 'services_prices_extract', timeoutMs: 8_000 }
+    );
+    const match = String(response || '').match(/\{[\s\S]*\}/);
+    if (!match) return {};
+    const parsed = JSON.parse(match[0]);
+    const prices = (parsed && typeof parsed.prices === 'object') ? parsed.prices : {};
+    const out = {};
+    for (const k of Object.keys(prices)) {
+      const v = prices[k];
+      if (typeof v === 'string' && v.trim() && v.trim().length <= 40) {
+        out[k] = v.trim();
+      }
+    }
+    return out;
+  } catch (err) {
+    logger.warn(`[ENTITY-ACC] extractPricesByService failed: ${err.message}`);
+    return {};
   }
 }
 
@@ -418,6 +470,7 @@ module.exports = {
   hydrateWebsiteData,
   extractIndustry,
   extractServices,
+  extractPricesByService,
   getSharedBusinessContext,
   inferIndustryFromBusinessName,
 };

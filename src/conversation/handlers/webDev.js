@@ -18,6 +18,7 @@ const {
   mergeWebsiteFields,
   extractIndustry,
   extractServices,
+  extractPricesByService,
 } = require('../entityAccumulator');
 const { isDelegation, classifyDelegation } = require('../../config/smartDefaults');
 const { localize } = require('../../utils/localizer');
@@ -1438,6 +1439,28 @@ async function handleCollectServices(user, message) {
 
   const skipped = services.length === 0;
   const websiteData = { ...wd, services, ...colors };
+
+  // Salon-specific: if the user listed prices alongside service names
+  // ("Haircut $40, Color $120, Manicure $30"), capture those into
+  // salonServices so the durations step doesn't redundantly re-ask
+  // for prices. durationMinutes stays 0 (not asked yet) so
+  // isSalonServicesComplete still routes through SALON_SERVICE_DURATIONS;
+  // the durations prompt and parser preserve the pre-captured priceText.
+  if (!skipped && isSalonIndustry(industry)) {
+    try {
+      const pricesByName = await extractPricesByService(servicesText, services, user.id);
+      if (pricesByName && Object.keys(pricesByName).length > 0) {
+        const seeded = services.map((s) => {
+          const price = pricesByName[s] || '';
+          return { name: s, durationMinutes: 0, priceText: price, addressed: false };
+        });
+        websiteData.salonServices = seeded;
+      }
+    } catch (err) {
+      logger.warn(`[WEBDEV] extractPricesByService threw: ${err.message}`);
+    }
+  }
+
   await updateUserMetadata(user.id, { websiteData });
   user.metadata = { ...(user.metadata || {}), websiteData };
   await logMessage(
@@ -2807,6 +2830,20 @@ async function handleSalonHours(user, message) {
       await logMessage(user.id, `Salon hours step: applied side-channel ${sc.side.kind}`, 'assistant');
       return STATES.SALON_HOURS;
     }
+    // Side-channel didn't apply (kind='unclear') but the user clearly
+    // wasn't giving hours and wasn't delegating either. Use the async
+    // LLM delegation classifier — covers natural phrasings the regex
+    // misses ("idk", "you decide", "i have no idea"). If that ALSO
+    // says non-delegation, the user said something we don't understand
+    // — re-ask instead of silently applying default hours. The old
+    // path silently swallowed mid-flow questions / off-topic asides
+    // and shipped a site with default hours the user never agreed to.
+    const wasDelegation = await classifyDelegation(text, 'What are your opening hours?');
+    if (!wasDelegation) {
+      await sendTextMessage(user.phone_number, await dynamicPhrase(reaskHours, user, text));
+      await logMessage(user.id, 'Salon hours step: re-asked (input not hours, not delegation, no side-channel hit)', 'assistant');
+      return STATES.SALON_HOURS;
+    }
   }
 
   wd.weeklyHours = hours;
@@ -2845,11 +2882,34 @@ async function handleSalonHours(user, message) {
     return finishSalonFlow(user);
   }
 
-  const fullMsg = prefix +
-    `How long does each service take, and what's the price?\n\n` +
-    `Example: *"Haircut 30min €25, Colour 90min €85, Nails 45min €35"*.\n\n` +
-    `Your services: ${services.join(', ')}.\n\n` +
-    `Or just reply *default* to use 30min with no price.`;
+  // Build the durations prompt. If the user already gave prices upfront
+  // in the services step (handleCollectServices captured them into
+  // wd.salonServices via extractPricesByService), don't re-ask for the
+  // prices — only ask for the duration of each service. Otherwise fall
+  // back to the standard combined duration+price question.
+  const seeded = Array.isArray(wd.salonServices) ? wd.salonServices : [];
+  const seededByName = new Map(seeded.map((s) => [String(s?.name || '').toLowerCase(), s]));
+  const everyServiceHasPrice = services.length > 0 && services.every((s) => {
+    const e = seededByName.get(String(s).toLowerCase());
+    return !!(e && e.priceText && String(e.priceText).trim());
+  });
+
+  let fullMsg;
+  if (everyServiceHasPrice) {
+    const linePerService = services
+      .map((s) => `${s} — ${seededByName.get(s.toLowerCase()).priceText}`)
+      .join('\n');
+    fullMsg = prefix +
+      `Got the prices noted:\n${linePerService}\n\n` +
+      `How long does each one take? Example: *"Haircut 30min, Color 90min, Manicure 45min"*.\n\n` +
+      `Or just reply *default* to set them all to 30min.`;
+  } else {
+    fullMsg = prefix +
+      `How long does each service take, and what's the price?\n\n` +
+      `Example: *"Haircut 30min €25, Colour 90min €85, Nails 45min €35"*.\n\n` +
+      `Your services: ${services.join(', ')}.\n\n` +
+      `Or just reply *default* to use 30min with no price.`;
+  }
   await sendTextMessage(user.phone_number, await dynamicPhrase(fullMsg, user, text));
   return STATES.SALON_SERVICE_DURATIONS;
 }
@@ -2887,6 +2947,9 @@ async function parseServiceDurations(text, servicesList, userId, existingSalonSe
     if (p && p.addressed) {
       return `- ${s}: addressed=true (${p.durationMinutes}min${p.priceText ? ', ' + p.priceText : ', no price'})`;
     }
+    if (p && p.priceText) {
+      return `- ${s}: addressed=false (no duration yet; price "${p.priceText}" already captured upfront — preserve it)`;
+    }
     return `- ${s}: addressed=false (no value yet)`;
   }).join('\n');
 
@@ -2900,10 +2963,11 @@ async function parseServiceDurations(text, servicesList, userId, existingSalonSe
     `- name MUST exactly match the input service name — do not rename, pluralize, or reorder.\n` +
     `- durationMinutes must be a positive integer 1-600. If the user didn't specify a duration for a service, use 30 (the default).\n` +
     `- priceText keeps the user's original currency symbol and amount (e.g. "$25", "€30", "Rs 500", "25 euros"). Empty string if no price was stated for that service.\n` +
-    `- addressed: TRUE if the user's reply explicitly addresses this service in this turn, OR if a uniform phrase covers it (see below). FALSE if the user named some other service(s) and this one wasn't covered AND no uniform phrase applies.\n` +
-    `\nUNIFORM phrases cover ALL services — apply default 30min/no-price across every service AND mark all addressed=true:\n` +
+    `- If prior state says a price was ALREADY captured upfront for a service, you MUST preserve that priceText in your output for that service — unless the user explicitly overrides it with a new price in this turn. Never blank out a pre-captured price.\n` +
+    `- addressed: TRUE if the user's reply explicitly addresses this service in this turn (gives a duration for it, or a uniform phrase covers it). FALSE if the user named some other service(s) and this one wasn't covered AND no uniform phrase applies.\n` +
+    `\nUNIFORM phrases cover ALL services — apply default 30min across every service AND mark all addressed=true. For prices, preserve any pre-captured priceText; leave others empty:\n` +
     `  • "all 30min" / "30 min for everything" / "default" / "same for all" / "every service" / "use defaults" / a bare number\n` +
-    `\n"REST" phrases cover ONLY services where prior addressed=false — apply default 30min/no-price to those, mark them addressed=true; for prior-addressed services, keep their existing duration+price+addressed=true:\n` +
+    `\n"REST" phrases cover ONLY services where prior addressed=false — apply default 30min to those, mark them addressed=true; for prior-addressed services, keep their existing duration+price+addressed=true. For pre-captured prices on unaddressed services, preserve those prices too:\n` +
     `  • "the rest are default" / "others are default" / "remaining 30min" / "baki sab default" / "baki 30min" / "rest 30 mins no price" / "los demás default" / "set the unaddressed to 30min" / "make the rest 30"\n` +
     `\nFor REST phrases, you MUST output the existing values for prior-addressed services exactly (durationMinutes + priceText from the prior state) — do NOT overwrite them with defaults.\n` +
     `\n- Accept any language and currency.\n` +
@@ -2933,9 +2997,21 @@ async function parseServiceDurations(text, servicesList, userId, existingSalonSe
       const dur = Number.isFinite(rawDur) && rawDur > 0 && rawDur <= 600
         ? Math.round(rawDur)
         : 30;
-      const priceText = hit && typeof hit.priceText === 'string'
+      let priceText = hit && typeof hit.priceText === 'string'
         ? hit.priceText.trim().slice(0, 40)
         : '';
+      // Belt-and-suspenders: if the LLM dropped a priceText that was
+      // already captured upfront (handleCollectServices →
+      // extractPricesByService), fall back to the prior priceText so
+      // the user doesn't have to re-state it. The prompt asks the LLM
+      // to preserve it, but the safety net here makes the contract
+      // hold even when the LLM forgets.
+      if (!priceText) {
+        const prev = priorByName[s.toLowerCase()];
+        if (prev && typeof prev.priceText === 'string' && prev.priceText.trim()) {
+          priceText = prev.priceText.trim().slice(0, 40);
+        }
+      }
       const addressed = !!(hit && hit.addressed === true);
       return { name: s, durationMinutes: dur, priceText, addressed };
     });
@@ -2990,7 +3066,12 @@ async function handleSalonServiceDurations(user, message) {
     ? services.map((s) => {
         const prev = existingByName[s.toLowerCase()];
         if (prev && prev.addressed) return { ...prev, addressed: true };
-        return { name: s, durationMinutes: 30, priceText: '', addressed: true };
+        // Preserve any pre-captured price (from handleCollectServices)
+        // even when the user delegates duration with "default".
+        const preservedPrice = (prev && typeof prev.priceText === 'string' && prev.priceText.trim())
+          ? prev.priceText.trim()
+          : '';
+        return { name: s, durationMinutes: 30, priceText: preservedPrice, addressed: true };
       })
     : await parseServiceDurations(text, services, user.id, existing);
 
@@ -3001,9 +3082,18 @@ async function handleSalonServiceDurations(user, message) {
   // addressed when the LLM (or delegation) confirms it.
   const merged = newParsed.map((entry) => {
     const prev = existingByName[entry.name.toLowerCase()];
-    if (entry.addressed) return { name: entry.name, durationMinutes: entry.durationMinutes, priceText: entry.priceText, addressed: true };
+    // Pre-captured price from the services step survives any path —
+    // entry.priceText already includes it (parseServiceDurations
+    // fallback) but if a delegation path stripped it, restore here.
+    const preservedPrice = (prev && typeof prev.priceText === 'string' && prev.priceText.trim())
+      ? prev.priceText.trim()
+      : '';
+    if (entry.addressed) {
+      const finalPrice = entry.priceText && entry.priceText.trim() ? entry.priceText.trim() : preservedPrice;
+      return { name: entry.name, durationMinutes: entry.durationMinutes, priceText: finalPrice, addressed: true };
+    }
     if (prev && prev.addressed) return { ...prev, addressed: true };
-    return { name: entry.name, durationMinutes: 30, priceText: '', addressed: false };
+    return { name: entry.name, durationMinutes: 30, priceText: preservedPrice, addressed: false };
   });
   wd.salonServices = merged;
   await updateUserMetadata(user.id, { websiteData: wd });
@@ -3896,40 +3986,32 @@ async function handleCollectContact(user, message) {
   const effectiveContact = userExplicitlySkipped ? contactData : mergedContact;
   const mergedWebsiteData = { ...prevWd, ...effectiveContact };
 
-  // Iterative contact collection: if the user gave only some fields
-  // (e.g. email only), don't immediately mark contactSkipped and leave
-  // for the logo step — they may have been about to follow up with
-  // their phone or address. Save what they gave, then ask once more.
-  // The follow-up turn (tracked via contactFollowupAsked) finalizes —
-  // whatever's there at that point is what they want.
-  const alreadyAskedFollowup = !!user.metadata?.contactFollowupAsked;
-
-  // Decide based on what the user typed *this turn* (contactData), not the
-  // merged result. Cached contactPhone/contactAddress from earlier in the
-  // convo would otherwise make all-three look present and skip the
-  // follow-up even when the user only volunteered email here.
+  // Iterative contact collection: keep asking until the user has filled
+  // all three fields OR explicitly said skip. The previous design only
+  // asked once (gated by contactFollowupAsked) — which dropped a real
+  // bug: user gives email → bot asks "want phone or address?" → user
+  // gives phone → bot finalized WITHOUT asking about address. Now we
+  // re-ask each turn as long as the user is still adding new fields,
+  // and stop only when (a) all three filled, (b) user said skip, or
+  // (c) the user provided nothing new this turn (handled by the junk
+  // path higher up that re-asks the open question instead).
   const turnFieldsHave = [
     !!contactData.contactEmail && 'email',
     !!contactData.contactPhone && 'phone',
     !!contactData.contactAddress && 'address',
   ].filter(Boolean);
-  const turnAllThree = turnFieldsHave.length >= 3;
+  const mergedFields = [
+    !!mergedContact.contactEmail && 'email',
+    !!mergedContact.contactPhone && 'phone',
+    !!mergedContact.contactAddress && 'address',
+  ].filter(Boolean);
+  const mergedAllThree = mergedFields.length >= 3;
   const shouldAskFollowup =
-    !alreadyAskedFollowup &&
     !userExplicitlySkipped &&
-    !turnAllThree &&
+    !mergedAllThree &&
     turnFieldsHave.length >= 1;
 
   if (shouldAskFollowup) {
-    // Only ask about fields we *still* don't have anywhere (turn ∪ cache).
-    // If the user gave email this turn and phone/address are already cached,
-    // missingFields is empty — finalize instead of asking a confusing
-    // "want to add a … too?" with nothing left to fill.
-    const mergedFields = [
-      !!mergedContact.contactEmail && 'email',
-      !!mergedContact.contactPhone && 'phone',
-      !!mergedContact.contactAddress && 'address',
-    ].filter(Boolean);
     const missingFields = ['email', 'phone', 'address'].filter((f) => !mergedFields.includes(f));
 
     if (missingFields.length > 0) {
@@ -3952,7 +4034,7 @@ async function handleCollectContact(user, message) {
           contactText
         )
       );
-      await logMessage(user.id, `Contact: partial (${turnFieldsHave.join(', ')}), asked follow-up`, 'assistant');
+      await logMessage(user.id, `Contact: partial (${turnFieldsHave.join(', ')}), asked follow-up — still missing: ${missingFields.join(', ')}`, 'assistant');
       return STATES.WEB_COLLECT_CONTACT;
     }
     // else: nothing actually missing — fall through to finalize.
