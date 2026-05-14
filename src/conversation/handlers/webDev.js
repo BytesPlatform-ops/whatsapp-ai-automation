@@ -2008,6 +2008,23 @@ General rules:
 7. Understand any language: English, Roman Urdu, Urdu, Hindi, Spanish, French, Arabic, etc. ("address ko Gulshan Iqbal kr do", "cambia el email a foo@bar.com", "haircut ko services may add krdo").
 8. If the user is NOT trying to change anything (saying "yes", "looks good", "cancel", "build it", a question, off-topic), return {"edits": []}.
 
+HARD RULE — placeholder phrases are NOT values:
+   If the user is asking IF they can add/change a field, without naming the new value, return {"edits": []} so the bot can ask "what is it?" on the next turn. Phrases like "can we add one more service?", "there is one more service, can we add that?", "add another one", "add a new service", "can I change the name?", "want to update the address?" are QUESTIONS about adding/editing — they do NOT specify the value.
+   Generic placeholder nouns are NEVER valid values:
+   - "service", "another service", "one more service", "new service", "another", "one more", "item", "thing", "one" → NOT a service name
+   - "the address", "address", "new address" (without an actual location) → NOT an address value
+   - "phone", "new phone", "another phone" (without digits) → NOT a phone value
+   - "the name", "new name", "another name" (without an actual word) → NOT a businessName value
+   When a message contains only a placeholder phrase, return {"edits": []}. The intent is "tell me how to add this" — handled by a question response, not an edit.
+
+   Examples:
+   - "can we add one more service?" → {"edits": []}
+   - "there is one more service, can we add that?" → {"edits": []}
+   - "can we add Pedicure?" → {"edits": [{"field": "services", "op": "add", "value": "Pedicure"}]}
+   - "add a new service: Pedicure" → {"edits": [{"field": "services", "op": "add", "value": "Pedicure"}]}
+   - "can I change the name?" → {"edits": []}
+   - "change name to Blush Bar" → {"edits": [{"field": "businessName", "value": "Blush Bar"}]}
+
 User said: "${t}"
 
 Return JSON ONLY. No prose. Examples:
@@ -2028,8 +2045,28 @@ Return JSON ONLY. No prose. Examples:
     if (!m) return [];
     const parsed = JSON.parse(m[0]);
     if (!Array.isArray(parsed.edits)) return [];
+    // Belt-and-suspenders placeholder filter. The prompt asks the LLM
+    // to return {edits:[]} for placeholder phrases ("one more service",
+    // "new service", etc.), but if it slips through, drop the edit
+    // here so we never persist a literal placeholder as a field value.
+    const PLACEHOLDER_VALUES = new Set([
+      'one more service', 'another service', 'new service', 'service',
+      'another', 'one more', 'one', 'item', 'thing',
+      'the address', 'new address', 'address',
+      'the name', 'new name', 'name',
+      'the phone', 'new phone', 'phone',
+      'the email', 'new email', 'email',
+    ]);
     return parsed.edits
       .filter((e) => e && typeof e.field === 'string' && e.field && (typeof e.value === 'string' || Array.isArray(e.value)) && String(e.value).trim())
+      .filter((e) => {
+        const v = String(e.value || '').trim().toLowerCase();
+        if (PLACEHOLDER_VALUES.has(v)) {
+          logger.info(`[WEBDEV-CONFIRM] Dropped placeholder edit: field="${e.field}" value="${e.value}"`);
+          return false;
+        }
+        return true;
+      })
       .map((e) => {
         const out = { field: e.field, value: e.value };
         if (typeof e.op === 'string' && ['add', 'remove', 'replace'].includes(e.op.toLowerCase())) {
