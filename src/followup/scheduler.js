@@ -22,6 +22,7 @@ const { handleConfirmedPayment } = require('../payments/postPayment');
 const { sendEmail } = require('../notifications/email');
 const { logger } = require('../utils/logger');
 const { STATES } = require('../conversation/states');
+const { generateResponse } = require('../llm/provider');
 
 // WhatsApp's customer-service window: free-form messages may only be
 // sent within 24 hours of the user's last INBOUND message. Outside
@@ -400,48 +401,89 @@ function renderDiscountMessage(personalityMode, newTotal, originalTotal, discoun
 // for English speakers, one LLM call for non-English). Placeholders:
 //   ${portfolioUrl}  — recent work to show the user
 //   ${calendlyUrl}   — meeting-booking fallback for the final rung
-const EXPLORATORY_MESSAGES = {
+// Per-step behavioral spec for the exploratory follow-up ladder. Each step
+// names ONE psychological lever (from the 12-lever arsenal in
+// PIXIE_CHAT_FLOW_PLAN.md Section B) and an intent description. The actual
+// message text is composed FRESH by the LLM at send time, so two silent
+// users on the same step get differently-worded nudges. No hardcoded
+// personality variants — they made every silent lead see byte-identical copy.
+const EXPLORATORY_STEP_SPEC = {
   expl_2h_soft: {
-    COOL: "yo still around? quick q — existing biz or starting fresh?",
-    PROFESSIONAL: "Hi! Quick question — are you setting up a new website, or refreshing an existing one?",
-    UNSURE: "hey 👋 just checking in — happy to help whenever you're ready 😊",
-    NEGOTIATOR: "still in? one q: new biz or existing?",
-    DEFAULT: "Hey 👋 just checking — what kind of website were you thinking about?",
+    lever: 'Loss aversion',
+    intentEn:
+      'It has been 2 hours since the user said hi to Pixie and never replied. Write ONE short, casual WhatsApp nudge that: (a) acknowledges you noticed they went quiet, without sounding clingy or naggy, (b) lowers the friction with a no-commitment ask — offer to send them a real example for their trade if they tell you what they do, (c) ends with one easy question (their trade / kind of business). No links, no preview pitch, no business-name ask. One sentence is fine.',
   },
   expl_8h_value: {
-    COOL: "btw here's recent work: ${portfolioUrl}. i can spin up a free demo of YOUR site in ~5 mins — just drop your business name. no payment till you see it 🔥",
-    PROFESSIONAL: "Sample of recent work: ${portfolioUrl}. I can put together a free demo of your business website in about 5 minutes — just send me your business name. No payment required until you see the live preview.",
-    UNSURE: "hey! sharing a sample of recent work in case it helps: ${portfolioUrl}. happy to spin up a free demo of yours too — just send your business name 😊 no payment till you see it",
-    NEGOTIATOR: "recent work: ${portfolioUrl}. free demo of yours in 5 min. send business name. no payment till you see it.",
-    DEFAULT: "Here's a sample of recent work: ${portfolioUrl}. I can spin up a free demo of YOUR business website in ~5 mins — just send your business name. No payment till you see it live.",
+    lever: 'Reciprocity',
+    intentEn:
+      'It has been 8 hours since the user said hi and never replied. Write ONE short, casual WhatsApp message that: (a) shares the recent example URL ${portfolioUrl} (keep the URL exact and inline) as proof of recent work, (b) offers to spin up a FREE demo of THEIR site in about 5 minutes if they send their business name, (c) makes it clear there is no payment until they see it live. Casual / human tone. No emoji unless it matches their vibe.',
   },
   expl_20h_last: {
-    COOL: "last nudge from me 🙏 want a free demo? if chat isn't your thing, grab 15 min: ${calendlyUrl}. after today i'll stop messaging unless you reach out",
-    PROFESSIONAL: "Last follow-up from my side. If you'd like a free demo, just reply with your business name. If chat isn't ideal, you can also book a 15-minute slot here: ${calendlyUrl}. After today I'll stop reaching out unless you message first.",
-    UNSURE: "hey, last note from me 😊 free demo if you want one — or grab 15 min on my calendar: ${calendlyUrl}. either way no pressure, won't message again unless you do",
-    NEGOTIATOR: "last nudge. free demo? or book 15 min: ${calendlyUrl}. silent after today.",
-    DEFAULT: "Last nudge from me — want a free demo? If chat isn't your thing, grab a 15-min slot: ${calendlyUrl}. After today I'll stop messaging unless you reach out 👍",
+    lever: 'Pattern interrupt',
+    intentEn:
+      'It has been ~20 hours since the user said hi and never replied — this is the LAST follow-up message they will get from Pixie. Write ONE short, casual WhatsApp message that: (a) explicitly tells them this is the last nudge ("last ping from me", or local-language equivalent), (b) PRESSURE-RELEASES — say something like "if you are just browsing, all good, I will stop messaging" — counterintuitively this raises reply rate, (c) offers ONE last path back if they want it (a free demo with their business name, OR a 15-min booked call at ${calendlyUrl} — pick one based on tone, do not push both). After this message we stop messaging this user unless they reach out first.',
   },
 };
 
 /**
- * Render an exploratory-ladder message in English with portfolio/calendly
- * URLs filled in. Returns null for unknown step keys so callers can skip
- * cleanly. Pass the result through the localizer before sending.
+ * Compose an exploratory-ladder follow-up via the LLM at send time. Returns
+ * the fully-worded WhatsApp message (already in the user's language, with
+ * URLs substituted, and pulling the lever specified by EXPLORATORY_STEP_SPEC).
+ *
+ * No more hardcoded personality variants — each silent user gets a
+ * uniquely-worded nudge. See PIXIE_CHAT_FLOW_PLAN.md Phase 3.
+ *
+ * Returns { text, lever } on success, null if the step is unknown.
  */
-function renderExploratoryMessage(stepKey, personalityMode, env) {
-  const bucket = EXPLORATORY_MESSAGES[stepKey];
-  if (!bucket) return null;
-  const mode = (personalityMode || '').toUpperCase();
-  const template = bucket[mode] || bucket.DEFAULT;
-  // Hardcoded to the branded URL — env override removed because stale
-  // PORTFOLIO_WEBSITE_1 values on Render were keeping netlify.app links
-  // in followup messages.
+async function composeExploratoryFollowup(stepKey, user, env, recentLevers = []) {
+  const spec = EXPLORATORY_STEP_SPEC[stepKey];
+  if (!spec) return null;
+
   const portfolioUrl = 'https://austinclimate.pixiebot.co';
   const calendlyUrl = (env && env.calendlyUrl) || 'https://calendly.com/bytes-platform';
-  return template
+
+  const filledIntent = spec.intentEn
     .replace(/\$\{portfolioUrl\}/g, portfolioUrl)
     .replace(/\$\{calendlyUrl\}/g, calendlyUrl);
+
+  // Language detection: reuse the cached preferredLanguage if available so
+  // we don't pay for a detection call on every follow-up. Falls back to
+  // English when nothing is on file.
+  const { resolveLanguage } = require('../utils/localizer');
+  const lang = await resolveLanguage(user, null);
+  const targetLang = (!lang || lang === 'english') ? 'English' : lang;
+  const isRoman = typeof lang === 'string' && lang.startsWith('roman-');
+
+  const banList = Array.isArray(recentLevers) && recentLevers.length > 0
+    ? `\nDO NOT use these levers — they were used in your last few messages: ${recentLevers.join(', ')}. You MUST pick a different angle within the spirit of "${spec.lever}".`
+    : '';
+
+  const sysPrompt = `You are Pixie, an AI assistant for a digital agency that builds business websites in 60 seconds via WhatsApp. You are composing ONE follow-up WhatsApp message to a silent lead — a user who said hi but never replied. Make it sound human, casual, like a real person typing on their phone. Never robotic.
+
+Lever to pull: **${spec.lever}**. ${banList}
+
+Rules:
+- Output language: ${targetLang}.${isRoman ? ' Use Latin/Roman script.' : ''}
+- ONE short paragraph (1-3 sentences). WhatsApp = brief.
+- Preserve any URLs and inline values exactly as they appear in the intent.
+- Never re-introduce yourself (no "Hey, I'm Pixie") — the user already knows.
+- No preamble, no quotes, no commentary in your output. Output ONLY the WhatsApp message text.${isRoman ? '\n- For gendered languages, commit to masculine/neutral form. Never slash hedges like "karunga/karungi".' : ''}
+
+Intent of this follow-up: ${filledIntent}`;
+
+  try {
+    const out = await generateResponse(
+      sysPrompt,
+      [{ role: 'user', content: '(compose the follow-up message)' }],
+      { userId: user?.id, operation: 'exploratory_followup' }
+    );
+    const text = String(out || '').trim();
+    if (!text) return null;
+    return { text, lever: spec.lever };
+  } catch (err) {
+    logger.warn(`[EXPL] compose failed for ${stepKey} / ${user.phone_number}: ${err.message}`);
+    return null;
+  }
 }
 
 /**
@@ -773,29 +815,28 @@ async function processUserFollowup(user) {
     const nextStep = getNextFollowup(lastMsg.created_at, explCompleted, leadTemp, tunedLadder);
     if (!nextStep) return;
 
-    const personality = metadata.leadBrief
-      ? extractPersonalityFromBrief(metadata.leadBrief)
-      : (metadata.personalityMode || 'DEFAULT');
-
     const { env: envCfg } = require('../config/env');
-    const englishMsg = renderExploratoryMessage(nextStep.step, personality, envCfg);
-    if (!englishMsg) return;
 
-    // Localize for non-English users. Cached language detection avoids an
-    // LLM call after the first turn; English users return verbatim.
-    const { localize } = require('../utils/localizer');
-    const message = await localize(englishMsg, user, null);
+    // Compose via LLM, lever-tagged, with the user's recent levers banned
+    // so the rotation rule holds. Falls back if compose returns null.
+    const recentLevers = Array.isArray(metadata.recentLevers) ? metadata.recentLevers.slice(-2) : [];
+    const composed = await composeExploratoryFollowup(nextStep.step, user, envCfg, recentLevers);
+    if (!composed) return;
 
     logger.info(
       `[EXPL] Sending ${nextStep.step} to ${user.phone_number} ` +
-        `(mode: ${personality}, temp: ${leadTemp}, lang: ${metadata.preferredLanguage || 'english'})`
+        `(lever: ${composed.lever}, temp: ${leadTemp}, lang: ${metadata.preferredLanguage || 'english'})`
     );
 
-    await sendTextMessage(user.phone_number, message);
-    await logMessage(user.id, message, 'assistant');
+    await sendTextMessage(user.phone_number, composed.text);
+    await logMessage(user.id, composed.text, 'assistant');
 
+    // Push the lever used into recentLevers so the next message (from the
+    // bot OR from a later follow-up step) doesn't repeat it.
+    const nextRecentLevers = [...recentLevers, composed.lever].slice(-2);
     await updateUserMetadata(user.id, {
       exploratorySteps: [...explCompleted, nextStep.step],
+      recentLevers: nextRecentLevers,
     });
     return;
   }
