@@ -661,8 +661,52 @@ async function handleSalesBot(user, message) {
   //      flow again with no further code changes needed.
   let handoffServiceKey = null;
   let handoffServiceLabel = null;
+
+  // Sanity check the LLM-emitted handoff label against what the user
+  // actually said. The LLM occasionally hallucinates a handoff for
+  // services the user never mentioned — typically when the user is
+  // just providing a business name (e.g. "Ansh Salon") and the LLM
+  // misreads it. If the user's current text shares no keyword with
+  // the handoff label, drop the trigger and let the conversation flow.
+  const isLikelyHallucinatedHandoff = (label, userText) => {
+    if (!label || !userText) return false;
+    const t = String(userText).toLowerCase();
+    const l = String(label).toLowerCase();
+    // The label's own words must appear (or a close synonym) in the user's text.
+    const labelTokens = l.split(/[\s/-]+/).filter((w) => w.length >= 3);
+    if (labelTokens.length === 0) return false;
+    // Synonyms / variants per service so we don't false-drop legit handoffs.
+    const SYNONYMS = {
+      chatbot: ['chatbot', 'chat bot', 'bot for', 'ai assistant for', 'ai chat'],
+      seo: ['seo', 'rank', 'ranking', 'google search', 'audit'],
+      logo: ['logo', 'brand mark', 'brand identity', 'branding'],
+      ad: ['ad', 'ads', 'advertis', 'creative', 'campaign'],
+      'social media': ['social', 'instagram', 'facebook', 'tiktok', 'smm'],
+      app: ['app', 'mobile app', 'android', 'ios', 'software', 'custom system'],
+      ecommerce: ['ecommerce', 'online store', 'shopify', 'shop'],
+    };
+    // If any label token matches user text → handoff is real
+    for (const tok of labelTokens) {
+      if (t.includes(tok)) return false;
+      const syns = SYNONYMS[tok] || [];
+      for (const s of syns) {
+        if (t.includes(s)) return false;
+      }
+    }
+    return true; // No match found → likely hallucination
+  };
+
   if (humanHandoffMatch) {
-    handoffServiceLabel = (humanHandoffMatch[1] || '').trim() || 'service';
+    const rawLabel = (humanHandoffMatch[1] || '').trim() || 'service';
+    // Special-case: "user_requested" is always real — emitted when the
+    // user explicitly asks for a human, never hallucinated.
+    if (rawLabel.toLowerCase() === 'user_requested') {
+      handoffServiceLabel = rawLabel;
+    } else if (isLikelyHallucinatedHandoff(rawLabel, text)) {
+      logger.warn(`[SALES] Dropping hallucinated handoff "${rawLabel}" — user text "${text.slice(0, 80)}" mentions nothing about that service`);
+    } else {
+      handoffServiceLabel = rawLabel;
+    }
   } else if (chatbotDemoTrigger && !isServiceEnabled('chatbot')) {
     handoffServiceKey = 'chatbot';
   } else if (adGeneratorTrigger && !isServiceEnabled('ads')) {
