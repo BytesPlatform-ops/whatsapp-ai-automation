@@ -3147,7 +3147,17 @@ async function handleSalonServiceDurations(user, message) {
   if (useDefault || remaining.length === 0) {
     let ackMsg;
     if (useDefault) {
-      ackMsg = `Got it, I'll set every service to *30 minutes with no price listed*. You can tweak durations and prices later from the summary.`;
+      const prevAddressed = existing.filter((s) => s.addressed);
+      const newlyDefaulted = merged.filter((s) => {
+        const was = existingByName[s.name.toLowerCase()];
+        return !(was && was.addressed);
+      });
+      if (prevAddressed.length > 0 && newlyDefaulted.length > 0 && newlyDefaulted.length < merged.length) {
+        const names = newlyDefaulted.map((s) => `*${s.name}*`).join(', ');
+        ackMsg = `Got it — ${names} set to 30 min with no price listed.`;
+      } else {
+        ackMsg = `Got it, I'll set every service to *30 minutes with no price listed*. You can tweak durations and prices later from the summary.`;
+      }
     } else {
       const preview = merged
         .slice(0, 3)
@@ -3776,6 +3786,8 @@ function parseContactFields(text) {
     if (!v) return false;
     if (/\d/.test(v)) return true;
     if (/\b(?:st|street|ave|avenue|road|rd|blvd|boulevard|lane|ln|drive|dr|way|plaza|suite|apt|floor|block|sector|phase|building|tower|mall|market|colony|bazaar|bazar|nagar|society|square|sq)\b/i.test(v)) return true;
+    // "City, Area" or "City, Country" pattern — comma-separated place names
+    if (v.includes(',') && v.trim().length >= 6) return true;
     return false;
   };
 
@@ -4281,7 +4293,14 @@ async function showConfirmSummary(user, prefix = '') {
     const parts = ['Built-in system'];
     if (wd.weeklyHours) parts.push('hours set');
     if (Array.isArray(wd.salonServices) && wd.salonServices.length > 0) {
-      parts.push(`${wd.salonServices.length} priced services`);
+      const pricedCount = wd.salonServices.filter((s) => s.priceText && s.priceText.trim()).length;
+      const svcLabel =
+        pricedCount === 0
+          ? `${wd.salonServices.length} services`
+          : pricedCount === wd.salonServices.length
+            ? `${wd.salonServices.length} priced services`
+            : `${wd.salonServices.length} services (${pricedCount} priced)`;
+      parts.push(svcLabel);
     }
     lines.push(`*Booking:* ${parts.join(' · ')}`);
   }
@@ -4961,6 +4980,20 @@ async function handleConfirm(user, message) {
     } catch (err) {
       logger.warn(`[WEBDEV-CONFIRM] Flow-switch check failed: ${err.message}`);
     }
+  }
+
+  // Phase 14: if LLM returned empty edits because the user expressed intent
+  // to add/remove a service or area without naming a value, ask specifically
+  // instead of showing the generic edit menu.
+  const addServiceIntent = /\b(add|include|want|need)\b.{0,30}\b(service|treatment|service area|area)\b|\b(one more|another|new)\b.{0,20}\b(service|treatment|area)\b/i.test(originalText);
+  const removeServiceIntent = /\b(remove|delete|take out|drop)\b.{0,30}\b(service|treatment|area)\b/i.test(originalText);
+  if (addServiceIntent) {
+    await sendTextMessage(user.phone_number, await dynamicPhrase('Which service would you like to add?', user, originalText));
+    return STATES.WEB_CONFIRM;
+  }
+  if (removeServiceIntent) {
+    await sendTextMessage(user.phone_number, await dynamicPhrase('Which service would you like to remove?', user, originalText));
+    return STATES.WEB_CONFIRM;
   }
 
   // Still nothing — ask the user to be more specific. Localize the hint.
