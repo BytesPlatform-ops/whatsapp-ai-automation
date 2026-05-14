@@ -803,7 +803,7 @@ async function handleCollectEmail(user, message) {
   // language nuance needed. But skip detection is now LLM-only so we
   // catch every dialect / phrasing without maintaining a keyword list
   // ("nope", "no thanks", "rehne do", "abhi nahi", "salta este", etc.).
-  const emailMatch = text.match(/[\w.-]+@[\w.-]+\.\w+/);
+  const emailMatch = text.match(/[\w.-]+@[\w.-]+\.\w{2,}/);
   let isSkip = false;
   if (!emailMatch && text && text.length <= 60) {
     try {
@@ -3751,7 +3751,7 @@ async function handleCollectProjectsPhotos(user, message) {
  * Handles both labeled input ("email: x, phone: y, address: z") and unlabeled input.
  */
 function parseContactFields(text) {
-  const emailMatch = text.match(/[\w.-]+@[\w.-]+\.\w+/);
+  const emailMatch = text.match(/[\w.-]+@[\w.-]+\.\w{2,}/);
   const phoneMatch = text.match(/[\+]?[\d][\d\s\-()]{6,}/);
 
   // Try labeled address first — handles "address: 123 Main St" on its own line or inline.
@@ -4813,11 +4813,21 @@ async function handleConfirm(user, message) {
           if (kind === 'remove') return { label: `*${itemList}* wasn't in your services`, kind: 'noop' };
         }
         wd.services = next;
+        const prevSalon = Array.isArray(wd.salonServices) ? [...wd.salonServices] : [];
         syncSalonServices();
+        // Warn if any service that had custom duration/price is no longer matched by name
+        const newSalonNames = new Set((wd.salonServices || []).map((s) => s.name.toLowerCase()));
+        const lostData = prevSalon.filter(
+          (s) => s.addressed && (s.durationMinutes !== 30 || s.priceText) &&
+                 !newSalonNames.has(s.name.toLowerCase())
+        );
         const preview = (affected.length ? affected : next).join(', ');
-        if (kind === 'add') return { label: `services + *${preview}* (now: ${next.join(', ')})`, kind: 'change' };
-        if (kind === 'remove') return { label: `services − *${preview}* (now: ${next.join(', ')})`, kind: 'change' };
-        return { label: `services → *${next.join(', ')}*`, kind: 'change' };
+        const lostWarning = lostData.length > 0
+          ? ` (note: pricing/duration for *${lostData.map((s) => s.name).join(', ')}* was reset — update from summary)`
+          : '';
+        if (kind === 'add') return { label: `services + *${preview}* (now: ${next.join(', ')})${lostWarning}`, kind: 'change' };
+        if (kind === 'remove') return { label: `services − *${preview}* (now: ${next.join(', ')})${lostWarning}`, kind: 'change' };
+        return { label: `services → *${next.join(', ')}*${lostWarning}`, kind: 'change' };
       }
       case 'areas':
       case 'serviceAreas': {
@@ -4837,11 +4847,9 @@ async function handleConfirm(user, message) {
         return { label: `service areas → *${next.join(', ')}*`, kind: 'change' };
       }
       case 'email':
-      case 'contactEmail': {
-        const m = v.match(/[\w.-]+@[\w.-]+\.\w+/);
-        wd.contactEmail = m ? m[0] : v;
+      case 'contactEmail':
+        wd.contactEmail = v;
         return { label: `email → *${wd.contactEmail}*`, kind: 'change' };
-      }
       case 'phone':
       case 'contactPhone':
         wd.contactPhone = v;
@@ -8144,6 +8152,7 @@ async function applyFieldCorrection(user, field, rawValue, op = 'replace') {
       // remove-of-non-existent, add-of-already-present).
       if (kind !== 'replace' && affected.length === 0) return null;
       wd.services = next;
+      syncSalonServices();
       const preview = (affected.length ? affected : next).slice(0, 4).join(', ');
       const ellipsis = (affected.length ? affected.length : next.length) > 4 ? '…' : '';
       if (kind === 'add') ack = `Got it — added *${preview}${ellipsis}* to your services.`;

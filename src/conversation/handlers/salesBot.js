@@ -284,7 +284,7 @@ async function handleSalesBot(user, message) {
   // If we just ran an SEO audit, inject the findings so the bot can pitch based on real data
   const seoAnalysis = user.metadata?.lastSeoAnalysis;
   if (seoAnalysis) {
-    systemPrompt += `\n\n---\n\n## SEO AUDIT CONTEXT\n\nYou just ran a live SEO audit on the client's website (${user.metadata.lastSeoUrl || 'their site'}). The full report has been sent as a PDF. Here are the findings:\n\n${seoAnalysis.slice(0, 2000)}\n\n**Use these specific findings to pitch the right SEO package.** Reference their actual issues - don't be generic. Show them exactly what's broken and how the package you're recommending fixes it. This is your strongest closer - you have real data, use it.`;
+    systemPrompt += `\n\n---\n\n## SEO AUDIT CONTEXT\n\nYou just ran a live SEO audit on the client's website (${user.metadata?.lastSeoUrl || 'their site'}). The full report has been sent as a PDF. Here are the findings:\n\n${seoAnalysis.slice(0, 2000)}\n\n**Use these specific findings to pitch the right SEO package.** Reference their actual issues - don't be generic. Show them exactly what's broken and how the package you're recommending fixes it. This is your strongest closer - you have real data, use it.`;
   }
 
   let rawResponse;
@@ -935,7 +935,9 @@ async function handleSalesBot(user, message) {
   if (paymentMatch && env.stripe.secretKey) {
     const [, amountStr, serviceType, tier, description] = paymentMatch;
     const amount = parseInt(amountStr, 10);
-
+    if (amount < 10 || amount > 9999) {
+      logger.warn(`[SALES] SEND_PAYMENT amount out of range (${amount}) — skipping payment link`);
+    } else
     try {
       const { createPaymentLink } = require('../../payments/stripe');
       const result = await createPaymentLink({
