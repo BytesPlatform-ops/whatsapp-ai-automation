@@ -108,7 +108,11 @@ CONTEXT (do not re-add fields the user already gave):
 
 Possible classifications:
 
-1. **service_add** — the user is naming ONE OR MORE services they ALSO offer (in addition to the existing list). Phrasing varies across languages — focus on intent, not keywords. The user is saying "we also do X" / "we also offer Y" / "X is something we provide too". Return ONLY genuinely new services — if they're echoing services already in the existing list, do NOT classify as service_add.
+1. **service_add** — the user is naming ONE OR MORE specific services they ALSO offer (in addition to the existing list). Phrasing varies across languages — focus on intent, not keywords. The user is saying "we also do X" / "we also offer Y" / "X is something we provide too" — where X and Y are CONCRETE service names (Haircut, Pedicure, Beard Trim, Massage, etc.).
+
+   **HARD RULE — do NOT extract generic placeholders.** If the user asks *"can we add one more service?"* / *"there is one more service, can we add that?"* / *"add another one"* / *"add a new service"* — they are ASKING about adding, not naming the service. The phrase "one more service" / "another service" / "new service" is NOT a service name. Classify as **question** instead so we can ask them what the service is called. Same goes for placeholder-y nouns like "service", "another", "item", "thing", "one" — never treat those as service names.
+
+   Return ONLY genuinely new, named services — if they're echoing services already in the existing list, or using a placeholder phrase, do NOT classify as service_add.
    Shape: {"kind":"service_add","services":["<new service 1>","<new service 2>"]}
 
 2. **name_change** — user wants to update the business name. Phrases like "actually it's called X", "name should be X", "change name to X".
