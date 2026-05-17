@@ -18,28 +18,28 @@
 </head>
 <body class="bg-gray-50 min-h-screen">
   <!-- Header -->
-  <nav class="bg-white border-b px-6 py-3 flex items-center justify-between">
+  <nav class="bg-white border-b px-4 sm:px-6 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
     <div class="flex items-center gap-4">
       <a href="/admin" class="text-gray-500 hover:text-gray-700 text-sm">&larr; Main Dashboard</a>
       <h1 class="text-lg font-bold text-gray-800">Chatbot SaaS</h1>
     </div>
-    <div id="global-stats" class="flex gap-6 text-sm text-gray-500"></div>
+    <div id="global-stats" class="flex flex-wrap gap-x-4 gap-y-1 text-xs sm:text-sm text-gray-500"></div>
   </nav>
 
   <!-- Tabs -->
-  <div class="bg-white border-b px-6 flex gap-6">
-    <button class="tab py-3 text-sm font-medium text-gray-500 hover:text-gray-700 tab-active" data-tab="clients">Clients</button>
-    <button class="tab py-3 text-sm font-medium text-gray-500 hover:text-gray-700" data-tab="analytics">Global Analytics</button>
+  <div class="bg-white border-b px-4 sm:px-6 flex gap-4 sm:gap-6 overflow-x-auto">
+    <button class="tab py-3 text-sm font-medium text-gray-500 hover:text-gray-700 tab-active whitespace-nowrap" data-tab="clients">Clients</button>
+    <button class="tab py-3 text-sm font-medium text-gray-500 hover:text-gray-700 whitespace-nowrap" data-tab="analytics">Global Analytics</button>
   </div>
 
   <!-- Content -->
-  <div class="p-6 max-w-7xl mx-auto">
+  <div class="p-3 sm:p-6 max-w-7xl mx-auto">
     <!-- Clients Tab -->
     <div id="tab-clients">
       <!-- Filters -->
-      <div class="flex gap-3 mb-4">
-        <input id="filter-search" type="text" placeholder="Search by name..." class="px-3 py-2 border rounded-lg text-sm flex-1 max-w-xs">
-        <select id="filter-status" class="px-3 py-2 border rounded-lg text-sm">
+      <div class="flex flex-wrap gap-2 sm:gap-3 mb-4">
+        <input id="filter-search" type="text" placeholder="Search by name..." class="px-3 py-2 border rounded-lg text-sm w-full sm:flex-1 sm:max-w-xs">
+        <select id="filter-status" class="px-3 py-2 border rounded-lg text-sm flex-1 sm:flex-none">
           <option value="">All Status</option>
           <option value="active">Active</option>
           <option value="trial">Trial</option>
@@ -47,7 +47,7 @@
           <option value="paused">Paused</option>
           <option value="cancelled">Cancelled</option>
         </select>
-        <select id="filter-tier" class="px-3 py-2 border rounded-lg text-sm">
+        <select id="filter-tier" class="px-3 py-2 border rounded-lg text-sm flex-1 sm:flex-none">
           <option value="">All Tiers</option>
           <option value="starter">Starter</option>
           <option value="growth">Growth</option>
@@ -57,28 +57,30 @@
 
       <!-- Client Table -->
       <div class="bg-white rounded-lg border overflow-hidden">
-        <table class="w-full text-sm">
-          <thead class="bg-gray-50 text-left text-gray-500">
-            <tr>
-              <th class="px-4 py-3 font-medium">Business</th>
-              <th class="px-4 py-3 font-medium">Status</th>
-              <th class="px-4 py-3 font-medium">Tier</th>
-              <th class="px-4 py-3 font-medium">Conversations</th>
-              <th class="px-4 py-3 font-medium">Leads</th>
-              <th class="px-4 py-3 font-medium">Created</th>
-              <th class="px-4 py-3 font-medium">Actions</th>
-            </tr>
-          </thead>
-          <tbody id="clients-table" class="divide-y"></tbody>
-        </table>
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead class="bg-gray-50 text-left text-gray-500">
+              <tr>
+                <th class="px-4 py-3 font-medium">Business</th>
+                <th class="px-4 py-3 font-medium">Status</th>
+                <th class="px-4 py-3 font-medium">Tier</th>
+                <th class="px-4 py-3 font-medium">Conversations</th>
+                <th class="px-4 py-3 font-medium">Leads</th>
+                <th class="px-4 py-3 font-medium">Created</th>
+                <th class="px-4 py-3 font-medium">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="clients-table" class="divide-y"></tbody>
+          </table>
+        </div>
         <div id="clients-empty" class="hidden p-8 text-center text-gray-400">No clients found</div>
       </div>
     </div>
 
     <!-- Analytics Tab -->
     <div id="tab-analytics" class="hidden">
-      <div class="grid grid-cols-4 gap-4 mb-6" id="global-metrics"></div>
-      <div class="bg-white rounded-lg border p-6">
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6" id="global-metrics"></div>
+      <div class="bg-white rounded-lg border p-4 sm:p-6">
         <h3 class="font-medium text-gray-700 mb-4">Client Distribution</h3>
         <div id="distribution-chart" class="space-y-3"></div>
       </div>
@@ -86,13 +88,13 @@
   </div>
 
   <!-- Client Detail Modal -->
-  <div id="detail-modal" class="fixed inset-0 modal-overlay hidden flex items-center justify-center z-50 p-4">
-    <div class="bg-white rounded-xl shadow-xl w-full max-w-3xl max-h-[90vh] overflow-y-auto">
-      <div class="sticky top-0 bg-white border-b px-6 py-4 flex items-center justify-between">
-        <h2 id="detail-title" class="text-lg font-bold"></h2>
-        <button onclick="closeModal()" class="text-gray-400 hover:text-gray-600 text-2xl">&times;</button>
+  <div id="detail-modal" class="fixed inset-0 modal-overlay hidden flex items-center justify-center z-50 sm:p-4">
+    <div class="bg-white sm:rounded-xl shadow-xl w-full max-w-3xl h-full sm:h-auto max-h-screen sm:max-h-[90vh] overflow-y-auto">
+      <div class="sticky top-0 bg-white border-b px-4 sm:px-6 py-4 flex items-center justify-between">
+        <h2 id="detail-title" class="text-base sm:text-lg font-bold truncate pr-3"></h2>
+        <button onclick="closeModal()" class="text-gray-400 hover:text-gray-600 text-2xl shrink-0">&times;</button>
       </div>
-      <div id="detail-content" class="p-6"></div>
+      <div id="detail-content" class="p-4 sm:p-6"></div>
     </div>
   </div>
 

@@ -25,11 +25,19 @@
 </head>
 <body class="bg-gray-50 text-gray-900">
   <div class="flex h-screen overflow-hidden">
+    <!-- Mobile backdrop -->
+    <div id="sidebar-backdrop" onclick="closeSidebar()" class="fixed inset-0 bg-black/50 z-30 hidden md:hidden"></div>
+
     <!-- Sidebar -->
-    <aside class="w-64 bg-gray-900 text-gray-300 flex flex-col flex-shrink-0">
-      <div class="p-5 border-b border-gray-800">
-        <h1 class="text-white font-bold text-lg">WA Bot Admin</h1>
-        <p class="text-xs text-gray-500 mt-1">Analytics &amp; Management</p>
+    <aside id="sidebar" class="fixed md:relative inset-y-0 left-0 z-40 w-64 bg-gray-900 text-gray-300 flex flex-col flex-shrink-0 transform -translate-x-full md:translate-x-0 transition-transform duration-300">
+      <div class="p-5 border-b border-gray-800 flex items-center justify-between">
+        <div>
+          <h1 class="text-white font-bold text-lg">WA Bot Admin</h1>
+          <p class="text-xs text-gray-500 mt-1">Analytics &amp; Management</p>
+        </div>
+        <button onclick="closeSidebar()" class="md:hidden p-1.5 -mr-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-gray-800" aria-label="Close menu">
+          <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
       </div>
       <nav class="flex-1 py-4 space-y-1 px-3 overflow-y-auto">
         <a href="#" class="sidebar-link active flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm" data-section="overview">
@@ -115,15 +123,23 @@
     </aside>
 
     <!-- Main content -->
-    <main class="flex-1 overflow-y-auto">
-      <div class="p-6 max-w-7xl mx-auto" id="content">
+    <main class="flex-1 overflow-y-auto w-full">
+      <!-- Mobile top bar -->
+      <div class="md:hidden bg-white border-b px-4 py-3 flex items-center justify-between sticky top-0 z-20">
+        <button onclick="toggleSidebar()" class="p-2 -ml-2 rounded-lg hover:bg-gray-100" aria-label="Open menu">
+          <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg>
+        </button>
+        <h1 class="font-bold text-sm">WA Bot Admin</h1>
+        <div class="w-9"></div>
+      </div>
+      <div class="p-3 sm:p-6 max-w-7xl mx-auto" id="content">
         <div class="flex items-center justify-center h-64"><div class="loader"></div></div>
       </div>
     </main>
 
     <!-- Conversation modal -->
     <div id="conv-modal" class="fixed inset-0 bg-black/50 z-50 hidden items-center justify-center">
-      <div class="bg-white rounded-2xl w-full max-w-2xl max-h-[85vh] flex flex-col m-4 shadow-2xl">
+      <div class="bg-white sm:rounded-2xl w-full max-w-2xl h-full sm:h-auto sm:max-h-[85vh] flex flex-col sm:m-4 shadow-2xl">
         <div class="flex items-center justify-between p-4 border-b">
           <div>
             <h3 id="conv-modal-title" class="font-bold text-lg">Conversation</h3>
@@ -142,9 +158,9 @@
             <button id="takeover-btn" onclick="toggleTakeover()" class="px-3 py-1.5 text-xs font-medium rounded-lg transition"></button>
             <span id="takeover-status" class="text-xs text-gray-400"></span>
           </div>
-          <form id="admin-reply-form" onsubmit="sendAdminReply(event)" class="flex gap-2">
-            <input id="admin-reply-input" type="text" placeholder="Type a message..." class="flex-1 px-4 py-2.5 border rounded-xl text-sm focus:outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100" autocomplete="off">
-            <button type="submit" id="admin-reply-btn" class="px-5 py-2.5 bg-indigo-600 text-white text-sm font-medium rounded-xl hover:bg-indigo-700 transition disabled:opacity-50 disabled:cursor-not-allowed">Send</button>
+          <form id="admin-reply-form" onsubmit="sendAdminReply(event)" class="flex items-end gap-2">
+            <textarea id="admin-reply-input" rows="1" placeholder="Type a message..." class="flex-1 px-4 py-2.5 border rounded-2xl text-sm focus:outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 resize-none leading-5 max-h-40 overflow-y-auto" autocomplete="off" oninput="autoGrowReply(this)" onkeydown="replyKeydown(event)"></textarea>
+            <button type="submit" id="admin-reply-btn" class="px-5 py-2.5 bg-indigo-600 text-white text-sm font-medium rounded-2xl hover:bg-indigo-700 transition disabled:opacity-50 disabled:cursor-not-allowed shrink-0">Send</button>
           </form>
         </div>
       </div>
@@ -231,11 +247,23 @@ function tempBadge(temp) {
   return '';
 }
 
+// Sidebar (mobile off-canvas)
+function toggleSidebar() {
+  document.getElementById('sidebar').classList.toggle('-translate-x-full');
+  document.getElementById('sidebar-backdrop').classList.toggle('hidden');
+}
+function closeSidebar() {
+  document.getElementById('sidebar').classList.add('-translate-x-full');
+  document.getElementById('sidebar-backdrop').classList.add('hidden');
+}
+
 // Navigation
 document.querySelectorAll('.sidebar-link').forEach(function(link) {
   link.addEventListener('click', function(e) {
     e.preventDefault();
     var section = link.dataset.section;
+    // Auto-close drawer on mobile, even when clicking the active item.
+    closeSidebar();
     if (section === currentSection) return;
     document.querySelectorAll('.sidebar-link').forEach(function(l) { l.classList.remove('active'); });
     link.classList.add('active');
@@ -510,7 +538,7 @@ function renderLeads(leads) {
   stateOptions.sort();
 
   var filters = '<div class="flex flex-wrap gap-3 mb-4">' +
-    '<input id="lead-search" type="text" placeholder="Search phone or name..." class="px-3 py-2 border rounded-lg text-sm w-64" oninput="filterLeads()">' +
+    '<input id="lead-search" type="text" placeholder="Search phone or name..." class="px-3 py-2 border rounded-lg text-sm w-full sm:w-64" oninput="filterLeads()">' +
     '<select id="lead-status" class="px-3 py-2 border rounded-lg text-sm" onchange="filterLeads()">' +
       '<option value="">All Status</option><option value="closed">Closed</option><option value="qualified">Qualified</option><option value="open">Open</option>' +
     '</select>' +
@@ -704,7 +732,7 @@ function renderConversations(leads) {
       '<button onclick="setConvType(\'ai\')" class="' + typeTabClass('ai') + '">🤖 AI Only <span class="ml-1 opacity-75">(' + tCounts.ai + ')</span></button>' +
       '<button onclick="setConvType(\'manual\')" class="' + typeTabClass('manual') + '">✋ Manual <span class="ml-1 opacity-75">(' + tCounts.manual + ')</span></button>' +
     '</div>' +
-    '<input id="conv-search" type="text" placeholder="Search by phone or name..." class="px-3 py-2 border rounded-lg text-sm w-80 mb-4" oninput="filterConvList()">' +
+    '<input id="conv-search" type="text" placeholder="Search by phone or name..." class="px-3 py-2 border rounded-lg text-sm w-full sm:w-80 mb-4" oninput="filterConvList()">' +
     '<div id="conv-list" class="grid gap-3">' + convListItems(leads) + '</div>' +
   '</div>';
 }
@@ -777,7 +805,9 @@ function openConversation(userId, phone, name) {
   document.getElementById('conv-modal-title').textContent = name || phone;
   document.getElementById('conv-modal-subtitle').textContent = phone;
   document.getElementById('conv-modal-body').innerHTML = '<div class="flex justify-center py-8"><div class="loader"></div></div>';
-  document.getElementById('admin-reply-input').value = '';
+  var replyEl = document.getElementById('admin-reply-input');
+  replyEl.value = '';
+  autoGrowReply(replyEl);
   updateTakeoverButton(false); // default until we know
 
   api('conversations/' + userId).then(function(data) {
@@ -1248,6 +1278,28 @@ function closeConvModal() {
   if (tBtn) tBtn.classList.add('hidden');
 }
 
+// Auto-grow the reply textarea up to the CSS max-height (Tailwind max-h-40 → 10rem).
+// Resetting height to 'auto' first lets scrollHeight shrink when text is deleted.
+function autoGrowReply(el) {
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 160) + 'px';
+}
+
+// Enter sends, Shift+Enter (or Ctrl/Cmd/Alt+Enter) inserts a newline.
+// Matches WhatsApp/Slack composer behaviour.
+function replyKeydown(e) {
+  if (e.key !== 'Enter' || e.isComposing) return;
+  // Any modifier + Enter → let the textarea's default insert a newline.
+  // stopPropagation guards against any ancestor listener that might submit.
+  if (e.shiftKey || e.ctrlKey || e.metaKey || e.altKey) {
+    e.stopPropagation();
+    return;
+  }
+  // Plain Enter → send.
+  e.preventDefault();
+  document.getElementById('admin-reply-form').requestSubmit();
+}
+
 function sendAdminReply(e) {
   e.preventDefault();
   var input = document.getElementById('admin-reply-input');
@@ -1275,6 +1327,7 @@ function sendAdminReply(e) {
       body.appendChild(msgDiv);
       body.scrollTop = body.scrollHeight;
       input.value = '';
+      autoGrowReply(input);
       // The backend has already written this message to the conversations
       // table by the time we get here. Bump lastMsgCount so the next 5s
       // poll doesn't see it as "new" and append a duplicate bubble.
@@ -1502,7 +1555,7 @@ function renderLeadSummaries(summaries) {
     '</div>' +
 
     // Outcome filter tabs
-    '<div class="flex items-center gap-3 mb-4">' +
+    '<div class="flex flex-wrap items-center gap-2 sm:gap-3 mb-4">' +
       '<button onclick="setLeadSummaryFilter(\'all\')" class="' + tabClass('all') + '">All (' + counts.all + ')</button>' +
       '<button onclick="setLeadSummaryFilter(\'paid\')" class="' + tabClass('paid') + '">Paid (' + (counts.paid || 0) + ')</button>' +
       '<button onclick="setLeadSummaryFilter(\'meeting_booked\')" class="' + tabClass('meeting_booked') + '">Meetings (' + (counts.meeting_booked || 0) + ')</button>' +
@@ -1857,7 +1910,7 @@ function renderMeetings(meetings) {
       '<button onclick="setMeetingsStatus(\'pending\')" class="' + tabCls('pending') + '">Pending <span class="ml-1 text-xs opacity-75">(' + statusCount('pending') + ')</span></button>' +
       '<button onclick="setMeetingsStatus(\'cancelled\')" class="' + tabCls('cancelled') + '">Cancelled <span class="ml-1 text-xs opacity-75">(' + statusCount('cancelled') + ')</span></button>' +
     '</div>' +
-    '<input id="meetings-search" type="text" placeholder="Search by name, phone, or topic..." class="px-3 py-2 border rounded-lg text-sm w-96 mb-4" oninput="filterMeetings()" value="' + esc(meetingsSearch) + '">' +
+    '<input id="meetings-search" type="text" placeholder="Search by name, phone, or topic..." class="px-3 py-2 border rounded-lg text-sm w-full sm:w-96 mb-4" oninput="filterMeetings()" value="' + esc(meetingsSearch) + '">' +
     '<div class="bg-white rounded-xl border overflow-hidden"><div class="overflow-x-auto"><table class="w-full text-sm">' +
       '<thead class="bg-gray-50 border-b"><tr>' +
         '<th class="text-left p-3 font-semibold">Name</th>' +
@@ -1883,7 +1936,7 @@ function openMeeting(meetingId) {
     modal.id = 'meeting-modal';
     modal.className = 'fixed inset-0 bg-black bg-opacity-50 z-50 hidden items-center justify-center p-4';
     modal.onclick = function(e) { if (e.target === modal) closeMeetingModal(); };
-    modal.innerHTML = '<div id="meeting-modal-card" class="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto" onclick="event.stopPropagation()"></div>';
+    modal.innerHTML = '<div id="meeting-modal-card" class="bg-white sm:rounded-2xl max-w-2xl w-full h-full sm:h-auto max-h-screen sm:max-h-[90vh] overflow-y-auto" onclick="event.stopPropagation()"></div>';
     document.body.appendChild(modal);
   }
   var card = document.getElementById('meeting-modal-card');
@@ -2338,13 +2391,13 @@ function renderAdAttribution(data) {
   }
 
   var topBar =
-    '<div class="flex items-center justify-between mb-6">' +
+    '<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">' +
       '<div>' +
         '<h2 class="text-2xl font-bold">Ad Attribution</h2>' +
         '<p class="text-sm text-gray-500 mt-1">Which ad creatives bring leads that actually close. Lower cost-per-close = cheaper customer acquisition.</p>' +
       '</div>' +
-      '<div class="flex gap-2">' + windowTab(7, '7 days') + windowTab(30, '30 days') + windowTab(90, '90 days') + windowTab(0, 'All time') +
-      '<button onclick="loadSection(\'adattribution\')" class="text-sm text-indigo-600 hover:text-indigo-800 ml-3">Refresh</button></div>' +
+      '<div class="flex flex-wrap gap-2">' + windowTab(7, '7 days') + windowTab(30, '30 days') + windowTab(90, '90 days') + windowTab(0, 'All time') +
+      '<button onclick="loadSection(\'adattribution\')" class="text-sm text-indigo-600 hover:text-indigo-800 ml-1 sm:ml-3 self-center">Refresh</button></div>' +
     '</div>';
 
   var summaryCards =
