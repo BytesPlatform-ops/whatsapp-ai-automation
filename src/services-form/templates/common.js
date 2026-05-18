@@ -175,6 +175,52 @@ const BASE_STYLES = `
     padding:11px 13px 11px 4px!important;background:transparent;
   }
 
+  /* ── Custom currency dropdown ─────────────────────────────────── */
+  .cur-wrap{position:relative}
+  .cur-btn{
+    width:100%;padding:11px 38px 11px 13px;
+    border:1.5px solid ${BRAND.ink200};border-radius:10px;
+    font:inherit;color:inherit;background:#fff;
+    text-align:left;cursor:pointer;
+    transition:border-color .15s ease,box-shadow .15s ease;
+    position:relative;
+  }
+  .cur-btn::after{
+    content:'';position:absolute;right:14px;top:50%;transform:translateY(-50%);
+    width:0;height:0;
+    border-left:5px solid transparent;border-right:5px solid transparent;
+    border-top:6px solid ${BRAND.ink400};
+    transition:transform .15s ease;
+  }
+  .cur-btn[aria-expanded=true]::after{transform:translateY(-50%) rotate(180deg)}
+  .cur-btn:hover{border-color:${BRAND.ink300}}
+  .cur-btn:focus,.cur-btn[aria-expanded=true]{
+    outline:none;border-color:${BRAND.green};
+    box-shadow:0 0 0 4px rgba(37,211,102,0.18);
+  }
+  .cur-panel{
+    display:none;position:absolute;top:calc(100% + 6px);left:0;right:0;
+    background:#fff;border:1.5px solid ${BRAND.ink200};border-radius:12px;
+    box-shadow:0 8px 28px -6px rgba(15,23,42,0.16);z-index:50;overflow:hidden;
+  }
+  .cur-panel.open{display:block}
+  .cur-search{
+    width:100%;padding:10px 13px;border:none;border-bottom:1px solid ${BRAND.ink100};
+    font:inherit;font-size:13px;color:inherit;outline:none;background:#fff;
+  }
+  .cur-list{max-height:240px;overflow-y:auto;overscroll-behavior:contain}
+  .cur-grp{
+    padding:6px 13px 2px;font-size:11px;font-weight:700;letter-spacing:0.06em;
+    text-transform:uppercase;color:${BRAND.ink300};
+  }
+  .cur-opt{
+    padding:9px 13px;font-size:14px;cursor:pointer;color:${BRAND.ink900};
+    transition:background .1s ease;
+  }
+  .cur-opt:hover{background:${BRAND.bgSoft}}
+  .cur-opt.selected{background:#F0FFF6;color:#0B3A1E;font-weight:600}
+  .cur-opt.hidden{display:none}
+
   .footer{text-align:center;margin-top:32px;font-size:12px;color:${BRAND.ink400}}
   .footer a{color:${BRAND.ink500};text-decoration:none;font-weight:600}
   .footer a:hover{color:${BRAND.greenDark}}
@@ -271,15 +317,80 @@ const CURRENCY_GROUPS = [
   ]},
 ];
 
-const CURRENCY_OPTIONS_HTML = CURRENCY_GROUPS.map(({ group, currencies }) =>
-  `<optgroup label="${group}">\n` +
-  currencies.map((c) => `        <option value="${c.code}">${c.code} – ${c.label} (${c.sym})</option>`).join('\n') +
-  `\n      </optgroup>`
-).join('\n      ');
-
 // Flat list for JS symbol lookups
 const CURRENCIES = CURRENCY_GROUPS.flatMap((g) => g.currencies);
 // JS-safe map of code → symbol, embedded in form scripts.
 const CURRENCY_SYM_MAP_JS = '{' + CURRENCIES.map((c) => `'${c.code}':'${c.sym}'`).join(',') + '}';
 
-module.exports = { escapeHtml, pageShell, infoPage, CURRENCY_OPTIONS_HTML, CURRENCY_SYM_MAP_JS };
+// Custom dropdown HTML — replaces native <select> so scrolling works
+// reliably across all browsers/OS combinations.
+function buildCurrencyDropdown(inputName) {
+  const opts = CURRENCY_GROUPS.map(({ group, currencies }) =>
+    `<div class="cur-grp">${group}</div>` +
+    currencies.map((c) =>
+      `<div class="cur-opt${c.code === 'USD' ? ' selected' : ''}" data-value="${c.code}" data-sym="${c.sym}">${c.code} – ${c.label} (${c.sym})</div>`
+    ).join('')
+  ).join('');
+
+  return `
+    <div class="cur-wrap" id="${inputName}-wrap">
+      <input type="hidden" name="${inputName}" id="${inputName}" value="USD">
+      <button type="button" class="cur-btn" id="${inputName}-btn" aria-expanded="false" aria-haspopup="listbox">
+        USD – US Dollar ($)
+      </button>
+      <div class="cur-panel" id="${inputName}-panel" role="listbox">
+        <input type="text" class="cur-search" placeholder="Search currency…" autocomplete="off">
+        <div class="cur-list">${opts}</div>
+      </div>
+    </div>`;
+}
+
+// Shared JS that wires up ALL .cur-wrap dropdowns on the page.
+const CURRENCY_DROPDOWN_JS = `
+(function(){
+  document.querySelectorAll('.cur-wrap').forEach(function(wrap){
+    var btn    = wrap.querySelector('.cur-btn');
+    var panel  = wrap.querySelector('.cur-panel');
+    var search = wrap.querySelector('.cur-search');
+    var input  = wrap.querySelector('input[type=hidden]');
+    var opts   = wrap.querySelectorAll('.cur-opt');
+
+    function open(){
+      btn.setAttribute('aria-expanded','true');
+      panel.classList.add('open');
+      search.value='';
+      opts.forEach(function(o){o.classList.remove('hidden')});
+      search.focus();
+    }
+    function close(){
+      btn.setAttribute('aria-expanded','false');
+      panel.classList.remove('open');
+    }
+    btn.addEventListener('click',function(e){
+      e.stopPropagation();
+      panel.classList.contains('open') ? close() : open();
+    });
+    search.addEventListener('input',function(){
+      var q=search.value.toLowerCase();
+      opts.forEach(function(o){
+        o.classList.toggle('hidden', q && !o.textContent.toLowerCase().includes(q));
+      });
+    });
+    opts.forEach(function(opt){
+      opt.addEventListener('click',function(){
+        opts.forEach(function(o){o.classList.remove('selected')});
+        opt.classList.add('selected');
+        input.value = opt.dataset.value;
+        btn.textContent = opt.textContent;
+        // notify price-symbol listeners
+        wrap.dispatchEvent(new CustomEvent('currency-change',{bubbles:true,detail:{code:opt.dataset.value,sym:opt.dataset.sym}}));
+        close();
+      });
+    });
+    document.addEventListener('click',function(e){
+      if(!wrap.contains(e.target)) close();
+    });
+  });
+})();`;
+
+module.exports = { escapeHtml, pageShell, infoPage, buildCurrencyDropdown, CURRENCY_DROPDOWN_JS, CURRENCY_SYM_MAP_JS };
