@@ -17,6 +17,7 @@ function generateNeighborhoodsPage(c) {
   const phone = c.contactPhone || '';
   const tel = telHref(phone);
   const city = c.primaryCity || '';
+  const defaultCurrency = (c.featuredListings && c.featuredListings[0] && c.featuredListings[0].currency) || null;
   const areas = (c.serviceAreas && c.serviceAreas.length ? c.serviceAreas : (city ? [city] : []));
   const descriptions = c.areaDescriptions || {};
   const medianPrices = c.areaMedianPrices || {};
@@ -121,7 +122,7 @@ function generateNeighborhoodsPage(c) {
     const recentSaleLine = recentSale ? `
       <div class="recent-sale-line">
         <span class="rsl-label">Recent sale</span>
-        <span class="rsl-price">${esc(fmtMoney(recentSale.price))}</span>
+        <span class="rsl-price">${esc(fmtMoney(recentSale.price, recentSale.currency || defaultCurrency))}</span>
         <span class="rsl-meta">${[recentSale.beds ? `${recentSale.beds} bd` : '', recentSale.baths ? `${recentSale.baths} ba` : '', recentSale.soldOn ? esc(recentSale.soldOn) : ''].filter(Boolean).join(' \u00B7 ')}</span>
       </div>` : '';
     const img = (c.neighborhoodImages && (c.neighborhoodImages[a] || c.neighborhoodImages[a.toLowerCase()])) || null;
@@ -134,7 +135,7 @@ function generateNeighborhoodsPage(c) {
         <span>
           <span class="ns-icon">${icon('star', 14, TOKENS.gold)}</span>
           Median
-          <strong>${median ? esc(fmtMoney(median)) : '—'}<span class="trend-pill ${trendClass}">${esc(trendLabel)}</span></strong>
+          <strong>${median ? esc(fmtMoney(median, defaultCurrency)) : '—'}<span class="trend-pill ${trendClass}">${esc(trendLabel)}</span></strong>
         </span>
         <span>
           <span class="ns-icon">${icon('walking', 14, TOKENS.gold)}</span>
@@ -219,7 +220,7 @@ function generateNeighborhoodsPage(c) {
     { q: 'Walkable urban energy', getRank: (x) => x.walk, why: (x) => `${x.walk}/100 walkability`, direction: 'desc' },
     { q: 'Top-ranked schools', getRank: (x) => x.schools, why: (x) => `${x.schools}/10 school rating`, direction: 'desc' },
     { q: 'Investment upside', getRank: (x) => x.yoy || 0, why: (x) => `${x.yoy > 0 ? '+' : ''}${(x.yoy || 0).toFixed(1)}% YoY`, direction: 'desc' },
-    { q: 'First-home value', getRank: (x) => x.median || Infinity, why: (x) => (x.median ? `Median ${fmtMoney(x.median)}` : 'Entry-level market'), direction: 'asc' },
+    { q: 'First-home value', getRank: (x) => x.median || Infinity, why: (x) => (x.median ? `Median ${fmtMoney(x.median, defaultCurrency)}` : 'Entry-level market'), direction: 'asc' },
   ];
 
   const picked = new Set();

@@ -388,6 +388,7 @@ Generate compelling website copy for this business. Return ONLY valid JSON.${lan
       generatedContent.featuredListings = userListings.map((l) => ({
         address: l.address || 'Address on request',
         price: Number(l.price) || 0,
+        currency: l.currency || null,
         beds: Number(l.beds) || 3,
         baths: Number(l.baths) || 2,
         sqft: Number(l.sqft) || 1800,

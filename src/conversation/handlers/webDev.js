@@ -1642,61 +1642,115 @@ const MAX_LISTINGS = 3;
 // Currency code → display symbol. Falls through to the ISO code itself
 // (e.g. "AED") when we don't have a specific symbol.
 const CURRENCY_SYMBOLS = {
-  USD: '$', CAD: 'CA$', AUD: 'A$',
-  GBP: '£', EUR: '€',
-  PKR: 'Rs', INR: '₹', BDT: '৳', LKR: 'Rs',
-  AED: 'AED', SAR: 'SAR', QAR: 'QAR', KWD: 'KWD', OMR: 'OMR', BHD: 'BHD',
+  USD: '$',   CAD: 'CA$', BRL: 'R$',  MXN: 'MX$',
+  GBP: '£',   EUR: '€',   CHF: 'CHF', TRY: '₺',
+  AED: 'AED', SAR: 'SAR', QAR: 'QAR', KWD: 'KWD', OMR: 'OMR', BHD: 'BHD', JOD: 'JD', EGP: 'E£',
+  PKR: 'Rs',  INR: '₹',   BDT: '৳',   LKR: 'Rs',  NPR: 'Rs',
+  AUD: 'A$',  NZD: 'NZ$', SGD: 'S$',  MYR: 'RM',
+  ZAR: 'R',   NGN: '₦',   KES: 'KSh', GHS: 'GH₵',
 };
 
 // Well-known city → currency lookup. Only cities where the correct currency
 // is unambiguous and the city name is unlikely to clash. Expand as needed.
 const CITY_TO_CURRENCY = {
+  // Pakistan
   karachi: 'PKR', lahore: 'PKR', islamabad: 'PKR', rawalpindi: 'PKR',
   faisalabad: 'PKR', peshawar: 'PKR', quetta: 'PKR', multan: 'PKR', hyderabad: 'PKR',
+  // India
   delhi: 'INR', mumbai: 'INR', bangalore: 'INR', bengaluru: 'INR', kolkata: 'INR',
-  chennai: 'INR', pune: 'INR', ahmedabad: 'INR', jaipur: 'INR',
+  chennai: 'INR', pune: 'INR', ahmedabad: 'INR', jaipur: 'INR', hyderabad: 'INR',
+  // UK
   london: 'GBP', manchester: 'GBP', birmingham: 'GBP', glasgow: 'GBP', edinburgh: 'GBP',
+  leeds: 'GBP', liverpool: 'GBP', bristol: 'GBP',
+  // Europe
   paris: 'EUR', madrid: 'EUR', barcelona: 'EUR', berlin: 'EUR', munich: 'EUR',
   rome: 'EUR', milan: 'EUR', amsterdam: 'EUR', dublin: 'EUR', lisbon: 'EUR',
-  dubai: 'AED', 'abu dhabi': 'AED', sharjah: 'AED',
-  riyadh: 'SAR', jeddah: 'SAR', mecca: 'SAR',
-  doha: 'QAR', toronto: 'CAD', vancouver: 'CAD', montreal: 'CAD',
-  sydney: 'AUD', melbourne: 'AUD', brisbane: 'AUD', perth: 'AUD',
-  dhaka: 'BDT', colombo: 'LKR',
+  brussels: 'EUR', vienna: 'EUR', zurich: 'CHF', geneva: 'CHF',
+  istanbul: 'TRY', ankara: 'TRY',
+  // UAE & Gulf
+  dubai: 'AED', 'abu dhabi': 'AED', sharjah: 'AED', ajman: 'AED',
+  riyadh: 'SAR', jeddah: 'SAR', mecca: 'SAR', medina: 'SAR',
+  doha: 'QAR', kuwait: 'KWD', 'kuwait city': 'KWD',
+  muscat: 'OMR', manama: 'BHD', amman: 'JOD', cairo: 'EGP',
+  // Americas
+  toronto: 'CAD', vancouver: 'CAD', montreal: 'CAD', calgary: 'CAD',
+  'sao paulo': 'BRL', 'são paulo': 'BRL', 'rio de janeiro': 'BRL', brasilia: 'BRL',
+  'mexico city': 'MXN', guadalajara: 'MXN', monterrey: 'MXN',
+  // Oceania
+  sydney: 'AUD', melbourne: 'AUD', brisbane: 'AUD', perth: 'AUD', auckland: 'NZD',
+  // Southeast Asia & South Asia
+  singapore: 'SGD', 'kuala lumpur': 'MYR', dhaka: 'BDT', colombo: 'LKR', kathmandu: 'NPR',
+  // Africa
+  johannesburg: 'ZAR', 'cape town': 'ZAR', durban: 'ZAR',
+  lagos: 'NGN', abuja: 'NGN', nairobi: 'KES', accra: 'GHS',
 };
 
 function detectCurrency(text, primaryCity) {
   const t = String(text || '').toLowerCase();
-  // Explicit currency markers in the message win.
-  if (/\bpkr\b|\brs\.?\b|\brupees?\b|₨/i.test(t) && !/indian\s+rupee/i.test(t)) return 'PKR';
+  // Explicit currency markers — specific before generic to avoid mismatches.
   if (/\binr\b|indian\s+rupees?|₹/i.test(t)) return 'INR';
+  if (/\bpkr\b|pakistani\s+rupees?|₨/i.test(t)) return 'PKR';
+  if (/\bnpr\b|nepalese?\s+rupees?/i.test(t)) return 'NPR';
+  if (/\blkr\b|sri\s+lankan\s+rupees?/i.test(t)) return 'LKR';
+  if (/\bbdt\b|bangladeshi?\s+taka|৳/i.test(t)) return 'BDT';
   if (/\bgbp\b|\bpounds?\b|£/i.test(t)) return 'GBP';
   if (/\beur\b|\beuros?\b|€/i.test(t)) return 'EUR';
+  if (/\bchf\b|swiss\s+francs?/i.test(t)) return 'CHF';
+  if (/\btry\b|turkish\s+liras?|₺/i.test(t)) return 'TRY';
   if (/\baed\b|\bdirhams?\b/i.test(t)) return 'AED';
-  if (/\bsar\b|\briyals?\b/i.test(t)) return 'SAR';
-  if (/\bcad\b/i.test(t)) return 'CAD';
-  if (/\baud\b/i.test(t)) return 'AUD';
+  if (/\bsar\b|saudi\s+riyals?/i.test(t)) return 'SAR';
+  if (/\bqar\b|qatari\s+riyals?/i.test(t)) return 'QAR';
+  if (/\bkwd\b|kuwaiti\s+dinars?/i.test(t)) return 'KWD';
+  if (/\bomr\b|omani\s+rials?/i.test(t)) return 'OMR';
+  if (/\bbhd\b|bahraini\s+dinars?/i.test(t)) return 'BHD';
+  if (/\bjod\b|jordanian\s+dinars?/i.test(t)) return 'JOD';
+  if (/\begp\b|egyptian\s+pounds?/i.test(t)) return 'EGP';
+  if (/\bbrl\b|reais?|brazilian\s+real/i.test(t)) return 'BRL';
+  if (/\bmxn\b|mexican\s+pesos?/i.test(t)) return 'MXN';
+  if (/\bcad\b|canadian\s+dollars?/i.test(t)) return 'CAD';
+  if (/\baud\b|australian\s+dollars?/i.test(t)) return 'AUD';
+  if (/\bnzd\b|new\s+zealand\s+dollars?/i.test(t)) return 'NZD';
+  if (/\bsgd\b|singapore\s+dollars?/i.test(t)) return 'SGD';
+  if (/\bmyr\b|ringgits?/i.test(t)) return 'MYR';
+  if (/\bzar\b|south\s+african\s+rands?/i.test(t)) return 'ZAR';
+  if (/\bngn\b|nairas?|₦/i.test(t)) return 'NGN';
+  if (/\bkes\b|kenyan\s+shillings?/i.test(t)) return 'KES';
+  if (/\bghs\b|cedis?|gh[₵c]/i.test(t)) return 'GHS';
   if (/\busd\b|\bdollars?\b|\$/i.test(t)) return 'USD';
+  // Generic "rupees" with no country qualifier — infer from city, else ask.
+  if (/\brupees?\b|\brs\.?\b/i.test(t)) {
+    if (primaryCity) {
+      const code = CITY_TO_CURRENCY[String(primaryCity).trim().toLowerCase()];
+      if (['PKR', 'INR', 'NPR', 'LKR'].includes(code)) return code;
+    }
+    return null;
+  }
   // Fall back to inferred currency from the user's primary city.
   if (primaryCity) {
     const code = CITY_TO_CURRENCY[String(primaryCity).trim().toLowerCase()];
     if (code) return code;
   }
-  return 'USD';
+  // Return null when genuinely unknown — caller will ask the user.
+  return null;
 }
 
 // Plausible price ranges per currency. Rentals can land at the bottom of
 // the range and full sales at the top. Widened relative to the old
 // USD-only bounds so PKR rent (~100k) and INR rent (~10k) aren't rejected.
 function priceRangeFor(currency) {
+  if (!currency) return { min: 300, max: 2_000_000_000 };
   switch ((currency || 'USD').toUpperCase()) {
-    case 'PKR': return { min: 20000, max: 2_000_000_000 };
+    case 'PKR': case 'NPR': return { min: 20000, max: 2_000_000_000 };
     case 'INR': return { min: 5000, max: 500_000_000 };
-    case 'BDT': return { min: 5000, max: 500_000_000 };
-    case 'LKR': return { min: 10000, max: 500_000_000 };
-    case 'AED': return { min: 500, max: 100_000_000 };
-    case 'SAR': case 'QAR': return { min: 500, max: 100_000_000 };
-    case 'GBP': case 'EUR': case 'USD': case 'CAD': case 'AUD':
+    case 'BDT': case 'LKR': return { min: 5000, max: 500_000_000 };
+    case 'NGN': return { min: 50000, max: 2_000_000_000 };
+    case 'IDR': return { min: 100000, max: 50_000_000_000 };
+    case 'AED': case 'SAR': case 'QAR': case 'OMR': case 'BHD': case 'KWD': case 'JOD':
+      return { min: 500, max: 100_000_000 };
+    case 'EGP': case 'KES': case 'GHS': case 'MXN': case 'BRL': case 'TRY': case 'ZAR':
+      return { min: 1000, max: 500_000_000 };
+    case 'GBP': case 'EUR': case 'USD': case 'CAD': case 'AUD': case 'NZD':
+    case 'SGD': case 'MYR': case 'CHF':
     default:
       return { min: 300, max: 50_000_000 };
   }
@@ -2323,6 +2377,42 @@ async function handleCollectListingsDetails(user, message) {
   const wd = { ...(user.metadata?.websiteData || {}) };
   const listings = Array.isArray(wd.listings) ? [...wd.listings] : [];
 
+  // If the previous turn saved a listing with unknown currency, treat this
+  // reply as the currency answer before doing anything else.
+  if (wd.awaitingCurrencyForListing && listings.length > 0) {
+    const detected = detectCurrency(raw, null);
+    const last = listings[listings.length - 1];
+    if (detected) {
+      last.currency = detected;
+      const reaskMsg = listings.length >= MAX_LISTINGS
+        ? null
+        : 'Send the next listing, or reply *done* to finish.';
+      const priceStr = formatPrice(last.price, last.currency);
+      const merged = { ...wd, listings, awaitingCurrencyForListing: false };
+      if (listings.length >= MAX_LISTINGS) {
+        merged.listingsDetailsDone = true;
+      }
+      await updateUserMetadata(user.id, { websiteData: merged });
+      user.metadata = { ...(user.metadata || {}), websiteData: merged };
+      const ack = `Got it — currency set to *${last.currency}* (${priceStr}).`;
+      if (reaskMsg) {
+        await sendTextMessage(user.phone_number, `${ack}\n\n${reaskMsg}`);
+        return STATES.WEB_COLLECT_LISTINGS_DETAILS;
+      }
+      await sendTextMessage(
+        user.phone_number,
+        `${ack}\n\nMax 3 reached — moving to photos.\n\n${questionForState(STATES.WEB_COLLECT_LISTINGS_PHOTOS, merged)}`
+      );
+      return STATES.WEB_COLLECT_LISTINGS_PHOTOS;
+    }
+    // Couldn't parse currency — re-ask
+    await sendTextMessage(
+      user.phone_number,
+      'What currency are the prices in? e.g. *USD*, *GBP*, *PKR*, *AED*, *EUR*, *INR*'
+    );
+    return STATES.WEB_COLLECT_LISTINGS_DETAILS;
+  }
+
   // Cross-field handling. Run BEFORE the listing-intent classifier below —
   // if the user is volunteering contact info ("phone is +123") or
   // correcting a prior field ("change name to X") at this step, those
@@ -2390,7 +2480,7 @@ async function handleCollectListingsDetails(user, message) {
   const listing = {
     address: parsed.address || 'Address on request',
     price: parsed.price || 0,
-    currency: parsed.currency || 'USD',
+    currency: parsed.currency || null, // null = unknown, will ask below
     beds: parsed.beds != null ? parsed.beds : 3,
     baths: parsed.baths != null ? parsed.baths : 2,
     sqft: parsed.sqft != null ? parsed.sqft : 1800,
@@ -2405,6 +2495,21 @@ async function handleCollectListingsDetails(user, message) {
   if (reachedMax) merged.listingsDetailsDone = true;
   await updateUserMetadata(user.id, { websiteData: merged });
   user.metadata = { ...(user.metadata || {}), websiteData: merged };
+
+  // Currency unknown — ask before proceeding
+  if (!listing.currency) {
+    merged.awaitingCurrencyForListing = true;
+    await updateUserMetadata(user.id, { websiteData: merged });
+    user.metadata = { ...(user.metadata || {}), websiteData: merged };
+    const priceRaw = listing.price ? listing.price.toLocaleString() : '—';
+    await logMessage(user.id, `Listing ${listings.length} captured (currency pending): ${listing.address} / ${priceRaw}`, 'assistant');
+    await sendTextMessage(
+      user.phone_number,
+      `Got it — *${listing.address}*, ${priceRaw}, ${listing.beds}bd/${listing.baths}ba.\n\nWhat currency are the prices in? e.g. *USD*, *GBP*, *PKR*, *AED*, *EUR*, *INR*`
+    );
+    return STATES.WEB_COLLECT_LISTINGS_DETAILS;
+  }
+
   const priceStr = formatPrice(listing.price, listing.currency);
   await logMessage(user.id, `Listing ${listings.length} captured: ${listing.address} / ${priceStr}`, 'assistant');
 

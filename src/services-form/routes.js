@@ -23,6 +23,21 @@ const { STATES } = require('../conversation/states');
 
 const router = express.Router();
 
+const CURRENCY_SYMBOLS = {
+  USD: '$',   CAD: 'CA$', BRL: 'R$',  MXN: 'MX$',
+  GBP: '£',   EUR: '€',   CHF: 'CHF ',TRY: '₺',
+  AED: 'AED ',SAR: 'SAR ',QAR: 'QAR ',KWD: 'KWD ',OMR: 'OMR ',BHD: 'BHD ',JOD: 'JD ', EGP: 'E£',
+  PKR: 'Rs ', INR: '₹',   BDT: '৳',   LKR: 'Rs ', NPR: 'Rs ',
+  AUD: 'A$',  NZD: 'NZ$', SGD: 'S$',  MYR: 'RM ',
+  ZAR: 'R ',  NGN: '₦',   KES: 'KSh ',GHS: 'GH₵',
+};
+const ALLOWED_CURRENCIES = new Set(Object.keys(CURRENCY_SYMBOLS));
+
+function sanitizeCurrency(raw) {
+  const code = (raw || 'USD').toString().trim().toUpperCase();
+  return ALLOWED_CURRENCIES.has(code) ? code : 'USD';
+}
+
 const PHOTO_MAX_BYTES = 10 * 1024 * 1024;
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -162,24 +177,28 @@ async function uploadPhoto(file, kind) {
   }
 }
 
-function parseSalonRows(rows) {
+function parseSalonRows(rows, currency) {
+  const symbol = CURRENCY_SYMBOLS[currency] || '$';
   const out = [];
   for (const row of rows) {
     const name = (row.name || '').toString().trim();
     if (!name) continue;
     const dur = parseInt(row.durationMinutes, 10);
-    const priceText = (row.priceText || '').toString().trim();
+    const amount = parseFloat(row.priceAmount);
+    const priceText = Number.isFinite(amount) && amount >= 0
+      ? `${symbol}${amount % 1 === 0 ? amount.toFixed(0) : amount.toFixed(2)}`
+      : '';
     out.push({
       name: name.slice(0, 80),
       durationMinutes: Number.isFinite(dur) && dur > 0 ? Math.min(dur, 480) : 30,
-      priceText: priceText.slice(0, 20) || '',
+      priceText: priceText.slice(0, 20),
       __photo: row.__photo || null,
     });
   }
   return out;
 }
 
-function parseRealEstateRows(rows) {
+function parseRealEstateRows(rows, currency) {
   const out = [];
   for (const row of rows.slice(0, 3)) {
     const address = (row.address || '').toString().trim();
@@ -194,7 +213,7 @@ function parseRealEstateRows(rows) {
     out.push({
       address: address.slice(0, 120),
       price: Number.isFinite(price) && price > 0 ? price : 0,
-      currency: 'USD',
+      currency,
       beds: Number.isFinite(beds) ? beds : 3,
       baths: Number.isFinite(baths) ? baths : 2,
       sqft: Number.isFinite(sqft) && sqft > 0 ? sqft : 1800,
@@ -354,8 +373,9 @@ router.post('/services-form/:token', upload.any(), async (req, res) => {
     }
 
     const isSalon = row.industry !== 'real_estate';
+    const currency = sanitizeCurrency(req.body?.currency);
     const rawRows = collectRows(req.body, req.files, isSalon ? 'services' : 'listings');
-    const parsed = isSalon ? parseSalonRows(rawRows) : parseRealEstateRows(rawRows);
+    const parsed = isSalon ? parseSalonRows(rawRows, currency) : parseRealEstateRows(rawRows, currency);
     if (parsed.length === 0) {
       return htmlResponse(res, 400, infoPage({
         title: 'Nothing submitted',

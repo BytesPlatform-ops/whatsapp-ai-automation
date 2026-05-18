@@ -28,8 +28,8 @@ const ADMIN_SECRET = (() => {
     'NOT secure. Set ADMIN_SECRET (32+ chars) before deploying.'
   );
   return 'wa-bot-admin-DEV-ONLY';
+   
 })();
-
 function makeToken(password) {
   return crypto.createHmac('sha256', ADMIN_SECRET).update(password).digest('hex');
 }

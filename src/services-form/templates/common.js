@@ -154,6 +154,15 @@ const BASE_STYLES = `
 
   .err{color:#DC2626;font-size:13px;margin-top:2px;font-weight:500}
 
+  .price-wrap{position:relative;display:flex;align-items:center}
+  .price-wrap .price-sym{
+    position:absolute;left:13px;
+    font-size:14px;font-weight:600;color:${BRAND.ink500};
+    pointer-events:none;user-select:none;
+  }
+  .price-wrap .price-num-input{padding-left:36px!important}
+  .price-wrap .price-num-input:focus{padding-left:36px!important}
+
   .footer{text-align:center;margin-top:32px;font-size:12px;color:${BRAND.ink400}}
   .footer a{color:${BRAND.ink500};text-decoration:none;font-weight:600}
   .footer a:hover{color:${BRAND.greenDark}}
@@ -204,4 +213,51 @@ function infoPage({ title, message, accent }) {
   return pageShell({ title, body });
 }
 
-module.exports = { escapeHtml, pageShell, infoPage };
+// Currency options shared by both forms. Symbol shown inline so the user
+// knows exactly what they're selecting without needing external knowledge.
+const CURRENCIES = [
+  // Americas
+  { code: 'USD', label: 'US Dollar',          sym: '$'    },
+  { code: 'CAD', label: 'Canadian Dollar',     sym: 'CA$'  },
+  { code: 'BRL', label: 'Brazilian Real',      sym: 'R$'   },
+  { code: 'MXN', label: 'Mexican Peso',        sym: 'MX$'  },
+  // Europe
+  { code: 'GBP', label: 'British Pound',       sym: '£'    },
+  { code: 'EUR', label: 'Euro',                sym: '€'    },
+  { code: 'CHF', label: 'Swiss Franc',         sym: 'CHF'  },
+  { code: 'TRY', label: 'Turkish Lira',        sym: '₺'    },
+  // Middle East
+  { code: 'AED', label: 'UAE Dirham',          sym: 'AED'  },
+  { code: 'SAR', label: 'Saudi Riyal',         sym: 'SAR'  },
+  { code: 'QAR', label: 'Qatari Riyal',        sym: 'QAR'  },
+  { code: 'KWD', label: 'Kuwaiti Dinar',       sym: 'KWD'  },
+  { code: 'OMR', label: 'Omani Rial',          sym: 'OMR'  },
+  { code: 'BHD', label: 'Bahraini Dinar',      sym: 'BHD'  },
+  { code: 'JOD', label: 'Jordanian Dinar',     sym: 'JD'   },
+  { code: 'EGP', label: 'Egyptian Pound',      sym: 'E£'   },
+  // South Asia
+  { code: 'PKR', label: 'Pakistani Rupee',     sym: 'Rs'   },
+  { code: 'INR', label: 'Indian Rupee',        sym: '₹'    },
+  { code: 'BDT', label: 'Bangladeshi Taka',    sym: '৳'    },
+  { code: 'LKR', label: 'Sri Lankan Rupee',    sym: 'Rs'   },
+  { code: 'NPR', label: 'Nepalese Rupee',      sym: 'Rs'   },
+  // Southeast Asia & Pacific
+  { code: 'AUD', label: 'Australian Dollar',   sym: 'A$'   },
+  { code: 'NZD', label: 'New Zealand Dollar',  sym: 'NZ$'  },
+  { code: 'SGD', label: 'Singapore Dollar',    sym: 'S$'   },
+  { code: 'MYR', label: 'Malaysian Ringgit',   sym: 'RM'   },
+  // Africa
+  { code: 'ZAR', label: 'South African Rand',  sym: 'R'    },
+  { code: 'NGN', label: 'Nigerian Naira',       sym: '₦'    },
+  { code: 'KES', label: 'Kenyan Shilling',      sym: 'KSh'  },
+  { code: 'GHS', label: 'Ghanaian Cedi',        sym: 'GH₵'  },
+];
+
+const CURRENCY_OPTIONS_HTML = CURRENCIES
+  .map((c) => `<option value="${c.code}">${c.code} – ${c.label} (${c.sym})</option>`)
+  .join('\n      ');
+
+// JS-safe map of code → symbol, embedded in form scripts.
+const CURRENCY_SYM_MAP_JS = '{' + CURRENCIES.map((c) => `'${c.code}':'${c.sym}'`).join(',') + '}';
+
+module.exports = { escapeHtml, pageShell, infoPage, CURRENCY_OPTIONS_HTML, CURRENCY_SYM_MAP_JS };

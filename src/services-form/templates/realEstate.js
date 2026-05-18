@@ -1,4 +1,4 @@
-const { pageShell, escapeHtml } = require('./common');
+const { pageShell, escapeHtml, CURRENCY_OPTIONS_HTML, CURRENCY_SYM_MAP_JS } = require('./common');
 
 function renderRealEstateForm({ token, businessName }) {
   const title = businessName
@@ -13,6 +13,12 @@ function renderRealEstateForm({ token, businessName }) {
 </div>
 
 <form id="services-form" method="POST" action="/services-form/${escapeHtml(token)}" enctype="multipart/form-data">
+  <div class="field-group" style="margin-bottom:1.5rem">
+    <label for="currency-select">Currency</label>
+    <select name="currency" id="currency-select" required>
+      ${CURRENCY_OPTIONS_HTML}
+    </select>
+  </div>
   <div id="rows"></div>
   <button type="button" class="add-btn" id="add-btn">+ Add another listing</button>
 
@@ -34,7 +40,7 @@ function renderRealEstateForm({ token, businessName }) {
     <input type="text" name="listings[__I__][address]" placeholder="45 Elm St" required maxlength="120">
     <div class="grid-2">
       <div>
-        <label>Price (number)</label>
+        <label>Price (<span class="price-sym">$</span>)</label>
         <input type="number" name="listings[__I__][price]" min="0" step="1000" placeholder="525000" required>
       </div>
       <div>
@@ -115,6 +121,15 @@ function renderRealEstateForm({ token, businessName }) {
 
   addBtn.addEventListener('click', addRow);
   addRow();
+
+  var symMap = ${CURRENCY_SYM_MAP_JS};
+  var currencySelect = document.getElementById('currency-select');
+  function updatePriceSymbols(){
+    var sym = symMap[currencySelect.value] || currencySelect.value;
+    document.querySelectorAll('.price-sym').forEach(function(el){ el.textContent = sym; });
+  }
+  currencySelect.addEventListener('change', updatePriceSymbols);
+  updatePriceSymbols();
 
   var form = document.getElementById('services-form');
   var errEl = document.getElementById('err');

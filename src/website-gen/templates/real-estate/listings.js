@@ -220,6 +220,7 @@ function generateListingsPage(c) {
     </div>`;
 
   // ─── Recently Sold strip (Tier 3 #10) — conditional on real data ────────
+  const defaultCurrency = (c.featuredListings && c.featuredListings[0] && c.featuredListings[0].currency) || null;
   const recentSales = Array.isArray(c.recentSales) ? c.recentSales.slice(0, 4) : [];
   const soldSection = recentSales.length ? `
     <section class="sold-section">
@@ -239,7 +240,7 @@ function generateListingsPage(c) {
               ${s.neighborhood ? `<div class="sold-neigh">${esc(s.neighborhood)}${s.soldOn ? ` &middot; ${esc(s.soldOn)}` : ''}</div>` : (s.soldOn ? `<div class="sold-neigh">${esc(s.soldOn)}</div>` : '')}
               <div class="sold-price-wrap">
                 <span class="sold-price-label">Sold for</span>
-                <div class="sold-price">${s.price ? esc(fmtMoney(s.price)) : '—'}</div>
+                <div class="sold-price">${s.price ? esc(fmtMoney(s.price, s.currency || defaultCurrency)) : '—'}</div>
               </div>
               ${(s.beds || s.baths || s.sqft) ? `<div class="sold-meta">
                 ${s.beds ? `<span>${esc(String(s.beds))} bd</span>` : ''}

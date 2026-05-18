@@ -1,4 +1,4 @@
-const { pageShell, escapeHtml } = require('./common');
+const { pageShell, escapeHtml, CURRENCY_OPTIONS_HTML, CURRENCY_SYM_MAP_JS } = require('./common');
 
 function renderSalonForm({ token, businessName }) {
   const title = businessName
@@ -13,6 +13,12 @@ function renderSalonForm({ token, businessName }) {
 </div>
 
 <form id="services-form" method="POST" action="/services-form/${escapeHtml(token)}" enctype="multipart/form-data">
+  <div class="field-group" style="margin-bottom:1.5rem">
+    <label for="currency-select">Currency</label>
+    <select name="currency" id="currency-select" required>
+      ${CURRENCY_OPTIONS_HTML}
+    </select>
+  </div>
   <div id="rows"></div>
   <button type="button" class="add-btn" id="add-btn">+ Add another service</button>
 
@@ -39,7 +45,10 @@ function renderSalonForm({ token, businessName }) {
       </div>
       <div>
         <label>Price</label>
-        <input type="text" name="services[__I__][priceText]" placeholder="$45" required maxlength="20">
+        <div class="price-wrap">
+          <span class="price-sym">$</span>
+          <input type="number" name="services[__I__][priceAmount]" min="0" step="0.01" placeholder="45" required class="price-num-input">
+        </div>
       </div>
     </div>
     <div>
@@ -103,6 +112,15 @@ function renderSalonForm({ token, businessName }) {
 
   addBtn.addEventListener('click', addRow);
   addRow();
+
+  var symMap = ${CURRENCY_SYM_MAP_JS};
+  var currencySelect = document.getElementById('currency-select');
+  function updatePriceSymbols(){
+    var sym = symMap[currencySelect.value] || currencySelect.value;
+    document.querySelectorAll('.price-sym').forEach(function(el){ el.textContent = sym; });
+  }
+  currencySelect.addEventListener('change', updatePriceSymbols);
+  updatePriceSymbols();
 
   var form = document.getElementById('services-form');
   var errEl = document.getElementById('err');
