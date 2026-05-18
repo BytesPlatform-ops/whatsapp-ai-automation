@@ -19,6 +19,7 @@ const {
   extractIndustry,
   extractServices,
   extractPricesByService,
+  extractDurationsByService,
 } = require('../entityAccumulator');
 const { isDelegation, classifyDelegation } = require('../../config/smartDefaults');
 const { localize } = require('../../utils/localizer');
@@ -228,7 +229,7 @@ async function offerServicesForm(user, kind, opts = {}) {
   }
   const url = buildFormUrl(token);
   const offerBody = kind === 'salon'
-    ? `Quick choice — easier in chat or in a quick form?\n\n📋 Open the form: ${url}\n\nOr just type your services here (e.g. *Haircut $40, Color $120, Manicure $30…*).\nReply *chat* if you'd rather type them out one by one.`
+    ? `Quick choice — easier in chat or in a quick form?\n\n📋 Open the form: ${url}\n\nOr just type your services here (e.g. *Haircut 30min $40, Color 90min $120, Manicure 45min $30…*).\nReply *chat* if you'd rather type them out one by one.`
     : `Quick choice — easier in chat or in a quick form?\n\n📋 Open the form: ${url}\n\nOr reply *yes* to send your listings here in chat, *skip* to use placeholder listings, or *chat* to switch to typing them out.`;
   const intro = prefixAck ? `${prefixAck}\n\n${offerBody}` : offerBody;
 
@@ -632,6 +633,7 @@ const SUMMARY_REQUEST_STATES = new Set([
   STATES.WEB_COLLECT_PROJECTS_ASK,
   STATES.WEB_COLLECT_PROJECTS_DETAILS,
   STATES.WEB_COLLECT_PROJECTS_PHOTOS,
+  STATES.SALON_CURRENCY,
   STATES.SALON_BOOKING_TOOL,
   STATES.SALON_HOURS,
   STATES.SALON_SERVICE_DURATIONS,
@@ -701,6 +703,8 @@ async function handleWebDev(user, message) {
       return STATES.WEB_COLLECT_CONTACT;
     case STATES.WEB_COLLECT_LOGO:
       return handleCollectLogo(user, message);
+    case STATES.SALON_CURRENCY:
+      return handleSalonCurrency(user, message);
     case STATES.SALON_BOOKING_TOOL:
       return handleSalonBookingTool(user, message);
     case STATES.SALON_HOURS:
@@ -1440,24 +1444,30 @@ async function handleCollectServices(user, message) {
   const skipped = services.length === 0;
   const websiteData = { ...wd, services, ...colors };
 
-  // Salon-specific: if the user listed prices alongside service names
-  // ("Haircut $40, Color $120, Manicure $30"), capture those into
-  // salonServices so the durations step doesn't redundantly re-ask
-  // for prices. durationMinutes stays 0 (not asked yet) so
-  // isSalonServicesComplete still routes through SALON_SERVICE_DURATIONS;
-  // the durations prompt and parser preserve the pre-captured priceText.
+  // Salon-specific: if the user listed prices and/or durations alongside
+  // service names ("Haircut 30min $40, Color 90min $120, Manicure 45min $30"),
+  // capture both so the durations step is skipped (or only asks for what's
+  // missing). Both extractions run in parallel to keep latency low.
   if (!skipped && isSalonIndustry(industry)) {
     try {
-      const pricesByName = await extractPricesByService(servicesText, services, user.id);
-      if (pricesByName && Object.keys(pricesByName).length > 0) {
-        const seeded = services.map((s) => {
-          const price = pricesByName[s] || '';
-          return { name: s, durationMinutes: 0, priceText: price, addressed: false };
-        });
+      const [pricesByName, durationsByName] = await Promise.all([
+        extractPricesByService(servicesText, services, user.id),
+        extractDurationsByService(servicesText, services, user.id),
+      ]);
+      const hasPrices = pricesByName && Object.keys(pricesByName).length > 0;
+      const hasDurations = durationsByName && Object.keys(durationsByName).length > 0;
+      if (hasPrices || hasDurations) {
+        const seeded = services.map((s) => ({
+          name: s,
+          durationMinutes: (hasDurations && durationsByName[s]) ? durationsByName[s] : 0,
+          priceText: (hasPrices && pricesByName[s]) ? pricesByName[s] : '',
+          addressed: false,
+        }));
         websiteData.salonServices = seeded;
+        websiteData.salonHasPrices = hasPrices;
       }
     } catch (err) {
-      logger.warn(`[WEBDEV] extractPricesByService threw: ${err.message}`);
+      logger.warn(`[WEBDEV] salon service detail extraction threw: ${err.message}`);
     }
   }
 
@@ -1469,7 +1479,23 @@ async function handleCollectServices(user, message) {
     'assistant'
   );
 
-  if (isSalonIndustry(industry)) return startSalonFlow(user);
+  if (isSalonIndustry(industry)) {
+    // If prices were captured, ask for currency before proceeding so the
+    // website always shows the correct symbol (£, $, Rs, AED, etc.).
+    if (websiteData.salonHasPrices) {
+      const ack = `Got it — *${services.slice(0, 4).join(', ')}${services.length > 4 ? '…' : ''}*.`;
+      await sendTextMessage(
+        user.phone_number,
+        await dynamicPhrase(
+          `${ack}\n\nWhat currency are your prices in? (e.g. *USD $*, *GBP £*, *PKR Rs*, *AED*, *EUR €*, *INR ₹*)`,
+          user,
+          message.text || ''
+        )
+      );
+      return STATES.SALON_CURRENCY;
+    }
+    return startSalonFlow(user);
+  }
 
   const ack = skipped
     ? "No worries, we'll use a sensible default."
@@ -2728,6 +2754,49 @@ function isSalonServicesComplete(wd) {
   });
 }
 
+// Currency symbols used to format priceText after user picks their currency.
+const SALON_CURRENCY_SYMBOLS = {
+  USD: '$', GBP: '£', EUR: '€', PKR: 'Rs ', INR: '₹',
+  AED: 'AED ', SAR: 'SAR ', QAR: 'QAR ', KWD: 'KWD ', OMR: 'OMR ', BHD: 'BHD ', JOD: 'JD ', EGP: 'E£',
+  BDT: '৳', LKR: 'Rs ', NPR: 'Rs ', CAD: 'CA$', AUD: 'A$', NZD: 'NZ$', SGD: 'S$', MYR: 'RM ',
+  BRL: 'R$', MXN: 'MX$', CHF: 'CHF ', TRY: '₺', ZAR: 'R ', NGN: '₦', KES: 'KSh ', GHS: 'GH₵',
+};
+
+async function handleSalonCurrency(user, message) {
+  const raw = (message.text || '').trim();
+  const wd = { ...(user.metadata?.websiteData || {}) };
+  const currency = detectCurrency(raw, wd.primaryCity);
+
+  if (!currency) {
+    await sendTextMessage(
+      user.phone_number,
+      await dynamicPhrase(
+        'Which currency? Just type the code or symbol — e.g. *USD*, *GBP*, *PKR*, *AED*, *EUR*, *INR*',
+        user, raw
+      )
+    );
+    return STATES.SALON_CURRENCY;
+  }
+
+  // Prefix all captured priceTexts with the currency symbol if they don't
+  // already have one (bare numbers like "40" → "Rs 40").
+  const sym = SALON_CURRENCY_SYMBOLS[currency] || `${currency} `;
+  const services = Array.isArray(wd.salonServices) ? wd.salonServices : [];
+  const updatedServices = services.map((s) => {
+    const pt = String(s.priceText || '').trim();
+    if (!pt) return s;
+    // Already has a non-numeric prefix — leave as-is.
+    if (/[^0-9.,\s]/.test(pt.charAt(0))) return s;
+    return { ...s, priceText: `${sym}${pt}` };
+  });
+
+  const merged = { ...wd, salonServices: updatedServices, salonCurrency: currency, salonHasPrices: false };
+  await updateUserMetadata(user.id, { websiteData: merged });
+  user.metadata = { ...(user.metadata || {}), websiteData: merged };
+  await logMessage(user.id, `Salon currency set: ${currency}`, 'assistant');
+  return startSalonFlow(user);
+}
+
 async function startSalonFlow(user) {
   // Mark this site as using the salon template so the deployer picks the salon renderer.
   const siteId = user.metadata?.currentSiteId;
@@ -3048,7 +3117,7 @@ async function handleSalonHours(user, message) {
   } else {
     fullMsg = prefix +
       `How long does each service take, and what's the price?\n\n` +
-      `Example: *"Haircut 30min €25, Colour 90min €85, Nails 45min €35"*.\n\n` +
+      `Example: *"Haircut 30min $40, Color 90min $120, Manicure 45min $30"* — use your own currency symbol (£, €, Rs, AED, etc.).\n\n` +
       `Your services: ${services.join(', ')}.\n\n` +
       `Or just reply *default* to use 30min with no price.`;
   }

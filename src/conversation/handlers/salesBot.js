@@ -474,6 +474,19 @@ async function handleSalesBot(user, message) {
     const ind = (m[1] || adIndustry || 'generic').toLowerCase();
     if (!sampleImageIndustries.includes(ind)) sampleImageIndustries.push(ind);
   }
+  // Fallback: if the LLM included a known demo URL but forgot the tag,
+  // detect the URL and add the matching industry so the image still sends.
+  const DEMO_URL_INDUSTRY = {
+    'blushbar.pixiebot.co': 'salon',
+    'austinclimate.pixiebot.co': 'hvac',
+    'sarahmitchell.pixiebot.co': 'real_estate',
+    'bytecoffee.pixiebot.co': 'generic',
+  };
+  for (const [host, ind] of Object.entries(DEMO_URL_INDUSTRY)) {
+    if (cleanText.includes(host) && !sampleImageIndustries.includes(ind)) {
+      sampleImageIndustries.push(ind);
+    }
+  }
 
   // Internal-signal tag from the INPUT SAFETY section of the prompt. The
   // LLM appends [SECURITY_FLAGS: <comma,labels>] when it detects injection

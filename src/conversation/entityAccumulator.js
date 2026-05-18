@@ -358,11 +358,12 @@ async function extractPricesByService(userReply, services, userId) {
 
 Their original reply was: "${raw.slice(0, 600)}"
 
-Did they include a price for any of these services in their reply? Extract per-service prices ONLY when explicitly stated. Return ONLY JSON: {"prices": {"<service name from the list>": "<price text the user wrote, with currency symbol>", ...}}
+Did they include a price for any of these services in their reply? Extract per-service prices ONLY when explicitly stated. Return ONLY JSON: {"prices": {"<service name from the list>": "<price text the user wrote>", ...}}
 
 Rules:
 - Keys MUST exactly match service names from the list (case-sensitive).
-- Values keep the user's original currency symbol and amount ("$40", "€120", "Rs 500", "120 dollars").
+- Values keep the user's original text — with OR without a currency symbol ("$40", "€120", "Rs 500", "120 dollars", "40", "120").
+- Bare numbers without a symbol (e.g. "Haircut 40, Color 120") ARE valid — capture them as-is ("40", "120").
 - ONLY include services where a price is clearly attached to that service. If the user wrote "Haircut $40, Color, Manicure $30", emit {"Haircut": "$40", "Manicure": "$30"} — omit "Color" (no price stated).
 - If no prices were stated at all, return {"prices": {}}.
 - Never invent or guess prices.`;
@@ -387,6 +388,51 @@ Rules:
     return out;
   } catch (err) {
     logger.warn(`[ENTITY-ACC] extractPricesByService failed: ${err.message}`);
+    return {};
+  }
+}
+
+/**
+ * Salon-specific: extract service durations from an inline reply like
+ * "Haircut 30min $40, Color 90min $120". Returns { [serviceName]: minutes }
+ * for services where a duration was clearly stated; 0 for the rest.
+ * Falls back to an empty map on failure — caller treats 0 as "not provided".
+ */
+async function extractDurationsByService(userReply, services, userId) {
+  const raw = String(userReply || '').trim();
+  if (!raw || !Array.isArray(services) || services.length === 0) return {};
+
+  const prompt = `A salon owner listed their services as: ${JSON.stringify(services)}
+
+Their original reply was: "${raw.slice(0, 600)}"
+
+Did they include a duration for any of these services? Extract per-service durations ONLY when explicitly stated. Return ONLY JSON: {"durations": {"<service name from the list>": <integer minutes>, ...}}
+
+Rules:
+- Keys MUST exactly match service names from the list (case-sensitive).
+- Values are integers (minutes). Convert: "30min"→30, "1hr"→60, "1.5hr"→90, "half hour"→30, "45 minutes"→45.
+- ONLY include services where a duration is clearly stated. Omit services with no duration.
+- If no durations were stated at all, return {"durations": {}}.
+- Never invent or guess durations.`;
+
+  try {
+    const response = await generateResponse(
+      prompt,
+      [{ role: 'user', content: raw }],
+      { userId, operation: 'services_durations_extract', timeoutMs: 8_000 }
+    );
+    const match = String(response || '').match(/\{[\s\S]*\}/);
+    if (!match) return {};
+    const parsed = JSON.parse(match[0]);
+    const durations = (parsed && typeof parsed.durations === 'object') ? parsed.durations : {};
+    const out = {};
+    for (const k of Object.keys(durations)) {
+      const v = parseInt(durations[k], 10);
+      if (Number.isFinite(v) && v > 0 && v <= 480) out[k] = v;
+    }
+    return out;
+  } catch (err) {
+    logger.warn(`[ENTITY-ACC] extractDurationsByService failed: ${err.message}`);
     return {};
   }
 }
@@ -471,6 +517,7 @@ module.exports = {
   extractIndustry,
   extractServices,
   extractPricesByService,
+  extractDurationsByService,
   getSharedBusinessContext,
   inferIndustryFromBusinessName,
 };
