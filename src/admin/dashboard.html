@@ -147,6 +147,18 @@
           </div>
           <div class="flex items-center gap-2">
             <button id="translate-btn" onclick="toggleTranslate()" class="hidden px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-300 hover:bg-gray-50 transition" title="Translate to English">🌐 Translate</button>
+            <button id="modal-fav-btn" onclick="toggleFavorite(currentConvUserId, event)" title="Toggle favourite" style="font-size:1.4rem;line-height:1;background:none;border:none;cursor:pointer;color:#6b7280;padding:4px 4px;" aria-label="Favourite">&#9734;</button>
+            <!-- Download dropdown -->
+            <div class="relative" id="dl-dropdown-wrap">
+              <button onclick="toggleDownloadMenu()" class="px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-300 hover:bg-gray-50 transition" title="Download conversation">&#8681; Download</button>
+              <div id="dl-dropdown" class="hidden absolute right-0 mt-1 w-52 bg-white border border-gray-200 rounded-xl shadow-lg z-50 overflow-hidden text-sm">
+                <button onclick="downloadConversation('txt', false)" class="w-full text-left px-4 py-2.5 hover:bg-gray-50 flex items-center gap-2">📄 <span>Download as TXT</span></button>
+                <button onclick="downloadConversation('txt', true)" class="w-full text-left px-4 py-2.5 hover:bg-gray-50 flex items-center gap-2">📄 <span>TXT + Summary</span></button>
+                <div class="border-t border-gray-100"></div>
+                <button onclick="downloadConversation('pdf', false)" class="w-full text-left px-4 py-2.5 hover:bg-gray-50 flex items-center gap-2">📑 <span>Download as PDF</span></button>
+                <button onclick="downloadConversation('pdf', true)" class="w-full text-left px-4 py-2.5 hover:bg-gray-50 flex items-center gap-2">📑 <span>PDF + Summary</span></button>
+              </div>
+            </div>
             <button onclick="closeConvModal()" class="p-2 hover:bg-gray-100 rounded-lg">
               <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
             </button>
@@ -592,6 +604,35 @@ function filterLeads() {
 // ─── Conversations ─────────────────────────────
 var convChannelFilter = 'all';
 var convTypeFilter = 'all'; // 'all' | 'ai' | 'manual'
+var convShowFavoritesOnly = false;
+
+// ─── Favorites (localStorage) ──────────────────
+var favoritesSet = (function() {
+  try { return new Set(JSON.parse(localStorage.getItem('pixie_fav_convs') || '[]')); }
+  catch(e) { return new Set(); }
+})();
+function saveFavorites() {
+  try { localStorage.setItem('pixie_fav_convs', JSON.stringify(Array.from(favoritesSet))); } catch(e) {}
+}
+function isFavorite(userId) { return favoritesSet.has(userId); }
+function toggleFavorite(userId, ev) {
+  ev && ev.stopPropagation();
+  if (favoritesSet.has(userId)) favoritesSet.delete(userId);
+  else favoritesSet.add(userId);
+  saveFavorites();
+  // Update the star on the current row without full re-render
+  var btn = document.getElementById('fav-btn-' + userId);
+  if (btn) btn.innerHTML = isFavorite(userId) ? '&#9733;' : '&#9734;';
+  if (btn) btn.title = isFavorite(userId) ? 'Remove from favourites' : 'Add to favourites';
+  if (btn) btn.style.color = isFavorite(userId) ? '#f59e0b' : '#9ca3af';
+  // Also update the star in the open modal header if this is the open convo
+  if (currentConvUserId === userId) {
+    var mBtn = document.getElementById('modal-fav-btn');
+    if (mBtn) { mBtn.innerHTML = isFavorite(userId) ? '&#9733;' : '&#9734;'; mBtn.style.color = isFavorite(userId) ? '#f59e0b' : '#6b7280'; }
+  }
+  // If we're in favorites-only mode and just un-favourited, re-render
+  if (convShowFavoritesOnly) renderConversations(leadsData);
+}
 
 function channelIcon(channel) {
   if (channel === 'messenger') return '<span class="inline-block w-5 h-5 rounded-full bg-blue-100 text-blue-600 text-[10px] font-bold flex items-center justify-center" title="Messenger">M</span>';
@@ -626,8 +667,12 @@ function convListItems(leads) {
     if (convChannelFilter !== 'all' && (l.channel || 'whatsapp') !== convChannelFilter) return false;
     if (convTypeFilter === 'manual' && !l.has_manual) return false;
     if (convTypeFilter === 'ai' && l.has_manual) return false;
+    if (convShowFavoritesOnly && !isFavorite(l.id)) return false;
     return true;
   }).sort(function(a, b) {
+    // Favourites float to the top
+    var fa = isFavorite(a.id) ? 1 : 0, fb = isFavorite(b.id) ? 1 : 0;
+    if (fb !== fa) return fb - fa;
     var ta = a.last_message_at ? new Date(a.last_message_at).getTime() : 0;
     var tb = b.last_message_at ? new Date(b.last_message_at).getTime() : 0;
     return tb - ta;
@@ -666,6 +711,9 @@ function convListItems(leads) {
         windowDot = '<span class="inline-block w-2 h-2 rounded-full bg-gray-300" title="No inbound yet from this user"></span>';
       }
     }
+    var favColor = isFavorite(l.id) ? '#f59e0b' : '#9ca3af';
+    var favTitle = isFavorite(l.id) ? 'Remove from favourites' : 'Add to favourites';
+    var favStar = isFavorite(l.id) ? '&#9733;' : '&#9734;';
     return '<div class="rounded-xl ' + rowClasses + ' p-4 flex items-center justify-between transition-colors cursor-pointer" onclick="openConversation(\'' + l.id + '\', \'' + esc(l.phone_number) + '\', \'' + esc(l.name || '') + '\')">' +
       '<div class="flex items-center gap-4">' +
         '<div class="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-bold text-sm">' + (l.name ? l.name[0].toUpperCase() : '#') + '</div>' +
@@ -674,9 +722,12 @@ function convListItems(leads) {
           '<p class="text-xs text-gray-500">' + esc(l.phone_number) + ' &middot; ' + l.message_count + ' messages</p>' +
         '</div>' +
       '</div>' +
-      '<div class="text-right">' +
-        stateBadge(l.state) +
-        '<p class="text-xs text-gray-400 mt-1">' + timeAgo(l.last_message_at) + '</p>' +
+      '<div class="flex items-center gap-3">' +
+        '<button id="fav-btn-' + l.id + '" onclick="toggleFavorite(\'' + l.id + '\', event)" title="' + favTitle + '" style="color:' + favColor + ';font-size:1.25rem;line-height:1;background:none;border:none;cursor:pointer;padding:4px 2px;" aria-label="Favourite">' + favStar + '</button>' +
+        '<div class="text-right">' +
+          stateBadge(l.state) +
+          '<p class="text-xs text-gray-400 mt-1">' + timeAgo(l.last_message_at) + '</p>' +
+        '</div>' +
       '</div>' +
     '</div>';
   }).join('');
@@ -731,6 +782,7 @@ function renderConversations(leads) {
       '<button onclick="setConvType(\'all\')" class="' + typeTabClass('all') + '">All <span class="ml-1 opacity-75">(' + tCounts.all + ')</span></button>' +
       '<button onclick="setConvType(\'ai\')" class="' + typeTabClass('ai') + '">🤖 AI Only <span class="ml-1 opacity-75">(' + tCounts.ai + ')</span></button>' +
       '<button onclick="setConvType(\'manual\')" class="' + typeTabClass('manual') + '">✋ Manual <span class="ml-1 opacity-75">(' + tCounts.manual + ')</span></button>' +
+      '<button onclick="toggleFavoritesFilter()" class="' + (convShowFavoritesOnly ? 'px-3 py-1.5 text-xs font-semibold rounded-md bg-amber-400 text-white shadow-sm' : 'px-3 py-1.5 text-xs font-semibold rounded-md bg-white text-gray-600 border hover:bg-gray-50') + '">&#9733; Favourites</button>' +
     '</div>' +
     '<input id="conv-search" type="text" placeholder="Search by phone or name..." class="px-3 py-2 border rounded-lg text-sm w-full sm:w-80 mb-4" oninput="filterConvList()">' +
     '<div id="conv-list" class="grid gap-3">' + convListItems(leads) + '</div>' +
@@ -747,6 +799,11 @@ function setConvType(t) {
   renderConversations(leadsData);
 }
 
+function toggleFavoritesFilter() {
+  convShowFavoritesOnly = !convShowFavoritesOnly;
+  renderConversations(leadsData);
+}
+
 function filterConvList() {
   var s = document.getElementById('conv-search').value.toLowerCase();
   var filtered = leadsData.filter(function(l) {
@@ -754,6 +811,7 @@ function filterConvList() {
     if (convChannelFilter !== 'all' && (l.channel || 'whatsapp') !== convChannelFilter) return false;
     if (convTypeFilter === 'manual' && !l.has_manual) return false;
     if (convTypeFilter === 'ai' && l.has_manual) return false;
+    if (convShowFavoritesOnly && !isFavorite(l.id)) return false;
     return l.phone_number.toLowerCase().indexOf(s) !== -1 || (l.name || '').toLowerCase().indexOf(s) !== -1;
   });
   document.getElementById('conv-list').innerHTML = convListItems(filtered);
@@ -804,6 +862,9 @@ function openConversation(userId, phone, name) {
   modal.classList.add('flex');
   document.getElementById('conv-modal-title').textContent = name || phone;
   document.getElementById('conv-modal-subtitle').textContent = phone;
+  // Sync favourite star in modal header
+  var mBtn = document.getElementById('modal-fav-btn');
+  if (mBtn) { mBtn.innerHTML = isFavorite(userId) ? '&#9733;' : '&#9734;'; mBtn.style.color = isFavorite(userId) ? '#f59e0b' : '#6b7280'; }
   document.getElementById('conv-modal-body').innerHTML = '<div class="flex justify-center py-8"><div class="loader"></div></div>';
   var replyEl = document.getElementById('admin-reply-input');
   replyEl.value = '';
@@ -1276,6 +1337,125 @@ function closeConvModal() {
   // Hide translate button so it doesn't flash before the next modal opens.
   var tBtn = document.getElementById('translate-btn');
   if (tBtn) tBtn.classList.add('hidden');
+  // Close download menu if open
+  var dd = document.getElementById('dl-dropdown');
+  if (dd) dd.classList.add('hidden');
+}
+
+// ─── Download dropdown ─────────────────────────
+function toggleDownloadMenu() {
+  var dd = document.getElementById('dl-dropdown');
+  if (dd) dd.classList.toggle('hidden');
+}
+// Close dropdown when clicking outside it
+document.addEventListener('click', function(e) {
+  var wrap = document.getElementById('dl-dropdown-wrap');
+  if (wrap && !wrap.contains(e.target)) {
+    var dd = document.getElementById('dl-dropdown');
+    if (dd) dd.classList.add('hidden');
+  }
+});
+
+// ─── Download conversation ─────────────────────
+function downloadConversation(format, includeSummary) {
+  var dd = document.getElementById('dl-dropdown');
+  if (dd) dd.classList.add('hidden');
+
+  var msgs = lastConvMessages;
+  if (!msgs || !msgs.length) { alert('No messages to download.'); return; }
+
+  var titleEl = document.getElementById('conv-modal-title');
+  var subtitleEl = document.getElementById('conv-modal-subtitle');
+  var convName = (titleEl ? titleEl.textContent : '') || 'Conversation';
+  var convPhone = (subtitleEl ? subtitleEl.textContent : '') || '';
+  var now = new Date().toLocaleString();
+
+  // Lead brief from cached leads row
+  function getBrief() {
+    var lead = leadsData && leadsData.find(function(l) { return l.id === currentConvUserId; });
+    return (lead && lead.lead_brief) || null;
+  }
+
+  // ── TXT ──────────────────────────────────────
+  if (format === 'txt') {
+    var lines = [];
+    lines.push('Conversation: ' + convName + ' (' + convPhone + ')');
+    lines.push('Exported: ' + now);
+    lines.push('');
+    if (includeSummary) {
+      var brief = getBrief();
+      lines.push('── Lead Summary ──');
+      lines.push(brief || '(No summary available for this conversation)');
+      lines.push('');
+    }
+    msgs.forEach(function(m) {
+      if (m.role === 'system') {
+        lines.push('── ' + (m.message_text || 'system') + ' ──');
+      } else {
+        var who = m.role === 'user' ? (convName || convPhone) : 'Pixie';
+        var ts = m.created_at ? new Date(m.created_at).toLocaleString() : '';
+        lines.push('[' + ts + '] ' + who + ':');
+        lines.push(m.message_text || '(media)');
+      }
+      lines.push('');
+    });
+    var blob = new Blob([lines.join('\n')], { type: 'text/plain;charset=utf-8' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = (convPhone || 'conversation').replace(/[^a-z0-9+]/gi, '_') + '_' + new Date().toISOString().slice(0,10) + '.txt';
+    a.click();
+    setTimeout(function() { URL.revokeObjectURL(url); }, 2000);
+    return;
+  }
+
+  // ── PDF (print-to-PDF via new window) ────────
+  if (format === 'pdf') {
+    var html = '<!DOCTYPE html><html><head><meta charset="utf-8">' +
+      '<title>' + esc(convName) + ' — Pixie Chat</title>' +
+      '<style>' +
+        'body{font-family:system-ui,sans-serif;font-size:13px;color:#111;padding:32px;max-width:720px;margin:0 auto}' +
+        'h1{font-size:18px;margin-bottom:4px}' +
+        '.meta{color:#666;font-size:11px;margin-bottom:24px}' +
+        '.summary{background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:14px 16px;margin-bottom:24px;font-size:12px;white-space:pre-wrap;word-break:break-word}' +
+        '.summary h2{font-size:13px;font-weight:600;margin:0 0 8px}' +
+        '.bubble{border-radius:12px;padding:9px 13px;margin-bottom:10px;max-width:78%;font-size:12.5px;line-height:1.55;white-space:pre-wrap;word-break:break-word}' +
+        '.user{background:#e0e7ff;margin-right:auto}' +
+        '.bot{background:#f3f4f6;margin-left:auto}' +
+        '.ts{font-size:10px;color:#9ca3af;margin-top:3px}' +
+        '.divider{text-align:center;color:#9ca3af;font-size:10px;text-transform:uppercase;letter-spacing:.05em;margin:16px 0;border-top:1px solid #e5e7eb;padding-top:8px}' +
+        '@media print{body{padding:16px}}' +
+      '</style></head><body>' +
+      '<h1>' + esc(convName) + '</h1>' +
+      '<p class="meta">' + esc(convPhone) + ' &nbsp;·&nbsp; Exported ' + esc(now) + '</p>';
+
+    if (includeSummary) {
+      var brief2 = getBrief();
+      html += '<div class="summary"><h2>Lead Summary</h2>' +
+        esc(brief2 || 'No summary available for this conversation') + '</div>';
+    }
+
+    msgs.forEach(function(m) {
+      if (m.role === 'system') {
+        html += '<div class="divider">' + esc(m.message_text || 'system') + '</div>';
+        return;
+      }
+      var isUser = m.role === 'user';
+      var ts = m.created_at ? new Date(m.created_at).toLocaleString() : '';
+      html += '<div class="bubble ' + (isUser ? 'user' : 'bot') + '">' +
+        '<div>' + esc(m.message_text || '(media)') + '</div>' +
+        '<div class="ts">' + esc(isUser ? (convName || convPhone) : 'Pixie') + (ts ? ' · ' + esc(ts) : '') + '</div>' +
+        '</div>';
+    });
+    html += '</body></html>';
+
+    var win = window.open('', '_blank', 'width=780,height=900');
+    if (!win) { alert('Pop-up blocked — allow popups for this page to use PDF download.'); return; }
+    win.document.write(html);
+    win.document.close();
+    win.focus();
+    setTimeout(function() { win.print(); }, 400);
+  }
 }
 
 // Auto-grow the reply textarea up to the CSS max-height (Tailwind max-h-40 → 10rem).
