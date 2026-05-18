@@ -1480,19 +1480,37 @@ async function handleCollectServices(user, message) {
   );
 
   if (isSalonIndustry(industry)) {
-    // If prices were captured, ask for currency before proceeding so the
-    // website always shows the correct symbol (£, $, Rs, AED, etc.).
     if (websiteData.salonHasPrices) {
-      const ack = `Got it — *${services.slice(0, 4).join(', ')}${services.length > 4 ? '…' : ''}*.`;
-      await sendTextMessage(
-        user.phone_number,
-        await dynamicPhrase(
-          `${ack}\n\nWhat currency are your prices in? (e.g. *USD $*, *GBP £*, *PKR Rs*, *AED*, *EUR €*, *INR ₹*)`,
-          user,
-          message.text || ''
-        )
-      );
-      return STATES.SALON_CURRENCY;
+      // Try to detect currency from the raw services text first.
+      // If user wrote "$40" or "£120" or "Rs 500" it's already clear — no need to ask.
+      const detectedCurrency = detectCurrency(servicesText, websiteData.primaryCity);
+      if (detectedCurrency) {
+        // Currency is unambiguous — store it and skip the question.
+        const sym = SALON_CURRENCY_SYMBOLS[detectedCurrency] || `${detectedCurrency} `;
+        const seeded = (websiteData.salonServices || []).map((s) => {
+          const pt = String(s.priceText || '').trim();
+          // Only prefix if price is a bare number (no non-numeric leading char)
+          if (pt && /^[0-9]/.test(pt)) return { ...s, priceText: `${sym}${pt}` };
+          return s;
+        });
+        websiteData.salonServices = seeded;
+        websiteData.salonCurrency = detectedCurrency;
+        websiteData.salonHasPrices = false;
+        await updateUserMetadata(user.id, { websiteData });
+        user.metadata = { ...(user.metadata || {}), websiteData };
+      } else {
+        // Currency ambiguous — ask once.
+        const ack = `Got it — *${services.slice(0, 4).join(', ')}${services.length > 4 ? '…' : ''}*.`;
+        await sendTextMessage(
+          user.phone_number,
+          await dynamicPhrase(
+            `${ack}\n\nWhat currency are your prices in? (e.g. *USD $*, *GBP £*, *PKR Rs*, *AED*, *EUR €*, *INR ₹*)`,
+            user,
+            message.text || ''
+          )
+        );
+        return STATES.SALON_CURRENCY;
+      }
     }
     return startSalonFlow(user);
   }

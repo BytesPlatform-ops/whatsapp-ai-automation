@@ -1,4 +1,4 @@
-const { pageShell, escapeHtml, buildCurrencyDropdown, CURRENCY_DROPDOWN_JS, CURRENCY_SYM_MAP_JS } = require('./common');
+const { pageShell, escapeHtml, buildCurrencyDropdown, CURRENCY_DROPDOWN_JS } = require('./common');
 
 function renderSalonForm({ token, businessName }) {
   const title = businessName
