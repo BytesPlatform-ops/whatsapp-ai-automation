@@ -3942,77 +3942,44 @@ async function handleCollectProjectsPhotos(user, message) {
  * Parse a free-text contact blob into { contactEmail, contactPhone, contactAddress }.
  * Handles both labeled input ("email: x, phone: y, address: z") and unlabeled input.
  */
-function parseContactFields(text) {
-  const emailMatch = text.match(/[\w.-]+@[\w.-]+\.\w{2,}/);
-  const phoneMatch = text.match(/[\+]?[\d][\d\s\-()]{6,}/);
+async function parseContactFields(text, userId) {
+  const prompt = `Extract contact information from this message. Return ONLY JSON.
 
-  // Try labeled address first — handles "address: 123 Main St" on its own line or inline.
-  // Stops at the next known label word (with OR without a colon) or end of
-  // string, so prose like "address is X email Y@Z.com phone 555" splits
-  // cleanly into the three fields instead of collapsing into the address.
-  const labeledAddressMatch = text.match(
-    /(?:address|location|addr)\s*[:\-=]?\s*([^\n]+?)(?=\s*(?:email|e-?mail|phone|tel|mobile|contact)\b|$)/i
-  );
+Message: "${String(text || '').slice(0, 400)}"
 
-  // Clean a captured address: strip a leading copula/separator that sneaks in
-  // when the user writes prose ("the address is ABC, Street" captures "is
-  // ABC, Street" without this), plus trailing punctuation and stray "and"
-  // connectors ("123 Main St, and" → "123 Main St"). Covers common copulas
-  // from Roman Urdu / Hindi / Spanish / French too so "address hai X" /
-  // "direccion es X" / "l'adresse est X" don't leak the verb into the value.
-  const stripAddressSeparator = (v) =>
-    v
-      .replace(/^(?:is|are|=|:|-|at|of|for|hai|hain|ka|ki|ke|ye|yeh|es|son|est|sont|ist|sind)\s+/i, '')
-      .replace(/\s+(?:and|plus|aur|y|et|und)\s*$/i, '')
-      .replace(/[,;.\s=:\-]+$/, '')
-      .trim();
+Extract these fields if present:
+- email: email address (e.g. "user@domain.com"), else null
+- phone: phone number in any format/country, else null
+- address: any location or address — street address, city+state, city+country, area name, neighbourhood, postcode — all valid. Keep exactly as written.
 
-  // Reject addresses that look like leftover junk from a labeled message
-  // (e.g. "contact =", "email", "phone") or filler-word residue after the
-  // parser stripped out matched email/phone values ("yeah the is and
-  // number is" left over from "yeah the email is X and number is Y"). An
-  // address worth keeping must have EITHER a digit OR a recognizable
-  // street keyword — pure-prose strings have neither and are almost
-  // always residue.
-  const isPlausibleAddress = (v) => {
-    if (!v) return false;
-    if (/\d/.test(v)) return true;
-    if (/\b(?:st|street|ave|avenue|road|rd|blvd|boulevard|lane|ln|drive|dr|way|plaza|suite|apt|floor|block|sector|phase|building|tower|mall|market|colony|bazaar|bazar|nagar|society|square|sq)\b/i.test(v)) return true;
-    // "City, Area" or "City, Country" pattern — comma-separated place names
-    if (v.includes(',') && v.trim().length >= 6) return true;
-    return false;
-  };
+Rules:
+- Only extract what is explicitly present. Never invent or guess.
+- If the entire message is just a location like "USA, Texas" or "Lahore, Pakistan" or "Dubai, UAE", set address to that value.
+- If nothing looks like contact info, return all nulls.
 
-  let addressValue = '';
-  let addressWasLabeled = false;
-  if (labeledAddressMatch) {
-    addressValue = stripAddressSeparator(labeledAddressMatch[1].trim());
-    addressWasLabeled = true;
-  } else {
-    // Fallback: strip the matched email/phone and any leftover label words, return the rest.
-    // Expanded label list includes "contact" (common when users write
-    // "contact = 555-1234" to mean phone) and accepts = as a separator too.
-    addressValue = text
-      .replace(emailMatch?.[0] || '', '')
-      .replace(phoneMatch?.[0] || '', '')
-      .replace(/\b(email|e-?mail|phone|tel|mobile|contact|contact\s*number|address|location|addr)\s*[:\-=]?/gi, '')
-      .replace(/[,\n\r]+/g, ' ')
-      .replace(/\s{2,}/g, ' ')
-      .trim();
-    addressValue = stripAddressSeparator(addressValue);
+Return like: {"email":"x@y.com","phone":"+1 555-1234","address":"123 Main St, New York"}`;
+
+  const fallbackEmail = text.match(/[\w.-]+@[\w.-]+\.\w{2,}/)?.[0] || '';
+  const fallbackPhone = text.match(/[\+]?[\d][\d\s\-()]{6,}/)?.[0]?.trim() || '';
+
+  try {
+    const response = await generateResponse(
+      prompt,
+      [{ role: 'user', content: text }],
+      { userId, operation: 'contact_parse', timeoutMs: 8_000 }
+    );
+    const m = String(response || '').match(/\{[\s\S]*\}/);
+    if (!m) return { contactEmail: fallbackEmail, contactPhone: fallbackPhone, contactAddress: '' };
+    const p = JSON.parse(m[0]);
+    return {
+      contactEmail: (typeof p.email === 'string' && p.email.includes('@')) ? p.email.trim() : fallbackEmail,
+      contactPhone: typeof p.phone === 'string' ? p.phone.trim() : fallbackPhone,
+      contactAddress: typeof p.address === 'string' ? p.address.trim() : '',
+    };
+  } catch (err) {
+    logger.warn(`[WEBDEV-CONTACT] parseContactFields LLM failed: ${err.message}`);
+    return { contactEmail: fallbackEmail, contactPhone: fallbackPhone, contactAddress: '' };
   }
-
-  // Junk filter: discard unlabeled residue that doesn't look like a real
-  // address. When the user explicitly wrote "address is …" we trust them
-  // — place names like "USA, Texas" or "Lahore, Pakistan" have no digits
-  // or street keywords but are perfectly valid addresses.
-  if (!addressWasLabeled && !isPlausibleAddress(addressValue)) addressValue = '';
-
-  return {
-    contactEmail: emailMatch?.[0] || '',
-    contactPhone: phoneMatch?.[0]?.trim() || '',
-    contactAddress: addressValue,
-  };
 }
 
 async function handleCollectContact(user, message) {
@@ -4163,25 +4130,12 @@ async function handleCollectContact(user, message) {
   if (!contactText || contactText.length < 3 || isExplicitSkip) {
     contactData = { contactEmail: '', contactPhone: '', contactAddress: '' };
   } else {
-    contactData = parseContactFields(contactText);
+    contactData = await parseContactFields(contactText, user.id);
 
-    // Reject junk / stray replies like "hello?", "?", "im waiting". If we
-    // got no email, no phone, and the "address" we parsed looks like
-    // conversational filler (no digits, no street keyword, very short, or
-    // matches a common non-contact word), don't store it — re-prompt.
-    const hasEmail = !!contactData.contactEmail;
-    const hasPhone = !!contactData.contactPhone;
-    const addr = contactData.contactAddress || '';
-    const addrHasDigits = /\d/.test(addr);
-    const addrHasStreetKeyword = /\b(?:st|street|ave|avenue|road|rd|blvd|boulevard|lane|ln|drive|dr|way|plaza|square|sq|apt|suite|floor|block|sector|phase)\b/i.test(addr);
-    const addrLooksLikeJunk =
-      /^(?:hello\??|hi\??|hey\??|waiting|im\s+waiting|what\??|huh\??|eh\??|um+|uh+|ok\??|sure\??|yeah\??|yes\??|no\??)$/i.test(addr);
-    const addrTooShort = addr.length < 8;
-
-    if (!hasEmail && !hasPhone && (addrLooksLikeJunk || (addrTooShort && !addrHasStreetKeyword && !addrHasDigits))) {
-      // Before re-prompting, check whether the user actually meant to
-      // update a different field. Restrict to non-contact intents
-      // (real contact info would have parsed above).
+    // If LLM extracted nothing (no email, phone, or address), re-prompt.
+    // The LLM already handles junk filtering — if it returns all empty it
+    // means the message had no contact info worth keeping.
+    if (!contactData.contactEmail && !contactData.contactPhone && !contactData.contactAddress) {
       const sc = await tryApplySideChannel(user, 'contactInfo', contactText);
       const kind = sc?.side?.kind;
       if (sc && kind && kind !== 'contact_update' && kind !== 'question' && kind !== 'unclear') {
@@ -5051,11 +5005,11 @@ async function handleConfirm(user, message) {
         wd.contactAddress = v;
         return { label: `address → *${wd.contactAddress}*`, kind: 'change' };
       case 'contact': {
-        const parsed = parseContactFields(v);
+        const emailM = v.match(/[\w.-]+@[\w.-]+\.\w{2,}/);
+        const phoneM = v.match(/[\+]?[\d][\d\s\-()]{6,}/);
         const applied = [];
-        if (parsed.contactEmail) { wd.contactEmail = parsed.contactEmail; applied.push(`email → *${wd.contactEmail}*`); }
-        if (parsed.contactPhone) { wd.contactPhone = parsed.contactPhone; applied.push(`phone → *${wd.contactPhone}*`); }
-        if (parsed.contactAddress) { wd.contactAddress = parsed.contactAddress; applied.push(`address → *${wd.contactAddress}*`); }
+        if (emailM?.[0]) { wd.contactEmail = emailM[0]; applied.push(`email → *${wd.contactEmail}*`); }
+        if (phoneM?.[0]) { wd.contactPhone = phoneM[0].trim(); applied.push(`phone → *${wd.contactPhone}*`); }
         return applied.length ? { label: applied.join('; '), kind: 'change' } : null;
       }
       default:
