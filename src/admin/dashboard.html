@@ -605,6 +605,7 @@ function filterLeads() {
 var convChannelFilter = 'all';
 var convTypeFilter = 'all'; // 'all' | 'ai' | 'manual'
 var convShowFavoritesOnly = false;
+var selectedConvIds = new Set(); // checked rows for bulk CSV export
 
 // ─── Favorites (localStorage) ──────────────────
 var favoritesSet = (function() {
@@ -714,9 +715,11 @@ function convListItems(leads) {
     var favColor = isFavorite(l.id) ? '#f59e0b' : '#9ca3af';
     var favTitle = isFavorite(l.id) ? 'Remove from favourites' : 'Add to favourites';
     var favStar = isFavorite(l.id) ? '&#9733;' : '&#9734;';
-    return '<div class="rounded-xl ' + rowClasses + ' p-4 flex items-center justify-between transition-colors cursor-pointer" onclick="openConversation(\'' + l.id + '\', \'' + esc(l.phone_number) + '\', \'' + esc(l.name || '') + '\')">' +
-      '<div class="flex items-center gap-4">' +
-        '<div class="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-bold text-sm">' + (l.name ? l.name[0].toUpperCase() : '#') + '</div>' +
+    var isChecked = selectedConvIds.has(l.id);
+    return '<div class="rounded-xl ' + rowClasses + ' p-4 flex items-center justify-between transition-colors cursor-pointer' + (isChecked ? ' ring-2 ring-indigo-400' : '') + '" onclick="openConversation(\'' + l.id + '\', \'' + esc(l.phone_number) + '\', \'' + esc(l.name || '') + '\')">' +
+      '<div class="flex items-center gap-3">' +
+        '<input type="checkbox" id="chk-' + l.id + '" ' + (isChecked ? 'checked' : '') + ' onclick="toggleConvSelect(\'' + l.id + '\', event)" class="w-4 h-4 rounded border-gray-300 text-indigo-600 cursor-pointer shrink-0" style="accent-color:#4f46e5">' +
+        '<div class="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-bold text-sm shrink-0">' + (l.name ? l.name[0].toUpperCase() : '#') + '</div>' +
         '<div>' +
           '<p class="font-semibold text-sm flex items-center gap-2 flex-wrap">' + windowDot + ' ' + esc(l.name || l.phone_number) + ' ' + channelIcon(l.channel || 'whatsapp') + ' ' + viaLinePill(l.via_phone_number_id) + manualBadge + languageBadge(l.detected_language) + '</p>' +
           '<p class="text-xs text-gray-500">' + esc(l.phone_number) + ' &middot; ' + l.message_count + ' messages</p>' +
@@ -784,13 +787,23 @@ function renderConversations(leads) {
       '<button onclick="setConvType(\'manual\')" class="' + typeTabClass('manual') + '">✋ Manual <span class="ml-1 opacity-75">(' + tCounts.manual + ')</span></button>' +
       '<button onclick="toggleFavoritesFilter()" class="' + (convShowFavoritesOnly ? 'px-3 py-1.5 text-xs font-semibold rounded-md bg-amber-400 text-white shadow-sm' : 'px-3 py-1.5 text-xs font-semibold rounded-md bg-white text-gray-600 border hover:bg-gray-50') + '">&#9733; Favourites</button>' +
     '</div>' +
-    '<input id="conv-search" type="text" placeholder="Search by phone or name..." class="px-3 py-2 border rounded-lg text-sm w-full sm:w-80 mb-4" oninput="filterConvList()">' +
+    '<div class="flex items-center gap-2 mb-3 flex-wrap">' +
+      '<input id="conv-search" type="text" placeholder="Search by phone or name..." class="px-3 py-2 border rounded-lg text-sm w-full sm:w-64" oninput="filterConvList()">' +
+      '<button onclick="toggleSelectAllConvs()" class="px-3 py-2 text-xs font-medium rounded-lg border border-gray-300 bg-white hover:bg-gray-50 text-gray-600">&#9633; Select All</button>' +
+      '<button onclick="downloadConvsCSV(\'visible\')" class="px-3 py-2 text-xs font-medium rounded-lg border border-gray-300 bg-white hover:bg-gray-50 text-gray-600" title="Export all currently visible conversations">&#8681; Export All CSV</button>' +
+      '<span id="conv-selected-bar" class="' + (selectedConvIds.size > 0 ? 'flex' : 'hidden') + ' items-center gap-2">' +
+        '<span class="text-xs text-indigo-700 font-semibold">' + selectedConvIds.size + ' selected</span>' +
+        '<button onclick="downloadConvsCSV(\'selected\')" class="px-3 py-2 text-xs font-medium rounded-lg bg-indigo-600 text-white hover:bg-indigo-700">&#8681; Export Selected CSV</button>' +
+        '<button onclick="clearConvSelection()" class="px-2 py-2 text-xs text-gray-400 hover:text-gray-600" title="Clear selection">&#10005;</button>' +
+      '</span>' +
+    '</div>' +
     '<div id="conv-list" class="grid gap-3">' + convListItems(leads) + '</div>' +
   '</div>';
 }
 
 function setConvChannel(ch) {
   convChannelFilter = ch;
+  selectedConvIds.clear();
   renderConversations(leadsData);
 }
 
@@ -803,6 +816,132 @@ function toggleFavoritesFilter() {
   convShowFavoritesOnly = !convShowFavoritesOnly;
   renderConversations(leadsData);
 }
+
+// ─── Conversation multi-select ─────────────────
+function toggleConvSelect(userId, ev) {
+  ev && ev.stopPropagation();
+  if (selectedConvIds.has(userId)) selectedConvIds.delete(userId);
+  else selectedConvIds.add(userId);
+  // Update ring on the row without full re-render
+  var row = ev && ev.target && ev.target.closest('.rounded-xl');
+  if (row) {
+    if (selectedConvIds.has(userId)) row.classList.add('ring-2', 'ring-indigo-400');
+    else row.classList.remove('ring-2', 'ring-indigo-400');
+  }
+  updateConvSelectionBar();
+}
+
+function updateConvSelectionBar() {
+  var bar = document.getElementById('conv-selected-bar');
+  if (!bar) return;
+  if (selectedConvIds.size > 0) {
+    bar.classList.remove('hidden');
+    bar.classList.add('flex');
+    var label = bar.querySelector('span');
+    if (label) label.textContent = selectedConvIds.size + ' selected';
+  } else {
+    bar.classList.add('hidden');
+    bar.classList.remove('flex');
+  }
+}
+
+function clearConvSelection() {
+  selectedConvIds.clear();
+  // Uncheck all visible checkboxes
+  document.querySelectorAll('[id^="chk-"]').forEach(function(cb) { cb.checked = false; });
+  document.querySelectorAll('#conv-list .ring-2').forEach(function(el) { el.classList.remove('ring-2', 'ring-indigo-400'); });
+  updateConvSelectionBar();
+}
+
+function toggleSelectAllConvs() {
+  // Gather all currently visible lead ids from rendered checkboxes
+  var boxes = document.querySelectorAll('[id^="chk-"]');
+  var allChecked = boxes.length > 0 && Array.from(boxes).every(function(cb) { return cb.checked; });
+  boxes.forEach(function(cb) {
+    var uid = cb.id.replace('chk-', '');
+    if (allChecked) {
+      selectedConvIds.delete(uid);
+      cb.checked = false;
+      var row = cb.closest('.rounded-xl');
+      if (row) row.classList.remove('ring-2', 'ring-indigo-400');
+    } else {
+      selectedConvIds.add(uid);
+      cb.checked = true;
+      var row = cb.closest('.rounded-xl');
+      if (row) row.classList.add('ring-2', 'ring-indigo-400');
+    }
+  });
+  updateConvSelectionBar();
+}
+
+// mode: 'selected' | 'visible' | 'favourites'
+function downloadConvsCSV(mode) {
+  var target;
+  if (mode === 'selected') {
+    target = (leadsData || []).filter(function(l) { return selectedConvIds.has(l.id); });
+    if (!target.length) { alert('No conversations selected.'); return; }
+  } else if (mode === 'favourites') {
+    target = (leadsData || []).filter(function(l) { return isFavorite(l.id); });
+    if (!target.length) { alert('No favourited contacts to export.'); return; }
+  } else {
+    // 'visible' — respects current channel/type/search/favourites filters
+    var searchVal = (document.getElementById('conv-search') || {}).value || '';
+    var s = searchVal.toLowerCase();
+    target = (leadsData || []).filter(function(l) {
+      if (l.message_count === 0) return false;
+      if (convChannelFilter !== 'all' && (l.channel || 'whatsapp') !== convChannelFilter) return false;
+      if (convTypeFilter === 'manual' && !l.has_manual) return false;
+      if (convTypeFilter === 'ai' && l.has_manual) return false;
+      if (convShowFavoritesOnly && !isFavorite(l.id)) return false;
+      if (s) return l.phone_number.toLowerCase().indexOf(s) !== -1 || (l.name || '').toLowerCase().indexOf(s) !== -1;
+      return true;
+    });
+    if (!target.length) { alert('No conversations match the current filters.'); return; }
+  }
+
+  function csvCell(v) {
+    var s = v == null ? '' : String(v);
+    if (s.indexOf(',') !== -1 || s.indexOf('\n') !== -1 || s.indexOf('"') !== -1) {
+      return '"' + s.replace(/"/g, '""') + '"';
+    }
+    return s;
+  }
+
+  var headers = ['Name', 'Phone', 'Channel', 'State', 'Lead Temperature', 'Favourite', 'Services Interested', 'Ad Source', 'Joined', 'Last Activity', 'Summary'];
+  var rows = [headers.map(csvCell).join(',')];
+  target.forEach(function(l) {
+    var services = [];
+    if (l.services_used) {
+      if (l.services_used.website) services.push('Website');
+      if (l.services_used.seo) services.push('SEO');
+      if (l.services_used.returnToSales) services.push('Return/Sales');
+    }
+    rows.push([
+      l.name || '',
+      l.phone_number || '',
+      l.channel || 'whatsapp',
+      l.state || '',
+      l.lead_temperature || '',
+      isFavorite(l.id) ? 'Yes' : '',
+      services.join('; '),
+      l.ad_source || '',
+      l.created_at ? new Date(l.created_at).toLocaleDateString() : '',
+      l.last_message_at ? new Date(l.last_message_at).toLocaleDateString() : '',
+      l.lead_brief || '',
+    ].map(csvCell).join(','));
+  });
+
+  var suffix = mode === 'selected' ? 'selected' : mode === 'favourites' ? 'favourites' : 'all';
+  var blob = new Blob([rows.join('\n')], { type: 'text/csv;charset=utf-8' });
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url;
+  a.download = 'pixie_convs_' + suffix + '_' + new Date().toISOString().slice(0, 10) + '.csv';
+  a.click();
+  setTimeout(function() { URL.revokeObjectURL(url); }, 2000);
+}
+
+function downloadFavouritesCSV() { downloadConvsCSV('favourites'); }
 
 function filterConvList() {
   var s = document.getElementById('conv-search').value.toLowerCase();
@@ -830,12 +969,21 @@ function renderMessageContent(m, useTranslated) {
   var html = '';
   if (m.media_data && m.media_mime) {
     if (m.media_mime.indexOf('image') === 0) {
-      html += '<img src="' + m.media_data + '" alt="image" class="rounded-lg max-w-full max-h-64 mb-1.5 cursor-pointer" onclick="window.open(this.src)">';
+      var isSticker = m.media_mime === 'image/webp' && m.message_type === 'sticker';
+      var imgClass = isSticker
+        ? 'max-w-[120px] max-h-[120px] mb-1.5 cursor-pointer'
+        : 'rounded-lg max-w-full max-h-64 mb-1.5 cursor-pointer';
+      html += '<img src="' + m.media_data + '" alt="' + (isSticker ? 'sticker' : 'image') + '" class="' + imgClass + '" onclick="window.open(this.src)">';
     } else if (m.media_mime.indexOf('audio') === 0) {
       html += '<audio controls class="w-full mb-1.5"><source src="' + m.media_data + '" type="' + m.media_mime + '"></audio>';
     } else if (m.media_mime.indexOf('video') === 0) {
       html += '<video controls class="rounded-lg max-w-full max-h-64 mb-1.5"><source src="' + m.media_data + '" type="' + m.media_mime + '"></video>';
     }
+  } else if (m.message_type === 'image' && !m.media_data) {
+    // Legacy outbound image rows logged before the URL-storage fix
+    html += '<span class="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-gray-100 text-gray-500 text-xs mb-1.5">🖼 Image (URL not stored)</span>';
+  } else if (m.message_type === 'sticker' && !m.media_data) {
+    html += '<span class="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-gray-100 text-gray-500 text-xs mb-1.5">🎭 Sticker (not downloaded)</span>';
   }
   // When translation toggle is on AND we have a translation for this
   // message id, render the translated text instead. The original is

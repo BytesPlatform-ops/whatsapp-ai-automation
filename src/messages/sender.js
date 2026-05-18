@@ -36,12 +36,12 @@ function extractPlatformMessageId(result) {
  * initiated sends that already log manually). Errors are swallowed
  * so a DB hiccup never fails a send.
  */
-async function autoLogOutbound(text, messageType = 'text', platformMessageId = null) {
+async function autoLogOutbound(text, messageType = 'text', platformMessageId = null, mediaData = null, mediaMime = null) {
   const userId = getUserId();
   if (!userId || !text) return;
   try {
     const { logMessage } = require('../db/conversations');
-    await logMessage(userId, text, 'assistant', messageType, platformMessageId);
+    await logMessage(userId, text, 'assistant', messageType, platformMessageId, mediaData, mediaMime);
   } catch (err) {
     logger.debug(`[SENDER] Auto-log failed: ${err.message}`);
   }
@@ -121,7 +121,7 @@ async function sendDocumentBuffer(to, buffer, caption = '', filename = 'report.p
 async function sendImage(to, imageUrl, caption = '') {
   const result = await getSender().sendImage(to, imageUrl, caption);
   noteSendSucceeded();
-  autoLogOutbound(`[Image sent]${caption ? ` — ${caption}` : ''}`, 'image', extractPlatformMessageId(result)).catch(() => {});
+  autoLogOutbound(caption || '[Image]', 'image', extractPlatformMessageId(result), imageUrl, 'image/jpeg').catch(() => {});
   return result;
 }
 

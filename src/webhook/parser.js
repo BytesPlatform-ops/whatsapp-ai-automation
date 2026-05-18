@@ -103,6 +103,12 @@ function parseWebhookPayload(body) {
         parsed.text = message.image?.caption || '[Image]';
         break;
 
+      case 'sticker':
+        parsed.mediaId = message.sticker?.id;
+        parsed.mimeType = message.sticker?.mime_type || 'image/webp';
+        parsed.text = '[Sticker]';
+        break;
+
       case 'document':
         parsed.mediaId = message.document?.id;
         parsed.mimeType = message.document?.mime_type;

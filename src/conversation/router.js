@@ -538,7 +538,7 @@ async function _routeMessage(message) {
   // Download media (image/audio) for storage in DB so admin can view it
   let mediaData = null;
   let mediaMime = null;
-  if ((message.type === 'image' || message.type === 'audio') && message.mediaId) {
+  if ((message.type === 'image' || message.type === 'sticker' || message.type === 'audio') && message.mediaId) {
     try {
       const { downloadMedia } = require('../messages/sender');
       const media = await downloadMedia(message.mediaId);
