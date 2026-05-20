@@ -185,6 +185,15 @@ async function getLeads() {
     manualMap[m.user_id] = (manualMap[m.user_id] || 0) + 1;
   });
 
+  // Paid users — any successful payment row marks the user as paid for the
+  // admin "Paid" filter. Webhook flips payments.status to 'paid' on
+  // checkout.session.completed.
+  const { data: paidRows } = await supabase
+    .from('payments')
+    .select('user_id')
+    .eq('status', 'paid');
+  const paidSet = new Set((paidRows || []).map((p) => p.user_id).filter(Boolean));
+
   return (users || []).map((u) => {
     const windowInfo = computeWindow(lastInboundMap[u.id]);
     return {
@@ -210,12 +219,16 @@ async function getLeads() {
     is_qualified: !!u.metadata?.leadBriefSent,
     is_closed: !!u.metadata?.leadClosed,
     is_favorite: !!u.metadata?.adminFavorite,
+    is_paid: paidSet.has(u.id),
     lead_brief: u.metadata?.leadBrief || null,
     lead_temperature: u.metadata?.leadTemperature || null,
     closing_technique: u.metadata?.closingTechnique || null,
     services_used: {
       website: !!u.metadata?.websiteDemoTriggered,
       seo: !!u.metadata?.seoAuditTriggered,
+      logo: !!u.metadata?.logoMakerTriggered,
+      ad: !!u.metadata?.adGeneratorTriggered,
+      chatbot: !!u.metadata?.chatbotDemoTriggered,
       returnToSales: !!u.metadata?.returnToSales,
     },
     // Detected inbound language (cached per-user via the

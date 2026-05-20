@@ -605,7 +605,37 @@ function filterLeads() {
 var convChannelFilter = 'all';
 var convTypeFilter = 'all'; // 'all' | 'ai' | 'manual'
 var convShowFavoritesOnly = false;
+var convStatusFilter = 'all'; // 'all' | 'paid' | 'qualified' | 'closed'
+var convTemperatureFilter = 'all'; // 'all' | 'hot' | 'warm' | 'cold'
+var convServiceFilter = 'all'; // 'all' | 'website' | 'seo' | 'logo' | 'ad' | 'chatbot'
+var convRecencyFilter = 'all'; // 'all' | 'today' | '7d' | '30d'
 var selectedConvIds = new Set(); // checked rows for bulk CSV export
+
+function matchesStatusFilter(l, key) {
+  if (key === 'all') return true;
+  if (key === 'paid') return !!l.is_paid;
+  if (key === 'qualified') return !!l.is_qualified;
+  if (key === 'closed') return !!l.is_closed;
+  return true;
+}
+function matchesTemperatureFilter(l, key) {
+  if (key === 'all') return true;
+  return (l.lead_temperature || '').toLowerCase() === key;
+}
+function matchesServiceFilter(l, key) {
+  if (key === 'all') return true;
+  return !!(l.services_used && l.services_used[key]);
+}
+function matchesRecencyFilter(l, key) {
+  if (key === 'all') return true;
+  var t = l.last_message_at ? new Date(l.last_message_at).getTime() : 0;
+  if (!t) return false;
+  var diff = Date.now() - t;
+  if (key === 'today') return diff < 24 * 60 * 60 * 1000;
+  if (key === '7d') return diff < 7 * 24 * 60 * 60 * 1000;
+  if (key === '30d') return diff < 30 * 24 * 60 * 60 * 1000;
+  return true;
+}
 
 // ─── Favorites (server-backed via users.metadata.adminFavorite) ──
 function isFavorite(userId) {
@@ -678,11 +708,12 @@ function convListItems(leads) {
     if (convTypeFilter === 'manual' && !l.has_manual) return false;
     if (convTypeFilter === 'ai' && l.has_manual) return false;
     if (convShowFavoritesOnly && !isFavorite(l.id)) return false;
+    if (!matchesStatusFilter(l, convStatusFilter)) return false;
+    if (!matchesTemperatureFilter(l, convTemperatureFilter)) return false;
+    if (!matchesServiceFilter(l, convServiceFilter)) return false;
+    if (!matchesRecencyFilter(l, convRecencyFilter)) return false;
     return true;
   }).sort(function(a, b) {
-    // Favourites float to the top
-    var fa = isFavorite(a.id) ? 1 : 0, fb = isFavorite(b.id) ? 1 : 0;
-    if (fb !== fa) return fb - fa;
     var ta = a.last_message_at ? new Date(a.last_message_at).getTime() : 0;
     var tb = b.last_message_at ? new Date(b.last_message_at).getTime() : 0;
     return tb - ta;
@@ -765,9 +796,67 @@ function convTypeCounts(leads) {
   return { all: visible.length, ai: visible.length - manual, manual: manual };
 }
 
+// Counts for the status/temperature/service/recency filter rows. Each row
+// ignores its own selection but respects every other active filter, so the
+// number on each pill is "how many you'd see if you picked this".
+function convExtraCounts(leads) {
+  var base = leads.filter(function(l) {
+    if (l.message_count === 0) return false;
+    if (convChannelFilter !== 'all' && (l.channel || 'whatsapp') !== convChannelFilter) return false;
+    if (convTypeFilter === 'manual' && !l.has_manual) return false;
+    if (convTypeFilter === 'ai' && l.has_manual) return false;
+    if (convShowFavoritesOnly && !isFavorite(l.id)) return false;
+    return true;
+  });
+  function countFor(ignoreKey, predicate) {
+    return base.filter(function(l) {
+      if (ignoreKey !== 'status' && !matchesStatusFilter(l, convStatusFilter)) return false;
+      if (ignoreKey !== 'temperature' && !matchesTemperatureFilter(l, convTemperatureFilter)) return false;
+      if (ignoreKey !== 'service' && !matchesServiceFilter(l, convServiceFilter)) return false;
+      if (ignoreKey !== 'recency' && !matchesRecencyFilter(l, convRecencyFilter)) return false;
+      return predicate(l);
+    }).length;
+  }
+  var TRUE = function() { return true; };
+  return {
+    status: {
+      all: countFor('status', TRUE),
+      paid: countFor('status', function(l) { return matchesStatusFilter(l, 'paid'); }),
+      qualified: countFor('status', function(l) { return matchesStatusFilter(l, 'qualified'); }),
+      closed: countFor('status', function(l) { return matchesStatusFilter(l, 'closed'); }),
+    },
+    temperature: {
+      all: countFor('temperature', TRUE),
+      hot: countFor('temperature', function(l) { return matchesTemperatureFilter(l, 'hot'); }),
+      warm: countFor('temperature', function(l) { return matchesTemperatureFilter(l, 'warm'); }),
+      cold: countFor('temperature', function(l) { return matchesTemperatureFilter(l, 'cold'); }),
+    },
+    service: {
+      all: countFor('service', TRUE),
+      website: countFor('service', function(l) { return matchesServiceFilter(l, 'website'); }),
+      seo: countFor('service', function(l) { return matchesServiceFilter(l, 'seo'); }),
+      logo: countFor('service', function(l) { return matchesServiceFilter(l, 'logo'); }),
+      ad: countFor('service', function(l) { return matchesServiceFilter(l, 'ad'); }),
+      chatbot: countFor('service', function(l) { return matchesServiceFilter(l, 'chatbot'); }),
+    },
+    recency: {
+      all: countFor('recency', TRUE),
+      today: countFor('recency', function(l) { return matchesRecencyFilter(l, 'today'); }),
+      '7d': countFor('recency', function(l) { return matchesRecencyFilter(l, '7d'); }),
+      '30d': countFor('recency', function(l) { return matchesRecencyFilter(l, '30d'); }),
+    },
+  };
+}
+
+function convPillClass(active, activeColor) {
+  if (!active) return 'px-3 py-1.5 text-xs font-semibold rounded-md bg-white text-gray-600 border hover:bg-gray-50';
+  return 'px-3 py-1.5 text-xs font-semibold rounded-md ' + activeColor + ' text-white shadow-sm';
+}
+
 function renderConversations(leads) {
   var counts = convChannelCounts(leads);
   var tCounts = convTypeCounts(leads);
+  var xCounts = convExtraCounts(leads);
   function tabClass(key) {
     return convChannelFilter === key
       ? 'px-4 py-2 text-sm font-medium rounded-lg bg-indigo-600 text-white'
@@ -789,12 +878,42 @@ function renderConversations(leads) {
       '<button onclick="setConvChannel(\'messenger\')" class="' + tabClass('messenger') + '">Messenger <span class="ml-1 text-xs opacity-75">(' + counts.messenger + ')</span></button>' +
       '<button onclick="setConvChannel(\'instagram\')" class="' + tabClass('instagram') + '">Instagram <span class="ml-1 text-xs opacity-75">(' + counts.instagram + ')</span></button>' +
     '</div>' +
-    '<div class="flex items-center gap-2 mb-4 flex-wrap">' +
+    '<div class="flex items-center gap-2 mb-2 flex-wrap">' +
       '<span class="text-xs text-gray-500 mr-1">Filter by type:</span>' +
       '<button onclick="setConvType(\'all\')" class="' + typeTabClass('all') + '">All <span class="ml-1 opacity-75">(' + tCounts.all + ')</span></button>' +
       '<button onclick="setConvType(\'ai\')" class="' + typeTabClass('ai') + '">🤖 AI Only <span class="ml-1 opacity-75">(' + tCounts.ai + ')</span></button>' +
       '<button onclick="setConvType(\'manual\')" class="' + typeTabClass('manual') + '">✋ Manual <span class="ml-1 opacity-75">(' + tCounts.manual + ')</span></button>' +
       '<button onclick="toggleFavoritesFilter()" class="' + (convShowFavoritesOnly ? 'px-3 py-1.5 text-xs font-semibold rounded-md bg-amber-400 text-white shadow-sm' : 'px-3 py-1.5 text-xs font-semibold rounded-md bg-white text-gray-600 border hover:bg-gray-50') + '">&#9733; Favourites</button>' +
+    '</div>' +
+    '<div class="flex items-center gap-2 mb-2 flex-wrap">' +
+      '<span class="text-xs text-gray-500 mr-1">Lead status:</span>' +
+      '<button onclick="setConvStatus(\'all\')" class="' + convPillClass(convStatusFilter === 'all', 'bg-gray-700') + '">All <span class="ml-1 opacity-75">(' + xCounts.status.all + ')</span></button>' +
+      '<button onclick="setConvStatus(\'paid\')" class="' + convPillClass(convStatusFilter === 'paid', 'bg-emerald-500') + '">💰 Paid <span class="ml-1 opacity-75">(' + xCounts.status.paid + ')</span></button>' +
+      '<button onclick="setConvStatus(\'qualified\')" class="' + convPillClass(convStatusFilter === 'qualified', 'bg-indigo-500') + '">✅ Qualified <span class="ml-1 opacity-75">(' + xCounts.status.qualified + ')</span></button>' +
+      '<button onclick="setConvStatus(\'closed\')" class="' + convPillClass(convStatusFilter === 'closed', 'bg-gray-500') + '">🔒 Closed <span class="ml-1 opacity-75">(' + xCounts.status.closed + ')</span></button>' +
+    '</div>' +
+    '<div class="flex items-center gap-2 mb-2 flex-wrap">' +
+      '<span class="text-xs text-gray-500 mr-1">Temperature:</span>' +
+      '<button onclick="setConvTemperature(\'all\')" class="' + convPillClass(convTemperatureFilter === 'all', 'bg-gray-700') + '">All <span class="ml-1 opacity-75">(' + xCounts.temperature.all + ')</span></button>' +
+      '<button onclick="setConvTemperature(\'hot\')" class="' + convPillClass(convTemperatureFilter === 'hot', 'bg-red-500') + '">🔥 Hot <span class="ml-1 opacity-75">(' + xCounts.temperature.hot + ')</span></button>' +
+      '<button onclick="setConvTemperature(\'warm\')" class="' + convPillClass(convTemperatureFilter === 'warm', 'bg-orange-500') + '">☀️ Warm <span class="ml-1 opacity-75">(' + xCounts.temperature.warm + ')</span></button>' +
+      '<button onclick="setConvTemperature(\'cold\')" class="' + convPillClass(convTemperatureFilter === 'cold', 'bg-sky-500') + '">❄️ Cold <span class="ml-1 opacity-75">(' + xCounts.temperature.cold + ')</span></button>' +
+    '</div>' +
+    '<div class="flex items-center gap-2 mb-2 flex-wrap">' +
+      '<span class="text-xs text-gray-500 mr-1">Service:</span>' +
+      '<button onclick="setConvService(\'all\')" class="' + convPillClass(convServiceFilter === 'all', 'bg-gray-700') + '">All <span class="ml-1 opacity-75">(' + xCounts.service.all + ')</span></button>' +
+      '<button onclick="setConvService(\'website\')" class="' + convPillClass(convServiceFilter === 'website', 'bg-indigo-500') + '">🌐 Website <span class="ml-1 opacity-75">(' + xCounts.service.website + ')</span></button>' +
+      '<button onclick="setConvService(\'seo\')" class="' + convPillClass(convServiceFilter === 'seo', 'bg-indigo-500') + '">📊 SEO <span class="ml-1 opacity-75">(' + xCounts.service.seo + ')</span></button>' +
+      '<button onclick="setConvService(\'logo\')" class="' + convPillClass(convServiceFilter === 'logo', 'bg-indigo-500') + '">🎨 Logo <span class="ml-1 opacity-75">(' + xCounts.service.logo + ')</span></button>' +
+      '<button onclick="setConvService(\'ad\')" class="' + convPillClass(convServiceFilter === 'ad', 'bg-indigo-500') + '">📣 Ad <span class="ml-1 opacity-75">(' + xCounts.service.ad + ')</span></button>' +
+      '<button onclick="setConvService(\'chatbot\')" class="' + convPillClass(convServiceFilter === 'chatbot', 'bg-indigo-500') + '">🤖 Chatbot <span class="ml-1 opacity-75">(' + xCounts.service.chatbot + ')</span></button>' +
+    '</div>' +
+    '<div class="flex items-center gap-2 mb-4 flex-wrap">' +
+      '<span class="text-xs text-gray-500 mr-1">Recency:</span>' +
+      '<button onclick="setConvRecency(\'all\')" class="' + convPillClass(convRecencyFilter === 'all', 'bg-gray-700') + '">All <span class="ml-1 opacity-75">(' + xCounts.recency.all + ')</span></button>' +
+      '<button onclick="setConvRecency(\'today\')" class="' + convPillClass(convRecencyFilter === 'today', 'bg-teal-500') + '">Today <span class="ml-1 opacity-75">(' + xCounts.recency.today + ')</span></button>' +
+      '<button onclick="setConvRecency(\'7d\')" class="' + convPillClass(convRecencyFilter === '7d', 'bg-teal-500') + '">7 days <span class="ml-1 opacity-75">(' + xCounts.recency['7d'] + ')</span></button>' +
+      '<button onclick="setConvRecency(\'30d\')" class="' + convPillClass(convRecencyFilter === '30d', 'bg-teal-500') + '">30 days <span class="ml-1 opacity-75">(' + xCounts.recency['30d'] + ')</span></button>' +
     '</div>' +
     '<div class="flex items-center gap-2 mb-3 flex-wrap">' +
       '<input id="conv-search" type="text" placeholder="Search by phone or name..." class="px-3 py-2 border rounded-lg text-sm w-full sm:w-64" oninput="filterConvList()">' +
@@ -823,6 +942,23 @@ function setConvType(t) {
 
 function toggleFavoritesFilter() {
   convShowFavoritesOnly = !convShowFavoritesOnly;
+  renderConversations(leadsData);
+}
+
+function setConvStatus(s) {
+  convStatusFilter = s;
+  renderConversations(leadsData);
+}
+function setConvTemperature(t) {
+  convTemperatureFilter = t;
+  renderConversations(leadsData);
+}
+function setConvService(s) {
+  convServiceFilter = s;
+  renderConversations(leadsData);
+}
+function setConvRecency(r) {
+  convRecencyFilter = r;
   renderConversations(leadsData);
 }
 
@@ -960,6 +1096,10 @@ function filterConvList() {
     if (convTypeFilter === 'manual' && !l.has_manual) return false;
     if (convTypeFilter === 'ai' && l.has_manual) return false;
     if (convShowFavoritesOnly && !isFavorite(l.id)) return false;
+    if (!matchesStatusFilter(l, convStatusFilter)) return false;
+    if (!matchesTemperatureFilter(l, convTemperatureFilter)) return false;
+    if (!matchesServiceFilter(l, convServiceFilter)) return false;
+    if (!matchesRecencyFilter(l, convRecencyFilter)) return false;
     return l.phone_number.toLowerCase().indexOf(s) !== -1 || (l.name || '').toLowerCase().indexOf(s) !== -1;
   });
   document.getElementById('conv-list').innerHTML = convListItems(filtered);
