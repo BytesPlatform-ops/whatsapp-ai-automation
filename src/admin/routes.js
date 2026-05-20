@@ -435,6 +435,18 @@ router.post('/api/conversations/:userId/takeover', async (req, res) => {
   }
 });
 
+router.post('/api/conversations/:userId/favorite', async (req, res) => {
+  try {
+    const { favorite } = req.body;
+    const { updateUserMetadata } = require('../db/users');
+    await updateUserMetadata(req.params.userId, { adminFavorite: !!favorite });
+    res.json({ success: true });
+  } catch (err) {
+    logger.error('[ADMIN] Favorite toggle error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // List users whose chats are currently paused — either because the abuse
 // detector auto-flagged them (metadata.aiHandover.auto === true) OR an
 // admin manually took over (metadata.humanTakeover === true). Used by the

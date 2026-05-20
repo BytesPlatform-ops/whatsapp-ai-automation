@@ -607,30 +607,39 @@ var convTypeFilter = 'all'; // 'all' | 'ai' | 'manual'
 var convShowFavoritesOnly = false;
 var selectedConvIds = new Set(); // checked rows for bulk CSV export
 
-// ─── Favorites (localStorage) ──────────────────
-var favoritesSet = (function() {
-  try { return new Set(JSON.parse(localStorage.getItem('pixie_fav_convs') || '[]')); }
-  catch(e) { return new Set(); }
-})();
-function saveFavorites() {
-  try { localStorage.setItem('pixie_fav_convs', JSON.stringify(Array.from(favoritesSet))); } catch(e) {}
+// ─── Favorites (server-backed via users.metadata.adminFavorite) ──
+function isFavorite(userId) {
+  var l = (leadsData || []).find(function(x) { return x.id === userId; });
+  return !!(l && l.is_favorite);
 }
-function isFavorite(userId) { return favoritesSet.has(userId); }
 function toggleFavorite(userId, ev) {
   ev && ev.stopPropagation();
-  if (favoritesSet.has(userId)) favoritesSet.delete(userId);
-  else favoritesSet.add(userId);
-  saveFavorites();
+  var lead = (leadsData || []).find(function(x) { return x.id === userId; });
+  if (!lead) return;
+  var next = !lead.is_favorite;
+  lead.is_favorite = next; // optimistic
   // Update the star on the current row without full re-render
   var btn = document.getElementById('fav-btn-' + userId);
-  if (btn) btn.innerHTML = isFavorite(userId) ? '&#9733;' : '&#9734;';
-  if (btn) btn.title = isFavorite(userId) ? 'Remove from favourites' : 'Add to favourites';
-  if (btn) btn.style.color = isFavorite(userId) ? '#f59e0b' : '#9ca3af';
+  if (btn) btn.innerHTML = next ? '&#9733;' : '&#9734;';
+  if (btn) btn.title = next ? 'Remove from favourites' : 'Add to favourites';
+  if (btn) btn.style.color = next ? '#f59e0b' : '#9ca3af';
   // Also update the star in the open modal header if this is the open convo
   if (currentConvUserId === userId) {
     var mBtn = document.getElementById('modal-fav-btn');
-    if (mBtn) { mBtn.innerHTML = isFavorite(userId) ? '&#9733;' : '&#9734;'; mBtn.style.color = isFavorite(userId) ? '#f59e0b' : '#6b7280'; }
+    if (mBtn) { mBtn.innerHTML = next ? '&#9733;' : '&#9734;'; mBtn.style.color = next ? '#f59e0b' : '#6b7280'; }
   }
+  fetch('/admin/api/conversations/' + userId + '/favorite', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ favorite: next }),
+  }).then(function(r) {
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+  }).catch(function() {
+    // Revert optimistic flip and re-render so the UI matches truth
+    lead.is_favorite = !next;
+    renderConversations(leadsData);
+    alert('Could not save favourite — try again.');
+  });
   // If we're in favorites-only mode and just un-favourited, re-render
   if (convShowFavoritesOnly) renderConversations(leadsData);
 }

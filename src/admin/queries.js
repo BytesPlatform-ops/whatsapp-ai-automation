@@ -209,6 +209,7 @@ async function getLeads() {
     human_takeover: !!u.metadata?.humanTakeover,
     is_qualified: !!u.metadata?.leadBriefSent,
     is_closed: !!u.metadata?.leadClosed,
+    is_favorite: !!u.metadata?.adminFavorite,
     lead_brief: u.metadata?.leadBrief || null,
     lead_temperature: u.metadata?.leadTemperature || null,
     closing_technique: u.metadata?.closingTechnique || null,
