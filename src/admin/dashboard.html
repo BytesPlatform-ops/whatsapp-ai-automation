@@ -919,6 +919,7 @@ function renderConversations(leads) {
       '<input id="conv-search" type="text" placeholder="Search by phone or name..." class="px-3 py-2 border rounded-lg text-sm w-full sm:w-64" oninput="filterConvList()">' +
       '<button onclick="toggleSelectAllConvs()" class="px-3 py-2 text-xs font-medium rounded-lg border border-gray-300 bg-white hover:bg-gray-50 text-gray-600">&#9633; Select All</button>' +
       '<button onclick="downloadConvsCSV(\'visible\')" class="px-3 py-2 text-xs font-medium rounded-lg border border-gray-300 bg-white hover:bg-gray-50 text-gray-600" title="Export all currently visible conversations">&#8681; Export All CSV</button>' +
+      '<button onclick="downloadAllChatsTxt()" class="px-3 py-2 text-xs font-medium rounded-lg border border-gray-300 bg-white hover:bg-gray-50 text-gray-600" title="Download full transcripts of ALL chats as one TXT file">&#8681; Download All Chats (TXT)</button>' +
       '<span id="conv-selected-bar" class="' + (selectedConvIds.size > 0 ? 'flex' : 'hidden') + ' items-center gap-2">' +
         '<span class="text-xs text-indigo-700 font-semibold">' + selectedConvIds.size + ' selected</span>' +
         '<button onclick="downloadConvsCSV(\'selected\')" class="px-3 py-2 text-xs font-medium rounded-lg bg-indigo-600 text-white hover:bg-indigo-700">&#8681; Export Selected CSV</button>' +
@@ -1087,6 +1088,15 @@ function downloadConvsCSV(mode) {
 }
 
 function downloadFavouritesCSV() { downloadConvsCSV('favourites'); }
+
+function downloadAllChatsTxt() {
+  var btn = event && event.target;
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Preparing…'; }
+  window.location.href = '/admin/api/conversations/bulk-export';
+  setTimeout(function() {
+    if (btn) { btn.disabled = false; btn.textContent = '↙ Download All Chats (TXT)'; }
+  }, 3000);
+}
 
 function filterConvList() {
   var s = document.getElementById('conv-search').value.toLowerCase();

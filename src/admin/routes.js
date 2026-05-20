@@ -129,6 +129,19 @@ router.get('/api/lead-summaries', async (req, res) => {
   }
 });
 
+router.get('/api/conversations/bulk-export', async (_req, res) => {
+  try {
+    const txt = await queries.getAllConversationsBulk();
+    const date = new Date().toISOString().slice(0, 10);
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="pixie_all_chats_${date}.txt"`);
+    res.send(txt);
+  } catch (err) {
+    logger.error('[ADMIN] Bulk export error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.get('/api/conversations/:userId', async (req, res) => {
   try {
     const data = await queries.getConversation(req.params.userId);

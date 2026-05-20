@@ -1030,10 +1030,58 @@ async function getLeadSummaries() {
   return data || [];
 }
 
+async function getAllConversationsBulk() {
+  const [usersResult, msgsResult] = await Promise.all([
+    supabase.from('users').select('id, phone_number, name, channel').order('created_at', { ascending: true }),
+    supabase.from('conversations').select('user_id, role, message_text, created_at, seq').order('seq', { ascending: true }).order('created_at', { ascending: true }),
+  ]);
+
+  const users = usersResult.data || [];
+  const msgs = msgsResult.data || [];
+
+  // group messages by user_id
+  const byUser = {};
+  for (const m of msgs) {
+    if (!byUser[m.user_id]) byUser[m.user_id] = [];
+    byUser[m.user_id].push(m);
+  }
+
+  // build TXT lines
+  const lines = [];
+  lines.push('Pixie — Bulk Chat Export');
+  lines.push('Exported: ' + new Date().toLocaleString());
+  lines.push('Total users: ' + users.length);
+  lines.push('');
+
+  for (const u of users) {
+    const userMsgs = byUser[u.id] || [];
+    if (!userMsgs.length) continue;
+    const label = (u.name ? u.name + ' ' : '') + '(' + (u.phone_number || u.id) + ')' + (u.channel && u.channel !== 'whatsapp' ? ' [' + u.channel + ']' : '');
+    lines.push('════════════════════════════════════════');
+    lines.push('Contact: ' + label);
+    lines.push('Messages: ' + userMsgs.length);
+    lines.push('────────────────────────────────────────');
+    for (const m of userMsgs) {
+      if (m.role === 'system') {
+        lines.push('── ' + (m.message_text || 'system event') + ' ──');
+      } else {
+        const who = m.role === 'user' ? (u.name || u.phone_number || 'User') : 'Pixie';
+        const ts = m.created_at ? new Date(m.created_at).toLocaleString() : '';
+        lines.push('[' + ts + '] ' + who + ':');
+        lines.push(m.message_text || '(media/non-text)');
+      }
+      lines.push('');
+    }
+  }
+
+  return lines.join('\n');
+}
+
 module.exports = {
   getOverviewMetrics,
   getLeads,
   getConversation,
+  getAllConversationsBulk,
   getFeedback,
   getDropoffs,
   getSites,

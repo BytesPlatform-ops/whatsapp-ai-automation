@@ -98,7 +98,7 @@ function identifyAdIndustry(adText) {
 const { handleWelcome } = require('./handlers/welcome');
 const { handleServiceSelection } = require('./handlers/serviceSelection');
 const { handleSeoAudit } = require('./handlers/seoAudit');
-const { handleWebDev, handleGenerationFailed, PAID_CLAIM_RX } = require('./handlers/webDev');
+const { handleWebDev, handleGenerationFailed, PAID_CLAIM_RX, questionForState, dynamicPhrase } = require('./handlers/webDev');
 const { handleAppDev } = require('./handlers/appDev');
 const { handleMarketing } = require('./handlers/marketing');
 const { handleGeneralChat } = require('./handlers/generalChat');
@@ -1752,6 +1752,26 @@ async function _routeMessage(message) {
   ) {
     logger.info(`[SALES] Objection intercepted for ${from} — routing to gentle handler`);
     await handleObjection(user, message, STATES.SALES_CHAT, 'sales conversation');
+    return;
+  }
+
+  // States that legitimately accept image messages — everything else should
+  // reject images so a stray photo doesn't silently mutate state via '[Image]'.
+  const IMAGE_AWARE_STATES = new Set([
+    STATES.WEB_COLLECT_LOGO,
+    STATES.WEB_COLLECT_LISTINGS_PHOTOS,
+    STATES.WEB_COLLECT_PROJECTS_PHOTOS,
+    STATES.WEB_REVISIONS,
+    STATES.AD_COLLECT_IMAGE,
+  ]);
+
+  if (message.type === 'image' && !IMAGE_AWARE_STATES.has(user.state)) {
+    const wd = user.metadata?.websiteData || {};
+    const currentQuestion = questionForState(user.state, wd);
+    const reply = currentQuestion
+      ? `Images can only be added at specific steps — like uploading a logo or photos for your site. For now, ${currentQuestion}`
+      : `I can only process images at specific steps like logo upload or adding photos to your site. Please send a text reply to continue.`;
+    await sendTextMessage(user.phone_number, await dynamicPhrase(reply, user, ''));
     return;
   }
 
