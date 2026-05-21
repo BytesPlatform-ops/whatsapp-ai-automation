@@ -844,6 +844,27 @@ async function _routeMessage(message) {
   // pulls from the turn verdict. Domain-state coverage (WEB_DOMAIN_*)
   // is handled by TURN_CLASSIFIER_DOMAIN_STATES at the kickoff site.
 
+  // Redact any pasted secrets (API keys, JWTs, private-key blocks, etc.)
+  // and log the inbound message BEFORE abuse detection or any other early
+  // return. Previously this lived after the abuse detector, which meant
+  // messages flagged as abusive were never stored and disappeared from the
+  // admin transcript. Moving it here ensures every inbound turn is captured
+  // regardless of which pipeline check fires first.
+  try {
+    const { redactSecrets } = require('../utils/validators');
+    const incomingText = message.text || text || '';
+    const redaction = redactSecrets(incomingText);
+    if (redaction.redacted) {
+      logger.warn(`[SECURITY] Redacted ${redaction.types.join(',')} from inbound message for ${from}`);
+      message.text = redaction.text;
+      user._secretRedaction = { types: redaction.types };
+    }
+    await logMessage(user.id, redaction.text, 'user', originalType, messageId, mediaData, mediaMime);
+  } catch (err) {
+    logger.warn(`[SECURITY] redactSecrets failed for ${from}: ${err.message} — logging raw text`);
+    await logMessage(user.id, message.text || text || '', 'user', originalType, messageId, mediaData, mediaMime);
+  }
+
   // ── Abuse detection (Phase 13) ─────────────────────────────────────────
   // Before ANY greeting / recap / handler dispatch runs, classify the
   // inbound message. Hard categories (hate / threats / phishing /
@@ -1032,30 +1053,6 @@ async function _routeMessage(message) {
     });
     user.metadata = { ...user.metadata, adSource: product, adIndustry, adReferral: ref };
     logger.info(`[AD TRACKING] Platform: ${channel} | Product: ${product} | Industry: ${adIndustry} | Ad: ${ref.headline || 'N/A'} | User: ${from}`);
-  }
-
-  // Redact any pasted secrets (API keys, JWTs, private-key blocks, etc.)
-  // BEFORE the message hits the conversation log or any downstream
-  // handler. Once it's in the DB, getConversationHistory will replay it
-  // into every future LLM call for this user — so this is the only
-  // boundary where redaction is meaningful. Mutating message.text means
-  // every downstream consumer (handlers, classifiers, LLM context) sees
-  // the redacted version. The salesBot handler reads `user._secretRedaction`
-  // so it can still raise the credential_or_secret_in_message flag without
-  // re-detecting the now-redacted text.
-  try {
-    const { redactSecrets } = require('../utils/validators');
-    const incomingText = message.text || text || '';
-    const redaction = redactSecrets(incomingText);
-    if (redaction.redacted) {
-      logger.warn(`[SECURITY] Redacted ${redaction.types.join(',')} from inbound message for ${from}`);
-      message.text = redaction.text;
-      user._secretRedaction = { types: redaction.types };
-    }
-    await logMessage(user.id, redaction.text, 'user', originalType, messageId, mediaData, mediaMime);
-  } catch (err) {
-    logger.warn(`[SECURITY] redactSecrets failed for ${from}: ${err.message} — logging raw text`);
-    await logMessage(user.id, message.text || text || '', 'user', originalType, messageId, mediaData, mediaMime);
   }
 
   // Auto-update lead temperature based on user message count
@@ -1768,10 +1765,22 @@ async function _routeMessage(message) {
   if (message.type === 'image' && !IMAGE_AWARE_STATES.has(user.state)) {
     const wd = user.metadata?.websiteData || {};
     const currentQuestion = questionForState(user.state, wd);
-    const reply = currentQuestion
-      ? `Images can only be added at specific steps — like uploading a logo or photos for your site. For now, ${currentQuestion}`
-      : `I can only process images at specific steps like logo upload or adding photos to your site. Please send a text reply to continue.`;
-    await sendTextMessage(user.phone_number, await dynamicPhrase(reply, user, ''));
+    if (currentQuestion) {
+      // Mid-wizard state — remind them of the current step
+      await sendTextMessage(user.phone_number, await dynamicPhrase(
+        `Images can only be added at specific steps — like uploading a logo or photos for your site. For now, ${currentQuestion}`,
+        user, ''
+      ));
+    } else {
+      // salesBot / general state — acknowledge without committing to viewing the image.
+      // Hardcoded (no dynamicPhrase) to avoid the async failure that previously
+      // caused "something glitched" when questionForState returned empty string.
+      const knownTrade = user.metadata?.salesContext?.industry || user.metadata?.adIndustry || null;
+      const redirect = knownTrade
+        ? `got your photo! I can't view images at this stage, but I've got everything I need — just drop your business name and I'll spin up a preview for you 🚀`
+        : `got your photo! I work with text in this chat — tell me what kind of business you have and I'll show you a live example in seconds.`;
+      await sendTextMessage(user.phone_number, redirect);
+    }
     return;
   }
 

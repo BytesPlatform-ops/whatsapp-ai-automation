@@ -1126,6 +1126,10 @@ var translationsByConv = {};
 
 function renderMessageContent(m, useTranslated) {
   var html = '';
+  if (m.message_type === 'deleted') {
+    html += '<span class="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-red-50 text-red-400 text-xs italic mb-1.5">🗑 This message was deleted by the user</span>';
+    return html;
+  }
   if (m.media_data && m.media_mime) {
     if (m.media_mime.indexOf('image') === 0) {
       var isSticker = m.media_mime === 'image/webp' && m.message_type === 'sticker';

@@ -3,6 +3,7 @@ const { Router } = require('express');
 const { env } = require('../config/env');
 const { parseWebhookPayload } = require('./parser');
 const { routeMessage } = require('../conversation/router');
+const { markMessageDeleted } = require('../db/conversations');
 const { logger } = require('../utils/logger');
 
 const router = Router();
@@ -58,6 +59,21 @@ router.post('/webhook', async (req, res) => {
   if (!verifySignature(req)) {
     logger.warn('Invalid webhook signature');
     return;
+  }
+
+  // Handle deletion status updates — must check before parseWebhookPayload
+  // because the parser returns null for all statuses. When a user deletes
+  // a message ("Delete for Everyone"), Meta sends status="deleted" with the
+  // original wamid so we can flag it in our DB without losing the content.
+  const _statuses = req.body?.entry?.[0]?.changes?.[0]?.value?.statuses;
+  if (_statuses) {
+    for (const s of _statuses) {
+      if (s.status === 'deleted' && s.id) {
+        markMessageDeleted(s.id).catch((err) =>
+          logger.warn(`[WEBHOOK] Failed to mark message deleted (${s.id}): ${err.message}`)
+        );
+      }
+    }
   }
 
   // Parse the incoming message

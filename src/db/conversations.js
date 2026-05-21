@@ -93,4 +93,16 @@ async function clearHistory(userId) {
   }, 'clearHistory');
 }
 
-module.exports = { logMessage, getConversationHistory, clearHistory, findMessageByPlatformId };
+async function markMessageDeleted(waMessageId) {
+  if (!waMessageId) return;
+  await withRetry(async () => {
+    const { error } = await supabase
+      .from('conversations')
+      .update({ message_type: 'deleted' })
+      .eq('whatsapp_message_id', waMessageId.slice(0, 100));
+    throwIfNetworkError(error);
+    if (error) throw new Error(`Failed to mark message deleted: ${error.message}`);
+  }, 'markMessageDeleted');
+}
+
+module.exports = { logMessage, getConversationHistory, clearHistory, findMessageByPlatformId, markMessageDeleted };
