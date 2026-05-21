@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { Inter, Plus_Jakarta_Sans } from 'next/font/google';
+import { Analytics } from '@vercel/analytics/next';
 import './globals.css';
 
 const sans = Inter({
@@ -46,7 +47,10 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className={`${sans.variable} ${display.variable}`}>
-      <body className="min-h-screen bg-white text-ink-900 antialiased">{children}</body>
+      <body className="min-h-screen bg-white text-ink-900 antialiased">
+        {children}
+        <Analytics />
+      </body>
     </html>
   );
 }
