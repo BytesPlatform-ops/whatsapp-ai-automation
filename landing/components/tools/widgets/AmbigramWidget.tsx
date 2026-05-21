@@ -2,6 +2,8 @@
 
 import { useRef, useState } from 'react';
 import { Sparkles, Loader2, RotateCw, Download } from 'lucide-react';
+import { ToolResultCta } from '@/components/tools/ToolResultCta';
+import { buildToolPrefill } from '@/lib/toolPrefill';
 
 type Style = 'gothic' | 'script' | 'modern' | 'tribal';
 type Mode = 'rotational' | 'chain';
@@ -318,6 +320,15 @@ export function AmbigramWidget() {
                 </div>
               </div>
             )}
+
+            {(() => {
+              const cta = buildToolPrefill('ambigram-generator', {
+                word,
+                score: analysis.score,
+                style: analysis.recommendedStyle,
+              });
+              return <ToolResultCta {...cta} prefill={cta.whatsappPrefill} />;
+            })()}
           </div>
         )}
       </div>

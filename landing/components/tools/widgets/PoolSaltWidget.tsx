@@ -2,6 +2,8 @@
 
 import { useMemo, useState } from 'react';
 import { AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { ToolResultCta } from '@/components/tools/ToolResultCta';
+import { buildToolPrefill } from '@/lib/toolPrefill';
 
 type Unit = 'gallons' | 'liters';
 
@@ -148,18 +150,33 @@ export function PoolSaltWidget() {
               Use food-grade pool salt (≥99% pure NaCl, no iodine, no anti-caking agents). Brush the bottom of the pool after adding to prevent staining. Allow 24 hours with pumps running for full dissolution.
             </p>
           </div>
+
+          {(() => {
+            const cta = buildToolPrefill('pool-salt-calculator', {
+              lbs: result.lbs,
+              targetPpm,
+              volume,
+              unit,
+              status: 'ok',
+            });
+            return <ToolResultCta {...cta} prefill={cta.whatsappPrefill} />;
+          })()}
         </div>
       ) : result?.status === 'too-high' ? (
         <div className="rounded-2xl bg-orange-50 p-6 ring-1 ring-orange-200">
           <div className="flex items-start gap-3">
             <AlertTriangle className="h-5 w-5 shrink-0 text-orange-600" />
-            <div>
+            <div className="flex-1">
               <div className="font-display text-lg font-bold text-ink-900">
                 Your salt is already too high
               </div>
               <p className="mt-1 text-sm text-ink-500">
                 Current salt ({currentPpm} ppm) exceeds your target ({targetPpm} ppm). You can&apos;t remove salt by adding more — partially drain and refill with fresh water to dilute.
               </p>
+              {(() => {
+                const cta = buildToolPrefill('pool-salt-calculator', { status: 'too-high' });
+                return <ToolResultCta {...cta} prefill={cta.whatsappPrefill} />;
+              })()}
             </div>
           </div>
         </div>

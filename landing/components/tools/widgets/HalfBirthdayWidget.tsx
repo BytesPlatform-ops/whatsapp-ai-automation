@@ -2,6 +2,8 @@
 
 import { useMemo, useState } from 'react';
 import { Cake, CalendarDays } from 'lucide-react';
+import { ToolResultCta } from '@/components/tools/ToolResultCta';
+import { buildToolPrefill } from '@/lib/toolPrefill';
 
 const MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -96,6 +98,17 @@ export function HalfBirthdayWidget() {
             {result.daysAway === 0
               ? 'It’s today! 🎉'
               : `${result.daysAway} ${result.daysAway === 1 ? 'day' : 'days'} away`}
+          </div>
+
+          <div className="mt-2 text-left">
+            {(() => {
+              const cta = buildToolPrefill('half-birthday-calculator', {
+                formatted: result.formatted,
+                dayOfWeek: result.dayOfWeek,
+                daysAway: result.daysAway,
+              });
+              return <ToolResultCta {...cta} prefill={cta.whatsappPrefill} />;
+            })()}
           </div>
         </div>
       ) : (

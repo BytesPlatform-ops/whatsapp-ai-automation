@@ -2,6 +2,8 @@
 
 import { useMemo, useState } from 'react';
 import { Copy, Check } from 'lucide-react';
+import { ToolResultCta } from '@/components/tools/ToolResultCta';
+import { buildToolPrefill } from '@/lib/toolPrefill';
 
 type Mode = 'smart' | 'all';
 
@@ -134,6 +136,11 @@ export function SuperscriptWidget() {
         >
           {output || <span className="text-ink-400">Your superscript will appear here</span>}
         </div>
+
+        {output && (() => {
+          const cta = buildToolPrefill('superscript-generator', {});
+          return <ToolResultCta {...cta} prefill={cta.whatsappPrefill} />;
+        })()}
       </div>
 
       <p className="text-xs text-ink-400">

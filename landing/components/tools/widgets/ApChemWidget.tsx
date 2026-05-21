@@ -1,6 +1,8 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import { ToolResultCta } from '@/components/tools/ToolResultCta';
+import { buildToolPrefill } from '@/lib/toolPrefill';
 
 // AP Chemistry exam structure (2024-2026):
 //   MCQ: 60 questions × 1 point = 60 raw → weighted to 50% of composite
@@ -134,6 +136,16 @@ export function ApChemWidget() {
           <p className="mt-4 text-xs text-ink-400">
             Estimate based on recent College Board curves (±1 score band). Real cutoffs adjust yearly based on exam difficulty.
           </p>
+
+          {(() => {
+            const cta = buildToolPrefill('ap-chem-score-calculator', {
+              apScore: result.apScore,
+              composite: result.composite,
+              mcqRaw: Number(mcqRaw),
+              frqRaw: Number(frqRaw),
+            });
+            return <ToolResultCta {...cta} prefill={cta.whatsappPrefill} />;
+          })()}
         </div>
       ) : (
         <div className="rounded-2xl border border-dashed border-ink-200 bg-ink-50 p-8 text-center text-sm text-ink-500">

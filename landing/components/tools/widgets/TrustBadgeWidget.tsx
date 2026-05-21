@@ -2,6 +2,8 @@
 
 import { useRef, useState } from 'react';
 import { Sparkles, Download, Copy, Check, Loader2, Palette } from 'lucide-react';
+import { ToolResultCta } from '@/components/tools/ToolResultCta';
+import { buildToolPrefill } from '@/lib/toolPrefill';
 
 type Shape = 'circle' | 'shield' | 'ribbon';
 
@@ -356,6 +358,11 @@ export function TrustBadgeWidget() {
               {copied ? 'Copied' : 'Copy SVG'}
             </button>
           </div>
+
+          {(() => {
+            const cta = buildToolPrefill('trust-badge-generator', { text, shape });
+            return <ToolResultCta {...cta} prefill={cta.whatsappPrefill} />;
+          })()}
         </div>
       </div>
 

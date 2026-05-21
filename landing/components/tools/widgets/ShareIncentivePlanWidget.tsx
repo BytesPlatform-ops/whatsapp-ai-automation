@@ -1,6 +1,8 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import { ToolResultCta } from '@/components/tools/ToolResultCta';
+import { buildToolPrefill } from '@/lib/toolPrefill';
 
 // UK 2025/26 tax year (rUK — not Scotland).
 const PERSONAL_ALLOWANCE = 12570;
@@ -151,6 +153,15 @@ export function ShareIncentivePlanWidget() {
               <StatBlock label="Tax + NI saved" value={fmtGBP(result.taxSaved)} />
               <StatBlock label="Employer match value" value={fmtGBP(result.matchValue)} />
             </div>
+
+            {(() => {
+              const cta = buildToolPrefill('share-incentive-plan-calculator', {
+                allowedAnnual: result.allowedAnnual,
+                totalValueAfter5y: result.totalValueAfter5y,
+                taxSaved: result.taxSaved,
+              });
+              return <ToolResultCta {...cta} prefill={cta.whatsappPrefill} />;
+            })()}
           </div>
 
           <div className="rounded-xl border border-ink-100 bg-white p-5 text-sm">
