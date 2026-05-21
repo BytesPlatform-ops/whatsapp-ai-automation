@@ -42,6 +42,9 @@ export const metadata: Metadata = {
     description: 'Text our AI bot on WhatsApp and get a live website in 60 seconds.',
   },
   robots: { index: true, follow: true },
+  verification: {
+    google: 'D3A1sh81ZRNd3LfTWNt5amVwgqR7MNyLZZZfC3RGU_c',
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
