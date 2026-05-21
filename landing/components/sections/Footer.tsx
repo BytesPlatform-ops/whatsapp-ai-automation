@@ -15,8 +15,11 @@ export function Footer() {
           © {new Date().getFullYear()} PixieBytes. Built with WhatsApp.
         </p>
         <div className="flex items-center gap-6 text-sm">
-          <a href="mailto:{siteConfig.supportEmail}" className="text-ink-500 transition hover:text-ink-900">
+          <a href={`mailto:${siteConfig.supportEmail}`} className="text-ink-500 transition hover:text-ink-900">
             {siteConfig.supportEmail}
+          </a>
+          <a href="/tools" className="text-ink-500 transition hover:text-ink-900">
+            Free tools
           </a>
           <a href="/privacy" className="text-ink-500 transition hover:text-ink-900">
             Privacy
