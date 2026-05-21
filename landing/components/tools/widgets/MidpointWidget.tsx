@@ -1,6 +1,8 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import { ToolResultCta } from '@/components/tools/ToolResultCta';
+import { buildToolPrefill } from '@/lib/toolPrefill';
 
 type Mode = '2d' | '3d';
 
@@ -111,6 +113,22 @@ export function MidpointWidget() {
               </div>
             </div>
           </div>
+
+          {(() => {
+            const cta = buildToolPrefill('midpoint-calculator', {
+              x1: formatNum(result.a[0]),
+              y1: formatNum(result.a[1]),
+              z1: formatNum(result.a[2]),
+              x2: formatNum(result.b[0]),
+              y2: formatNum(result.b[1]),
+              z2: formatNum(result.b[2]),
+              mx: formatNum(result.mx),
+              my: formatNum(result.my),
+              mz: formatNum(result.mz),
+              is3d: mode === '3d' ? '1' : '0',
+            });
+            return <ToolResultCta {...cta} prefill={cta.whatsappPrefill} />;
+          })()}
         </div>
       ) : (
         <div className="rounded-2xl border border-dashed border-ink-200 bg-ink-50 p-8 text-center text-sm text-ink-500">

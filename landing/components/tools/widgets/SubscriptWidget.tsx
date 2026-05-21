@@ -2,6 +2,8 @@
 
 import { useMemo, useState } from 'react';
 import { Copy, Check } from 'lucide-react';
+import { ToolResultCta } from '@/components/tools/ToolResultCta';
+import { buildToolPrefill } from '@/lib/toolPrefill';
 
 type Mode = 'smart' | 'all';
 
@@ -130,6 +132,11 @@ export function SubscriptWidget() {
         >
           {output || <span className="text-ink-400">Your subscript will appear here</span>}
         </div>
+
+        {output && (() => {
+          const cta = buildToolPrefill('subscript-generator', {});
+          return <ToolResultCta {...cta} prefill={cta.whatsappPrefill} />;
+        })()}
       </div>
 
       <p className="text-xs text-ink-400">

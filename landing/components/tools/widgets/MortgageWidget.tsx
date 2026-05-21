@@ -1,6 +1,8 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import { ToolResultCta } from '@/components/tools/ToolResultCta';
+import { buildToolPrefill } from '@/lib/toolPrefill';
 
 function fmtMoney(n: number): string {
   return n.toLocaleString('en-US', {
@@ -107,6 +109,16 @@ export function MortgageWidget() {
               <StatBlock label="Total interest" value={fmtMoney(result.totalInterest)} />
               <StatBlock label="Total paid" value={fmtMoney(result.totalPaid)} />
             </div>
+
+            {(() => {
+              const cta = buildToolPrefill('mortgage-calculator', {
+                monthly: result.monthly,
+                homePrice: Number(homePrice),
+                rate: Number(rate),
+                years: Number(years),
+              });
+              return <ToolResultCta {...cta} prefill={cta.whatsappPrefill} />;
+            })()}
           </div>
 
           <button
