@@ -5386,6 +5386,16 @@ async function generateWebsite(user) {
       `Your website is ready! Here's the preview:\n\n${previewUrl}\n\nHave a look - it's a ${pageSummary}.`
     );
 
+    // CAPI: report website preview as a Lead event for ad attribution
+    const { trackWebsitePreview } = require('../integrations/metaCapi');
+    await trackWebsitePreview({
+      phone:    user.phone_number,
+      email:    user.metadata?.email || websiteData?.contactEmail,
+      previewUrl,
+      ctwaClid: user.metadata?.adReferral?.ctwaClid,
+      channel:  user.channel,
+    });
+
     // Send the Stripe activation link as its own message so the user sees
     // the EXACT same URL in chat that the "Activate Now" button on the
     // site points to. One tap either way — same outcome. The total includes

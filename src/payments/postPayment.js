@@ -96,6 +96,19 @@ async function handleConfirmedPayment(payment, paidSession) {
     logger.warn(`[PAY] Phone mismatch for ${p.id}: payment=${p.phone_number}, user=${paidUserRecord.phone_number} — using user record`);
   }
 
+  // CAPI: Purchase event for ad attribution
+  const { trackPurchase } = require('../integrations/metaCapi');
+  await trackPurchase({
+    phone:       targetPhone,
+    email:       paidSession.customer_details?.email,
+    value:       p.amount / 100,
+    currency:    'usd',
+    contentName: p.description,
+    orderId:     String(p.id),
+    ctwaClid:    paidUserRecord?.metadata?.adReferral?.ctwaClid,
+    channel:     targetChannel,
+  });
+
   const amountDisplay = `$${(p.amount / 100).toLocaleString()}`;
   const isDomainAddon = p.service_type === 'domain_addon';
   const isWebsitePayment = !isDomainAddon && (/website|web/i.test(p.service_type || '') || /website|web/i.test(p.description || ''));
