@@ -18,7 +18,7 @@ export async function GET() {
     { loc: `${baseUrl}/`, lastmod, changefreq: 'daily', priority: '1.0' },
     { loc: `${baseUrl}/examples`, lastmod, changefreq: 'weekly', priority: '0.8' },
     { loc: `${baseUrl}/tools`, lastmod, changefreq: 'daily', priority: '1.0' },
-    { loc: `${baseUrl}/privacy`, lastmod, changefreq: 'monthly', priority: '0.3' },
+    { loc: `${baseUrl}/privacy`, lastmod, changefreq: 'monthly', priority: '0.8' },
     ...TOOLS.map((t) => ({
       loc: `${baseUrl}/tools/${t.slug}`,
       lastmod,
