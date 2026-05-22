@@ -1655,6 +1655,16 @@ async function _routeMessage(message) {
       logger.info(`[ROUTER] Intent=${intent} but no service target detected for ${from} — falling through to current handler instead of showing menu`);
     }
 
+    if (intent === 'greeting') {
+      const currentQuestion = STATE_QUESTION[user.state];
+      if (currentQuestion && !recapFired) {
+        await sendWithMenuButton(user.phone_number, `Yep, still here! ${currentQuestion}`);
+        await logMessage(user.id, `Greeted + re-asked: ${currentQuestion}`, 'assistant');
+        return;
+      }
+      // No active question (SALES_CHAT etc.) — fall through to normal handler.
+    }
+
     if (intent === 'question') {
       // Answer their question, then bring them back to where they were.
       // If the LLM call fails, skip the aside and just re-prompt — better

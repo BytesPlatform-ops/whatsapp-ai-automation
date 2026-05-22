@@ -140,6 +140,13 @@ function tryFastPath(text, { undoPending } = {}) {
     return { ...emptyVerdict(), primary: 'answer', source: 'fastpath_tiny', confidence: 0.85 };
   }
 
+  // Simple greetings mid-flow should not trigger the LLM aside machinery.
+  // "hello?", "hi!", "hey", "salaam" etc. → router handles with a warm
+  // "still here" + re-prompt at zero LLM cost.
+  if (/^(hi+|hey+|hello+|yo+|sup|hola|salaam|wassup|u there\??|you there\??)[\s!?.,]*$/i.test(t)) {
+    return { ...emptyVerdict(), primary: 'greeting', source: 'fastpath_greeting', confidence: 0.95 };
+  }
+
   // Delegation phrasings ("you decide", "surprise me", "idk", "whatever") —
   // the existing isDelegation check from smartDefaults captures these
   // language-agnostically, but it's a curated KEYWORD list rather than
