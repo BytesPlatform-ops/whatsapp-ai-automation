@@ -6,6 +6,7 @@ const { buildSalesPrompt } = require('../../llm/prompts');
 const { formatWhatsApp } = require('../../utils/formatWhatsApp');
 const { updateUserMetadata } = require('../../db/users');
 const { detectSecrets, validateBusinessName } = require('../../utils/validators');
+const { classifyIndustry } = require('../../utils/industryClassifier');
 
 // Internal-signal tag the LLM appends when it spots an injection attempt,
 // pasted secret, etc. The set must stay in sync with the prompt section
@@ -1218,7 +1219,10 @@ async function handleSalesBot(user, message) {
     // things the LLM already heard.
     businessName = normalizeBusinessName(businessName);
     const websiteData = { ...wd, businessName };
-    if (industry) websiteData.industry = industry;
+    if (industry) {
+      websiteData.industry = industry;
+      websiteData.industryKey = await classifyIndustry(industry);
+    }
     if (services) websiteData.services = services;
     await updateUserMetadata(user.id, { websiteData });
     user.metadata = { ...(user.metadata || {}), websiteData };
@@ -1255,7 +1259,7 @@ async function handleSalesBot(user, message) {
     // those cases still hit name-based detection because `industry` is
     // null/empty there.
     const salonByName = isSalonIndustry(websiteData.businessName);
-    const salonByIndustry = industry && isSalonIndustry(industry);
+    const salonByIndustry = industry && isSalonIndustry(industry, websiteData.industryKey);
     const industryUnsetOrSalon = !industry || salonByIndustry;
     if (salonByIndustry || (salonByName && industryUnsetOrSalon)) {
       // Services must be collected BEFORE entering the salon sub-flow.

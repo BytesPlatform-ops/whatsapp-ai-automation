@@ -107,14 +107,15 @@ async function generateWebsiteContent(businessData, extras = {}) {
     // come from the iterative WEB_COLLECT_PROJECTS_DETAILS flow.
     aboutText: userAboutText,
     projects: userProjects,
+    industryKey,
     // Caller-supplied hero image override. Skips the Unsplash API call
     // entirely — useful for demo fixtures and rate-limit recovery.
     heroImage: heroImageOverride,
   } = businessData;
 
   const hasServices = Array.isArray(services) && services.length > 0;
-  const hvacMode = isHvac(industry);
-  const realEstateMode = isRealEstate(industry);
+  const hvacMode = isHvac(industry, industryKey);
+  const realEstateMode = isRealEstate(industry, industryKey);
   // Plumbing shares the HVAC template; resolveTrade tells us which variant
   // the user lands on so LLM copy and seeded defaults match the trade.
   const trade = hvacMode ? resolveTrade(industry) : null;

@@ -98,7 +98,8 @@ const REAL_ESTATE_KEYWORDS = [
   // Word-bounded matches added below, but these substring lookups cover common phrases.
 ];
 
-function isHvac(industry) {
+function isHvac(industry, industryKey) {
+  if (industryKey) return industryKey === 'hvac';
   const s = String(industry || '').toLowerCase();
   if (HVAC_KEYWORDS.some((k) => s.includes(k))) return true;
   if (HVAC_AC_PATTERN.test(s)) return true;
@@ -127,7 +128,8 @@ function resolveTrade(industry) {
   return 'hvac';
 }
 
-function isRealEstate(industry) {
+function isRealEstate(industry, industryKey) {
+  if (industryKey) return industryKey === 'real_estate';
   const s = String(industry || '').toLowerCase();
   if (REAL_ESTATE_KEYWORDS.some((k) => s.includes(k))) return true;
   // Word-bounded checks for ambiguous tokens (so "homepage builder" doesn't match)
@@ -155,7 +157,8 @@ const PORTFOLIO_KEYWORDS = [
   'creator', 'creative',
 ];
 
-function isPortfolio(industry) {
+function isPortfolio(industry, industryKey) {
+  if (industryKey) return industryKey === 'portfolio';
   const s = String(industry || '').toLowerCase();
   if (PORTFOLIO_KEYWORDS.some((k) => s.includes(k))) return true;
   // Catch a few patterns not in the keyword list — "I am a designer" / "I do
@@ -168,8 +171,8 @@ function isPortfolio(industry) {
 // Industries that need a city + service-areas collection step. HVAC needs it
 // for emergency dispatch; real estate needs it for neighborhood pages.
 // Portfolio audiences don't need geographic areas (work is global by default).
-function needsAreaCollection(industry) {
-  return isHvac(industry) || isRealEstate(industry);
+function needsAreaCollection(industry, industryKey) {
+  return isHvac(industry, industryKey) || isRealEstate(industry, industryKey);
 }
 
 function pickTemplate(industry) {

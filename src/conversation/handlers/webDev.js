@@ -26,6 +26,7 @@ const { localize } = require('../../utils/localizer');
 const { dynamicPhrase } = require('../../utils/dynamicPhrase');
 const { normalizeBusinessName } = require('../../utils/normalizeName');
 const { classifySideChannelInCollection } = require('../sideChannel');
+const { classifyIndustry } = require('../../utils/industryClassifier');
 
 /**
  * Shared collection-state helper: when a state-specific extractor concludes
@@ -173,7 +174,7 @@ function buildFormUrl(token) {
 function shouldOfferServicesForm(nextState, websiteData) {
   const wd = websiteData || {};
   const isSalonByContext =
-    isSalonIndustry(wd.industry) || isSalonIndustry(wd.businessName);
+    isSalonIndustry(wd.industry, wd.industryKey) || isSalonIndustry(wd.businessName);
   if (
     nextState === STATES.WEB_COLLECT_SERVICES &&
     isSalonByContext &&
@@ -305,7 +306,7 @@ function nextMissingWebDevState(websiteData, fullMetadata = {}) {
   // page empty, so we still ask when areas are missing even if the city is
   // already known. A `areasSkipped` flag lets the user opt out explicitly.
   if (
-    needsAreaCollection(websiteData.industry) &&
+    needsAreaCollection(websiteData.industry, websiteData.industryKey) &&
     !websiteData.areasSkipped &&
     (!websiteData.primaryCity || !Array.isArray(websiteData.serviceAreas) || websiteData.serviceAreas.length === 0)
   ) {
@@ -314,7 +315,7 @@ function nextMissingWebDevState(websiteData, fullMetadata = {}) {
   // Real-estate flow diverges here: collect agent profile (brokerage / years /
   // designations) in place of the services list. The real-estate template has
   // no services section — whyChooseUs + featuredListings carry that load.
-  if (isRealEstate(websiteData.industry)) {
+  if (isRealEstate(websiteData.industry, websiteData.industryKey)) {
     if (!websiteData.agentProfileCollected) return STATES.WEB_COLLECT_AGENT_PROFILE;
     if (!websiteData.listingsFlowDone) {
       // Phase-gated: ASK → DETAILS → PHOTOS. If agent said skip at the ask
@@ -323,7 +324,7 @@ function nextMissingWebDevState(websiteData, fullMetadata = {}) {
       if (!websiteData.listingsDetailsDone) return STATES.WEB_COLLECT_LISTINGS_DETAILS;
       return STATES.WEB_COLLECT_LISTINGS_PHOTOS;
     }
-  } else if (isPortfolio(websiteData.industry)) {
+  } else if (isPortfolio(websiteData.industry, websiteData.industryKey)) {
     // Portfolio sub-flow: skills (services list) → about → projects (3-phase).
     // Skills come first so the LLM has context for any auto-generated bio.
     if (websiteData.services == null) return STATES.WEB_COLLECT_SERVICES;
@@ -402,7 +403,7 @@ async function smartAdvance(user, message, ackPrefix = null) {
     // like "Hair Plus Tech" (software co) would otherwise misroute into
     // the salon flow even when industry was correctly extracted as
     // "Software". Mirrors the same gate in salesBot.js's salon trigger.
-    const salonByIndustryHere = isSalonIndustry(merged.industry);
+    const salonByIndustryHere = isSalonIndustry(merged.industry, merged.industryKey);
     const salonByNameHere = isSalonIndustry(merged.businessName);
     const industryUnsetOrSalonHere = !merged.industry || salonByIndustryHere;
     const looksLikeSalon =
@@ -478,7 +479,7 @@ function questionForState(state, websiteData) {
     }
     case STATES.WEB_COLLECT_SERVICES: {
       const { isHvac, resolveTrade } = require('../../website-gen/templates');
-      if (isHvac(websiteData.industry)) {
+      if (isHvac(websiteData.industry, websiteData.industryKey)) {
         const trade = resolveTrade(websiteData.industry);
         // Trade-specific prompt with example defaults — keep the example
         // lists in sync with the DEFAULT_SERVICES arrays in
@@ -889,7 +890,8 @@ async function handleCollectIndustry(user, message) {
 
   // List selections are trusted as-is — the user picked a pre-defined option.
   if (message.listId) {
-    const websiteData = { ...(user.metadata?.websiteData || {}), industry: rawInput };
+    const industryKey = await classifyIndustry(rawInput);
+    const websiteData = { ...(user.metadata?.websiteData || {}), industry: rawInput, industryKey };
     await updateUserMetadata(user.id, { websiteData });
     user.metadata = { ...(user.metadata || {}), websiteData };
     await logMessage(user.id, `Industry: ${rawInput}`, 'assistant');
@@ -954,7 +956,8 @@ async function handleCollectIndustry(user, message) {
     announcedByFallback = true;
   }
 
-  const merged = { ...websiteData, industry };
+  const industryKey = await classifyIndustry(industry);
+  const merged = { ...websiteData, industry, industryKey };
   await updateUserMetadata(user.id, { websiteData: merged });
   user.metadata = { ...(user.metadata || {}), websiteData: merged };
   await logMessage(user.id, `Industry: ${industry}`, 'assistant');
@@ -1214,14 +1217,14 @@ const HVAC_PALETTE = { primaryColor: '#1E3A5F', secondaryColor: '#0F172A', accen
 const REAL_ESTATE_PALETTE = { primaryColor: '#1A2B45', secondaryColor: '#0F1B30', accentColor: '#C9A96E' };
 const SALON_PALETTE = { primaryColor: '#1F2937', secondaryColor: '#111827', accentColor: '#EC4899' };
 
-function getColorsForIndustry(industry) {
+function getColorsForIndustry(industry, industryKey) {
   // Template-matched industries take precedence — they share a template
   // and must share the template's researched palette (plumbing + HVAC
   // use the same nav/CTA chrome, so they must use the same colours).
   const { isHvac, isRealEstate } = require('../../website-gen/templates');
-  if (isHvac(industry)) return HVAC_PALETTE;
-  if (isRealEstate(industry)) return REAL_ESTATE_PALETTE;
-  if (isSalonIndustry(industry)) return SALON_PALETTE;
+  if (isHvac(industry, industryKey)) return HVAC_PALETTE;
+  if (isRealEstate(industry, industryKey)) return REAL_ESTATE_PALETTE;
+  if (isSalonIndustry(industry, industryKey)) return SALON_PALETTE;
 
   // Non-templated industries — keyword lookup, then partial match, then
   // the generic default palette.
@@ -1323,7 +1326,8 @@ function resolveColorReply(text) {
 }
 
 // A "salon-like" business gets the dedicated salon template with its booking flow.
-function isSalonIndustry(industry) {
+function isSalonIndustry(industry, industryKey) {
+  if (industryKey) return industryKey === 'salon';
   if (!industry) return false;
   // Allow "Barbershop" / "Hairstylist" / "Nailstudio" as one-word forms — the
   // \b at the end of the keyword would otherwise require a non-word char
@@ -1400,7 +1404,7 @@ async function handleCollectServices(user, message) {
 
   const wd = user.metadata?.websiteData || {};
   const industry = wd.industry || '';
-  const colors = getColorsForIndustry(industry);
+  const colors = getColorsForIndustry(industry, wd.industryKey);
 
   // LLM-first extraction. The extractor fast-paths clean comma lists through
   // without an LLM call, normalizes prose like "we just rent trucks" →
@@ -1448,7 +1452,7 @@ async function handleCollectServices(user, message) {
   // service names ("Haircut 30min $40, Color 90min $120, Manicure 45min $30"),
   // capture both so the durations step is skipped (or only asks for what's
   // missing). Both extractions run in parallel to keep latency low.
-  if (!skipped && isSalonIndustry(industry)) {
+  if (!skipped && isSalonIndustry(industry, wd.industryKey)) {
     try {
       const [pricesByName, durationsByName] = await Promise.all([
         extractPricesByService(servicesText, services, user.id),
@@ -1479,7 +1483,7 @@ async function handleCollectServices(user, message) {
     'assistant'
   );
 
-  if (isSalonIndustry(industry)) {
+  if (isSalonIndustry(industry, wd.industryKey)) {
     if (websiteData.salonHasPrices) {
       // Try to detect currency from the raw services text first.
       // If user wrote "$40" or "£120" or "Rs 500" it's already clear — no need to ask.
@@ -4283,7 +4287,7 @@ function renderServicesLine(wd) {
   }
   try {
     const { isHvac, resolveTrade } = require('../../website-gen/templates');
-    if (isHvac(wd.industry)) {
+    if (isHvac(wd.industry, wd.industryKey)) {
       const trade = resolveTrade(wd.industry);
       const { TRADE_COPY } = require('../../website-gen/templates/hvac/common');
       const entry = TRADE_COPY[trade];
@@ -4323,8 +4327,8 @@ async function showSummaryPeek(user) {
     wd = { ...(user.metadata?.websiteData || {}) };
   }
 
-  const realEstate = isRealEstate(wd.industry);
-  const hvac = !realEstate && isHvac(wd.industry);
+  const realEstate = isRealEstate(wd.industry, wd.industryKey);
+  const hvac = !realEstate && isHvac(wd.industry, wd.industryKey);
   const contactInfo = [wd.contactEmail, wd.contactPhone, wd.contactAddress].filter(Boolean).join(' | ') || 'Not yet';
 
   const lines = [`Here's what I've got so far:`, ``];
@@ -4396,8 +4400,8 @@ async function showConfirmSummary(user, prefix = '') {
     wd = { ...(user.metadata?.websiteData || {}) };
   }
 
-  const realEstate = isRealEstate(wd.industry);
-  const hvac = !realEstate && isHvac(wd.industry);
+  const realEstate = isRealEstate(wd.industry, wd.industryKey);
+  const hvac = !realEstate && isHvac(wd.industry, wd.industryKey);
   const contactInfo = [wd.contactEmail, wd.contactPhone, wd.contactAddress].filter(Boolean).join(' | ') || 'None';
 
   const lines = [
@@ -4459,7 +4463,7 @@ async function showConfirmSummary(user, prefix = '') {
   if (Array.isArray(wd.projects) && wd.projects.length) {
     const withCovers = wd.projects.filter((p) => p.photoUrl).length;
     lines.push(`*Projects:* ${wd.projects.length}${withCovers ? ` (${withCovers} with covers)` : ''}`);
-  } else if (require('../../website-gen/templates').isPortfolio(wd.industry) && wd.projectsAskAnswered) {
+  } else if (require('../../website-gen/templates').isPortfolio(wd.industry, wd.industryKey) && wd.projectsAskAnswered) {
     lines.push(`*Projects:* placeholder cards`);
   }
 
@@ -4933,7 +4937,7 @@ async function handleConfirm(user, message) {
   // Shared by the single-edit and multi-edit paths below. List fields
   // (services, serviceAreas) honor an `op` parameter (add / remove /
   // replace); scalars always replace.
-  const mutateWdForField = (field, value, op) => {
+  const mutateWdForField = async (field, value, op) => {
     const v = String(value || '').trim();
     if (!v) return null;
     switch (field) {
@@ -4943,6 +4947,7 @@ async function handleConfirm(user, message) {
         return { label: `business name → *${wd.businessName}*`, kind: 'change' };
       case 'industry':
         wd.industry = v;
+        wd.industryKey = await classifyIndustry(v);
         return { label: `industry → *${wd.industry}*`, kind: 'change' };
       case 'services': {
         const items = splitListValue(v);
@@ -5028,8 +5033,9 @@ async function handleConfirm(user, message) {
       const v = String(value || '').trim();
       if (!v) return null;
       wd.industry = v;
+      wd.industryKey = await classifyIndustry(v);
       const needsSalonFlow =
-        isSalonIndustry(v) &&
+        isSalonIndustry(v, wd.industryKey) &&
         !wd.bookingMode &&
         (!Array.isArray(wd.salonServices) || wd.salonServices.length === 0);
       if (needsSalonFlow) {
@@ -5041,7 +5047,7 @@ async function handleConfirm(user, message) {
       }
       return applyAndReshow(`Industry updated to *${wd.industry}*`);
     }
-    const result = mutateWdForField(field, value);
+    const result = await mutateWdForField(field, value);
     if (!result) return null;
     const { label, kind } = result;
     const prefix = kind === 'noop' ? 'ℹ️' : '✅';
@@ -5069,7 +5075,7 @@ async function handleConfirm(user, message) {
     const changes = [];
     const noops = [];
     for (const m of llmEdits) {
-      const result = mutateWdForField(m.field, m.value, m.op);
+      const result = await mutateWdForField(m.field, m.value, m.op);
       if (!result) continue;
       if (result.kind === 'change') changes.push(result.label);
       else if (result.kind === 'noop') noops.push(result.label);
@@ -5170,9 +5176,10 @@ async function handleConfirm(user, message) {
 // utility pages not in the nav.
 function describePages(industry, websiteData, templateId) {
   const { isHvac, isRealEstate } = require('../../website-gen/templates');
+  const industryKey = websiteData?.industryKey;
   const hasServices = Array.isArray(websiteData?.services) && websiteData.services.length > 0;
-  if (isHvac(industry)) return ['Home', 'Services', 'Areas', 'About', 'Contact'];
-  if (isRealEstate(industry)) return ['Home', 'Listings', 'Neighborhoods', 'About', 'Contact'];
+  if (isHvac(industry, industryKey)) return ['Home', 'Services', 'Areas', 'About', 'Contact'];
+  if (isRealEstate(industry, industryKey)) return ['Home', 'Listings', 'Neighborhoods', 'About', 'Contact'];
   if (templateId === 'salon') {
     const pages = ['Home', 'Booking'];
     if (hasServices) pages.push('Services');
@@ -5238,8 +5245,8 @@ async function generateWebsite(user) {
     // 1. Generate content with LLM
     const { isPortfolio: isPortfolioInd } = require('../../website-gen/templates');
     let templateId;
-    if (isSalonIndustry(websiteData.industry)) templateId = 'salon';
-    else if (isPortfolioInd(websiteData.industry)) templateId = 'portfolio';
+    if (isSalonIndustry(websiteData.industry, websiteData.industryKey)) templateId = 'salon';
+    else if (isPortfolioInd(websiteData.industry, websiteData.industryKey)) templateId = 'portfolio';
     else templateId = 'business-starter';
     const siteId = freshUser.metadata?.currentSiteId;
     logger.info(`[WEBGEN] Step 2/5: Generating website content via LLM for "${websiteData.businessName}" (template=${templateId})`);
@@ -8277,6 +8284,7 @@ async function applyFieldCorrection(user, field, rawValue, op = 'replace') {
     }
     case 'industry':
       wd.industry = value;
+      wd.industryKey = await classifyIndustry(value);
       ack = `Got it — updated industry to *${value}*.`;
       break;
     case 'contactEmail': {
