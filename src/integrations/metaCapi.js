@@ -59,16 +59,30 @@ async function sendCapiEvents(events) {
     }),
   };
 
+  // When META_CAPI_TEST_EVENT_CODE is set, events route to the Events
+  // Manager → Test Events tab instead of counting as production data.
+  // Leave it UNSET in prod. Grab the code from Events Manager → your
+  // dataset → Test Events (it looks like "TEST12345").
+  const testEventCode = process.env.META_CAPI_TEST_EVENT_CODE;
+  if (testEventCode) {
+    payload.test_event_code = testEventCode;
+  }
+
   try {
-    await axios.post(
+    const res = await axios.post(
       `${GRAPH_BASE}/${datasetId}/events`,
       payload,
       { params: { access_token: token }, timeout: 5000 }
     );
+    if (testEventCode) {
+      logger.info(`[CAPI] Sent ${events.length} test event(s) [${events.map((e) => e.eventName).join(', ')}]: ${JSON.stringify(res.data)}`);
+    }
+    return res.data;
   } catch (err) {
     // Non-fatal — CAPI failure must never break bot flow
     const detail = err.response?.data ? JSON.stringify(err.response.data) : err.message;
     logger.warn(`[CAPI] Failed to send event(s): ${detail}`);
+    return null;
   }
 }
 
