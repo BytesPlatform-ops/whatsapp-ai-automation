@@ -91,7 +91,7 @@ async function sendCapiEvents(events) {
  * sends a generated website preview.
  */
 async function trackWebsitePreview({ phone, email, previewUrl, ctwaClid, channel } = {}) {
-  await sendCapiEvents([{
+  return sendCapiEvents([{
     eventName:  ctwaClid ? 'LeadSubmitted' : 'Lead',
     eventId:    `preview_${sha256(phone || '')}_${Date.now()}`,
     ctwaClid,
@@ -112,7 +112,7 @@ async function trackWebsitePreview({ phone, email, previewUrl, ctwaClid, channel
  * Fire a Purchase event when a Stripe payment is confirmed.
  */
 async function trackPurchase({ phone, email, value, currency = 'usd', contentName, orderId, ctwaClid, channel } = {}) {
-  await sendCapiEvents([{
+  return sendCapiEvents([{
     eventName: 'Purchase',
     eventId:   `purchase_${orderId || sha256(phone || '')}_${Date.now()}`,
     ctwaClid,
