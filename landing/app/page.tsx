@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import { Navigation } from '@/components/sections/Navigation';
 import { Hero } from '@/components/sections/Hero';
 import { TrustStrip } from '@/components/sections/TrustStrip';
@@ -11,6 +12,10 @@ import { FAQ } from '@/components/sections/FAQ';
 import { FinalCTA } from '@/components/sections/FinalCTA';
 import { Footer } from '@/components/sections/Footer';
 import { FloatingWhatsApp } from '@/components/sections/FloatingWhatsApp';
+
+export const metadata: Metadata = {
+  alternates: { canonical: 'https://pixiebot.co' },
+};
 
 export default function Page() {
   return (

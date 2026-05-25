@@ -666,6 +666,496 @@ export const TOOLS: ToolDefinition[] = [
     about:
       'Half birthdays are a modern cultural phenomenon that exploded with social media. The tradition originally served two specific groups: kids with summer birthdays who couldn\'t celebrate at school, and people with serious illnesses for whom every milestone mattered. Over the past decade, half birthdays have gone mainstream — celebrities post half birthday tributes to their kids, dog owners post pet half birthdays, and couples mark relationship half-anniversaries. From a calendar-math perspective, the half birthday is simply six calendar months added to the birth date, with sensible handling of month-length edge cases (a January 31 birthday gives a July 31 half birthday; an August 31 birthday gives the last day of February). Some traditions calculate it as exactly 182.5 days after the birthday, but the calendar-month version is far more common in practice because it falls on the same numeric day of the month, making it easier to remember.',
   },
+  {
+    slug: 'ap-bio-score-calculator',
+    title: 'AP Biology Score Calculator 2026 — Free AP Bio Predictor | Pixie',
+    h1: 'AP Biology Score Calculator',
+    shortName: 'AP Bio Score Calculator',
+    tagline: 'Predict your AP Biology score from practice exam results.',
+    metaDescription:
+      'Free AP Biology score calculator. Enter your MCQ and free response scores to predict your AP Bio 1–5 score. Uses the latest College Board scoring curve.',
+    keywords: ['ap bio score calculator', 'ap biology score calculator', 'ap bio score predictor', 'ap biology curve', 'ap bio exam score'],
+    category: 'Calculator',
+    emoji: '🧬',
+    image: '/tools/ap-bio-score-calculator.jpg',
+    imageAlt: 'Biology textbook open to DNA double helix diagram',
+    primaryKeyword: 'ap bio score calculator',
+    intro:
+      'Enter your raw multiple-choice and free-response scores from the AP Biology exam. Get your predicted 1–5 score using the College Board\'s latest scoring conversion. See exactly how many more MCQ or FRQ points you need to reach the next score band.',
+    howItWorks: [
+      { title: 'Enter MCQ score', description: 'Number of multiple-choice questions correct out of 60.' },
+      { title: 'Enter free-response points', description: 'Total points earned on all 6 free-response questions (out of 40).' },
+      { title: 'Get predicted score', description: 'See your composite score and predicted 1–5 AP score with breakdown.' },
+    ],
+    faqs: [
+      {
+        q: 'How is the AP Biology score calculated?',
+        a: 'The AP Bio composite combines your MCQ section (60 questions, 50% weight) and FRQ section (6 questions, 50% weight). Both halves are scaled to 50 points and added together to form a 0–100 composite, then mapped to a 1–5 AP score using College Board cutoffs.',
+      },
+      {
+        q: 'What score do I need for a 5 on AP Bio?',
+        a: 'Historically, a composite of around 70%+ maps to a 5 — roughly 42/60 MCQ and 28/40 FRQ. The exact cutoff shifts yearly based on exam difficulty.',
+      },
+      {
+        q: 'Is this calculator accurate?',
+        a: 'The calculator uses published College Board curve data and is accurate within ±1 score band. Treat the prediction as a strong estimate — the real cutoff adjusts each year.',
+      },
+      {
+        q: 'What is the AP Biology exam format?',
+        a: '60 multiple-choice questions (90 min, 50% of score) + 6 free-response questions (90 min, 50% of score): 2 long FRQ (8–10 pts each) and 4 short FRQ (4 pts each).',
+      },
+      {
+        q: 'What units are on the AP Biology exam?',
+        a: 'The 8 units: Chemistry of Life, Cell Structure & Function, Cellular Energetics, Cell Communication & Cell Cycle, Heredity, Gene Expression & Regulation, Natural Selection, and Ecology. Units 3–4 have the heaviest weighting.',
+      },
+    ],
+    relatedSlugs: ['ap-chem-score-calculator', 'ap-calc-ab-score-calculator'],
+    ctaHook: 'Teach AP Biology? Pixie generates your tutoring website in 60 seconds — text us on WhatsApp.',
+    aboutHeading: 'How the AP Biology curve works',
+    about:
+      'AP Biology is one of the most popular AP exams, taken by over 280,000 students annually. About 14–16% earn a 5, and roughly 65% earn a 3 or higher. The exam was significantly redesigned in 2020 to emphasize scientific reasoning and data analysis over memorization. FRQ questions now frequently include graphs, experimental design problems, and mathematical models. The hardest units are Gene Expression (Unit 6) and Ecology (Unit 8). Unlike AP Chem, AP Bio allows some reference materials during the exam. The composite score combines both sections equally at 50% each, and College Board adjusts the 5-cutoff by 2–5 points annually based on overall exam difficulty.',
+  },
+  {
+    slug: 'ap-calc-ab-score-calculator',
+    title: 'AP Calc AB Score Calculator 2026 — Free AP Calculus Predictor | Pixie',
+    h1: 'AP Calculus AB Score Calculator',
+    shortName: 'AP Calc AB Score Calculator',
+    tagline: 'Predict your AP Calculus AB score from practice exam results.',
+    metaDescription:
+      'Free AP Calculus AB score calculator. Enter your MCQ and free response scores to predict your AP Calc AB 1–5 score. Based on the latest College Board scoring curve.',
+    keywords: ['ap calc ab score calculator', 'ap calculus ab score', 'ap calc ab predictor', 'ap calculus ab curve', 'ap calc score'],
+    category: 'Calculator',
+    emoji: '∫',
+    image: '/tools/ap-calc-ab-score-calculator.jpg',
+    imageAlt: 'Calculus textbook open with mathematical equations and graphs',
+    primaryKeyword: 'ap calc ab score calculator',
+    intro:
+      'Enter your raw multiple-choice and free-response scores from AP Calculus AB. See your predicted 1–5 score using the College Board\'s most recent scoring curve, plus how many more points you need to hit the next score band.',
+    howItWorks: [
+      { title: 'Enter MCQ score', description: 'Total multiple-choice correct out of 45 (30 no-calculator + 15 calculator).' },
+      { title: 'Enter FRQ points', description: 'Total points earned across 6 free-response questions (max 54 points).' },
+      { title: 'Get predicted score', description: 'See composite score and predicted 1–5 AP score.' },
+    ],
+    faqs: [
+      {
+        q: 'How is AP Calculus AB scored?',
+        a: 'The exam has two sections worth 50% each. Section I: 45 MCQ (30 no-calc, 15 calc). Section II: 6 FRQ (3 no-calc, 3 calc), each worth 9 points (54 total). Both sections are scaled to 50 composite points and combined.',
+      },
+      {
+        q: 'What score do I need for a 5 on AP Calc AB?',
+        a: 'Typically around 70% of total points — about 31/45 MCQ and 38/54 FRQ. The exact cutoff varies slightly each year; historically the 5 cutoff has been near 65–70% composite.',
+      },
+      {
+        q: 'Is AP Calc AB harder than AP Calc BC?',
+        a: 'AP Calc AB covers roughly the first semester of college calculus (limits, derivatives, integrals). AP Calc BC covers all of AB plus series, parametric, polar, and more. BC has a higher 5 rate (~40%) because only motivated students take it.',
+      },
+      {
+        q: 'What topics are on AP Calc AB?',
+        a: 'Limits and continuity, derivatives (basic, chain rule, implicit), applications of derivatives (optimization, related rates), integrals, the Fundamental Theorem of Calculus, area between curves, and basic differential equations.',
+      },
+      {
+        q: 'Can I use a calculator on AP Calc AB?',
+        a: 'On Part B of Section I (15 MCQ) and Part B of Section II (3 FRQ) yes. The rest is no-calculator. A graphing calculator is required — TI-84, TI-Nspire, or equivalent.',
+      },
+    ],
+    relatedSlugs: ['ap-bio-score-calculator', 'ap-psych-score-calculator'],
+    ctaHook: 'Teach calculus? Pixie generates your tutoring website in 60 seconds — text us on WhatsApp.',
+    aboutHeading: 'How the AP Calc AB scoring curve works',
+    about:
+      'AP Calculus AB is taken by roughly 300,000 students each year, making it one of the most common AP exams. About 20–22% earn a 5, and roughly 58–63% earn a 3 or higher — a higher 3+ rate than AP Chemistry or AP Physics. The exam tests limits, derivatives, integrals, the Fundamental Theorem, differential equations, and accumulation. Free-response questions are scored by trained AP readers who follow strict rubrics — partial credit is awarded, so showing work matters even when the final answer is wrong. Each FRQ is worth 9 points. The most commonly missed topics on AP Calc AB FRQs are related rates, implicit differentiation, and accumulation functions.',
+  },
+  {
+    slug: 'ap-psych-score-calculator',
+    title: 'AP Psychology Score Calculator 2026 — Free AP Psych Predictor | Pixie',
+    h1: 'AP Psychology Score Calculator',
+    shortName: 'AP Psych Score Calculator',
+    tagline: 'Predict your AP Psychology score from practice exam results.',
+    metaDescription:
+      'Free AP Psychology score calculator. Enter your MCQ and free response scores to predict your AP Psych 1–5 score. Uses the latest College Board scoring curve.',
+    keywords: ['ap psych score calculator', 'ap psychology score', 'ap psych predictor', 'ap psychology curve', 'ap psych exam score'],
+    category: 'Calculator',
+    emoji: '🧠',
+    image: '/tools/ap-psych-score-calculator.jpg',
+    imageAlt: 'Psychology textbook with brain diagram and neural network illustration',
+    primaryKeyword: 'ap psych score calculator',
+    intro:
+      'Enter your raw multiple-choice and free-response scores from the AP Psychology exam. Get your predicted 1–5 score using the College Board\'s latest scoring conversion. See exactly how many more points you need to reach the next score band.',
+    howItWorks: [
+      { title: 'Enter MCQ score', description: 'Number of multiple-choice questions correct out of 100.' },
+      { title: 'Enter FRQ points', description: 'Total points earned on both free-response questions (max 14 points, 7 each).' },
+      { title: 'Get predicted score', description: 'See your composite and predicted AP score with section breakdown.' },
+    ],
+    faqs: [
+      {
+        q: 'How is AP Psychology scored?',
+        a: 'Section I: 100 MCQ (70 min), worth 66.7% of composite. Section II: 2 FRQ — concept application (7 pts) + research design (7 pts), 50 min, worth 33.3% of composite. The two sections are weighted and combined into a 0–100 composite.',
+      },
+      {
+        q: 'What score do I need for a 5 on AP Psych?',
+        a: 'Typically around 75–80% of total composite. On the MCQ, that means roughly 80+ correct. The 2 FRQ questions (7 pts each) are scored strictly — even one missed component drops you a point.',
+      },
+      {
+        q: 'Is AP Psychology easy?',
+        a: 'AP Psych has one of the highest 5-rates of common AP exams — about 22–24% earn a 5, and roughly 65% earn a 3+. FRQ scoring is strict: you must use exact terminology correctly, like distinguishing "classical" from "operant" conditioning precisely.',
+      },
+      {
+        q: 'What topics are on AP Psychology?',
+        a: '9 units: Biological Bases of Behavior, Sensation & Perception, States of Consciousness, Learning, Cognitive Psychology, Developmental Psychology, Motivation/Emotion/Personality, Clinical Psychology, and Social Psychology. Social Psychology and Clinical Psychology together account for ~30% of MCQs.',
+      },
+      {
+        q: 'How are the AP Psych FRQs graded?',
+        a: 'Each FRQ is scored on a strict point-by-point rubric. The concept application question asks you to apply ~7 psychological terms to a scenario — each term earns 1 point only if correctly applied in context. Partial credit is given per term.',
+      },
+    ],
+    relatedSlugs: ['ap-bio-score-calculator', 'ap-calc-ab-score-calculator'],
+    ctaHook: 'Teach AP Psychology? Pixie generates your tutoring website in 60 seconds — text us on WhatsApp.',
+    aboutHeading: 'Why AP Psychology has one of the highest 5 rates',
+    about:
+      'AP Psychology is the second most popular AP exam after AP Language, with over 350,000 test-takers annually. It has one of the highest 5-rates of any major AP exam (22–24%) because it does not require the mathematical fluency needed for AP Sciences or the writing speed of AP English. However, FRQ performance separates average students from high scorers: the concept application question demands precise use of psychological terminology. The most tested topics are Units 7–8 (Motivation, Emotion, Clinical Psychology). Psychologists like Freud, Pavlov, Skinner, Bandura, and Kohlberg appear frequently on MCQs.',
+  },
+  {
+    slug: 'calculator-bacalaureat',
+    title: 'Calculator Bacalaureat — Calculează Media Examenului | Pixie',
+    h1: 'Calculator Bacalaureat',
+    shortName: 'Calculator Bacalaureat',
+    tagline: 'Calculează media de absolvire a examenului de bacalaureat.',
+    metaDescription:
+      'Calculator bacalaureat gratuit. Introdu notele la scris, oral și competențe pentru a afla media finală și dacă ai promovat examenul de bacalaureat.',
+    keywords: ['calculator bacalaureat', 'media bacalaureat', 'calcul bacalaureat', 'nota bacalaureat', 'promovat bacalaureat'],
+    category: 'Calculator',
+    emoji: '🎓',
+    image: '/tools/calculator-bacalaureat.jpg',
+    imageAlt: 'Student with diploma and graduation ceremony',
+    primaryKeyword: 'calculator bacalaureat',
+    intro:
+      'Introdu notele de la probele scrise, orale și competențe pentru a calcula media finală de bacalaureat. Calculatorul urmează grila oficială de ponderare — află dacă ai promovat și cu câte puncte.',
+    howItWorks: [
+      { title: 'Introdu notele la scris', description: 'Nota la Română scris, proba obligatorie de profil și proba la alegere.' },
+      { title: 'Adaugă probele orale și media liceu', description: 'Notele la oral Română, limbă modernă, competențe digitale și media generală din liceu (cl. 9–12).' },
+      { title: 'Află media finală', description: 'Calculatorul afișează media ponderată și dacă ai promovat (minim 6.00, note individuale ≥ 5.00).' },
+    ],
+    faqs: [
+      {
+        q: 'Cum se calculează media de bacalaureat?',
+        a: 'Media finală = (Română scris × 0.2) + (Probă obligatorie profil × 0.2) + (Probă la alegere × 0.2) + (Oral Română × 0.1) + (Oral limbă modernă × 0.1) + (Competențe digitale × 0.1) + (Media generală liceu × 0.1). Suma ponderilor = 1.0.',
+      },
+      {
+        q: 'Ce medie trebuie să am pentru a promova?',
+        a: 'Condiții de promovare: (1) media finală ≥ 6.00; (2) fiecare notă la probele scrise ≥ 5.00; (3) fiecare notă la probele orale ≥ 5.00. Dacă oricare notă scrisă este sub 5, examenul nu este promovat indiferent de medie.',
+      },
+      {
+        q: 'Cum influențează media de liceu nota finală?',
+        a: 'Media generală din liceu (cl. 9–12) influențează 10% din nota finală de bacalaureat. Este media aritmetică a tuturor mediilor anuale din clasele 9–12.',
+      },
+      {
+        q: 'Câte probe scrise sunt la bacalaureat?',
+        a: 'Există 3 probe scrise: Română (obligatorie), o probă obligatorie de profil (ex. Matematică pentru real, Istorie pentru uman), și o probă la alegere a profilului. Fiecare probă durează 3 ore.',
+      },
+      {
+        q: 'Ce se întâmplă dacă ai picat bacalaureatul?',
+        a: 'Poți susține examenul în sesiunile din august ale aceluiași an sau în sesiunile din anii următori, fără limită de număr. Probele susținute cu notă ≥ 5.00 pot fi păstrate timp de 2 ani.',
+      },
+    ],
+    relatedSlugs: ['ap-bio-score-calculator', 'midpoint-calculator'],
+    ctaHook: 'Ești profesor sau meditator? Pixie îți generează site-ul în 60 de secunde — scrie-ne pe WhatsApp.',
+    aboutHeading: 'Cum funcționează examenul de bacalaureat în România',
+    about:
+      'Bacalaureatul românesc este examenul de absolvire a liceului, echivalentul A-Level-urilor britanice. Susținut de elevi din clasa a 12-a, examenul include probe scrise pe 3 zile (Română, profil obligatoriu, la alegere) și probe orale evaluate anterior. Rata de promovare variază între 60–75% la nivel național. Notele de la bacalaureat sunt esențiale pentru admiterea la universitățile din România. Ministerul Educației publică anual metodologia de calcul; acest calculator implementează formula standard pentru sesiunea 2025–2026.',
+  },
+  {
+    slug: 'crosswind-calculator',
+    title: 'Crosswind Calculator — Aviation Crosswind & Headwind Component | Pixie',
+    h1: 'Crosswind Calculator',
+    shortName: 'Crosswind Calculator',
+    tagline: 'Calculate crosswind and headwind components for any runway.',
+    metaDescription:
+      'Free crosswind calculator for pilots. Enter wind direction, wind speed, and runway heading to get the exact crosswind and headwind/tailwind component. Instant results.',
+    keywords: ['crosswind calculator', 'crosswind component calculator', 'aviation crosswind', 'headwind calculator', 'runway crosswind'],
+    category: 'Calculator',
+    emoji: '✈️',
+    image: '/tools/crosswind-calculator.jpg',
+    imageAlt: 'Small aircraft on a runway with a wind sock blowing sideways',
+    primaryKeyword: 'crosswind calculator',
+    intro:
+      'Enter the wind direction (from ATIS or METAR), wind speed, and the runway heading you\'re departing or landing on. Get the exact crosswind and headwind/tailwind component in seconds — no trigonometry required. Essential for student pilots and checkride prep.',
+    howItWorks: [
+      { title: 'Enter wind direction & speed', description: 'Wind direction in degrees and speed in knots from your ATIS/METAR report.' },
+      { title: 'Enter runway heading', description: 'The runway heading in degrees (runway 27 = 270°, runway 09 = 090°).' },
+      { title: 'Get crosswind & headwind', description: 'See the crosswind component and headwind (positive) or tailwind (negative) instantly.' },
+    ],
+    faqs: [
+      {
+        q: 'How do you calculate crosswind component?',
+        a: 'Crosswind = wind speed × sin(wind angle), where wind angle is the difference between wind direction and runway heading. Example: wind from 270°, runway 240° → wind angle = 30° → Crosswind = 20 kts × sin(30°) = 10 kts.',
+      },
+      {
+        q: 'How do you calculate headwind component?',
+        a: 'Headwind = wind speed × cos(wind angle). Using the same example: 20 kts × cos(30°) = 17.3 kts headwind. A negative value means a tailwind.',
+      },
+      {
+        q: 'What is the max crosswind for a Cessna 172?',
+        a: 'The Cessna 172S has a demonstrated crosswind component of 15 knots. As a student pilot, treating it as a personal limit is wise. Always check your specific aircraft\'s POH.',
+      },
+      {
+        q: 'What does demonstrated crosswind component mean?',
+        a: 'It\'s the maximum crosswind at which the aircraft was tested during certification. The actual maximum depends on pilot skill — experienced pilots can handle crosswinds beyond the demonstrated limit in good conditions.',
+      },
+      {
+        q: 'What runway number should I enter?',
+        a: 'Multiply the runway number by 10 to get the heading. Runway 27 = 270°, Runway 09 = 090°, Runway 36 = 360°. Use the runway you\'re actually landing on.',
+      },
+    ],
+    relatedSlugs: ['dunk-calculator', 'midpoint-calculator'],
+    ctaHook: 'Run a flight school or aviation blog? Pixie generates your website in 60 seconds — text us on WhatsApp.',
+    aboutHeading: 'Why crosswind calculation matters in aviation',
+    about:
+      'Crosswind landings are one of the most skill-intensive maneuvers in general aviation, and exceeding crosswind limits is a leading cause of runway excursions. The crosswind component formula resolves the wind vector into two components relative to the runway: one parallel (headwind/tailwind) and one perpendicular (crosswind). Each aircraft has a "demonstrated crosswind" value in the POH — for the Cessna 172, it\'s 15 knots; for a Boeing 737, up to 35 knots. ATIS and METAR reports give wind in degrees magnetic and speed in knots, so this calculator accepts those inputs directly. Always verify conditions at the actual airport — ground-level winds can differ significantly from reported winds.',
+  },
+  {
+    slug: 'dunk-calculator',
+    title: 'Dunk Calculator — Can You Dunk a Basketball? | Pixie',
+    h1: 'Dunk Calculator',
+    shortName: 'Dunk Calculator',
+    tagline: 'Find out if you can dunk — and exactly how high you need to jump.',
+    metaDescription:
+      'Free dunk calculator. Enter your height and standing reach to find out how high you need to jump to dunk a basketball. Includes vertical jump training tips.',
+    keywords: ['dunk calculator', 'can i dunk calculator', 'vertical jump to dunk', 'how high to dunk', 'basketball dunk calculator'],
+    category: 'Calculator',
+    emoji: '🏀',
+    image: '/tools/dunk-calculator.jpg',
+    imageAlt: 'Basketball player dunking over a defender in a gym',
+    primaryKeyword: 'dunk calculator',
+    intro:
+      'Enter your height and standing reach to find out exactly how high you need to jump to dunk a standard 10-foot basketball rim. See your vertical gap, athleticism rating, and specific training targets to get you dunking.',
+    howItWorks: [
+      { title: 'Enter your height', description: 'Your height in feet/inches or cm. Used to estimate standing reach if you don\'t know it.' },
+      { title: 'Enter standing reach (optional)', description: 'How high you can reach flat-footed with arm fully extended. Defaults to height × 1.33.' },
+      { title: 'See your dunk gap', description: 'How many inches above the rim you need to reach, and the vertical jump needed to close that gap.' },
+    ],
+    faqs: [
+      {
+        q: 'How high do you need to jump to dunk?',
+        a: 'The rim is at 10 feet (120 inches). You need your hand at least 6 inches above the rim to place the ball — so roughly 126 inches. Vertical needed = 126 inches minus your standing reach. A 6\'0" person has a standing reach of ~96 inches, so they need a ~30-inch vertical to dunk.',
+      },
+      {
+        q: 'What vertical jump is needed to dunk at 5\'9"?',
+        a: 'At 5\'9", standing reach is about 91 inches. You need fingertips to reach 126", so your vertical gap is 35 inches. A 35-inch vertical is elite athlete territory — achievable with serious training but not easy.',
+      },
+      {
+        q: 'Can a 5\'10" person dunk?',
+        a: 'Yes, but it requires a 30–35 inch vertical. Standing reach at 5\'10" is about 92 inches. Most recreational players need focused plyometric training to reach this.',
+      },
+      {
+        q: 'How do I increase my vertical jump?',
+        a: 'Proven methods: plyometric training (box jumps, depth jumps), strength training (squats, Romanian deadlifts, hip thrusts), and sprint work. Most athletes can add 4–8 inches to their vertical in 8–12 weeks of focused training.',
+      },
+      {
+        q: 'What is a good standing reach?',
+        a: 'Average standing reach is about 1.33× your height. NBA players average higher because they\'re selected for wingspan. If your reach is notably below 1.3× height, improving shoulder mobility can help.',
+      },
+    ],
+    relatedSlugs: ['crosswind-calculator', 'midpoint-calculator'],
+    ctaHook: 'Run a basketball gym or coaching business? Pixie generates your website in 60 seconds — text us on WhatsApp.',
+    aboutHeading: 'The physics and training science behind dunking',
+    about:
+      'Dunking a basketball requires overcoming a precise physical gap: the rim is at 10 feet, and you need your hand at least 6 inches above it to place the ball — so fingertip reach must hit 126 inches. The gap between your standing reach and 126 inches is your vertical jump requirement. Most adults need a 24–40 inch vertical depending on height. The world record standing vertical jump is 46 inches (Brett Williams, 2019). In the NBA, the average vertical is about 28 inches. Training the vertical primarily targets fast-twitch muscle fibers in the quadriceps, glutes, and calves. Plyometric exercises are the most evidence-backed method for increasing jump height. Most programs report 4–8 inch gains in 8–12 weeks.',
+  },
+  {
+    slug: 'dots-calculator',
+    title: 'Dots Calculator — Dot Product Calculator for 2D & 3D Vectors | Pixie',
+    h1: 'Dots Calculator',
+    shortName: 'Dots Calculator',
+    tagline: 'Calculate the dot product and angle between two vectors.',
+    metaDescription:
+      'Free dot product calculator. Enter two 2D or 3D vectors and get the dot product, magnitude, and angle between them. Step-by-step solution included.',
+    keywords: ['dots calculator', 'dot product calculator', 'vector dot product', 'dot product 3d', 'angle between vectors'],
+    category: 'Calculator',
+    emoji: '·',
+    image: '/tools/dots-calculator.jpg',
+    imageAlt: 'Mathematical vector diagram with arrows and coordinate axes',
+    primaryKeyword: 'dots calculator',
+    intro:
+      'Enter two vectors (2D or 3D) and get the dot product, the magnitude of each vector, and the angle between them. Full step-by-step solution shown — perfect for linear algebra, physics, and computer graphics homework.',
+    howItWorks: [
+      { title: 'Enter two vectors', description: 'Type the components of Vector A and Vector B. Switch between 2D (x, y) and 3D (x, y, z) mode.' },
+      { title: 'Get dot product instantly', description: 'See A·B calculated as a₁b₁ + a₂b₂ (+ a₃b₃ for 3D). Full step-by-step shown.' },
+      { title: 'See the angle between them', description: 'Angle θ = arccos(A·B / (|A| × |B|)) displayed in degrees and radians.' },
+    ],
+    faqs: [
+      {
+        q: 'What is the dot product?',
+        a: 'The dot product of two vectors A and B is A·B = a₁b₁ + a₂b₂ (+ a₃b₃ for 3D). It returns a scalar. If A·B = 0, the vectors are perpendicular. If positive, the angle between them is acute; if negative, obtuse.',
+      },
+      {
+        q: 'How do you calculate the dot product?',
+        a: 'Multiply matching components and sum them. For A = (3, 4) and B = (1, 2): A·B = (3×1) + (4×2) = 11. For 3D: A = (1, 2, 3), B = (4, 5, 6): A·B = 4+10+18 = 32.',
+      },
+      {
+        q: 'How do you find the angle between two vectors?',
+        a: 'Use cos(θ) = A·B / (|A| × |B|), where |A| and |B| are the magnitudes. Then θ = arccos of that result. The calculator does this automatically and shows both degrees and radians.',
+      },
+      {
+        q: 'What is the dot product used for?',
+        a: 'Physics: work = force · displacement. Computer graphics: lighting/shading calculations. Machine learning: cosine similarity between word vectors. Geometry: checking perpendicularity (dot product = 0).',
+      },
+      {
+        q: 'What is the difference between dot product and cross product?',
+        a: 'Dot product returns a scalar and measures how parallel two vectors are. Cross product returns a vector perpendicular to both inputs. Dot product works in any dimension; cross product is defined only in 3D.',
+      },
+    ],
+    relatedSlugs: ['midpoint-calculator', 'ap-calc-ab-score-calculator'],
+    ctaHook: 'Teach physics or linear algebra? Pixie generates your tutoring website in 60 seconds — text us on WhatsApp.',
+    aboutHeading: 'Where the dot product shows up in the real world',
+    about:
+      'The dot product is one of the most widely used operations in applied mathematics. In physics, work is defined as W = F·d (force dot displacement). In 3D computer graphics, the Phong shading model uses the dot product between the surface normal and the light direction to determine polygon brightness. In machine learning, dot products are the core operation in neural networks — each neuron computes a weighted sum, which is a dot product of its inputs and weights. In NLP, cosine similarity between word embeddings uses the dot product divided by the product of magnitudes. The geometric interpretation A·B = |A| |B| cos(θ) encodes both the magnitudes and angle in a single number.',
+  },
+  {
+    slug: 'middle-name-generator',
+    title: 'Middle Name Generator — Find the Perfect Middle Name | Pixie',
+    h1: 'Middle Name Generator',
+    shortName: 'Middle Name Generator',
+    tagline: 'Generate perfect middle name ideas based on first and last name.',
+    metaDescription:
+      'Free middle name generator. Enter a first name and last name to get middle name suggestions that flow well phonetically. Includes name meanings and origin.',
+    keywords: ['middle name generator', 'middle name ideas', 'baby middle name', 'find middle name', 'middle name for baby'],
+    category: 'Generator',
+    emoji: '👶',
+    image: '/tools/middle-name-generator.jpg',
+    imageAlt: 'Handwritten baby name list in a notebook with a pen',
+    primaryKeyword: 'middle name generator',
+    intro:
+      'Enter a first name and last name to get middle name suggestions that flow well phonetically. Filter by style — classic, modern, nature-inspired, or short. Each suggestion includes origin and meaning. Perfect for new parents, authors naming characters, or anyone looking for the right fit.',
+    howItWorks: [
+      { title: 'Enter first and last name', description: 'The generator uses syllable count and phonetic patterns to find names that flow naturally in between.' },
+      { title: 'Pick a style', description: 'Optional: classic, modern, nature, or short (1–2 syllables). Filter narrows suggestions to your vibe.' },
+      { title: 'Get suggestions with meanings', description: 'See middle name options with origin and meaning, ranked by phonetic flow.' },
+    ],
+    faqs: [
+      {
+        q: 'How do you choose a middle name that flows well?',
+        a: 'Alternate stressed syllables. If the first name ends with a stressed syllable (like "James"), pair it with a middle starting with an unstressed syllable. Avoid middle names that rhyme with the first or last name. Aim for different syllable counts than the first name.',
+      },
+      {
+        q: 'Should a middle name have a special meaning?',
+        a: 'Many parents use middle names to honor family members or cultural heritage. Others prioritize flow over meaning. Both are valid — the middle name is rarely used daily, so phonetic flow is pragmatic.',
+      },
+      {
+        q: 'Can I have two middle names?',
+        a: 'Yes. Two middle names are common in Spanish-speaking and British cultures. Just check the full name flows when said aloud quickly.',
+      },
+      {
+        q: 'Are one-syllable middle names a good choice?',
+        a: 'Yes — short middle names (Mae, Rose, James, Cole) are extremely popular. A three-syllable first name often pairs beautifully with a one-syllable middle: "Isabella Mae" or "Alexander James".',
+      },
+      {
+        q: 'How important are the initials combination?',
+        a: 'Worth checking. Initials like A.S.S. or D.I.E. can be embarrassing on monograms and luggage. Run the full initials before committing.',
+      },
+    ],
+    relatedSlugs: ['half-birthday-calculator', 'era-calculator'],
+    ctaHook: 'Running a baby brand or parenting blog? Pixie generates your website in 60 seconds — text us on WhatsApp.',
+    aboutHeading: 'The history and culture of middle names',
+    about:
+      'Middle names are a relatively modern convention. In medieval Europe, most people had only one name. The practice expanded in the 16th century among Spanish and Portuguese nobility and spread through Germany, where the "Mittelname" became common in the 18th century. In the United States, middle names became near-universal by the 19th century, often used to preserve a mother\'s maiden surname or honor a godparent. Today, about 80% of Americans have a middle name. Middle names rarely appear in daily life — they show up on official documents, are invoked when a parent is very serious ("James Oliver Smith, come here!"), and appear on graduation diplomas. Despite rare use, middle names carry significant meaning as a vehicle for family history and cultural connection.',
+  },
+  {
+    slug: 'era-calculator',
+    title: 'Era Calculator — Taylor Swift Era & Historical Era Finder | Pixie',
+    h1: 'Era Calculator',
+    shortName: 'Era Calculator',
+    tagline: 'Find your Taylor Swift era and historical birth era.',
+    metaDescription:
+      'Free era calculator. Find out which Taylor Swift era matches your personality based on your birth year, and discover which historical era you grew up in.',
+    keywords: ['era calculator', 'taylor swift era calculator', 'which era are you', 'eras tour calculator', 'historical era calculator'],
+    category: 'Calculator',
+    emoji: '✨',
+    image: '/tools/era-calculator.jpg',
+    imageAlt: 'Colorful concert stage with sparkles and a glittering microphone',
+    primaryKeyword: 'era calculator',
+    intro:
+      'Enter your birth year and discover which Taylor Swift era defines your personality — based on the album that dominated your most formative years (ages 12–16). Also shows which generation, tech era, and cultural moment shaped your world.',
+    howItWorks: [
+      { title: 'Enter your birth year', description: 'The calculator maps your formative years (ages 12–16) to find your Taylor Swift era.' },
+      { title: 'Get your Taylor Swift era', description: 'See which album era dominated your teenage years and what that says about your taste.' },
+      { title: 'Discover your historical era', description: 'See which generation, tech era, and cultural moment defined the world you grew up in.' },
+    ],
+    faqs: [
+      {
+        q: 'How is my Taylor Swift era determined?',
+        a: 'Your era is based on which Taylor Swift album was most prominent during your formative years (ages 12–16). Born in 1995? You were 14 when Fearless (2008) dominated — that\'s your era. Born in 2001? 1989 (2014) was your era.',
+      },
+      {
+        q: 'What are all the Taylor Swift eras?',
+        a: 'Taylor Swift (2006), Fearless (2008), Speak Now (2010), Red (2012), 1989 (2014), Reputation (2017), Lover (2019), Folklore/Evermore (2020), Midnights (2022), TTPD (2024).',
+      },
+      {
+        q: 'What historical era was I born into?',
+        a: 'The calculator shows your generation (Gen X, Millennial, Gen Z, Gen Alpha), tech era (pre-internet, dial-up, broadband, smartphone, AI), and the cultural era that shaped your formative years.',
+      },
+      {
+        q: 'What if I was born before Taylor\'s first album?',
+        a: 'If you were too old for Taylor\'s debut era (born before 1990), the calculator identifies your closest cultural equivalent from your actual teen years and shows the historical pop era that shaped you instead.',
+      },
+      {
+        q: 'Can I calculate an era for someone else?',
+        a: 'Yes — just enter their birth year. Popular for comparing generations, settling debates about which era was the best, or calculating your parents\' era.',
+      },
+    ],
+    relatedSlugs: ['half-birthday-calculator', 'middle-name-generator'],
+    ctaHook: 'Running a music blog or fan site? Pixie generates your website in 60 seconds — text us on WhatsApp.',
+    aboutHeading: 'Why the Eras Tour made "era" a cultural concept',
+    about:
+      'The concept of a musical "era" has always existed, but Taylor Swift\'s Eras Tour (2023–2024) made the word mainstream vocabulary. The tour grossed over $1 billion — the first ever to do so — traveling across North America, Europe, Asia, and Australia, with fans dressing in outfits representing specific albums. The cultural resonance reflects how deeply music ties to identity formation: songs that dominate during your teenage years become emotionally encoded in a way later music rarely matches. Spotify research and music psychologists confirm that songs topping charts when you\'re 14–16 remain disproportionately linked to strong emotional memories for life. The "era calculator" plays on this: by identifying which album cycle peaked during your formative years, it maps your generational musical identity.',
+  },
+  {
+    slug: 'uma-affinity-calculator',
+    title: 'Uma Affinity Calculator — Uma Musume Support Card Bond | Pixie',
+    h1: 'Uma Musume Affinity Calculator',
+    shortName: 'Uma Affinity Calculator',
+    tagline: 'Calculate support card affinity and training bonuses in Uma Musume.',
+    metaDescription:
+      'Free Uma Musume affinity calculator. Calculate support card bond levels, affinity bonuses, and training efficiency for Uma Musume Pretty Derby.',
+    keywords: ['uma affinity calculator', 'uma musume affinity', 'uma musume support card', 'uma musume bond calculator', 'pretty derby calculator'],
+    category: 'Calculator',
+    emoji: '🐴',
+    image: '/tools/uma-affinity-calculator.jpg',
+    imageAlt: 'Colorful anime-style characters in racing uniforms',
+    primaryKeyword: 'uma affinity calculator',
+    intro:
+      'Calculate support card affinity, bond level bonuses, and training efficiency for Uma Musume Pretty Derby. Enter your support card count per training type and bond levels to see the maximum stat boost for each training run.',
+    howItWorks: [
+      { title: 'Select your support cards', description: 'Enter how many cards of each type (Speed, Stamina, Power, Guts, Wisdom, Friend) are in your deck.' },
+      { title: 'Set bond levels', description: 'Enter the bond/affinity level (0–100) for each card. Higher bond unlocks the unique skill and boosts training effects.' },
+      { title: 'See training bonuses', description: 'Get the estimated stat bonus per training type, hint rate, and overall deck efficiency score.' },
+    ],
+    faqs: [
+      {
+        q: 'What is affinity in Uma Musume?',
+        a: 'Affinity (親愛度) is the bond level between your character and each support card. It starts at 0 and maxes at 100. As affinity rises, each card unlocks its unique hint event and provides larger training bonuses when that card appears at the training panel.',
+      },
+      {
+        q: 'How do you raise affinity in Uma Musume?',
+        a: 'Affinity increases by 5 points each time you complete a training session where that support card is present, by 3 points from race events, and by 5–10 from special "dokidoki" heart events. Maxing all 6 cards takes roughly 2–3 full training runs.',
+      },
+      {
+        q: 'What bonus does max affinity give?',
+        a: 'At 80 affinity, a card\'s unique skill is unlocked for inheritance. At 100 affinity, the card provides a +10% bonus to all training stats when it appears at that panel. Friend cards at max affinity also restore significant energy.',
+      },
+      {
+        q: 'How many support cards can I use?',
+        a: 'You can equip up to 6 support cards per run. For speed-focused characters, 4 Speed + 1 Wisdom + 1 Friend is common. Wisdom cards are universally useful because they boost max energy, allowing safer training.',
+      },
+      {
+        q: 'What is the best support card deck for beginners?',
+        a: 'For beginners: 2 cards matching your target stat, 2 Speed cards, 1 Wisdom card, and 1 Friend card. Borrow a top-tier SSR Wisdom card from friends to maximize energy recovery. Build bond with the Friend card first.',
+      },
+    ],
+    relatedSlugs: ['dots-calculator', 'midpoint-calculator'],
+    ctaHook: 'Running a gaming blog or esports brand? Pixie generates your website in 60 seconds — text us on WhatsApp.',
+    aboutHeading: 'Uma Musume Pretty Derby: the game behind the calculator',
+    about:
+      'Uma Musume Pretty Derby (ウマ娘 プリティーダービー) is a Japanese mobile game developed by Cygames, released in February 2021. The game features anthropomorphized horse girls based on real racehorses from Japanese racing history. Players train their Uma Musume over 3 in-game years, building six stats (Speed, Stamina, Power, Guts, Wisdom, Skill) while managing energy and event triggers. The support card system is the core meta-game: SSR-tier cards from limited gacha banners dramatically outperform free-to-play alternatives. The affinity (bond) system rewards consistent play — maxing a card\'s affinity unlocks its unique skill for inheritance, the primary path to building top-tier characters. The game reached 15 million downloads in its first week and remains one of Japan\'s top-grossing mobile games.',
+  },
 ];
 
 export function getTool(slug: string): ToolDefinition | undefined {

@@ -11,6 +11,7 @@ import { siteConfig } from '@/lib/config';
 export const metadata: Metadata = {
   title: `Privacy Policy — ${siteConfig.brand}`,
   description: `How ${siteConfig.brand} collects, uses, and protects your data when you message our WhatsApp bot.`,
+  alternates: { canonical: `https://${siteConfig.domain}/privacy` },
   robots: { index: true, follow: true },
 };
 

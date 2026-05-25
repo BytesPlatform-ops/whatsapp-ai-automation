@@ -12,6 +12,7 @@ export const metadata: Metadata = {
   title: `Examples — Built by ${siteConfig.brand}`,
   description:
     'Real sites, real businesses. Every one built from a single WhatsApp conversation with our AI bot. Tap any example to explore the live site.',
+  alternates: { canonical: `https://${siteConfig.domain}/examples` },
   openGraph: {
     title: `Built by ${siteConfig.brand}`,
     description:

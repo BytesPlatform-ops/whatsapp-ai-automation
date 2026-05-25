@@ -102,6 +102,86 @@ export function buildToolPrefill(slug: string, data: PrefillData): ToolPrefillRe
           'Hi! Just used your Subscript Generator. I teach chemistry — interested in a tutoring site.',
       };
 
+    case 'ap-bio-score-calculator':
+      return {
+        headline: 'Teach AP Biology?',
+        subhead: 'Pixie generates your tutoring website in 60 seconds.',
+        whatsappPrefill:
+          'Hi! Just used your AP Bio Score Calculator. I teach AP Biology — interested in a tutoring site.',
+      };
+
+    case 'ap-calc-ab-score-calculator':
+      return {
+        headline: 'Teach calculus?',
+        subhead: 'Pixie generates your tutoring website in 60 seconds.',
+        whatsappPrefill:
+          'Hi! Just used your AP Calc AB Score Calculator. I teach calculus — interested in a tutoring site.',
+      };
+
+    case 'ap-psych-score-calculator':
+      return {
+        headline: 'Teach AP Psychology?',
+        subhead: 'Pixie generates your tutoring website in 60 seconds.',
+        whatsappPrefill:
+          'Hi! Just used your AP Psych Score Calculator. I teach AP Psychology — interested in a tutoring site.',
+      };
+
+    case 'calculator-bacalaureat':
+      return {
+        headline: 'Ești profesor sau meditator?',
+        subhead: 'Pixie îți generează site-ul în 60 de secunde.',
+        whatsappPrefill:
+          'Salut! Tocmai am folosit Calculatorul Bacalaureat. Sunt profesor/meditator — mă interesează un site.',
+      };
+
+    case 'crosswind-calculator':
+      return {
+        headline: 'Run a flight school or aviation blog?',
+        subhead: 'Pixie generates your website in 60 seconds.',
+        whatsappPrefill:
+          'Hi! Just used your Crosswind Calculator. I run a flight school — interested in a website.',
+      };
+
+    case 'dunk-calculator':
+      return {
+        headline: 'Run a basketball gym or coaching business?',
+        subhead: 'Pixie generates your website in 60 seconds.',
+        whatsappPrefill:
+          'Hi! Just used your Dunk Calculator. I run a basketball training program — interested in a website.',
+      };
+
+    case 'dots-calculator':
+      return {
+        headline: 'Teach physics or linear algebra?',
+        subhead: 'Pixie generates your tutoring website in 60 seconds.',
+        whatsappPrefill:
+          'Hi! Just used your Dots Calculator. I teach math/physics — interested in a tutoring site.',
+      };
+
+    case 'middle-name-generator':
+      return {
+        headline: 'Running a baby brand or parenting blog?',
+        subhead: 'Pixie generates your website in 60 seconds.',
+        whatsappPrefill:
+          'Hi! Just used your Middle Name Generator. I run a baby/parenting brand — interested in a website.',
+      };
+
+    case 'era-calculator':
+      return {
+        headline: 'Running a music blog or fan site?',
+        subhead: 'Pixie generates your website in 60 seconds.',
+        whatsappPrefill:
+          'Hi! Just used your Era Calculator. I run a music/pop culture site — interested in a website.',
+      };
+
+    case 'uma-affinity-calculator':
+      return {
+        headline: 'Running a gaming blog or esports brand?',
+        subhead: 'Pixie generates your website in 60 seconds.',
+        whatsappPrefill:
+          'Hi! Just used your Uma Affinity Calculator. I run a gaming blog — interested in a website.',
+      };
+
     default:
       return {
         headline: 'Want a site like this?',
