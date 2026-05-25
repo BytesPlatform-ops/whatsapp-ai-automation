@@ -14,7 +14,7 @@ export function Footer() {
         <p className="text-sm text-ink-400">
           © {new Date().getFullYear()} PixieBytes. Built with WhatsApp.
         </p>
-        <div className="flex items-center gap-6 text-sm">
+        <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-sm">
           <a href={`mailto:${siteConfig.supportEmail}`} className="text-ink-500 transition hover:text-ink-900">
             {siteConfig.supportEmail}
           </a>

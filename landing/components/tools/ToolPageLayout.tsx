@@ -23,17 +23,17 @@ export function ToolPageLayout({ tool, children }: ToolPageLayoutProps) {
         <div className="container-page relative">
           <nav
             aria-label="Breadcrumb"
-            className="mb-6 flex items-center gap-1.5 text-sm text-white/60"
+            className="mb-6 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-sm text-white/60"
           >
-            <Link href="/" className="hover:text-white">
+            <Link href="/" className="shrink-0 hover:text-white">
               Home
             </Link>
-            <ChevronRight className="h-3.5 w-3.5" />
-            <Link href="/tools" className="hover:text-white">
+            <ChevronRight className="h-3.5 w-3.5 shrink-0" />
+            <Link href="/tools" className="shrink-0 hover:text-white">
               Tools
             </Link>
-            <ChevronRight className="h-3.5 w-3.5" />
-            <span className="text-white/90">{tool.shortName}</span>
+            <ChevronRight className="h-3.5 w-3.5 shrink-0" />
+            <span className="min-w-0 truncate text-white/90">{tool.shortName}</span>
           </nav>
 
           <div className="flex items-center gap-3 mb-4">

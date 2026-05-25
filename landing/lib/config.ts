@@ -4,7 +4,7 @@ export const siteConfig = {
   tagline: 'Your website & marketing ads — built by a WhatsApp chat.',
   whatsappNumber: '3197010277911',
   supportEmail: 'hello@pixiebot.co',
-  domain: 'pixiebot.co',
+  domain: 'www.pixiebot.co',
 } as const;
 
 export function waLink(prefill?: string): string {

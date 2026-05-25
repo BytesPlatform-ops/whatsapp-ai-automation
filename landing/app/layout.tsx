@@ -17,7 +17,7 @@ const display = Plus_Jakarta_Sans({
 });
 
 export const metadata: Metadata = {
-  metadataBase: new URL('https://pixiebot.co'),
+  metadataBase: new URL('https://www.pixiebot.co'),
   title: 'Pixie — Your website, built by a WhatsApp chat',
   description:
     'Text our WhatsApp bot. Get a live website, AI-generated ads, or a free SEO audit in under 60 seconds. No coding, no designer, no meetings.',

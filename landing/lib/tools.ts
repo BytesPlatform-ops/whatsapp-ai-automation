@@ -28,12 +28,12 @@ export interface ToolDefinition {
 export const TOOLS: ToolDefinition[] = [
   {
     slug: 'trust-badge-generator',
-    title: 'Trust Badge Generator — Free Ecommerce Trust Badges | Pixie',
+    title: 'Free Trust Badge Generator for Online Stores',
     h1: 'Pixie Trust Badge Generator',
     shortName: 'Trust Badge Generator',
     tagline: 'Generate trust badges for your online store in seconds.',
     metaDescription:
-      'Free trust badge generator for ecommerce stores. Create custom guarantee, secure checkout, and shipping badges with AI-written copy. No signup, instant download.',
+      'Use this free trust badge generator to create guarantee, secure checkout, and shipping badges for your store. No signup, instant export.',
     keywords: [
       'trust badge generator',
       'ecommerce trust badges',
@@ -92,12 +92,12 @@ export const TOOLS: ToolDefinition[] = [
   },
   {
     slug: 'ambigram-generator',
-    title: 'Ambigram Generator — Free AI Ambigram Maker | Pixie',
+    title: 'Free Ambigram Generator — Make Ambigrams Fast',
     h1: 'Pixie Ambigram Generator',
     shortName: 'Ambigram Generator',
     tagline: 'Create ambigram designs that read the same upside down.',
     metaDescription:
-      'Free ambigram generator. Create rotational ambigrams, mirror ambigrams, and tattoo designs from any word. AI-powered word suggestions and style picker.',
+      'Create your own design with this free ambigram generator. Type any word and get an ambigram that reads the same upside down. No signup.',
     keywords: [
       'ambigram generator',
       'ambigram maker',
@@ -156,12 +156,12 @@ export const TOOLS: ToolDefinition[] = [
   },
   {
     slug: 'superscript-generator',
-    title: 'Superscript Generator — Free Superscript Text Converter | Pixie',
+    title: 'Superscript Generator — Make Superscript Text',
     h1: 'Pixie Superscript Generator',
     shortName: 'Superscript Generator',
     tagline: 'Convert any text to superscript characters instantly.',
     metaDescription:
-      'Free superscript generator. Convert text and numbers to superscript Unicode characters. Copy-paste into Instagram, TikTok, Twitter, Word, Google Docs.',
+      'Turn any text into superscript with this free superscript generator. Copy and paste small raised characters anywhere. No signup needed.',
     keywords: [
       'superscript generator',
       'superscript text',
@@ -220,12 +220,12 @@ export const TOOLS: ToolDefinition[] = [
   },
   {
     slug: 'subscript-generator',
-    title: 'Subscript Generator — Free Subscript Text Converter | Pixie',
+    title: 'Subscript Generator — Make Subscript Text Free',
     h1: 'Pixie Subscript Generator',
     shortName: 'Subscript Generator',
     tagline: 'Convert any text to subscript characters instantly.',
     metaDescription:
-      'Free subscript generator. Convert text and numbers to subscript Unicode characters. Copy-paste into chemistry formulas, social media, Word, Google Docs.',
+      'Convert text to subscript with this free subscript generator. Copy and paste small lowered characters anywhere online. No signup needed.',
     keywords: [
       'subscript generator',
       'subscript text',
@@ -284,12 +284,12 @@ export const TOOLS: ToolDefinition[] = [
   },
   {
     slug: 'mortgage-calculator',
-    title: 'Mortgage Calculator — Free Monthly Payment & Amortization | Pixie',
+    title: 'Free Mortgage Calculator — Monthly Payments',
     h1: 'Pixie Mortgage Calculator',
     shortName: 'Mortgage Calculator',
     tagline: 'Calculate your monthly mortgage payment and full amortization.',
     metaDescription:
-      'Free mortgage calculator. Calculate monthly payments, total interest, and full amortization schedule. AI explains your numbers and how to lower the payment.',
+      'Estimate your monthly home loan payment with this free mortgage calculator. Enter price, rate, and term to see your payment instantly.',
     keywords: [
       'mortgage calculator',
       'mortgage payment calculator',
@@ -348,12 +348,12 @@ export const TOOLS: ToolDefinition[] = [
   },
   {
     slug: 'midpoint-calculator',
-    title: 'Midpoint Calculator — Free Midpoint Formula Tool | Pixie',
+    title: 'Midpoint Calculator — Find the Midpoint Fast',
     h1: 'Pixie Midpoint Calculator',
     shortName: 'Midpoint Calculator',
     tagline: 'Find the midpoint between two coordinates with steps.',
     metaDescription:
-      'Free midpoint calculator. Calculate the midpoint between two points (x, y) with step-by-step solution. AI explains the midpoint formula in plain English.',
+      'Find the midpoint between two points with this free midpoint calculator. Enter your coordinates and get the exact midpoint instantly.',
     keywords: [
       'midpoint calculator',
       'midpoint formula',
@@ -412,12 +412,12 @@ export const TOOLS: ToolDefinition[] = [
   },
   {
     slug: 'ap-chem-score-calculator',
-    title: 'AP Chemistry Score Calculator 2026 — Free AP Chem Predictor | Pixie',
+    title: 'AP Chem Score Calculator — Predict Your Score',
     h1: 'AP Chemistry Score Calculator',
     shortName: 'AP Chem Score Calculator',
     tagline: 'Predict your AP Chemistry score from practice exam results.',
     metaDescription:
-      'Free AP Chemistry score calculator. Enter your multiple choice and free response scores to predict your AP Chem 1–5 score. AI study plan included.',
+      'Estimate your AP Chemistry exam result with this free AP Chem score calculator. Enter your raw points to see your predicted 1-5 score.',
     keywords: [
       'ap chemistry score calculator',
       'ap chem score predictor',
@@ -476,12 +476,12 @@ export const TOOLS: ToolDefinition[] = [
   },
   {
     slug: 'pool-salt-calculator',
-    title: 'Pool Salt Calculator — Free Saltwater Pool Calculator | Pixie',
+    title: 'Pool Salt Calculator — How Much Salt to Add',
     h1: 'Pixie Pool Salt Calculator',
     shortName: 'Pool Salt Calculator',
     tagline: 'Calculate exactly how much salt your saltwater pool needs.',
     metaDescription:
-      'Free pool salt calculator. Calculate how many pounds of pool salt to add to reach the ideal 3000–3500 ppm salinity. Works for any pool size in gallons or liters.',
+      'Find out how much salt your pool needs with this free pool salt calculator. Enter pool size and current level for the exact amount.',
     keywords: [
       'pool salt calculator',
       'saltwater pool calculator',
@@ -540,12 +540,12 @@ export const TOOLS: ToolDefinition[] = [
   },
   {
     slug: 'share-incentive-plan-calculator',
-    title: 'Share Incentive Plan Calculator — Free SIP Tax Calculator UK | Pixie',
+    title: 'Share Incentive Plan Calculator for UK SIPs',
     h1: 'Pixie Share Incentive Plan (SIP) Calculator',
     shortName: 'SIP Calculator',
     tagline: 'Calculate your UK Share Incentive Plan tax savings.',
     metaDescription:
-      'Free Share Incentive Plan calculator. Calculate UK SIP tax savings, partnership shares, free shares, and 5-year holding benefits. HMRC-rule compliant.',
+      'Work out the value and tax savings of your shares with this free share incentive plan calculator for UK SIP employee share schemes.',
     keywords: [
       'share incentive plan calculator',
       'sip calculator uk',
@@ -604,12 +604,12 @@ export const TOOLS: ToolDefinition[] = [
   },
   {
     slug: 'half-birthday-calculator',
-    title: 'Half Birthday Calculator — Find Your Half Birthday Date | Pixie',
+    title: 'Half Birthday Calculator — Find Your Half Day',
     h1: 'Pixie Half Birthday Calculator',
     shortName: 'Half Birthday Calculator',
     tagline: 'Find your half birthday — exactly 6 months from your birth date.',
     metaDescription:
-      'Free half birthday calculator. Enter your birthday and find the exact date you turn half a year older. AI suggests messages and gift ideas for half birthdays.',
+      'Find your exact half birthday with this free half birthday calculator. Enter your birth date to see the day you turn another half year.',
     keywords: [
       'half birthday calculator',
       'half birthday',

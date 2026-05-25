@@ -9,9 +9,9 @@ import { AUDIT_EXAMPLES } from '@/lib/auditExamples';
 import { siteConfig } from '@/lib/config';
 
 export const metadata: Metadata = {
-  title: `Examples — Built by ${siteConfig.brand}`,
+  title: 'WhatsApp Website Examples Built by Pixie',
   description:
-    'Real sites, real businesses. Every one built from a single WhatsApp conversation with our AI bot. Tap any example to explore the live site.',
+    'See real WhatsApp website examples built by Pixie for real businesses — each one created from a single chat in under three minutes.',
   alternates: { canonical: `https://${siteConfig.domain}/examples` },
   openGraph: {
     title: `Built by ${siteConfig.brand}`,

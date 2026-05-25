@@ -14,7 +14,10 @@ import { Footer } from '@/components/sections/Footer';
 import { FloatingWhatsApp } from '@/components/sections/FloatingWhatsApp';
 
 export const metadata: Metadata = {
-  alternates: { canonical: 'https://pixiebot.co' },
+  title: 'WhatsApp Website Builder — Build a Site by Chat',
+  description:
+    'Pixie is a WhatsApp website builder. Text our AI bot for a live website, marketing ads, or a free SEO audit in 60 seconds.',
+  alternates: { canonical: 'https://www.pixiebot.co' },
 };
 
 export default function Page() {

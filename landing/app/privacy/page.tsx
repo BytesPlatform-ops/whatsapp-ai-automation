@@ -9,8 +9,9 @@ import { siteConfig } from '@/lib/config';
 // rather than legal advice — have counsel review before EU traffic.
 
 export const metadata: Metadata = {
-  title: `Privacy Policy — ${siteConfig.brand}`,
-  description: `How ${siteConfig.brand} collects, uses, and protects your data when you message our WhatsApp bot.`,
+  title: 'Privacy Policy — How Pixie Uses Your Data',
+  description:
+    'Read Pixie\'s privacy policy to learn what data we collect, how we use it, and the choices you have when you chat with our bot.',
   alternates: { canonical: `https://${siteConfig.domain}/privacy` },
   robots: { index: true, follow: true },
 };

@@ -14,9 +14,9 @@ const indexOgImage = {
 };
 
 export const metadata: Metadata = {
-  title: 'Free AI Tools — Calculators, Generators & Converters | Pixie',
+  title: 'Free Online Tools for Your Business | Pixie',
   description:
-    'Free online tools from Pixie — trust badge generator, ambigram maker, mortgage calculator, midpoint calculator, AP score predictor, and more. No signup. Instant results.',
+    'Browse Pixie\'s free online tools — generators and calculators for your business. No signup, no login, instant results in seconds.',
   keywords: [
     'free online tools',
     'free calculators',
@@ -86,11 +86,11 @@ export default function ToolsIndexPage() {
 
             <h1 className="mt-5 font-display text-display-xl text-balance text-white">
               Free tools that{' '}
-              <span className="relative inline-block">
+              <span className="relative block sm:inline-block">
                 <span className="relative z-10 text-wa-green">actually save you time.</span>
                 <span
                   aria-hidden
-                  className="absolute bottom-1 left-0 right-0 -z-0 h-3 rounded-full bg-wa-green/20 blur-md"
+                  className="absolute bottom-1 left-0 right-0 -z-0 h-3 rounded-full bg-wa-green/20 blur-md hidden sm:block"
                 />
               </span>
             </h1>
