@@ -67,12 +67,20 @@ function defaultServices(industry) {
   ];
 }
 
-const PROCESS_STEPS = [
-  { title: 'Discovery',  desc: 'Listen first. Understand the business, audience, and constraints before sketching anything.' },
-  { title: 'Direction',  desc: 'Sketch broad. Three directions, each fully explored, before narrowing to one.' },
-  { title: 'Refinement', desc: "Iterate ruthlessly. Cut what isn't earning its place. Polish what is." },
-  { title: 'Delivery',   desc: 'Ship clean. Documented systems, tested across breakpoints, ready for the next hands.' },
-];
+// Titles read from the LLM-translated labels block when available (so a
+// Portuguese site shows "Descoberta / Direção / Refinamento / Entrega"
+// instead of English). Descriptions stay English in the fallback only —
+// the LLM-generated processSteps in siteConfig replace these wholesale
+// when present, so non-English users rarely see English descriptions.
+function processSteps(c) {
+  const L = (c && c.labels) || {};
+  return [
+    { title: L.procDiscovery  || 'Discovery',  desc: 'Listen first. Understand the business, audience, and constraints before sketching anything.' },
+    { title: L.procDirection  || 'Direction',  desc: 'Sketch broad. Three directions, each fully explored, before narrowing to one.' },
+    { title: L.procRefinement || 'Refinement', desc: "Iterate ruthlessly. Cut what isn't earning its place. Polish what is." },
+    { title: L.procDelivery   || 'Delivery',   desc: 'Ship clean. Documented systems, tested across breakpoints, ready for the next hands.' },
+  ];
+}
 
 // ─── styles ────────────────────────────────────────────────────────────────
 function getStyles(opts) {
@@ -1080,10 +1088,10 @@ function getNav(c, currentPath) {
     <a class="nav-mark" href="/" data-cursor="link">${esc(firstName)}</a>
     <div class="nav-right">
       <nav class="nav-links" aria-label="Primary">
-        ${link('Work', 'work')}
-        ${link('About', 'about')}
-        ${link('Services', 'services')}
-        ${link('Contact', 'contact')}
+        ${link(c.labels?.navProjects || 'Work', 'work')}
+        ${link(c.labels?.navAbout || 'About', 'about')}
+        ${link(c.labels?.navServices || 'Services', 'services')}
+        ${link(c.labels?.navContact || 'Contact', 'contact')}
       </nav>
       ${c.contactEmail ? `<a href="mailto:${attr(c.contactEmail)}" class="nav-cta" data-cursor="email" data-magnetic aria-label="Email ${attr(firstName)}"><span class="nav-cta-icon" aria-hidden="true">↗</span><span class="nav-cta-text">Email</span></a>` : ''}
       <button class="nav-burger" id="nav-burger" aria-label="Open menu" aria-expanded="false"><span></span><span></span></button>
@@ -1096,10 +1104,10 @@ function getNav(c, currentPath) {
     <button class="nav-overlay-close" id="nav-overlay-close" aria-label="Close menu">Close</button>
   </div>
   <nav class="nav-overlay-links" aria-label="Mobile">
-    <a href="${onHome ? '#work' : '/#work'}"><span class="num">01</span>Work</a>
-    <a href="${onHome ? '#about' : '/#about'}"><span class="num">02</span>About</a>
-    <a href="${onHome ? '#services' : '/#services'}"><span class="num">03</span>Services</a>
-    <a href="${onHome ? '#contact' : '/#contact'}"><span class="num">04</span>Contact</a>
+    <a href="${onHome ? '#work' : '/#work'}"><span class="num">01</span>${esc(c.labels?.navProjects || 'Work')}</a>
+    <a href="${onHome ? '#about' : '/#about'}"><span class="num">02</span>${esc(c.labels?.navAbout || 'About')}</a>
+    <a href="${onHome ? '#services' : '/#services'}"><span class="num">03</span>${esc(c.labels?.navServices || 'Services')}</a>
+    <a href="${onHome ? '#contact' : '/#contact'}"><span class="num">04</span>${esc(c.labels?.navContact || 'Contact')}</a>
     ${c.contactEmail ? `<a href="mailto:${attr(c.contactEmail)}"><span class="num">05</span>Get in touch</a>` : ''}
   </nav>
 </div>`;
@@ -1413,7 +1421,7 @@ function wrap(c, currentPath, body, opts) {
   const description = c.tagline || c.portfolioAbout || c.aboutText || `${c.businessName} — portfolio`;
   return `<!DOCTYPE html>
 <!-- Pixie Portfolio — General v1.1 — generated for ${esc(c.businessName)} -->
-<html lang="en">
+<html lang="${esc(c.htmlLang || 'en')}">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -1659,17 +1667,17 @@ function generateHomePage(c, opts) {
 
 <div class="section-divider" aria-hidden="true"><span class="glyph">✻</span></div>
 
-<section class="about" id="about" data-rail-label="About">
+<section class="about" id="about" data-rail-label="${esc(c.labels?.navAbout || 'About')}">
   <div class="container about-grid">
     <div class="about-photo-col reveal">${photoBlock}</div>
     <div class="about-text reveal">
       ${indicator()}
-      <span class="eyebrow">About</span>
+      <span class="eyebrow">${esc(c.labels?.navAbout || 'About')}</span>
       ${aboutPhotoUrl ? `<h2 style="margin-top: var(--space-3)">${italicAccent("Hi, I'm " + firstName)}</h2>` : ''}
       ${paragraphs.map((p) => `<p>${esc(p)}</p>`).join('')}
       <div class="about-mini">
-        <div class="col"><span class="eyebrow">Expertise</span><ul>${expertiseItems.map((s) => `<li>${esc(s)}</li>`).join('')}</ul></div>
-        <div class="col"><span class="eyebrow">Availability</span><ul>${availabilityItems.map((s) => `<li>${esc(s)}</li>`).join('')}</ul></div>
+        <div class="col"><span class="eyebrow">${esc(c.labels?.pfExpertise || 'Expertise')}</span><ul>${expertiseItems.map((s) => `<li>${esc(s)}</li>`).join('')}</ul></div>
+        <div class="col"><span class="eyebrow">${esc(c.labels?.pfAvailability || 'Availability')}</span><ul>${availabilityItems.map((s) => `<li>${esc(s)}</li>`).join('')}</ul></div>
       </div>
     </div>
   </div>
@@ -1682,11 +1690,11 @@ ${showProcess ? `
   <div class="container">
     <div class="process-head">
       ${indicator()}
-      <span class="eyebrow reveal">Method</span>
-      <h2 class="reveal" style="margin-top: var(--space-3)">${italicAccent('How I work')}</h2>
+      <span class="eyebrow reveal">${esc(c.labels?.secMethod || 'Method')}</span>
+      <h2 class="reveal" style="margin-top: var(--space-3)">${italicAccent(c.labels?.secHowIWork || 'How I work')}</h2>
     </div>
     <ol class="process-list">
-      ${PROCESS_STEPS.map((s, i) => `
+      ${processSteps(c).map((s, i) => `
         <li class="reveal">
           <span class="process-num">${pad2(i + 1)}</span>
           <h3>${esc(s.title)}</h3>
@@ -1699,12 +1707,12 @@ ${showProcess ? `
 ${showServices ? `
 <div class="section-divider" aria-hidden="true"><span class="glyph">✻</span></div>
 
-<section class="services" id="services" data-rail-label="Services">
+<section class="services" id="services" data-rail-label="${esc(c.labels?.navServices || 'Services')}">
   <div class="container">
     <div class="services-head">
       ${indicator()}
-      <span class="eyebrow reveal">What I do</span>
-      <h2 class="reveal" style="margin-top: var(--space-3)">${italicAccent('Services')}</h2>
+      <span class="eyebrow reveal">${esc(c.labels?.secWhatWeDo || 'What I do')}</span>
+      <h2 class="reveal" style="margin-top: var(--space-3)">${italicAccent(c.labels?.navServices || 'Services')}</h2>
     </div>
     <div class="services-list">
       ${services.map((s, i) => `
@@ -1746,7 +1754,7 @@ function generateAboutPage(c, opts) {
   const body = `
 <section class="page-section">
   <div class="container">
-    <span class="eyebrow reveal">About</span>
+    <span class="eyebrow reveal">${esc(c.labels?.navAbout || 'About')}</span>
     <h1 class="page-h1 reveal">${italicAccent("Hi, I'm " + firstName)}</h1>
     <div class="page-body reveal">
       ${paragraphs.map((p) => `<p>${esc(p)}</p>`).join('')}
@@ -1754,9 +1762,9 @@ function generateAboutPage(c, opts) {
       <p>If you're building something that needs care, <a href="/contact">let's talk</a>.</p>
     </div>
     <div class="detail-grid reveal">
-      ${skills.length ? `<div><h4>Toolkit</h4><p>${esc(skills.join(' · '))}</p></div>` : ''}
-      ${c.contactEmail ? `<div><h4>Reach out</h4><p><a href="mailto:${attr(c.contactEmail)}">${esc(c.contactEmail)}</a></p></div>` : ''}
-      ${place ? `<div><h4>Based</h4><p>${esc(place)}</p></div>` : ''}
+      ${skills.length ? `<div><h4>${esc(c.labels?.pfToolkit || 'Toolkit')}</h4><p>${esc(skills.join(' · '))}</p></div>` : ''}
+      ${c.contactEmail ? `<div><h4>${esc(c.labels?.pfReachOut || 'Reach out')}</h4><p><a href="mailto:${attr(c.contactEmail)}">${esc(c.contactEmail)}</a></p></div>` : ''}
+      ${place ? `<div><h4>${esc(c.labels?.pfBased || 'Based')}</h4><p>${esc(place)}</p></div>` : ''}
       ${c.instagramHandle ? `<div><h4>Elsewhere</h4><p><a href="https://instagram.com/${attr(c.instagramHandle)}" target="_blank" rel="noopener">@${esc(c.instagramHandle)}</a></p></div>` : ''}
     </div>
   </div>

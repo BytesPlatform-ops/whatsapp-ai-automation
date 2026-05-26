@@ -7,6 +7,7 @@ const { logger } = require('../../utils/logger');
 const { env } = require('../../config/env');
 const { STATES } = require('../states');
 const { classifyIntent } = require('../../llm/intentClassifier');
+const { localize } = require('../../utils/localizer');
 
 // Legacy handler — only reached by in-flight users in DOMAIN_OFFER /
 // DOMAIN_SEARCH states. New flow routes domain selection BEFORE preview
@@ -37,7 +38,7 @@ async function handleCustomDomain(user, message) {
     const body = hasSelectedDomain
       ? `You've already got *${user.metadata.selectedDomain}* locked in — no need to pick again. Your activation link was in the preview message; let me know if you'd like any changes to the site.`
       : `You already said you'd skip a custom domain, so the site's set to launch on its preview URL. Your activation link was in the preview message above — let me know if you'd like any changes to the site.`;
-    await sendTextMessage(user.phone_number, body);
+    await sendTextMessage(user.phone_number, await localize(body, user, message?.text || null));
     await logMessage(
       user.id,
       `Legacy domain state hit (domainChoice=${user.metadata.domainChoice || 'none'}) — bounced back to revisions`,
@@ -56,7 +57,7 @@ async function handleCustomDomain(user, message) {
     case STATES.DOMAIN_VERIFY:
       // Legacy states
       if (user.metadata?.selectedDomain) {
-        await sendTextMessage(user.phone_number, "Your domain setup is in progress. We'll update you when it's live!");
+        await sendTextMessage(user.phone_number, await localize("Your domain setup is in progress. We'll update you when it's live!", user, message?.text || null));
       }
       return STATES.GENERAL_CHAT;
     default:
@@ -96,9 +97,13 @@ async function classifyDomainIntent(text) {
 async function sendDomainExplainer(user) {
   await sendTextMessage(
     user.phone_number,
-    "A *custom domain* is your own web address — like *glowstudio.com* instead of the long preview URL we built on. " +
-      "Visitors type it into their browser to reach your site, and it makes your brand look way more professional.\n\n" +
-      "Would you like one? Reply *yes* to pick one out, or *no* if you'd rather skip it for now."
+    await localize(
+      "A *custom domain* is your own web address — like *glowstudio.com* instead of the long preview URL we built on. " +
+        "Visitors type it into their browser to reach your site, and it makes your brand look way more professional.\n\n" +
+        "Would you like one? Reply *yes* to pick one out, or *no* if you'd rather skip it for now.",
+      user,
+      null
+    )
   );
   await logMessage(user.id, 'Explained what a domain is', 'assistant');
   return STATES.DOMAIN_OFFER;
@@ -151,7 +156,11 @@ async function handleDomainOffer(user, message) {
       : `Your activation link is in the preview message above.`;
     await sendTextMessage(
       user.phone_number,
-      `No worries on the domain — your site will launch on its preview URL. ${tail}\n\nOr tell me if you'd like any changes to the site.`
+      await localize(
+        `No worries on the domain — your site will launch on its preview URL. ${tail}\n\nOr tell me if you'd like any changes to the site.`,
+        user,
+        rawText
+      )
     );
     await logMessage(user.id, 'User declined domain — pointed back to existing activation link', 'assistant');
     return STATES.WEB_REVISIONS;
@@ -162,7 +171,7 @@ async function handleDomainOffer(user, message) {
     const sanitized = businessName.toLowerCase().replace(/[^a-z0-9]/g, '');
 
     if (!sanitized || sanitized.length < 2) {
-      await sendTextMessage(user.phone_number, "What name would you like for your domain? (e.g., mybusiness)");
+      await sendTextMessage(user.phone_number, await localize("What name would you like for your domain? (e.g., mybusiness)", user, rawText));
       return STATES.DOMAIN_SEARCH;
     }
 
@@ -182,7 +191,7 @@ async function handleDomainOffer(user, message) {
 
   await sendTextMessage(
     user.phone_number,
-    "Would you like to set up a custom domain? Reply *yes* to pick one out, or *no* to skip it."
+    await localize("Would you like to set up a custom domain? Reply *yes* to pick one out, or *no* to skip it.", user, rawText)
   );
   return STATES.DOMAIN_OFFER;
 }
@@ -198,7 +207,7 @@ const FAST_EXIT_RE = /^(skip|nah|nope|cancel|stop|exit|back|menu|bail|never\s*mi
 async function exitDomainFlow(user) {
   await sendTextMessage(
     user.phone_number,
-    "No problem — we'll skip the custom domain for now. Your site is still live on its preview URL, and you can always grab a domain later. Anything else I can help with?"
+    await localize("No problem — we'll skip the custom domain for now. Your site is still live on its preview URL, and you can always grab a domain later. Anything else I can help with?", user, null)
   );
   await logMessage(user.id, 'User exited domain search', 'assistant');
   return STATES.SALES_CHAT;
@@ -223,7 +232,7 @@ async function handleDomainSearch(user, message) {
         return processDomainSelection(user, domainOptions[idx].domain);
       }
       if (idx >= 0 && idx < domainOptions.length) {
-        await sendTextMessage(user.phone_number, 'That domain is not available. Please pick another one, or type a different name.');
+        await sendTextMessage(user.phone_number, await localize('That domain is not available. Please pick another one, or type a different name.', user, text));
         return STATES.DOMAIN_SEARCH;
       }
     }
@@ -265,14 +274,14 @@ async function handleDomainSearch(user, message) {
   // Don't search for random phrases — only if it looks like a domain name
   const cleaned = text.toLowerCase().replace(/[^a-z0-9-]/g, '');
   if (!cleaned || cleaned.length < 2 || cleaned.length > 30) {
-    await sendTextMessage(user.phone_number, 'Please reply with the *number* of the domain you want (e.g., *1*), or type a domain name to search:');
+    await sendTextMessage(user.phone_number, await localize('Please reply with the *number* of the domain you want (e.g., *1*), or type a domain name to search:', user, text));
     return STATES.DOMAIN_SEARCH;
   }
 
   // Only search if it looks like a plausible domain name (no spaces in original, no common phrases)
   const isPhrase = /\s/.test(text.trim()) && !/\.(com|co|io|net|org)$/i.test(text.trim());
   if (isPhrase) {
-    await sendTextMessage(user.phone_number, 'Please reply with the *number* of the domain you want (e.g., *1*), or type a single word for a new domain search:');
+    await sendTextMessage(user.phone_number, await localize('Please reply with the *number* of the domain you want (e.g., *1*), or type a single word for a new domain search:', user, text));
     return STATES.DOMAIN_SEARCH;
   }
 
@@ -280,7 +289,7 @@ async function handleDomainSearch(user, message) {
 }
 
 async function runDomainSearch(user, baseName) {
-  await sendTextMessage(user.phone_number, `Checking domain availability for *${baseName}*...`);
+  await sendTextMessage(user.phone_number, await localize(`Checking domain availability for *${baseName}*...`, user, null));
 
   const results = await checkDomainAvailability(baseName);
   const available = results.filter(r => r.available && !r.premium);
@@ -299,13 +308,13 @@ async function runDomainSearch(user, baseName) {
 
   if (available.length === 0) {
     msg += '\nNo domains available with that name. Try a different name:';
-    await sendTextMessage(user.phone_number, msg);
+    await sendTextMessage(user.phone_number, await localize(msg, user, null));
     return STATES.DOMAIN_SEARCH;
   }
 
   msg += '\nJust reply with the *number* or *domain name* you want, or type a different name to search again.';
 
-  await sendTextMessage(user.phone_number, msg);
+  await sendTextMessage(user.phone_number, await localize(msg, user, null));
 
   await updateUserMetadata(user.id, {
     domainOptions: results,
@@ -343,9 +352,13 @@ async function processDomainSelection(user, domain) {
   // discount instead (handled by the follow-up scheduler).
   await sendTextMessage(
     user.phone_number,
-    `Great choice — *${domain}*!\n\n` +
-    `${totalLine}\n\n` +
-    `Once you pay, I'll register your domain, set everything up, and your site will be live at *${domain}* — usually within the hour.`
+    await localize(
+      `Great choice — *${domain}*!\n\n` +
+      `${totalLine}\n\n` +
+      `Once you pay, I'll register your domain, set everything up, and your site will be live at *${domain}* — usually within the hour.`,
+      user,
+      null
+    )
   );
 
   // Create and send payment link for full amount
@@ -364,7 +377,7 @@ async function processDomainSelection(user, domain) {
 
       await sendCTAButton(
         user.phone_number,
-        `Tap below to pay $${fullAmount} and get your site live`,
+        await localize(`Tap below to pay $${fullAmount} and get your site live`, user, null),
         `💳 Pay $${fullAmount}`,
         result.url
       );
@@ -382,7 +395,7 @@ async function processDomainSelection(user, domain) {
     }
   } catch (err) {
     logger.error('[DOMAIN] Payment link creation failed:', err.message);
-    await sendTextMessage(user.phone_number, 'There was an issue creating the payment link. Our team will follow up shortly.');
+    await sendTextMessage(user.phone_number, await localize('There was an issue creating the payment link. Our team will follow up shortly.', user, null));
   }
 
   // Notify team

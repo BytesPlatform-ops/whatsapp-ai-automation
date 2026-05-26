@@ -17,8 +17,8 @@ function generateAreasPage(c) {
   const hero = `
     <section class="page-hero">
       <div class="ctn">
-        <p class="crumb"><a href="/">Home</a> &rsaquo; Service Areas</p>
-        <h1 class="h1">Service Areas.</h1>
+        <p class="crumb"><a href="/">${esc(c.labels?.navHome || 'Home')}</a> &rsaquo; ${esc(c.labels?.secServiceAreas || 'Service Areas')}</p>
+        <h1 class="h1">${esc(c.labels?.secServiceAreas || 'Service Areas')}.</h1>
         <p class="body-lg">${primary ? `Based in ${esc(primary)}, ` : ''}${tc.areasHeroBody}</p>
       </div>
     </section>`;

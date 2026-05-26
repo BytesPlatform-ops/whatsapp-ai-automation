@@ -14,7 +14,7 @@ function generateContactPage(c) {
   const hero = `
     <section class="page-hero">
       <div class="ctn">
-        <p class="crumb"><a href="/">Home</a> &rsaquo; Contact</p>
+        <p class="crumb"><a href="/">${esc(c.labels?.navHome || 'Home')}</a> &rsaquo; ${esc(c.labels?.navContact || 'Contact')}</p>
         <h1 class="h1">Request a free quote.</h1>
         <p class="body-lg">Send a message or call directly. We respond within one hour, 7 days a week.</p>
       </div>
@@ -86,7 +86,7 @@ function generateContactPage(c) {
       </div>` : ''}
 
       <div class="card">
-        <h3 class="ff-display" style="font-size:17px;margin-bottom:16px">Hours</h3>
+        <h3 class="ff-display" style="font-size:17px;margin-bottom:16px">${esc(c.labels?.secHours || 'Hours')}</h3>
         <ul style="list-style:none;display:flex;flex-direction:column;gap:8px;font-size:14px;color:${TOKENS.body}">
           <li style="display:flex;justify-content:space-between"><span>Monday &ndash; Friday</span><span>7:00 AM &ndash; 6:00 PM</span></li>
           <li style="display:flex;justify-content:space-between"><span>Saturday</span><span>8:00 AM &ndash; 4:00 PM</span></li>

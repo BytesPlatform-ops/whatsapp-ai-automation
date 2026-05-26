@@ -21,7 +21,7 @@ function generateServicesPage(c) {
   const overview = `
     <section class="page-hero">
       <div class="ctn">
-        <p class="crumb"><a href="/">Home</a> &rsaquo; Services</p>
+        <p class="crumb"><a href="/">${esc(c.labels?.navHome || 'Home')}</a> &rsaquo; ${esc(c.labels?.navServices || 'Services')}</p>
         <h1 class="h1">${esc(tc.servicesH1)}</h1>
         <p class="body-lg">${esc(tc.servicesSub)}</p>
       </div>

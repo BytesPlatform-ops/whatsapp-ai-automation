@@ -1374,6 +1374,8 @@ async function _routeMessage(message) {
         nextState = webDev.nextMissingWebDevState(wd, user.metadata || {});
       }
 
+      const { localize } = require('../utils/localizer');
+
       // Null sentinel for salon → route through finishSalonFlow. It
       // handles contact-already-collected vs needs-collection vs confirm.
       if (nextState === null) {
@@ -1382,12 +1384,16 @@ async function _routeMessage(message) {
         // can mimic its decision.
         const hasContact = !!(wd.contactEmail || wd.contactPhone || wd.contactAddress);
         if (hasContact) {
-          await sendTextMessage(user.phone_number, 'Kept as is.');
+          await sendTextMessage(user.phone_number, await localize('Kept as is.', user, text));
           await webDev.showConfirmSummary(user);
         } else {
           await sendTextMessage(
             user.phone_number,
-            "Kept as is.\n\nLast thing — what contact info do you want on the site? Send your email, phone, and/or address."
+            await localize(
+              "Kept as is.\n\nLast thing — what contact info do you want on the site? Send your email, phone, and/or address.",
+              user,
+              text
+            )
           );
           await updateUserState(user.id, STATES.WEB_COLLECT_CONTACT);
         }
@@ -1403,12 +1409,19 @@ async function _routeMessage(message) {
         await webDev.showConfirmSummary(user);
       } else {
         const question = webDev.questionForState(nextState, wd);
-        await sendTextMessage(user.phone_number, `Kept as is. ${question}`);
+        await sendTextMessage(
+          user.phone_number,
+          await localize(`Kept as is. ${question}`, user, text)
+        );
       }
       await logMessage(user.id, `Undo: kept, advanced to ${nextState}`, 'assistant');
       } catch (err) {
         logger.error(`[UNDO] Keep-advance failed: ${err.message}`);
-        await sendTextMessage(user.phone_number, "Kept as is. What's next?");
+        const { localize } = require('../utils/localizer');
+        await sendTextMessage(
+          user.phone_number,
+          await localize("Kept as is. What's next?", user, text)
+        );
       }
       return;
     }

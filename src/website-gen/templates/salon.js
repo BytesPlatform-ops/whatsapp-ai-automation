@@ -18,15 +18,35 @@ function esc(s) {
 }
 const attr = (s) => esc(s).replace(/\n/g, ' ');
 
-const DAY_LABELS = { mon: 'Monday', tue: 'Tuesday', wed: 'Wednesday', thu: 'Thursday', fri: 'Friday', sat: 'Saturday', sun: 'Sunday' };
 const DAYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
 
-function renderHoursRows(hours) {
+// Map a dayKey to a localized weekday name via Intl. Falls back to the English
+// hand-table if the locale is unsupported by the runtime's ICU build (older
+// Node versions in restrictive containers). Reference date: a Monday-anchored
+// week starting at 2024-01-01 (which was a Monday), so each offset lands on
+// the right weekday.
+const DAY_LABELS_FALLBACK = { mon: 'Monday', tue: 'Tuesday', wed: 'Wednesday', thu: 'Thursday', fri: 'Friday', sat: 'Saturday', sun: 'Sunday' };
+function localizedDayLabel(dayKey, bcp47Locale) {
+  const idx = DAYS.indexOf(dayKey);
+  if (idx < 0) return DAY_LABELS_FALLBACK[dayKey] || dayKey;
+  try {
+    const fmt = new Intl.DateTimeFormat(bcp47Locale || 'en', { weekday: 'long' });
+    const ref = new Date(Date.UTC(2024, 0, 1 + idx)); // 2024-01-01 is a Monday
+    const out = fmt.format(ref);
+    return out ? out.charAt(0).toUpperCase() + out.slice(1) : DAY_LABELS_FALLBACK[dayKey];
+  } catch {
+    return DAY_LABELS_FALLBACK[dayKey];
+  }
+}
+
+function renderHoursRows(hours, c) {
   if (!hours) return '';
+  const closedLabel = (c && c.labels && c.labels.lblClosed) || 'Closed';
+  const locale = c && c.bcp47Locale;
   return DAYS.map((d) => {
     const ws = hours[d] || [];
-    const value = ws.length === 0 ? 'Closed' : ws.map((w) => `${w.open} – ${w.close}`).join(', ');
-    return `<li class="hr"><span class="hr-d">${DAY_LABELS[d]}</span><span class="hr-v">${esc(value)}</span></li>`;
+    const value = ws.length === 0 ? closedLabel : ws.map((w) => `${w.open} – ${w.close}`).join(', ');
+    return `<li class="hr"><span class="hr-d">${esc(localizedDayLabel(d, locale))}</span><span class="hr-v">${esc(value)}</span></li>`;
   }).join('');
 }
 
@@ -43,11 +63,12 @@ function categoryOf(name) {
 }
 
 function pages(c) {
-  const list = [{ n: 'Home', h: '/' }];
-  if ((c.salonServices || []).length > 0) list.push({ n: 'Services', h: '/services' });
-  list.push({ n: 'Booking', h: '/booking' });
-  list.push({ n: 'About', h: '/about' });
-  list.push({ n: 'Contact', h: '/contact' });
+  const L = c.labels || {};
+  const list = [{ n: L.navHome || 'Home', h: '/' }];
+  if ((c.salonServices || []).length > 0) list.push({ n: L.navServices || 'Services', h: '/services' });
+  list.push({ n: L.navBooking || 'Booking', h: '/booking' });
+  list.push({ n: L.navAbout || 'About', h: '/about' });
+  list.push({ n: L.navContact || 'Contact', h: '/contact' });
   return list;
 }
 
@@ -310,13 +331,13 @@ function getNav(c, cur, opts = {}) {
     : esc(c.businessName)}</a>
   <div class="nav-ls">
     ${ps.map((p) => `<a href="${p.h}" class="nav-l${p.h === cur ? ' active' : ''}">${p.n}</a>`).join('')}
-    <a href="/booking" class="nav-cta"><span>Reserve</span></a>
+    <a href="/booking" class="nav-cta"><span>${esc(c.labels?.btnReserve || 'Reserve')}</span></a>
   </div>
   <button class="mm-btn" aria-label="Menu">Menu</button>
 </nav>
 <div class="mm"><button class="mm-close" aria-label="Close">×</button>
   ${ps.map((p) => `<a href="${p.h}">${p.n}</a>`).join('')}
-  <a href="/booking">Reserve</a>
+  <a href="/booking">${esc(c.labels?.btnReserve || 'Reserve')}</a>
 </div>`;
 }
 
@@ -331,24 +352,24 @@ function getFooter(c) {
       <p class="foot-tag">${esc(c.footerTagline || c.tagline || '')}</p>
     </div>
     <div>
-      <h4>Visit</h4>
+      <h4>${esc(c.labels?.footVisit || 'Visit')}</h4>
       ${ps.map((p) => `<a href="${p.h}">${p.n}</a>`).join('')}
     </div>
     <div>
-      <h4>Contact</h4>
+      <h4>${esc(c.labels?.navContact || 'Contact')}</h4>
       ${c.contactPhone ? `<a href="tel:${attr(c.contactPhone)}">${esc(c.contactPhone)}</a>` : ''}
       ${c.contactEmail ? `<a href="mailto:${attr(c.contactEmail)}">${esc(c.contactEmail)}</a>` : ''}
       ${c.contactAddress ? `<p style="font-size:14px;line-height:1.75;font-weight:300;padding-top:6px">${esc(c.contactAddress)}</p>` : ''}
     </div>
     <div>
-      <h4>Follow</h4>
+      <h4>${esc(c.labels?.footFollow || 'Follow')}</h4>
       ${c.instagramHandle ? `<a href="https://instagram.com/${attr(c.instagramHandle)}" target="_blank" rel="noopener">Instagram</a>` : ''}
-      <a href="/booking">Book a visit</a>
+      <a href="/booking">${esc(c.labels?.footBookAVisit || 'Book a visit')}</a>
     </div>
   </div>
   <div class="foot-bottom">
-    <span>© ${new Date().getFullYear()} ${esc(c.businessName)} — All rights reserved.</span>
-    <span><a href="/privacy/" style="color:inherit;text-decoration:underline">Privacy Policy</a> &middot; Handcrafted in ${esc((c.contactAddress || '').split(',').pop() || 'the studio')}</span>
+    <span>© ${new Date().getFullYear()} ${esc(c.businessName)} — ${esc(c.labels?.footAllRights || 'All rights reserved')}.</span>
+    <span><a href="/privacy/" style="color:inherit;text-decoration:underline">${esc(c.labels?.footPrivacy || 'Privacy Policy')}</a> &middot; ${esc(c.labels?.footHandcrafted || 'Handcrafted in')} ${esc((c.contactAddress || '').split(',').pop() || 'the studio')}</span>
   </div>
 </footer>`;
 }
@@ -391,7 +412,7 @@ function wrap(c, cur, body, { navDark = false, heroPal = null } = {}) {
   const pc = c.primaryColor || '#1F2937';
   const ac = c.accentColor || '#EC4899';
   const title = cur === '/' ? esc(c.businessName) : `${esc(c.businessName)} — ${cur.replace('/', '').replace(/^\w/, (x) => x.toUpperCase())}`;
-  return `<!DOCTYPE html><html lang="en"><head>
+  return `<!DOCTYPE html><html lang="${esc(c.htmlLang || 'en')}"><head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>${title}</title>
 <meta name="description" content="${attr(c.tagline || '')}">
@@ -443,8 +464,8 @@ function generateHomePage(c) {
     <h1 class="hero-h1 rv">${esc(c.headline)}</h1>
     <p class="hero-tag rv d1">${esc(c.tagline)}</p>
     <div class="hero-ctas rv d2">
-      <a href="/booking" class="btn btn-w">Reserve a Visit <svg class="arr" viewBox="0 0 14 10" fill="currentColor"><path d="M8.5 0l4.8 5L8.5 10l-.7-.7L11.4 5.7H0v-1.4h11.4L7.8.7z"/></svg></a>
-      ${(c.salonServices || []).length > 0 ? `<a href="/services" class="btn btn-g">The Menu</a>` : ''}
+      <a href="/booking" class="btn btn-w">${esc(c.labels?.btnReserveVisit || 'Reserve a Visit')} <svg class="arr" viewBox="0 0 14 10" fill="currentColor"><path d="M8.5 0l4.8 5L8.5 10l-.7-.7L11.4 5.7H0v-1.4h11.4L7.8.7z"/></svg></a>
+      ${(c.salonServices || []).length > 0 ? `<a href="/services" class="btn btn-g">${esc(c.labels?.btnViewMenu || 'The Menu')}</a>` : ''}
     </div>
     <div class="hero-meta rv d3">
       <div class="hero-meta-item"><span class="k">Reservations</span><span class="v">Online in under a minute</span></div>
@@ -453,7 +474,7 @@ function generateHomePage(c) {
       ${c.contactPhone ? `<div class="hero-meta-item"><span class="k">Call us</span><span class="v">${esc(c.contactPhone)}</span></div>` : ''}
     </div>
   </div>
-  <div class="hero-scroll">Scroll</div>
+  <div class="hero-scroll">${esc(c.labels?.lblScroll || 'Scroll')}</div>
 </section>
 
 <section class="intro">
@@ -467,13 +488,13 @@ ${featured.length > 0 ? `
 <section class="sect" style="background:var(--paper)"><div class="ctn">
   <div class="sig-head rv">
     <div>
-      <p class="eyebrow" style="margin-bottom:18px">— Signature Services —</p>
+      <p class="eyebrow" style="margin-bottom:18px">— ${esc(c.labels?.secSignatureServices || 'Signature Services')} —</p>
       <h2 class="sig-title">${esc(c.servicesTitle || 'The treatments we are known for')}</h2>
     </div>
     <p class="sig-sub">A curated list of the treatments our regulars return for. Every appointment is handled by a senior stylist — no shortcuts.</p>
   </div>
   <div class="svc-grid">${featuredCards}</div>
-  ${(c.salonServices || []).length > featured.length ? `<div style="text-align:center;margin-top:80px"><a href="/services" class="btn btn-ink">The Full Menu <svg class="arr" viewBox="0 0 14 10" fill="currentColor"><path d="M8.5 0l4.8 5L8.5 10l-.7-.7L11.4 5.7H0v-1.4h11.4L7.8.7z"/></svg></a></div>` : ''}
+  ${(c.salonServices || []).length > featured.length ? `<div style="text-align:center;margin-top:80px"><a href="/services" class="btn btn-ink">${esc(c.labels?.btnFullMenu || 'The Full Menu')} <svg class="arr" viewBox="0 0 14 10" fill="currentColor"><path d="M8.5 0l4.8 5L8.5 10l-.7-.7L11.4 5.7H0v-1.4h11.4L7.8.7z"/></svg></a></div>` : ''}
 </div></section>` : ''}
 
 <section class="manifesto">
@@ -502,7 +523,7 @@ ${c.instagramHandle ? `
   <p class="eyebrow eyebrow--light rv" style="margin-bottom:22px">— Appointments now open —</p>
   <h2 class="rv d1">${esc(c.ctaTitle || 'Make it your next ritual.')}</h2>
   <p class="rv d2">${esc(c.ctaText || 'Reserve a time in under a minute. We will confirm by email and send a reminder the day before.')}</p>
-  <a href="/booking" class="btn btn-w rv d3">Reserve a Visit <svg class="arr" viewBox="0 0 14 10" fill="currentColor"><path d="M8.5 0l4.8 5L8.5 10l-.7-.7L11.4 5.7H0v-1.4h11.4L7.8.7z"/></svg></a>
+  <a href="/booking" class="btn btn-w rv d3">${esc(c.labels?.btnReserveVisit || 'Reserve a Visit')} <svg class="arr" viewBox="0 0 14 10" fill="currentColor"><path d="M8.5 0l4.8 5L8.5 10l-.7-.7L11.4 5.7H0v-1.4h11.4L7.8.7z"/></svg></a>
 </section>`;
 
   // navDark=true paints the nav white for dark-hero pages. When the palette
@@ -519,7 +540,7 @@ function generateServicesPage(c) {
   const body = `
 <section class="page-head">
   <div class="page-head-inner">
-    <p class="eyebrow rv">— The Menu —</p>
+    <p class="eyebrow rv">— ${esc(c.labels?.btnViewMenu || 'The Menu')} —</p>
     <h1 class="rv d1">${esc(c.servicesTitle || 'Services')}<em>.</em></h1>
     <p class="rv d2" style="max-width:560px;margin-top:32px;color:var(--mute);font-size:17px;line-height:1.75;font-weight:300">Every treatment below is handled by a trained stylist. Reserve one online, or give us a call — we are happy to help you pick the right one.</p>
   </div>
@@ -529,7 +550,7 @@ function generateServicesPage(c) {
   ${svcs.length > 0
     ? `<div class="svc-grid">${cards}</div>`
     : '<p style="text-align:center;color:var(--mute);padding:60px 0">Menu coming soon — give us a call to book.</p>'}
-  <div style="text-align:center;margin-top:90px"><a href="/booking" class="btn btn-p">Reserve a Visit <svg class="arr" viewBox="0 0 14 10" fill="currentColor"><path d="M8.5 0l4.8 5L8.5 10l-.7-.7L11.4 5.7H0v-1.4h11.4L7.8.7z"/></svg></a></div>
+  <div style="text-align:center;margin-top:90px"><a href="/booking" class="btn btn-p">${esc(c.labels?.btnReserveVisit || 'Reserve a Visit')} <svg class="arr" viewBox="0 0 14 10" fill="currentColor"><path d="M8.5 0l4.8 5L8.5 10l-.7-.7L11.4 5.7H0v-1.4h11.4L7.8.7z"/></svg></a></div>
 </div></section>`;
 
   return wrap(c, '/services', body);
@@ -591,11 +612,11 @@ function generateBookingPage(c) {
   if (isEmbed) {
     content = `
       <div class="bk-wrap">
-        <p class="bk-note">Reservations are handled by our booking partner.</p>
+        <p class="bk-note">${esc(c.labels?.confirmEmailNote || 'Reservations are handled by our booking partner.')}</p>
         <div style="background:var(--bone);padding:12px;border:1px solid var(--line)">
           <iframe src="${attr(c.bookingUrl)}" style="width:100%;height:780px;border:none;background:var(--paper)" title="Booking"></iframe>
         </div>
-        <p style="text-align:center;margin-top:26px"><a href="${attr(c.bookingUrl)}" target="_blank" rel="noopener" class="btn btn-ink">Open in a new tab</a></p>
+        <p style="text-align:center;margin-top:26px"><a href="${attr(c.bookingUrl)}" target="_blank" rel="noopener" class="btn btn-ink">${esc(c.labels?.btnOpenNewTab || 'Open in a new tab')}</a></p>
       </div>`;
   } else if (c.bookingMode === 'native' && c.siteId) {
     const servicesJson = JSON.stringify(c.salonServices || []).replace(/</g, '\\u003c');
@@ -608,39 +629,39 @@ function generateBookingPage(c) {
 
         <div class="bk-row">
           <div>
-            <label class="bk-label">Treatment</label>
+            <label class="bk-label">${esc(c.labels?.formTreatment || 'Treatment')}</label>
             <select id="bk-service" class="bk-select"></select>
           </div>
           <div>
-            <label class="bk-label">Date</label>
+            <label class="bk-label">${esc(c.labels?.formDate || 'Date')}</label>
             <input id="bk-date" type="date" class="bk-input" />
           </div>
         </div>
 
-        <label class="bk-label">Available Times</label>
-        <p id="bk-loading" class="bk-note" style="display:none;margin:0 0 18px;text-align:left">Loading times…</p>
+        <label class="bk-label">${esc(c.labels?.formTimes || 'Available Times')}</label>
+        <p id="bk-loading" class="bk-note" style="display:none;margin:0 0 18px;text-align:left">${esc(c.labels?.formLoadingTimes || 'Loading times…')}</p>
         <div id="bk-slots" class="slots"></div>
 
         <div id="bk-form" style="display:none">
           <div class="bk-panel">
-            <p class="bk-panel-title">Your Details</p>
+            <p class="bk-panel-title">${esc(c.labels?.formYourDetails || 'Your Details')}</p>
             <div style="display:grid;gap:12px">
-              <input id="bk-name" class="bk-input" placeholder="Full name" />
-              <input id="bk-email" class="bk-input" type="email" placeholder="Email" />
-              <input id="bk-phone" class="bk-input" placeholder="Phone number" />
-              <textarea id="bk-notes" class="bk-input" placeholder="Anything we should know? (optional)" style="min-height:80px;resize:vertical;font-family:inherit"></textarea>
+              <input id="bk-name" class="bk-input" placeholder="${esc(c.labels?.formFullName || 'Full name')}" />
+              <input id="bk-email" class="bk-input" type="email" placeholder="${esc(c.labels?.formEmail || 'Email')}" />
+              <input id="bk-phone" class="bk-input" placeholder="${esc(c.labels?.formPhone || 'Phone number')}" />
+              <textarea id="bk-notes" class="bk-input" placeholder="${esc(c.labels?.formNote || 'Anything we should know? (optional)')}" style="min-height:80px;resize:vertical;font-family:inherit"></textarea>
               ${consentField(c, { idPrefix: 'bk' })}
-              <button id="bk-submit" class="bk-submit" type="button">Confirm Reservation</button>
+              <button id="bk-submit" class="bk-submit" type="button">${esc(c.labels?.btnConfirmReservation || 'Confirm Reservation')}</button>
             </div>
-            <p class="bk-note" style="margin:20px 0 0">A confirmation email with a cancellation link will arrive shortly after.</p>
+            <p class="bk-note" style="margin:20px 0 0">${esc(c.labels?.confirmEmailNote || 'A confirmation email with a cancellation link will arrive shortly after.')}</p>
           </div>
         </div>
 
         <div id="bk-done" class="success" style="display:none">
-          <p class="eyebrow" style="margin-bottom:14px">— Reserved —</p>
-          <h3>Thank you.</h3>
+          <p class="eyebrow" style="margin-bottom:14px">— ${esc(c.labels?.secReserved || 'Reserved')} —</p>
+          <h3>${esc(c.labels?.thankYouTitle || 'Thank you.')}</h3>
           <p id="bk-done-msg" style="color:#4a4540;margin-top:8px"></p>
-          <p style="color:var(--mute);font-size:13px;margin-top:22px">Your confirmation email is on its way.</p>
+          <p style="color:var(--mute);font-size:13px;margin-top:22px">${esc(c.labels?.confirmationOnItsWay || 'Your confirmation email is on its way.')}</p>
         </div>
       </div>
 
@@ -676,7 +697,7 @@ function generateBookingPage(c) {
           var url=API+'/api/booking/'+SITE+'/availability?service='+encodeURIComponent(state.service)+'&date='+state.date;
           fetch(url).then(function(r){return r.json().then(function(j){return {ok:r.ok,j:j}})}).then(function(x){
             loadingEl.style.display='none';
-            if(!x.ok){showError(x.j.error||'Could not load times');return;}
+            if(!x.ok){showError(x.j.error||${JSON.stringify(c.labels?.couldNotLoadTimes || 'Could not load times')});return;}
             var slots=x.j.slots||[];
             if(slots.length===0){slotsEl.innerHTML='<p style="grid-column:1/-1;color:var(--mute);padding:18px 0;text-align:center">No times available this day.</p>';return;}
             slots.forEach(function(s){
@@ -709,8 +730,8 @@ function generateBookingPage(c) {
           fetch(API+'/api/booking/'+SITE,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
             service:state.service,startAt:state.slot,customerName:name,customerEmail:email,customerPhone:phone,notes:notes,consentGiven:true
           })}).then(function(r){return r.json().then(function(j){return {ok:r.ok,j:j}})}).then(function(x){
-            submitBtn.disabled=false;submitBtn.textContent='Confirm Reservation';
-            if(!x.ok){showError(x.j.error||'Booking failed');return;}
+            submitBtn.disabled=false;submitBtn.textContent=${JSON.stringify(c.labels?.btnConfirmReservation || 'Confirm Reservation')};
+            if(!x.ok){showError(x.j.error||${JSON.stringify(c.labels?.bookingFailed || 'Booking failed')});return;}
             // Redirect to standalone thank-you page. Booking details travel
             // via query string so the page can render a rich summary without
             // needing a server round-trip. Inline success card stays as a
@@ -724,7 +745,7 @@ function generateBookingPage(c) {
             }).toString();
             window.location.href='/thank-you/?'+q;
           }).catch(function(e){
-            submitBtn.disabled=false;submitBtn.textContent='Confirm Reservation';
+            submitBtn.disabled=false;submitBtn.textContent=${JSON.stringify(c.labels?.btnConfirmReservation || 'Confirm Reservation')};
             showError('Network error: '+e.message);
           });
         });
@@ -760,7 +781,7 @@ function generateBookingPage(c) {
 
 // ─── CONTACT ────────────────────────────────────────────────────────────────
 function generateContactPage(c) {
-  const hours = c.weeklyHours ? renderHoursRows(c.weeklyHours) : '';
+  const hours = c.weeklyHours ? renderHoursRows(c.weeklyHours, c) : '';
   const formAction = PUBLIC_API_BASE && c.siteId
     ? `${PUBLIC_API_BASE}/public/leads/${c.siteId}`
     : '/thank-you/';
@@ -860,13 +881,13 @@ function generateThankYouPage(c) {
   const body = `
 <section class="ty-hero">
   <div class="ty-shell rv">
-    <p class="eyebrow">— Reserved —</p>
-    <h1 class="ty-title">Thank you<em>.</em></h1>
+    <p class="eyebrow">— ${esc(c.labels?.secReserved || 'Reserved')} —</p>
+    <h1 class="ty-title">${esc(c.labels?.thankYouTitle || 'Thank you.').replace(/\.$/, '')}<em>.</em></h1>
     <p id="ty-greet" class="ty-greet">Your reservation is confirmed. We look forward to seeing you.</p>
 
     <div id="ty-card" class="ty-card" style="display:none">
       <div class="ty-row">
-        <span class="ty-key">Treatment</span>
+        <span class="ty-key">${esc(c.labels?.formTreatment || 'Treatment')}</span>
         <span id="ty-svc" class="ty-val"></span>
       </div>
       <div class="ty-row">
@@ -880,15 +901,15 @@ function generateThankYouPage(c) {
     </div>
 
     <p id="ty-email" class="ty-note" style="display:none">
-      A confirmation email with a cancellation link is on its way to <strong id="ty-email-value"></strong>. Check your inbox (and spam, just in case).
+      ${esc(c.labels?.confirmEmailNote || 'A confirmation email with a cancellation link will arrive shortly after.')}
     </p>
     <p id="ty-email-fallback" class="ty-note">
-      A confirmation email with a cancellation link is on its way. Check your inbox (and spam).
+      ${esc(c.labels?.confirmationOnItsWay || 'Your confirmation email is on its way.')}
     </p>
 
     <div class="ty-cta">
-      <a href="/" class="btn btn-ink">Back to Home</a>
-      <a href="/booking" class="btn btn-p">Book Another Visit</a>
+      <a href="/" class="btn btn-ink">${esc(c.labels?.btnBackToHome || 'Back to Home')}</a>
+      <a href="/booking" class="btn btn-p">${esc(c.labels?.btnReserveVisit || 'Reserve a Visit')}</a>
     </div>
   </div>
 </section>
@@ -961,7 +982,10 @@ function generateAllPages(config, watermark = false) {
     pages['/services/index.html'] = generateServicesPage(config);
   }
   if (watermark) {
-    const WM = `<div style="position:fixed;bottom:0;left:0;right:0;background:rgba(14,13,12,0.94);color:#fff;text-align:center;padding:14px 20px;z-index:99999;font-family:'Inter',sans-serif;font-size:12px;letter-spacing:0.3em;text-transform:uppercase">Preview — <a href="https://bytesplatform.com" style="color:#fff;text-decoration:underline;font-weight:500">Built by Pixie</a></div>`;
+    // "Built by Pixie" is brand attribution and stays. The "Preview" prefix is
+    // localized from the chrome labels block when the site is non-English.
+    const previewWord = esc((config.labels && config.labels.bnrWatermark) || 'Preview').replace(/—.*$/, '').replace(/built by pixie/i, '').trim() || 'Preview';
+    const WM = `<div style="position:fixed;bottom:0;left:0;right:0;background:rgba(14,13,12,0.94);color:#fff;text-align:center;padding:14px 20px;z-index:99999;font-family:'Inter',sans-serif;font-size:12px;letter-spacing:0.3em;text-transform:uppercase">${previewWord} — <a href="https://bytesplatform.com" style="color:#fff;text-decoration:underline;font-weight:500">Built by Pixie</a></div>`;
     for (const [p, html] of Object.entries(pages)) {
       pages[p] = html.replace('</body>', WM + '</body>');
     }

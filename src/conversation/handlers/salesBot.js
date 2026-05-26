@@ -157,7 +157,7 @@ async function handleSalesBot(user, message) {
   if (!text) {
     await sendTextMessage(
       user.phone_number,
-      "Hey! I didn't catch that - what can I help you with?"
+      await localize("Hey! I didn't catch that - what can I help you with?", user, null)
     );
     return STATES.SALES_CHAT;
   }
@@ -223,7 +223,11 @@ async function handleSalesBot(user, message) {
     await updateUserMetadata(user.id, { followupOptOut: true });
     await sendTextMessage(
       user.phone_number,
-      "No worries at all! I won't follow up further. If you ever change your mind, just send a message and I'll be here. Have a great day!"
+      await localize(
+        "No worries at all! I won't follow up further. If you ever change your mind, just send a message and I'll be here. Have a great day!",
+        user,
+        text
+      )
     );
     await logMessage(user.id, 'User not interested — follow-ups stopped', 'assistant');
     saveLeadSummary(user, 'opted_out', 'User said not interested — follow-ups stopped').catch(() => {});
@@ -1105,7 +1109,11 @@ async function handleSalesBot(user, message) {
       });
       await sendTextMessage(
         user.phone_number,
-        `Got it, building a chatbot for *${businessName}*! What industry are you in? (e.g., restaurant, dental, salon, real estate, etc.)`
+        await localize(
+          `Got it, building a chatbot for *${businessName}*! What industry are you in? (e.g., restaurant, dental, salon, real estate, etc.)`,
+          user,
+          text
+        )
       );
       await logMessage(user.id, `Chatbot demo: business name pre-filled as "${businessName}"`, 'assistant');
       return STATES.CB_COLLECT_INDUSTRY;
@@ -1113,7 +1121,7 @@ async function handleSalesBot(user, message) {
 
     await sendTextMessage(
       user.phone_number,
-      "Let's build it - what's your business name?"
+      await localize("Let's build it - what's your business name?", user, text)
     );
     await logMessage(user.id, 'Starting chatbot demo flow from sales', 'assistant');
     return STATES.CB_COLLECT_NAME;

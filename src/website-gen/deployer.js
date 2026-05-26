@@ -324,10 +324,11 @@ document.querySelectorAll('.tilt').forEach(card=>{card.addEventListener('mousemo
 
 // ─── Navbar ─────────────────────────────────────────────────────────────────
 function getPages(c) {
-  const pages=[{n:'Home',h:'/'}];
-  if((c.services||[]).length>0) pages.push({n:'Services',h:'/services'});
-  pages.push({n:'About',h:'/about'});
-  pages.push({n:'Contact',h:'/contact'});
+  const L = c.labels || {};
+  const pages=[{n: L.navHome || 'Home', h:'/'}];
+  if((c.services||[]).length>0) pages.push({n: L.navServices || 'Services', h:'/services'});
+  pages.push({n: L.navAbout || 'About', h:'/about'});
+  pages.push({n: L.navContact || 'Contact', h:'/contact'});
   return pages;
 }
 
@@ -341,10 +342,10 @@ function getNav(c, cur) {
   <a href="/" class="nav-b">${c.logoUrl
     ? `<img src="${esc(c.logoUrl)}" alt="${esc(c.businessName || '')}" style="height:56px;max-height:56px;width:auto;display:inline-block;vertical-align:middle;object-fit:contain">`
     : esc(c.businessName)}</a>
-  <div class="nav-ls">${pages.map(p=>`<a href="${p.h}" class="nav-l${p.h===cur?' font-semibold':''}">${p.n}</a>`).join('')}<a href="/contact" class="btn-p" style="padding:10px 24px;font-size:14px">Get Started</a></div>
+  <div class="nav-ls">${pages.map(p=>`<a href="${p.h}" class="nav-l${p.h===cur?' font-semibold':''}">${p.n}</a>`).join('')}<a href="/contact" class="btn-p" style="padding:10px 24px;font-size:14px">${esc(c.labels?.btnGetStarted||'Get Started')}</a></div>
   <div class="mt" aria-label="Menu"><span></span><span></span><span></span></div>
 </div></nav>
-<div class="mm"><button class="mc" aria-label="Close">&times;</button>${pages.map(p=>`<a href="${p.h}">${p.n}</a>`).join('')}<a href="/contact" class="btn-p" style="margin-top:16px">Get Started</a></div>`;
+<div class="mm"><button class="mc" aria-label="Close">&times;</button>${pages.map(p=>`<a href="${p.h}">${p.n}</a>`).join('')}<a href="/contact" class="btn-p" style="margin-top:16px">${esc(c.labels?.btnGetStarted||'Get Started')}</a></div>`;
 }
 
 // ─── Footer ─────────────────────────────────────────────────────────────────
@@ -354,17 +355,17 @@ function getFoot(c) {
 <footer style="background:#0a0a1a;color:#999;padding:80px 24px 40px"><div class="ctn">
   <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(200px,100%),1fr));gap:48px;margin-bottom:48px">
     <div><p style="font-size:24px;font-weight:800;color:#fff;margin-bottom:12px">${esc(c.businessName)}</p><p style="font-size:14px;line-height:1.8;opacity:0.6">${esc(c.footerTagline||'')}</p></div>
-    <div><p style="font-weight:600;color:#fff;margin-bottom:16px;font-size:14px;text-transform:uppercase;letter-spacing:1px">Pages</p><div style="display:flex;flex-direction:column;gap:10px">
+    <div><p style="font-weight:600;color:#fff;margin-bottom:16px;font-size:14px;text-transform:uppercase;letter-spacing:1px">${esc(c.labels?.footPages||'Pages')}</p><div style="display:flex;flex-direction:column;gap:10px">
       ${getPages(c).map(p=>`<a href="${p.h}" style="color:#999;text-decoration:none;font-size:14px;transition:color 0.3s">${p.n}</a>`).join('')}
     </div></div>
-    <div><p style="font-weight:600;color:#fff;margin-bottom:16px;font-size:14px;text-transform:uppercase;letter-spacing:1px">Contact</p><div style="display:flex;flex-direction:column;gap:10px">
+    <div><p style="font-weight:600;color:#fff;margin-bottom:16px;font-size:14px;text-transform:uppercase;letter-spacing:1px">${esc(c.labels?.navContact||'Contact')}</p><div style="display:flex;flex-direction:column;gap:10px">
       ${c.contactEmail?`<a href="mailto:${esc(c.contactEmail)}" style="color:#999;text-decoration:none;font-size:14px">${esc(c.contactEmail)}</a>`:''}
       ${c.contactPhone?`<a href="tel:${esc(c.contactPhone)}" style="color:#999;text-decoration:none;font-size:14px">${esc(c.contactPhone)}</a>`:''}
       ${c.contactAddress?`<p style="font-size:14px">${esc(c.contactAddress)}</p>`:''}
     </div></div>
   </div>
   <div style="border-top:1px solid rgba(255,255,255,0.08);padding-top:24px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:16px">
-    <div><p style="font-size:12px;opacity:0.4">Built with care. All rights reserved. &middot; <a href="/privacy/" style="color:inherit;text-decoration:underline">Privacy Policy</a></p></div>
+    <div><p style="font-size:12px;opacity:0.4">${esc(c.labels?.footAllRights||'All rights reserved')}. &middot; <a href="/privacy/" style="color:inherit;text-decoration:underline">${esc(c.labels?.footPrivacy||'Privacy Policy')}</a></p></div>
     <p style="font-size:12px;opacity:0.4">${esc(c.businessName)} &copy; ${new Date().getFullYear()}</p>
   </div>
 </div></footer>
@@ -389,7 +390,7 @@ function wrap(c, cur, body) {
   //   2. Primary button and back-to-top button — they sit directly on pc.
   const onPc = heroTextPalette(pc, c.heroTextOverride);
   const heroPageHasLightBg = cur === '/' && onPc.fg === '#0f172a';
-  return `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+  return `<!DOCTYPE html><html lang="${esc(c.htmlLang || 'en')}"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>${esc(c.businessName||'Business')}${title}</title><meta name="description" content="${esc(c.tagline||'')}">
 <link rel="icon" type="image/png" href="${esc(c.logoUrl || 'https://pixiebot.co/pixie-logo.png')}">
 <link rel="apple-touch-icon" href="${esc(c.logoUrl || 'https://pixiebot.co/pixie-logo.png')}">
@@ -526,7 +527,7 @@ function generateHomePage(c) {
         <p style="font-size:clamp(16px,2.5vw,22px);color:${palette.fgSoft};max-width:650px;margin:0 auto 40px;line-height:1.6;animation:fadeUp 0.8s ease-out 0.4s both;${heroShadow}">${esc(c.tagline)}</p>
         <div style="display:flex;gap:16px;justify-content:center;flex-wrap:wrap;animation:fadeUp 0.8s ease-out 0.6s both">
           <a href="/contact" class="btn-w" style="animation:pulseGlow 3s ease-in-out infinite;background:${palette.buttonBg};color:${palette.buttonFg}">${esc(c.ctaButton)} ${ARR}</a>
-          ${(c.services||[]).length>0?`<a href="/services" class="btn-s" style="color:${palette.fg};border-color:${palette.border}">Our Services</a>`:''}
+          ${(c.services||[]).length>0?`<a href="/services" class="btn-s" style="color:${palette.fg};border-color:${palette.border}">${esc(c.labels?.secOurServices||'Our Services')}</a>`:''}
         </div>
       </div>
       <div style="position:absolute;bottom:32px;left:50%;transform:translateX(-50%);animation:fadeIn 1s ease-out 1s both">
@@ -540,22 +541,22 @@ function generateHomePage(c) {
 
     ${(c.services||[]).length>0?`<section class="sect" style="background:#fafafa"><div class="ctn">
       <div class="rv" style="text-align:center;margin-bottom:64px">
-        <span style="display:inline-block;padding:8px 20px;border-radius:50px;font-size:13px;font-weight:600;letter-spacing:1px;text-transform:uppercase;background:${pc}10;color:${pc};margin-bottom:16px">What We Do</span>
+        <span style="display:inline-block;padding:8px 20px;border-radius:50px;font-size:13px;font-weight:600;letter-spacing:1px;text-transform:uppercase;background:${pc}10;color:${pc};margin-bottom:16px">${esc(c.labels?.secWhatWeDo||'What We Do')}</span>
         <h2 style="font-size:clamp(28px,4vw,48px);font-weight:800;color:#1a1a2e;letter-spacing:-1px">${esc(c.servicesTitle)}</h2>
         <div style="width:60px;height:4px;border-radius:2px;background:linear-gradient(90deg,${pc},${ac});margin:20px auto 0"></div>
       </div>
       <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(min(320px,100%),1fr));gap:28px">${services}</div>
-      <div class="rv d4" style="text-align:center;margin-top:48px"><a href="/services" class="btn-p">View All Services ${ARR}</a></div>
+      <div class="rv d4" style="text-align:center;margin-top:48px"><a href="/services" class="btn-p">${esc(c.labels?.btnViewServices||'View All Services')} ${ARR}</a></div>
     </div></section>`:''}
 
     <section class="sect" style="background:#fff"><div class="ctn">
       <div style="display:grid;grid-template-columns:1fr;gap:64px;align-items:center" class="md2">
         <div class="rl">
-          <span style="display:inline-block;padding:8px 20px;border-radius:50px;font-size:13px;font-weight:600;letter-spacing:1px;text-transform:uppercase;background:${pc}10;color:${pc};margin-bottom:16px">About Us</span>
+          <span style="display:inline-block;padding:8px 20px;border-radius:50px;font-size:13px;font-weight:600;letter-spacing:1px;text-transform:uppercase;background:${pc}10;color:${pc};margin-bottom:16px">${esc(c.labels?.secAboutUs||'About Us')}</span>
           <h2 style="font-size:clamp(28px,4vw,44px);font-weight:800;color:#1a1a2e;letter-spacing:-1px;margin-bottom:24px">${esc(c.aboutTitle)}</h2>
           <div style="width:60px;height:4px;border-radius:2px;background:linear-gradient(90deg,${pc},${ac});margin-bottom:24px"></div>
           <p style="font-size:17px;line-height:1.8;color:#555;margin-bottom:32px">${esc(c.aboutText)}</p>
-          <a href="/about" class="btn-s">Learn More About Us</a>
+          <a href="/about" class="btn-s">${esc(c.labels?.btnLearnMoreAboutUs||'Learn More About Us')}</a>
         </div>
         <div class="rr mobile-1col" style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
           ${(c.whyChooseUs||[]).slice(0,4).map((w,i)=>`
@@ -570,16 +571,16 @@ function generateHomePage(c) {
 
     ${(c.processSteps||[]).length>0?`<section class="sect" style="background:#fafafa"><div class="ctn">
       <div class="rv" style="text-align:center;margin-bottom:64px">
-        <span style="display:inline-block;padding:8px 20px;border-radius:50px;font-size:13px;font-weight:600;letter-spacing:1px;text-transform:uppercase;background:${pc}10;color:${pc};margin-bottom:16px">How It Works</span>
-        <h2 style="font-size:clamp(28px,4vw,44px);font-weight:800;color:#1a1a2e;letter-spacing:-1px">Our Process</h2>
+        <span style="display:inline-block;padding:8px 20px;border-radius:50px;font-size:13px;font-weight:600;letter-spacing:1px;text-transform:uppercase;background:${pc}10;color:${pc};margin-bottom:16px">${esc(c.labels?.secHowItWorks||'How It Works')}</span>
+        <h2 style="font-size:clamp(28px,4vw,44px);font-weight:800;color:#1a1a2e;letter-spacing:-1px">${esc(c.labels?.secOurProcess||'Our Process')}</h2>
       </div>
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(200px,100%),1fr));gap:40px">${process}</div>
     </div></section>`:''}
 
     ${(c.testimonials||[]).length>0?`<section class="sect" style="background:#fff"><div class="ctn">
       <div class="rv" style="text-align:center;margin-bottom:64px">
-        <span style="display:inline-block;padding:8px 20px;border-radius:50px;font-size:13px;font-weight:600;letter-spacing:1px;text-transform:uppercase;background:${pc}10;color:${pc};margin-bottom:16px">Testimonials</span>
-        <h2 style="font-size:clamp(28px,4vw,44px);font-weight:800;color:#1a1a2e;letter-spacing:-1px">What Our Clients Say</h2>
+        <span style="display:inline-block;padding:8px 20px;border-radius:50px;font-size:13px;font-weight:600;letter-spacing:1px;text-transform:uppercase;background:${pc}10;color:${pc};margin-bottom:16px">${esc(c.labels?.secTestimonials||'Testimonials')}</span>
+        <h2 style="font-size:clamp(28px,4vw,44px);font-weight:800;color:#1a1a2e;letter-spacing:-1px">${esc(c.labels?.secClientsSay||'What Our Clients Say')}</h2>
       </div>
       <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(min(320px,100%),1fr));gap:28px">${testimonials}</div>
     </div></section>`:''}
@@ -617,7 +618,7 @@ function generateServicesPage(c) {
             </div>
             <h3 style="font-size:clamp(24px,3vw,36px);font-weight:800;color:#1a1a2e;margin-bottom:16px;letter-spacing:-0.5px">${esc(s.title)}</h3>
             <p style="font-size:17px;line-height:1.8;color:#555;margin-bottom:24px">${esc(s.fullDescription||s.description)}</p>
-            <a href="/contact" class="btn-p">Get Started ${ARR}</a>
+            <a href="/contact" class="btn-p">${esc(c.labels?.btnGetStarted||'Get Started')} ${ARR}</a>
           </div>
           <div class="${isEven?'rr':'rl'}" style="order:${isEven?2:1}">
             ${s.image && s.image.url
@@ -797,9 +798,9 @@ function generateContactPage(c) {
     <section style="padding:160px 24px 80px;text-align:center;position:relative;overflow:hidden;background:linear-gradient(135deg,${pc}06,${ac}06)">
       <div class="dot-grid" style="position:absolute;inset:0"></div>
       <div class="ctn" style="position:relative;z-index:10"><div style="animation:fadeUp 0.8s ease-out">
-        <span style="display:inline-block;padding:8px 20px;border-radius:50px;font-size:13px;font-weight:600;letter-spacing:1px;text-transform:uppercase;background:${pc}15;color:${pc};margin-bottom:16px">Contact Us</span>
-        <h1 style="font-size:clamp(32px,5vw,56px);font-weight:900;color:#1a1a2e;letter-spacing:-2px;margin-bottom:20px">Get In Touch</h1>
-        <p style="font-size:18px;color:#666;max-width:550px;margin:0 auto;line-height:1.7">${esc(c.contactPageIntro||'We would love to hear from you.')}</p>
+        <span style="display:inline-block;padding:8px 20px;border-radius:50px;font-size:13px;font-weight:600;letter-spacing:1px;text-transform:uppercase;background:${pc}15;color:${pc};margin-bottom:16px">${esc(c.labels?.secContactUs||'Contact Us')}</span>
+        <h1 style="font-size:clamp(32px,5vw,56px);font-weight:900;color:#1a1a2e;letter-spacing:-2px;margin-bottom:20px">${esc(c.labels?.introGetInTouch||'Get In Touch')}</h1>
+        <p style="font-size:18px;color:#666;max-width:550px;margin:0 auto;line-height:1.7">${esc(c.contactPageIntro || c.labels?.introContactBody || 'We would love to hear from you.')}</p>
       </div></div>
     </section>
 
@@ -807,28 +808,28 @@ function generateContactPage(c) {
 
     <section class="sect" style="background:#fff"><div class="ctn" style="max-width:700px">
       <div class="rv" style="text-align:center;margin-bottom:48px">
-        <h2 style="font-size:clamp(28px,4vw,40px);font-weight:800;color:#1a1a2e;letter-spacing:-1px;margin-bottom:12px">Send Us a Message</h2>
-        <p style="font-size:16px;color:#888">Fill out the form below and we'll get back to you soon.</p>
+        <h2 style="font-size:clamp(28px,4vw,40px);font-weight:800;color:#1a1a2e;letter-spacing:-1px;margin-bottom:12px">${esc(c.labels?.introSendUs||'Send Us a Message')}</h2>
+        <p style="font-size:16px;color:#888">${esc(c.labels?.introSendUsBody||"Fill out the form below and we'll get back to you soon.")}</p>
       </div>
-      <form name="contact" method="POST" action="${genericLeadAction(c)}" data-pixie-form="1" class="rv d2" onsubmit="event.preventDefault();var f=this;var b=f.querySelector('button');b.disabled=true;b.innerHTML='Sending...';var fd=new FormData(f);fetch(f.action,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded','Accept':'application/json'},body:new URLSearchParams(fd).toString()}).then(function(r){return r.json().catch(function(){return{}})}).then(function(r){if(!r||r.ok===false)throw new Error('submit-failed');var q=new URLSearchParams({name:((fd.get('first-name')||'')+' '+(fd.get('last-name')||'')).trim(),email:fd.get('email')||''}).toString();window.location.href='/thank-you/?'+q}).catch(function(){b.innerHTML='Error — try again';b.style.background='#ef4444';b.disabled=false})" style="display:flex;flex-direction:column;gap:20px">
+      <form name="contact" method="POST" action="${genericLeadAction(c)}" data-pixie-form="1" class="rv d2" onsubmit="event.preventDefault();var f=this;var b=f.querySelector('button');b.disabled=true;b.innerHTML=${JSON.stringify(esc(c.labels?.formSending || 'Sending...'))};var fd=new FormData(f);fetch(f.action,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded','Accept':'application/json'},body:new URLSearchParams(fd).toString()}).then(function(r){return r.json().catch(function(){return{}})}).then(function(r){if(!r||r.ok===false)throw new Error('submit-failed');var q=new URLSearchParams({name:((fd.get('first-name')||'')+' '+(fd.get('last-name')||'')).trim(),email:fd.get('email')||''}).toString();window.location.href='/thank-you/?'+q}).catch(function(){b.innerHTML=${JSON.stringify(esc(c.labels?.formErrorRetry || 'Error — try again'))};b.style.background='#ef4444';b.disabled=false})" style="display:flex;flex-direction:column;gap:20px">
         <input type="hidden" name="form_name" value="contact">
         <input type="hidden" name="source_page" value="/contact">
         <input type="hidden" name="_honey" value="" tabindex="-1" autocomplete="off" style="position:absolute;left:-9999px;width:1px;height:1px;opacity:0;pointer-events:none" aria-hidden="true">
         <div class="mobile-1col" style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
-          <div><label style="display:block;font-size:14px;font-weight:600;color:#333;margin-bottom:8px">First Name</label><input type="text" name="first-name" required placeholder="John" style="width:100%;padding:14px 18px;border:2px solid #eee;border-radius:12px;font-size:15px;font-family:inherit;transition:all 0.3s;outline:none" onfocus="this.style.borderColor='${pc}';this.style.boxShadow='0 0 0 4px ${pc}15'" onblur="this.style.borderColor='#eee';this.style.boxShadow='none'"></div>
-          <div><label style="display:block;font-size:14px;font-weight:600;color:#333;margin-bottom:8px">Last Name</label><input type="text" name="last-name" required placeholder="Doe" style="width:100%;padding:14px 18px;border:2px solid #eee;border-radius:12px;font-size:15px;font-family:inherit;transition:all 0.3s;outline:none" onfocus="this.style.borderColor='${pc}';this.style.boxShadow='0 0 0 4px ${pc}15'" onblur="this.style.borderColor='#eee';this.style.boxShadow='none'"></div>
+          <div><label style="display:block;font-size:14px;font-weight:600;color:#333;margin-bottom:8px">${esc(c.labels?.formFirstName||'First Name')}</label><input type="text" name="first-name" required placeholder="${esc(c.labels?.phFirstName||'John')}" style="width:100%;padding:14px 18px;border:2px solid #eee;border-radius:12px;font-size:15px;font-family:inherit;transition:all 0.3s;outline:none" onfocus="this.style.borderColor='${pc}';this.style.boxShadow='0 0 0 4px ${pc}15'" onblur="this.style.borderColor='#eee';this.style.boxShadow='none'"></div>
+          <div><label style="display:block;font-size:14px;font-weight:600;color:#333;margin-bottom:8px">${esc(c.labels?.formLastName||'Last Name')}</label><input type="text" name="last-name" required placeholder="${esc(c.labels?.phLastName||'Doe')}" style="width:100%;padding:14px 18px;border:2px solid #eee;border-radius:12px;font-size:15px;font-family:inherit;transition:all 0.3s;outline:none" onfocus="this.style.borderColor='${pc}';this.style.boxShadow='0 0 0 4px ${pc}15'" onblur="this.style.borderColor='#eee';this.style.boxShadow='none'"></div>
         </div>
-        <div><label style="display:block;font-size:14px;font-weight:600;color:#333;margin-bottom:8px">Email</label><input type="email" name="email" required placeholder="john@example.com" style="width:100%;padding:14px 18px;border:2px solid #eee;border-radius:12px;font-size:15px;font-family:inherit;transition:all 0.3s;outline:none" onfocus="this.style.borderColor='${pc}';this.style.boxShadow='0 0 0 4px ${pc}15'" onblur="this.style.borderColor='#eee';this.style.boxShadow='none'"></div>
-        <div><label style="display:block;font-size:14px;font-weight:600;color:#333;margin-bottom:8px">Message</label><textarea rows="5" name="message" required placeholder="Tell us about your project..." style="width:100%;padding:14px 18px;border:2px solid #eee;border-radius:12px;font-size:15px;font-family:inherit;resize:vertical;transition:all 0.3s;outline:none" onfocus="this.style.borderColor='${pc}';this.style.boxShadow='0 0 0 4px ${pc}15'" onblur="this.style.borderColor='#eee';this.style.boxShadow='none'"></textarea></div>
+        <div><label style="display:block;font-size:14px;font-weight:600;color:#333;margin-bottom:8px">${esc(c.labels?.formEmail||'Email')}</label><input type="email" name="email" required placeholder="${esc(c.labels?.phEmail||'john@example.com')}" style="width:100%;padding:14px 18px;border:2px solid #eee;border-radius:12px;font-size:15px;font-family:inherit;transition:all 0.3s;outline:none" onfocus="this.style.borderColor='${pc}';this.style.boxShadow='0 0 0 4px ${pc}15'" onblur="this.style.borderColor='#eee';this.style.boxShadow='none'"></div>
+        <div><label style="display:block;font-size:14px;font-weight:600;color:#333;margin-bottom:8px">${esc(c.labels?.formMessage||'Message')}</label><textarea rows="5" name="message" required placeholder="${esc(c.labels?.phMessage||'Tell us about your project...')}" style="width:100%;padding:14px 18px;border:2px solid #eee;border-radius:12px;font-size:15px;font-family:inherit;resize:vertical;transition:all 0.3s;outline:none" onfocus="this.style.borderColor='${pc}';this.style.boxShadow='0 0 0 4px ${pc}15'" onblur="this.style.borderColor='#eee';this.style.boxShadow='none'"></textarea></div>
         ${require('./templates/_privacy').consentField(c, { idPrefix: 'gen', accent: pc })}
-        <button type="submit" class="btn-p" style="justify-content:center;font-size:16px;padding:18px 32px;border-radius:12px;width:100%;cursor:pointer">Send Message <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/></svg></button>
+        <button type="submit" class="btn-p" style="justify-content:center;font-size:16px;padding:18px 32px;border-radius:12px;width:100%;cursor:pointer">${esc(c.labels?.btnSendMessage||'Send Message')} <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/></svg></button>
       </form>
     </div></section>
 
     ${(c.faq||[]).length>0?`<section class="sect" style="background:#fafafa"><div class="ctn" style="max-width:800px">
       <div class="rv" style="text-align:center;margin-bottom:48px">
-        <span style="display:inline-block;padding:8px 20px;border-radius:50px;font-size:13px;font-weight:600;letter-spacing:1px;text-transform:uppercase;background:${pc}10;color:${pc};margin-bottom:16px">FAQ</span>
-        <h2 style="font-size:clamp(28px,4vw,40px);font-weight:800;color:#1a1a2e;letter-spacing:-1px">Frequently Asked Questions</h2>
+        <span style="display:inline-block;padding:8px 20px;border-radius:50px;font-size:13px;font-weight:600;letter-spacing:1px;text-transform:uppercase;background:${pc}10;color:${pc};margin-bottom:16px">${esc(c.labels?.secFAQ||'FAQ')}</span>
+        <h2 style="font-size:clamp(28px,4vw,40px);font-weight:800;color:#1a1a2e;letter-spacing:-1px">${esc(c.labels?.secFAQHeading||'Frequently Asked Questions')}</h2>
       </div>
       <div style="display:flex;flex-direction:column;gap:12px">${faqItems}</div>
     </div></section>`:''}
@@ -860,16 +861,16 @@ function generateThankYouPage(c) {
             <path d="M4 12.5l5 5L20 7"/>
           </svg>
         </div>
-        <h1 id="ty-heading" class="rv d1" style="font-size:clamp(36px,5.5vw,60px);font-weight:900;color:#1a1a2e;letter-spacing:-1.5px;line-height:1.05;margin:0">Message received<span style="color:${pc}">.</span></h1>
-        <p id="ty-sub" class="rv d2" style="font-size:17px;color:#555;max-width:480px;margin:22px auto 0;line-height:1.7">Thanks for reaching out. We&rsquo;ll review what you&rsquo;ve sent and get back to you within <strong style="color:#1a1a2e">24 hours</strong>.</p>
+        <h1 id="ty-heading" class="rv d1" style="font-size:clamp(36px,5.5vw,60px);font-weight:900;color:#1a1a2e;letter-spacing:-1.5px;line-height:1.05;margin:0">${esc(c.labels?.thankYouHeading||'Message received')}<span style="color:${pc}">.</span></h1>
+        <p id="ty-sub" class="rv d2" style="font-size:17px;color:#555;max-width:480px;margin:22px auto 0;line-height:1.7">${esc(c.labels?.thankYouBody||"Thanks for reaching out. We'll review what you've sent and get back to you within")} <strong style="color:#1a1a2e">${esc(c.labels?.thankYouHours||'24 hours')}</strong>.</p>
 
         <div id="ty-email-note" class="rv d3" style="display:none;margin-top:28px;padding:18px 22px;background:#fff;border:1px solid ${pc}20;border-radius:14px;font-size:14.5px;color:#555;line-height:1.6">
-          A confirmation is on its way to <strong id="ty-email-value" style="color:#1a1a2e"></strong>. Check your inbox (and spam, just in case).
+          ${esc(c.labels?.thankYouEmailNote||'A confirmation is on its way to')} <strong id="ty-email-value" style="color:#1a1a2e"></strong>. ${esc(c.labels?.thankYouCheckSpam||'Check your inbox (and spam, just in case).')}
         </div>
 
         <div class="rv d3" style="display:flex;gap:14px;justify-content:center;margin-top:40px;flex-wrap:wrap">
-          <a href="/" class="btn-p" style="padding:14px 28px;border-radius:12px;font-weight:700;font-size:15px;text-decoration:none;display:inline-flex;align-items:center;gap:8px">Back to Home ${ARR}</a>
-          ${hasServices ? `<a href="/services" style="padding:14px 28px;border-radius:12px;font-weight:700;font-size:15px;text-decoration:none;display:inline-flex;align-items:center;gap:8px;background:#fff;color:#1a1a2e;border:2px solid #eaeaea;transition:all 0.2s">Browse Services</a>` : ''}
+          <a href="/" class="btn-p" style="padding:14px 28px;border-radius:12px;font-weight:700;font-size:15px;text-decoration:none;display:inline-flex;align-items:center;gap:8px">${esc(c.labels?.btnBackToHome||'Back to Home')} ${ARR}</a>
+          ${hasServices ? `<a href="/services" style="padding:14px 28px;border-radius:12px;font-weight:700;font-size:15px;text-decoration:none;display:inline-flex;align-items:center;gap:8px;background:#fff;color:#1a1a2e;border:2px solid #eaeaea;transition:all 0.2s">${esc(c.labels?.btnBrowseServices||'Browse Services')}</a>` : ''}
         </div>
       </div>
     </section>
@@ -895,7 +896,19 @@ function generateThankYouPage(c) {
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
-const WATERMARK_HTML = `<div style="position:fixed;bottom:0;left:0;right:0;background:rgba(0,0,0,0.9);color:#fff;text-align:center;padding:14px 20px;z-index:99999;font-family:sans-serif;font-size:14px;backdrop-filter:blur(8px)">Preview Only — <a href="https://bytesplatform.com" style="color:#818cf8;text-decoration:underline;font-weight:600">Built by Pixie</a></div>`;
+function buildWatermarkHtml(c) {
+  // "Built by Pixie" is brand attribution and stays as-is. The "Preview Only"
+  // prefix gets localized when the site is for a non-English speaker.
+  const previewLabel = (c && c.labels && c.labels.bnrWatermark) || 'Preview Only — Built by Pixie';
+  // If the localized label still contains "Built by Pixie", use as-is; if it
+  // doesn't (English fallback path or LLM dropped the attribution), reattach
+  // the attribution link.
+  if (/built by pixie/i.test(previewLabel)) {
+    const safe = String(previewLabel).replace(/built by pixie/i, '<a href="https://bytesplatform.com" style="color:#818cf8;text-decoration:underline;font-weight:600">Built by Pixie</a>');
+    return `<div style="position:fixed;bottom:0;left:0;right:0;background:rgba(0,0,0,0.9);color:#fff;text-align:center;padding:14px 20px;z-index:99999;font-family:sans-serif;font-size:14px;backdrop-filter:blur(8px)">${safe}</div>`;
+  }
+  return `<div style="position:fixed;bottom:0;left:0;right:0;background:rgba(0,0,0,0.9);color:#fff;text-align:center;padding:14px 20px;z-index:99999;font-family:sans-serif;font-size:14px;backdrop-filter:blur(8px)">${esc(previewLabel)} — <a href="https://bytesplatform.com" style="color:#818cf8;text-decoration:underline;font-weight:600">Built by Pixie</a></div>`;
+}
 
 function generateAllPages(config, watermark = false) {
   // Niche-specific templates override the generic one.
@@ -919,7 +932,7 @@ function generateAllPages(config, watermark = false) {
   }
   if (watermark) {
     for (const [path, html] of Object.entries(pages)) {
-      pages[path] = html.replace('</body>', WATERMARK_HTML + '</body>');
+      pages[path] = html.replace('</body>', buildWatermarkHtml(config) + '</body>');
     }
   }
   return pages;

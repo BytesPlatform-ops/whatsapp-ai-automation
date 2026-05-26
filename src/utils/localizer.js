@@ -21,25 +21,39 @@ const { logger } = require('../utils/logger');
 // Non-Latin script ranges we recognize instantly as non-English.
 const NON_LATIN_RE = /[\u0600-\u06FF\u0750-\u077F\u0900-\u097F\u0A00-\u0A7F\u4E00-\u9FFF\u3040-\u30FF\uAC00-\uD7AF\u0400-\u04FF]/;
 
-// Common Roman-Urdu / Hindi / Spanish / French / German markers that
-// clearly signal non-English even when the script is Latin. Kept small
+// Common Roman-Urdu / Hindi / Spanish / French / German / Portuguese markers
+// that clearly signal non-English even when the script is Latin. Kept small
 // and high-precision; the LLM handles the long tail.
-const ROMAN_NON_ENGLISH_RE = /\b(?:hai|hain|karein|karna|karo|karenge|chahiye|mujhe|mera|meri|bhai|yaar|acha|thik|theek|nahi|hola|gracias|por\s*favor|bonjour|merci|oui|non|ciao|grazie|danke|bitte|ja|nein|saya|anda|terima|kasih)\b/i;
+const ROMAN_NON_ENGLISH_RE = /\b(?:hai|hain|karein|karna|karo|karenge|chahiye|mujhe|mera|meri|bhai|yaar|acha|thik|theek|nahi|hola|gracias|por\s*favor|bonjour|merci|oui|non|ciao|grazie|danke|bitte|ja|nein|saya|anda|terima|kasih|oi|ol[áa]|obrigad[oa]|tchau|voc[êe]|est[áa]|estou|sou|tenho|quero|queria|tamb[ée]m|porque|n[ãa]o|sim|pra|pro|meu|minha|sal[ãa]o|neg[óo]cio|empresa|fazer|tudo\s*bem|por\s*favor|quanto\s*custa)\b/i;
+
+// Portuguese-specific accent triad: ã/õ/ç almost never appear in Spanish,
+// French, Italian, etc. — near-deterministic Portuguese signal.
+const PORTUGUESE_ACCENTS_RE = /[ãõç]/i;
+
+// Positive English signal — common function words / sales-bot greetings that
+// strongly indicate the message is English. We only fast-path to 'english'
+// when one of these matches AND no foreign marker did; otherwise we let the
+// LLM decide. "no" / "yes" / "ok" are intentionally omitted because they
+// collide with Portuguese, Spanish, and German.
+const ENGLISH_MARKER_RE = /\b(?:the|and|you|your|are|was|were|this|that|with|have|has|will|would|could|should|want|need|just|like|what|when|where|how|please|thanks|thank|hello|hey|hi|sure|nope|yeah|yep|alright|okay|today|tomorrow|website|business|name|email|phone|address|appointment|booking)\b/i;
 
 /**
  * Best-effort cheap detection of whether the user's message is English.
  * Returns true = definitely English, false = definitely not, null = unsure.
+ * Unsure cases get routed to an LLM detection in resolveLanguage.
  */
 function quickDetect(text) {
   if (!text) return null;
   const t = String(text).trim();
   if (!t) return null;
   if (NON_LATIN_RE.test(t)) return false;
+  if (PORTUGUESE_ACCENTS_RE.test(t)) return false;
   if (ROMAN_NON_ENGLISH_RE.test(t)) return false;
-  // Latin-only, no non-English markers — could still be e.g. Dutch, but
-  // for a WhatsApp sales bot those users typically still prefer English
-  // replies. Treat as English by default.
-  return true;
+  if (ENGLISH_MARKER_RE.test(t)) return true;
+  // Latin-only and no marker on either side — could be Portuguese without
+  // diacritics ("oi quero um site"), Dutch, code-switched, etc. Bail to
+  // the LLM rather than guessing English.
+  return null;
 }
 
 /**
@@ -87,28 +101,39 @@ async function resolveLanguage(user, latestUserMessage) {
   }
 
   const quick = quickDetect(effectiveLatest);
+
+  // Code-switch safety net: current message is clearly English. Reply in
+  // English this turn regardless of any cached non-English preference.
+  // Cache is left alone — user may switch back next turn.
   if (quick === true) {
     return 'english';
   }
 
-  // Cached value wins after the safety check.
-  if (cached) return cached;
+  // Current message is clearly non-English. If the cache agrees (any
+  // non-english value), trust it. If the cache is missing or says
+  // 'english', re-detect — the cached label is stale or never set.
+  if (quick === false) {
+    if (cached && cached !== 'english') return cached;
+    // fall through to LLM detection
+  } else {
+    // quick === null (unsure). Trust cache if present, otherwise detect.
+    if (cached) return cached;
+  }
 
-  // Non-English signal — ask the LLM to name the language so we can use
-  // it in a translation prompt later. The script matters: "mujhe chahiye"
-  // should reply in Roman Urdu, not Devanagari Hindi; "أحتاج" should reply
-  // in Arabic script. So the label encodes both the language and the
-  // script the user is using.
+  // LLM detection. The script matters: "mujhe chahiye" should reply in
+  // Roman Urdu, not Devanagari Hindi; "أحتاج" should reply in Arabic
+  // script. So the label encodes both the language and the script.
   try {
     const response = await generateResponse(
       "Identify the language of the user's message. Pay attention to the SCRIPT they're using — if Roman/Latin script, prefer 'roman-urdu' / 'roman-hindi' / 'roman-arabic' over the native-script name. Reply with ONE word: the language label in English, lowercase, hyphenated if needed. Examples: english, roman-urdu, urdu, hindi, roman-hindi, spanish, arabic, roman-arabic, french, german, portuguese, italian. If you genuinely can't tell, reply: english.",
-      [{ role: 'user', content: String(latestUserMessage || '').slice(0, 500) }],
+      [{ role: 'user', content: String(effectiveLatest || latestUserMessage || '').slice(0, 500) }],
       { userId: user?.id, operation: 'language_detect' }
     );
-    const lang = String(response || '').trim().toLowerCase().replace(/[^a-z-]/g, '');
-    if (!lang || lang === 'english') return 'english';
+    const lang = String(response || '').trim().toLowerCase().replace(/[^a-z-]/g, '') || 'english';
 
-    // Persist so we don't re-detect every turn.
+    // Persist every detection (including 'english') so we don't re-pay
+    // this cost on every turn. The safety-net branches above handle the
+    // case where a cached value drifts from reality.
     if (user?.id) {
       try {
         await updateUserMetadata(user.id, { preferredLanguage: lang });
@@ -119,7 +144,7 @@ async function resolveLanguage(user, latestUserMessage) {
     return lang;
   } catch (err) {
     logger.warn(`[LOCALIZER] Language detection failed: ${err.message}`);
-    return 'english';
+    return cached || 'english';
   }
 }
 
@@ -161,8 +186,44 @@ async function localize(englishText, user, latestUserMessage) {
   }
 }
 
+// Map our internal language labels (as resolved by `resolveLanguage`) to
+// BCP-47 codes suitable for `<html lang="...">`, `Intl.DateTimeFormat`,
+// and other locale-aware browser APIs. Unknown labels fall back to 'en'
+// — the chrome looks right (since the LLM-generated labels block is in
+// the right language) but the SEO tag is conservative.
+function bcp47From(lang) {
+  if (!lang) return 'en';
+  const l = String(lang).trim().toLowerCase();
+  switch (l) {
+    case 'english': return 'en';
+    case 'portuguese': return 'pt-BR';
+    case 'spanish': return 'es';
+    case 'french': return 'fr';
+    case 'italian': return 'it';
+    case 'german': return 'de';
+    case 'dutch': return 'nl';
+    case 'urdu':
+    case 'roman-urdu': return 'ur';
+    case 'hindi':
+    case 'roman-hindi': return 'hi';
+    case 'arabic':
+    case 'roman-arabic': return 'ar';
+    case 'turkish': return 'tr';
+    case 'indonesian': return 'id';
+    case 'malay': return 'ms';
+    case 'vietnamese': return 'vi';
+    case 'japanese': return 'ja';
+    case 'korean': return 'ko';
+    case 'chinese': return 'zh';
+    case 'russian': return 'ru';
+    case 'polish': return 'pl';
+    default: return 'en';
+  }
+}
+
 module.exports = {
   quickDetect,
   resolveLanguage,
   localize,
+  bcp47From,
 };

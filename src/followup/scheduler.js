@@ -861,7 +861,9 @@ async function processUserFollowup(user) {
       ? extractPersonalityFromBrief(metadata.leadBrief)
       : (metadata.personalityMode || 'DEFAULT');
 
-    const message = renderDiscountMessage(personality, discount.newTotal, discount.originalTotal, discount.discountPct);
+    const englishMessage = renderDiscountMessage(personality, discount.newTotal, discount.originalTotal, discount.discountPct);
+    const { localize } = require('../utils/localizer');
+    const message = await localize(englishMessage, user, null);
 
     logger.info(`Followup: sending 22h discount to ${user.phone_number} (mode: ${personality}, new: $${discount.newTotal})`);
 
@@ -872,9 +874,10 @@ async function processUserFollowup(user) {
     try {
       const { sendCTAButton } = require('../messages/sender');
       if (discount.newLinkUrl) {
+        const ctaBody = await localize(`Tap below to pay $${discount.newTotal}`, user, null);
         await sendCTAButton(
           user.phone_number,
-          `Tap below to pay $${discount.newTotal}`,
+          ctaBody,
           `💳 Pay $${discount.newTotal}`,
           discount.newLinkUrl
         );
@@ -939,7 +942,7 @@ async function runMeetingReminders() {
           // the line this user messages on so the reminder goes back there.
           const { data: user } = await supabase
             .from('users')
-            .select('metadata, via_phone_number_id')
+            .select('id, metadata, via_phone_number_id, phone_number')
             .eq('id', meeting.user_id)
             .single();
 
@@ -979,12 +982,16 @@ async function runMeetingReminders() {
           const displayDate = meeting.preferred_date;
           const topic = meeting.topic || 'your upcoming call';
 
+          const { localize } = require('../utils/localizer');
+          const reminderEn = `Hey${meeting.name ? ' ' + meeting.name : ''}! Just a quick reminder - you have a call about *${topic}* in about 30 minutes (${displayTime}, ${displayDate}). Talk soon!`;
+          const reminderText = await localize(
+            reminderEn,
+            user || { id: meeting.user_id, phone_number: meeting.phone_number, metadata: {} },
+            null
+          );
           await runWithContext(
             { channel, phoneNumberId: user?.via_phone_number_id || null },
-            () => sendTextMessage(
-              meeting.phone_number,
-              `Hey${meeting.name ? ' ' + meeting.name : ''}! Just a quick reminder - you have a call about *${topic}* in about 30 minutes (${displayTime}, ${displayDate}). Talk soon!`
-            )
+            () => sendTextMessage(meeting.phone_number, reminderText)
           );
           await logMessage(meeting.user_id, `Meeting reminder sent for ${displayDate} at ${displayTime}`, 'assistant');
 

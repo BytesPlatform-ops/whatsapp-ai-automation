@@ -8,6 +8,13 @@ const { generateUniqueSlug } = require('../../chatbot/services/slug-generator');
 const { env } = require('../../config/env');
 const { generateResponse } = require('../../llm/provider');
 const { classifyIntent } = require('../../llm/intentClassifier');
+const { localize } = require('../../utils/localizer');
+
+// Latest message text from the incoming message, used as language-detection
+// context. Pass `null` if the bot is sending without an inbound trigger.
+function latestText(message) {
+  return (message && typeof message.text === 'string') ? message.text : null;
+}
 
 // Base URL for demo/chat pages
 const BASE_URL = env.chatbot.baseUrl;
@@ -40,8 +47,9 @@ async function handleChatbotService(user, message) {
 // Step 1: Collect business name
 async function handleCollectName(user, message) {
   const text = (message.text || '').trim();
+  const latest = latestText(message);
   if (!text || text.length < 2) {
-    await sendWithMenuButton(user.phone_number, "What's your business name?");
+    await sendWithMenuButton(user.phone_number, await localize("What's your business name?", user, latest));
     return STATES.CB_COLLECT_NAME;
   }
 
@@ -57,8 +65,12 @@ async function handleCollectName(user, message) {
   if (inferredIndustry) {
     await sendWithMenuButton(
       user.phone_number,
-      `Got it — *${text}* · _${inferredIndustry}_ 👍\n\n` +
-        "What are the top questions your customers usually ask? Send them one per message, then type *done* when you're finished."
+      await localize(
+        `Got it — *${text}* · _${inferredIndustry}_ 👍\n\n` +
+          "What are the top questions your customers usually ask? Send them one per message, then type *done* when you're finished.",
+        user,
+        latest
+      )
     );
     await logMessage(user.id, `Chatbot flow: name="${text}", inferred industry="${inferredIndustry}"`, 'assistant');
     return STATES.CB_COLLECT_FAQS;
@@ -66,7 +78,11 @@ async function handleCollectName(user, message) {
 
   await sendWithMenuButton(
     user.phone_number,
-    `Got it, *${text}*! What industry are you in? (e.g., restaurant, dental clinic, salon, real estate, gym, etc.)`
+    await localize(
+      `Got it, *${text}*! What industry are you in? (e.g., restaurant, dental clinic, salon, real estate, gym, etc.)`,
+      user,
+      latest
+    )
   );
   await logMessage(user.id, `Chatbot flow: business name = "${text}"`, 'assistant');
   return STATES.CB_COLLECT_INDUSTRY;
@@ -75,8 +91,9 @@ async function handleCollectName(user, message) {
 // Step 2: Collect industry
 async function handleCollectIndustry(user, message) {
   const text = (message.text || '').trim();
+  const latest = latestText(message);
   if (!text) {
-    await sendWithMenuButton(user.phone_number, 'What industry is your business in?');
+    await sendWithMenuButton(user.phone_number, await localize('What industry is your business in?', user, latest));
     return STATES.CB_COLLECT_INDUSTRY;
   }
 
@@ -87,7 +104,11 @@ async function handleCollectIndustry(user, message) {
 
   await sendWithMenuButton(
     user.phone_number,
-    "What are the top questions your customers usually ask? Send them one per message, then type *done* when you're finished."
+    await localize(
+      "What are the top questions your customers usually ask? Send them one per message, then type *done* when you're finished.",
+      user,
+      latest
+    )
   );
   await logMessage(user.id, `Chatbot flow: industry = "${text}"`, 'assistant');
   return STATES.CB_COLLECT_FAQS;
@@ -160,8 +181,9 @@ If the message contains no real customer question (e.g. greeting, meta comment),
 // Step 3: Collect FAQs (multi-message or multi-question-per-message)
 async function handleCollectFaqs(user, message) {
   const text = (message.text || '').trim();
+  const latest = latestText(message);
   if (!text) {
-    await sendWithMenuButton(user.phone_number, 'Send me a common customer question, or type *done* to move on.');
+    await sendWithMenuButton(user.phone_number, await localize('Send me a common customer question, or type *done* to move on.', user, latest));
     return STATES.CB_COLLECT_FAQS;
   }
 
@@ -189,13 +211,17 @@ async function handleCollectFaqs(user, message) {
 
   if (isDone) {
     if (faqs.length === 0) {
-      await sendWithMenuButton(user.phone_number, "Please share at least one common question your customers ask before typing *done*.");
+      await sendWithMenuButton(user.phone_number, await localize("Please share at least one common question your customers ask before typing *done*.", user, latest));
       return STATES.CB_COLLECT_FAQS;
     }
 
     await sendWithMenuButton(
       user.phone_number,
-      `Got ${faqs.length} question${faqs.length > 1 ? 's' : ''}! Now, what services do you offer with their prices? (A brief list is fine, e.g., "Teeth cleaning - $100, Whitening - $250")`
+      await localize(
+        `Got ${faqs.length} question${faqs.length > 1 ? 's' : ''}! Now, what services do you offer with their prices? (A brief list is fine, e.g., "Teeth cleaning - $100, Whitening - $250")`,
+        user,
+        latest
+      )
     );
     await logMessage(user.id, `Chatbot flow: collected ${faqs.length} FAQs`, 'assistant');
     return STATES.CB_COLLECT_SERVICES;
@@ -205,7 +231,7 @@ async function handleCollectFaqs(user, message) {
   // a clearly-single question skips the LLM call.
   const questions = await splitFaqQuestions(text, user.id);
   if (questions.length === 0) {
-    await sendWithMenuButton(user.phone_number, "Didn't catch a customer question there. Send one (or several), or type *done* to continue.");
+    await sendWithMenuButton(user.phone_number, await localize("Didn't catch a customer question there. Send one (or several), or type *done* to continue.", user, latest));
     return STATES.CB_COLLECT_FAQS;
   }
 
@@ -222,7 +248,7 @@ async function handleCollectFaqs(user, message) {
     : `Added ${questions.length} questions — ${count} total.`;
   await sendTextMessage(
     user.phone_number,
-    `${ackLine} Send another, or type *done* to continue.`
+    await localize(`${ackLine} Send another, or type *done* to continue.`, user, latest)
   );
   await logMessage(user.id, `Chatbot flow: +${questions.length} FAQs (total ${count})`, 'assistant');
   return STATES.CB_COLLECT_FAQS;
@@ -231,8 +257,9 @@ async function handleCollectFaqs(user, message) {
 // Step 4: Collect services
 async function handleCollectServices(user, message) {
   const text = (message.text || '').trim();
+  const latest = latestText(message);
   if (!text) {
-    await sendWithMenuButton(user.phone_number, 'What services do you offer? A brief list with prices is perfect.');
+    await sendWithMenuButton(user.phone_number, await localize('What services do you offer? A brief list with prices is perfect.', user, latest));
     return STATES.CB_COLLECT_SERVICES;
   }
 
@@ -257,7 +284,7 @@ async function handleCollectServices(user, message) {
 
   await sendWithMenuButton(
     user.phone_number,
-    "What are your business hours? (e.g., Mon-Fri 9am-6pm, Sat 10am-2pm)"
+    await localize("What are your business hours? (e.g., Mon-Fri 9am-6pm, Sat 10am-2pm)", user, latest)
   );
   await logMessage(user.id, `Chatbot flow: collected ${services.length} services`, 'assistant');
   return STATES.CB_COLLECT_HOURS;
@@ -266,8 +293,9 @@ async function handleCollectServices(user, message) {
 // Step 5: Collect hours
 async function handleCollectHours(user, message) {
   const text = (message.text || '').trim();
+  const latest = latestText(message);
   if (!text) {
-    await sendWithMenuButton(user.phone_number, 'What are your business hours?');
+    await sendWithMenuButton(user.phone_number, await localize('What are your business hours?', user, latest));
     return STATES.CB_COLLECT_HOURS;
   }
 
@@ -278,7 +306,7 @@ async function handleCollectHours(user, message) {
 
   await sendWithMenuButton(
     user.phone_number,
-    "Last one - what's your business address/location?"
+    await localize("Last one - what's your business address/location?", user, latest)
   );
   await logMessage(user.id, `Chatbot flow: hours = "${text}"`, 'assistant');
   return STATES.CB_COLLECT_LOCATION;
@@ -287,8 +315,9 @@ async function handleCollectHours(user, message) {
 // Step 6: Collect location, then generate demo
 async function handleCollectLocation(user, message) {
   const text = (message.text || '').trim();
+  const latest = latestText(message);
   if (!text) {
-    await sendWithMenuButton(user.phone_number, "What's your business address or location?");
+    await sendWithMenuButton(user.phone_number, await localize("What's your business address or location?", user, latest));
     return STATES.CB_COLLECT_LOCATION;
   }
 
@@ -297,7 +326,7 @@ async function handleCollectLocation(user, message) {
     chatbotData: { ...existing, location: text, phone: user.phone_number },
   });
 
-  await sendTextMessage(user.phone_number, 'Awesome, I have everything I need! Generating your chatbot demo now...');
+  await sendTextMessage(user.phone_number, await localize('Awesome, I have everything I need! Generating your chatbot demo now...', user, latest));
   await logMessage(user.id, `Chatbot flow: location = "${text}". Generating demo...`, 'assistant');
 
   // Generate the demo
@@ -331,17 +360,17 @@ async function handleCollectLocation(user, message) {
 
     await sendTextMessage(
       user.phone_number,
-      `Your chatbot is ready! Try it out - ask it anything your customers would ask:`
+      await localize(`Your chatbot is ready! Try it out - ask it anything your customers would ask:`, user, latest)
     );
     await sendCTAButton(
       user.phone_number,
-      'Tap below to test your AI chatbot',
+      await localize('Tap below to test your AI chatbot', user, latest),
       'Try Your Chatbot',
       demoUrl
     );
     await sendTextMessage(
       user.phone_number,
-      'Share it with your team too! When you\'re ready to make it permanent, just let me know.'
+      await localize('Share it with your team too! When you\'re ready to make it permanent, just let me know.', user, latest)
     );
     await logMessage(user.id, `Chatbot demo created: ${demoUrl}`, 'assistant');
 
@@ -355,7 +384,7 @@ async function handleCollectLocation(user, message) {
     logger.error('[CHATBOT-FLOW] Demo generation failed:', error.message);
     await sendTextMessage(
       user.phone_number,
-      'Sorry, something went wrong while generating your demo. Let me try again - just type "retry" or we can go back to the menu.'
+      await localize('Sorry, something went wrong while generating your demo. Let me try again - just type "retry" or we can go back to the menu.', user, latest)
     );
     return STATES.CB_GENERATING;
   }
@@ -364,17 +393,19 @@ async function handleCollectLocation(user, message) {
 // Retry handler for failed generation
 async function handleGenerating(user, message) {
   const text = (message.text || '').trim().toLowerCase();
+  const latest = latestText(message);
   if (text === 'retry') {
     return handleCollectLocation(user, { ...message, text: user.metadata?.chatbotData?.location || 'N/A' });
   }
   // If they want to bail, they can use /menu
-  await sendWithMenuButton(user.phone_number, 'Type "retry" to try generating your demo again, or tap the menu button.');
+  await sendWithMenuButton(user.phone_number, await localize('Type "retry" to try generating your demo again, or tap the menu button.', user, latest));
   return STATES.CB_GENERATING;
 }
 
 // After demo is sent - wait for feedback
 async function handleDemoSent(user, message) {
   const text = (message.text || '').trim().toLowerCase();
+  const latest = latestText(message);
   const buttonId = message.buttonId || '';
 
   // Check if they want to proceed. Keyword regex is the fast path; if it
@@ -403,9 +434,10 @@ async function handleDemoSent(user, message) {
     "*Growth ($249/mo)* - Unlimited conversations, priority support, advanced analytics\n" +
     "*Premium ($599/mo)* - Everything + custom integrations, dedicated account manager\n\n" +
     "All plans start with a *7-day free trial* - no payment needed to start!";
+  const localizedPricing = await localize(pricingTiersMsg, user, latest);
   await sendInteractiveButtons(
     user.phone_number,
-    pricingTiersMsg,
+    localizedPricing,
     [
       { id: 'cb_proceed', title: 'Start Free Trial' },
       { id: 'menu_main', title: 'Back to Menu' },
@@ -413,7 +445,7 @@ async function handleDemoSent(user, message) {
   );
   // Log the actual pricing text so the admin conversation page shows
   // what the user saw, not a placeholder label.
-  await logMessage(user.id, pricingTiersMsg, 'assistant');
+  await logMessage(user.id, localizedPricing, 'assistant');
   return STATES.CB_FOLLOW_UP;
 }
 
@@ -421,6 +453,7 @@ async function handleDemoSent(user, message) {
 async function handleFollowUp(user, message) {
   const buttonId = message.buttonId || '';
   const text = (message.text || '').trim().toLowerCase();
+  const latest = latestText(message);
 
   // Same fast-path-then-classifier pattern as handleDemoSent. The
   // keyword set here also includes the tier names ("starter", "growth",
@@ -448,7 +481,7 @@ async function handleFollowUp(user, message) {
 
   await sendWithMenuButton(
     user.phone_number,
-    "No worries! The demo link stays active if you want to share it around. Just message us whenever you're ready to start your free trial!"
+    await localize("No worries! The demo link stays active if you want to share it around. Just message us whenever you're ready to start your free trial!", user, latest)
   );
 
   // Phase 12: user passed on the trial but the chatbot demo pass is
@@ -466,7 +499,7 @@ async function activateTrial(user) {
   const slug = chatbotData.slug;
 
   if (!slug) {
-    await sendTextMessage(user.phone_number, "Hmm, I can't find your demo. Let's set it up again - what's your business name?");
+    await sendTextMessage(user.phone_number, await localize("Hmm, I can't find your demo. Let's set it up again - what's your business name?", user, null));
     return STATES.CB_COLLECT_NAME;
   }
 
@@ -485,13 +518,13 @@ async function activateTrial(user) {
 
     await sendTextMessage(
       user.phone_number,
-      "Your 7-day free trial is activated! Here's your chatbot - two ways to use it:"
+      await localize("Your 7-day free trial is activated! Here's your chatbot - two ways to use it:", user, null)
     );
 
     // Send standalone link
     await sendCTAButton(
       user.phone_number,
-      '1. *Standalone link* - share this anywhere (Instagram bio, Google Business, business cards):',
+      await localize('1. *Standalone link* - share this anywhere (Instagram bio, Google Business, business cards):', user, null),
       'Your Chat Link',
       chatUrl
     );
@@ -499,12 +532,12 @@ async function activateTrial(user) {
     // Send embed code
     await sendTextMessage(
       user.phone_number,
-      `2. *Website embed* - paste this code in your website's HTML before </body>:\n\n\`${embedCode}\``
+      await localize(`2. *Website embed* - paste this code in your website's HTML before </body>:\n\n\`${embedCode}\``, user, null)
     );
 
     await sendTextMessage(
       user.phone_number,
-      "That's it! Your chatbot is live. I'll send you a report at the end of the trial showing how many conversations and leads it captured."
+      await localize("That's it! Your chatbot is live. I'll send you a report at the end of the trial showing how many conversations and leads it captured.", user, null)
     );
 
     await logMessage(user.id, `Chatbot trial activated for ${slug}`, 'assistant');
@@ -540,7 +573,7 @@ async function activateTrial(user) {
     return STATES.SALES_CHAT;
   } catch (error) {
     logger.error('[CHATBOT-FLOW] Trial activation failed:', error.message);
-    await sendTextMessage(user.phone_number, "Something went wrong activating your trial. Let me have someone from the team help - they'll reach out shortly!");
+    await sendTextMessage(user.phone_number, await localize("Something went wrong activating your trial. Let me have someone from the team help - they'll reach out shortly!", user, null));
     return STATES.SALES_CHAT;
   }
 }
@@ -586,9 +619,13 @@ async function startChatbotFlow(user) {
   if (!hasName) {
     await sendWithMenuButton(
       user.phone_number,
-      '🤖 *AI Chatbot for Your Business*\n\n' +
-        "Let's build you a 24/7 AI assistant that answers customer questions and captures leads.\n\n" +
-        "First, what's your *business name*?"
+      await localize(
+        '🤖 *AI Chatbot for Your Business*\n\n' +
+          "Let's build you a 24/7 AI assistant that answers customer questions and captures leads.\n\n" +
+          "First, what's your *business name*?",
+        user,
+        null
+      )
     );
     await logMessage(user.id, 'Started chatbot flow', 'assistant');
     return STATES.CB_COLLECT_NAME;
@@ -597,8 +634,12 @@ async function startChatbotFlow(user) {
   if (!hasIndustry) {
     await sendWithMenuButton(
       user.phone_number,
-      `🤖 *AI Chatbot for Your Business*${carriedNote}\n\n` +
-        `What *industry* is your business in? (e.g. restaurant, dental clinic, salon, real estate, gym)`
+      await localize(
+        `🤖 *AI Chatbot for Your Business*${carriedNote}\n\n` +
+          `What *industry* is your business in? (e.g. restaurant, dental clinic, salon, real estate, gym)`,
+        user,
+        null
+      )
     );
     await logMessage(user.id, `Started chatbot flow with prefilled name=${seeded.businessName}`, 'assistant');
     return STATES.CB_COLLECT_INDUSTRY;
@@ -612,8 +653,12 @@ async function startChatbotFlow(user) {
     : '';
   await sendWithMenuButton(
     user.phone_number,
-    `🤖 *AI Chatbot for Your Business*${carriedNote}${servicesNote}\n\n` +
-      "What are the top questions your customers usually ask? Send them one per message, then type *done* when you're finished."
+    await localize(
+      `🤖 *AI Chatbot for Your Business*${carriedNote}${servicesNote}\n\n` +
+        "What are the top questions your customers usually ask? Send them one per message, then type *done* when you're finished.",
+      user,
+      null
+    )
   );
   await logMessage(user.id, `Started chatbot flow with prefilled name=${seeded.businessName}, industry=${seeded.industry}, services=${hasServices}`, 'assistant');
   return STATES.CB_COLLECT_FAQS;

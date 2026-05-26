@@ -1263,12 +1263,13 @@ function getEmergencyStrip(c) {
 // ─── Navigation ─────────────────────────────────────────────────────────────
 
 function getHvacPages(c) {
+  const L = c.labels || {};
   const pages = [
-    { n: 'Home', h: '/' },
-    { n: 'Services', h: '/services' },
-    { n: 'Areas', h: '/areas' },
-    { n: 'About', h: '/about' },
-    { n: 'Contact', h: '/contact' },
+    { n: L.navHome || 'Home', h: '/' },
+    { n: L.navServices || 'Services', h: '/services' },
+    { n: L.navAreas || 'Areas', h: '/areas' },
+    { n: L.navAbout || 'About', h: '/about' },
+    { n: L.navContact || 'Contact', h: '/contact' },
   ];
   return pages;
 }
@@ -1293,14 +1294,14 @@ function getHvacNav(c, cur) {
     <div class="nav-right">
       ${phone ? `<a class="nav-phone" href="tel:${esc(tel)}">${icon('phone', 16)} ${esc(phone)}</a>` : ''}
       ${phone ? `<a class="nav-call-m" href="tel:${esc(tel)}" aria-label="Call ${esc(phone)}">${icon('phone', 18, '#fff')}</a>` : ''}
-      <a href="/contact" class="btn btn-orange btn-sm" style="display:inline-flex">Book Now</a>
+      <a href="/contact" class="btn btn-orange btn-sm" style="display:inline-flex">${esc(c.labels?.btnBookNow || 'Book Now')}</a>
       <button class="ham" aria-label="Menu" aria-expanded="false"><span></span><span></span><span></span></button>
     </div>
   </div></nav>
   <div class="mm">
     ${pages.map(p => `<a class="mm-link" href="${p.h}">${p.n}</a>`).join('')}
     ${phone ? `<a class="btn btn-outline mm-cta" href="tel:${esc(tel)}">${icon('phone', 16)} Call ${esc(phone)}</a>` : ''}
-    <a class="btn btn-orange" href="/contact">Request a Free Quote</a>
+    <a class="btn btn-orange" href="/contact">${esc(c.labels?.btnRequestQuote || 'Request a Free Quote')}</a>
   </div>`;
 }
 
@@ -1317,20 +1318,20 @@ function getHvacFooter(c) {
       <div>
         ${c.logoUrl ? `<img src="${esc(c.logoUrl)}" alt="${esc(c.businessName || '')}" style="height:48px;max-height:48px;width:auto;margin-bottom:14px;object-fit:contain;display:block">` : ''}
         <p class="foot-brand">${esc(c.businessName)}</p>
-        <p style="margin-bottom:18px">${esc(c.footerTagline || 'Licensed, insured, and here when you need us most.')}</p>
+        <p style="margin-bottom:18px">${esc(c.footerTagline || c.labels?.badgeTagline || 'Licensed, insured, and here when you need us most.')}</p>
         ${phone ? `<a class="foot-big-phone" href="tel:${esc(tel)}">${icon('phone', 20)} ${esc(phone)}</a><br>` : ''}
-        <span style="font-size:13px;color:rgba(255,255,255,.5)">24/7 Emergency Service Available</span>
+        <span style="font-size:13px;color:rgba(255,255,255,.5)">${esc(c.labels?.badgeEmergency24x7 || '24/7 Emergency Service Available')}</span>
       </div>
       <div>
-        <h5>Pages</h5>
+        <h5>${esc(c.labels?.footPages || 'Pages')}</h5>
         <ul>${pages.map(p => `<li><a href="${p.h}">${p.n}</a></li>`).join('')}</ul>
       </div>
       <div>
-        <h5>Services</h5>
-        <ul>${(c.services || []).slice(0, 6).map(s => `<li><a href="/services">${esc(s.title)}</a></li>`).join('') || '<li><a href="/services">View all</a></li>'}</ul>
+        <h5>${esc(c.labels?.navServices || 'Services')}</h5>
+        <ul>${(c.services || []).slice(0, 6).map(s => `<li><a href="/services">${esc(s.title)}</a></li>`).join('') || `<li><a href="/services">${esc(c.labels?.btnViewAll || 'View all')}</a></li>`}</ul>
       </div>
       <div>
-        <h5>Contact</h5>
+        <h5>${esc(c.labels?.navContact || 'Contact')}</h5>
         <ul>
           ${phone ? `<li><a href="tel:${esc(tel)}">${esc(phone)}</a></li>` : ''}
           ${email ? `<li><a href="mailto:${esc(email)}">${esc(email)}</a></li>` : ''}
@@ -1341,7 +1342,7 @@ function getHvacFooter(c) {
     </div>
     <div class="foot-bot">
       <span>&copy; ${new Date().getFullYear()} ${esc(c.businessName)}. All rights reserved.</span>
-      <span><a href="/privacy/" style="color:inherit;text-decoration:underline">Privacy Policy</a> &middot; Licensed &middot; Insured &middot; Trusted</span>
+      <span><a href="/privacy/" style="color:inherit;text-decoration:underline">${esc(c.labels?.footPrivacy || 'Privacy Policy')}</a> &middot; ${esc(c.labels?.badgeLicensed || 'Licensed & Insured')}</span>
     </div>
   </div></footer>`;
 }
@@ -1447,7 +1448,7 @@ function wrapHvacPage(c, cur, body, opts = {}) {
   const title = esc(opts.title || `${c.businessName} — ${tc.pageMetaTitleTail(c.primaryCity || '')}`);
   const desc = esc(opts.description || tc.pageMetaDescDefault(c.businessName, c.primaryCity || '', c.contactPhone || '').trim());
   const schemas = (opts.schemas || [getLocalBusinessSchema(c)]).join('\n');
-  return `<!DOCTYPE html><html lang="en"><head>
+  return `<!DOCTYPE html><html lang="${esc(c.htmlLang || 'en')}"><head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>${title}</title>

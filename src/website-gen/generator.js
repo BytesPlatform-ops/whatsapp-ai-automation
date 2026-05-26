@@ -8,6 +8,165 @@ const { attachRealEstateListingImages } = require('./realEstateListingImages');
 const { fetchNeighborhoodImages, fetchAgentPlaceholderImage } = require('./neighborhoodImages');
 const { inferTimezoneFromAddress } = require('./timezone');
 const { isHvac, isRealEstate, resolveTrade } = require('./templates');
+const { bcp47From } = require('../utils/localizer');
+
+// English-default values for every static chrome label a template might render
+// (nav items, button text, section eyebrows, trust badges, process steps).
+// When the user's chat language is non-English, we ask the LLM to translate
+// each value into that language as part of the existing single content-gen
+// call (no extra round-trip). The LLM's output replaces these defaults; any
+// missing key falls back to the English value here so a malformed response
+// can never blank out a label.
+const DEFAULT_CHROME_LABELS = {
+  // Nav
+  navHome: 'Home',
+  navAbout: 'About',
+  navServices: 'Services',
+  navContact: 'Contact',
+  navBooking: 'Booking',
+  navProjects: 'Projects',
+  navAreas: 'Service Areas',
+  navListings: 'Listings',
+  navNeighborhoods: 'Neighborhoods',
+  // Buttons / CTAs
+  btnBookNow: 'Book Now',
+  btnViewServices: 'View All Services',
+  btnViewAll: 'View All',
+  btnLearnMore: 'Learn More',
+  btnLearnMoreAboutUs: 'Learn More About Us',
+  btnGetQuote: 'Get a Quote',
+  btnContactUs: 'Contact Us',
+  btnCallNow: 'Call Now',
+  btnBrowseServices: 'Browse Services',
+  btnGetStarted: 'Get Started',
+  btnSendMessage: 'Send Message',
+  btnBackToHome: 'Back to Home',
+  btnReserve: 'Reserve',
+  btnReserveVisit: 'Reserve a Visit',
+  btnConfirmReservation: 'Confirm Reservation',
+  btnViewMenu: 'The Menu',
+  btnFullMenu: 'The Full Menu',
+  btnOpenNewTab: 'Open in a new tab',
+  btnScheduleCall: 'Schedule a Call',
+  btnBookSession: 'Book a session',
+  btnRequestQuote: 'Request a Free Quote',
+  // Form labels
+  formFirstName: 'First Name',
+  formLastName: 'Last Name',
+  formEmail: 'Email',
+  formMessage: 'Message',
+  formFullName: 'Full name',
+  formPhone: 'Phone number',
+  formNote: 'Anything we should know? (optional)',
+  formTreatment: 'Treatment',
+  formDate: 'Date',
+  formTimes: 'Available Times',
+  formLoadingTimes: 'Loading times…',
+  formYourDetails: 'Your Details',
+  formSending: 'Sending…',
+  formErrorRetry: 'Error — try again',
+  // Form placeholders — translated but should still read as obviously
+  // example values (the LLM is told these are placeholder samples).
+  phFirstName: 'John',
+  phLastName: 'Doe',
+  phEmail: 'john@example.com',
+  phMessage: 'Tell us about your project…',
+  // Section eyebrows / headings
+  secWhatWeDo: 'What We Do',
+  secAboutUs: 'About Us',
+  secContactUs: 'Contact Us',
+  secServices: 'Services',
+  secHours: 'Hours',
+  secTestimonials: 'What Our Customers Say',
+  secServiceAreas: 'Service Areas',
+  secSignatureServices: 'Signature Services',
+  secOurServices: 'Our Services',
+  secHowItWorks: 'How It Works',
+  secOurProcess: 'Our Process',
+  secClientsSay: 'What Our Clients Say',
+  secFAQ: 'FAQ',
+  secFAQHeading: 'Frequently Asked Questions',
+  secInTheChair: 'In the chair',
+  secOurStory: 'Our Story',
+  secAppointmentsOpen: 'Appointments now open',
+  secReserved: 'Reserved',
+  secMethod: 'Method',
+  secHowIWork: 'How I work',
+  // Contact / thank-you page copy
+  introGetInTouch: 'Get In Touch',
+  introContactBody: 'We would love to hear from you.',
+  introSendUs: 'Send Us a Message',
+  introSendUsBody: "Fill out the form below and we'll get back to you soon.",
+  thankYouHeading: 'Message received',
+  thankYouBody: "Thanks for reaching out. We'll review what you've sent and get back to you within",
+  thankYouHours: '24 hours',
+  thankYouEmailNote: 'A confirmation is on its way to',
+  thankYouCheckSpam: 'Check your inbox (and spam, just in case).',
+  thankYouTitle: 'Thank you.',
+  confirmEmailNote: 'A confirmation email with a cancellation link will arrive shortly after.',
+  confirmationOnItsWay: 'Your confirmation email is on its way.',
+  bookingFailed: 'Booking failed',
+  couldNotLoadTimes: 'Could not load times',
+  // Footer
+  footPages: 'Pages',
+  footVisit: 'Visit',
+  footFollow: 'Follow',
+  footAllRights: 'All rights reserved',
+  footPrivacy: 'Privacy Policy',
+  footHandcrafted: 'Handcrafted in',
+  footBookAVisit: 'Book a visit',
+  // HVAC trust badges + extras
+  badgeLicensed: 'Licensed & Insured',
+  badgeSameDay: 'Same-Day Service',
+  badgeUpfront: 'Upfront Pricing',
+  badgeSatisfaction: '100% Satisfaction Guarantee',
+  badgeEmergency24x7: '24/7 Emergency Service Available',
+  badgeTagline: 'Licensed, insured, and here when you need us most.',
+  // Misc labels
+  lblClosed: 'Closed',
+  lblLocation: 'Location',
+  lblScroll: 'Scroll',
+  // Portfolio process-step defaults (used when no LLM-generated processSteps)
+  procDiscovery: 'Discovery',
+  procDirection: 'Direction',
+  procRefinement: 'Refinement',
+  procDelivery: 'Delivery',
+  procStrategy: 'Strategy',
+  procExecution: 'Execution',
+  // Portfolio side panel labels
+  pfExpertise: 'Expertise',
+  pfAvailability: 'Availability',
+  pfToolkit: 'Toolkit',
+  pfReachOut: 'Reach out',
+  pfBased: 'Based',
+  // Activation banner shown on un-paid previews (visible to the business
+  // owner and to early visitors before payment).
+  bnrPreviewMode: 'PREVIEW MODE',
+  bnrActivateNow: 'Activate Now',
+  bnrActivateText: 'Activate this site to make it live',
+  bnrFormLock: 'Contact forms activate once the site is published — click Activate above.',
+  bnrWatermark: 'Preview — Built by Pixie',
+};
+
+// Build the "translate these labels too" tail of the content-gen prompt. When
+// userLanguage is English we ask for no extra field — the fallbacks already
+// match. Otherwise we hand the LLM the English values and ask for the same
+// keys in the user's language, embedded in the SAME JSON it's already
+// returning.
+function buildLabelsDirective(userLanguage) {
+  if (userLanguage === 'english') return '';
+  const entries = Object.entries(DEFAULT_CHROME_LABELS)
+    .map(([k, v]) => `  "${k}": "${v.replace(/"/g, '\\"')}"`)
+    .join(',\n');
+  return `
+
+ALSO include a "labels" object in your JSON response. Translate each value below into ${userLanguage} (the user's language). Use natural phrasing for the locale — don't word-for-word translate. Keep keys exactly as listed. If the language label starts with "roman-" (e.g. roman-urdu), use Latin/Roman script, NOT the native alphabet.
+
+Format:
+"labels": {
+${entries}
+}`;
+}
 
 // Luxury-biased hero queries, grouped by salon sub-type. One is picked at
 // random at generation time so two similar salons get different heroes.
@@ -144,6 +303,7 @@ async function generateWebsiteContent(businessData, extras = {}) {
   const languageDirective = userLanguage === 'english'
     ? '\n\nLANGUAGE: Write ALL website copy in English. Even if the business name or industry contains words from another language (e.g. "Salon" is a French word but commonly used in English business names), the user has been chatting in ENGLISH — write the entire site in ENGLISH.'
     : `\n\nLANGUAGE: Write ALL website copy in ${userLanguage}. The user has been chatting in ${userLanguage} so all hero copy, headings, body paragraphs, service descriptions, FAQs, testimonials, CTAs, and labels MUST be written in ${userLanguage}. Proper nouns (business name, city names) stay as given. If the language label starts with "roman-" (e.g. roman-urdu), write in Latin/Roman script — do NOT use the native script.`;
+  const labelsDirective = buildLabelsDirective(userLanguage);
 
   let prompt;
   let systemPrompt;
@@ -164,7 +324,7 @@ ${contactEmail ? `Email: ${contactEmail}` : ''}
 ${contactPhone ? `Phone: ${contactPhone}` : ''}
 ${contactAddress ? `Address: ${contactAddress}` : ''}
 
-Generate ${tradeLabelUpper} website copy. Return ONLY valid JSON matching the schema in the system prompt.${languageDirective}`;
+Generate ${tradeLabelUpper} website copy. Return ONLY valid JSON matching the schema in the system prompt.${languageDirective}${labelsDirective}`;
   } else if (realEstateMode) {
     promptLabel = 'real-estate';
     systemPrompt = REAL_ESTATE_CONTENT_PROMPT;
@@ -184,7 +344,7 @@ ${contactPhone ? `Phone: ${contactPhone}` : ''}
 ${contactAddress ? `Address: ${contactAddress}` : ''}
 ${hasServices ? `How I help: ${services.join(', ')}` : ''}
 
-Generate real-estate-agent website copy. Return ONLY valid JSON matching the schema in the system prompt.${languageDirective}`;
+Generate real-estate-agent website copy. Return ONLY valid JSON matching the schema in the system prompt.${languageDirective}${labelsDirective}`;
   } else {
     promptLabel = 'generic';
     systemPrompt = WEBSITE_CONTENT_PROMPT;
@@ -196,7 +356,7 @@ ${contactEmail ? `Email: ${contactEmail}` : ''}
 ${contactPhone ? `Phone: ${contactPhone}` : ''}
 ${contactAddress ? `Address: ${contactAddress}` : ''}
 
-Generate compelling website copy for this business. Return ONLY valid JSON.${languageDirective}`;
+Generate compelling website copy for this business. Return ONLY valid JSON.${languageDirective}${labelsDirective}`;
   }
 
   logger.info(`[WEBGEN] Sending ${promptLabel} content prompt to LLM for "${businessName}"`);
@@ -534,6 +694,16 @@ Generate compelling website copy for this business. Return ONLY valid JSON.${lan
     // the template generates LLM-hallucinated placeholders.
     projects: Array.isArray(userProjects) && userProjects.length ? userProjects : null,
     portfolioAbout: userAboutText || null,
+    // Language metadata. htmlLang feeds <html lang="..."> in every template;
+    // bcp47Locale powers Intl.DateTimeFormat for weekday names (salon hours).
+    // labels is the static chrome dictionary — LLM-translated when the user
+    // is non-English, English defaults otherwise. The merge below guarantees
+    // every key exists even if the LLM omitted some, so templates can read
+    // `siteConfig.labels.navHome` without short-circuit fallbacks every time.
+    userLanguage,
+    htmlLang: bcp47From(userLanguage),
+    bcp47Locale: bcp47From(userLanguage),
+    labels: { ...DEFAULT_CHROME_LABELS, ...(generatedContent.labels || {}) },
   };
 
   logger.info(`Generated website content for ${businessName}${heroImage ? ' (with Unsplash hero)' : ''}`);

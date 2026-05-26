@@ -1732,10 +1732,10 @@ function getNav(c, currentPath) {
   <div class="nav-inner">
     <a class="nav-mark" href="/">${esc(firstName.toLowerCase())}</a>
     <nav class="nav-links" aria-label="Primary">
-      ${link('projects', 'projects')}
+      ${link((c.labels?.navProjects || 'projects').toLowerCase(), 'projects')}
       ${link('experience', 'experience')}
       ${link('skills', 'skills')}
-      ${link('contact', 'contact')}
+      ${link((c.labels?.navContact || 'contact').toLowerCase(), 'contact')}
       ${c.contactEmail ? `<a href="mailto:${attr(c.contactEmail)}" class="cta">${esc(c.contactEmail)}</a>` : ''}
     </nav>
     <div class="nav-tools">
@@ -1750,10 +1750,10 @@ function getNav(c, currentPath) {
     <button class="nav-overlay-close" id="nav-overlay-close" aria-label="Close menu" type="button">close</button>
   </div>
   <nav class="nav-overlay-links" aria-label="Mobile">
-    <a href="${onHome ? '#projects' : '/#projects'}">projects</a>
+    <a href="${onHome ? '#projects' : '/#projects'}">${esc((c.labels?.navProjects || 'projects').toLowerCase())}</a>
     <a href="${onHome ? '#experience' : '/#experience'}">experience</a>
     <a href="${onHome ? '#skills' : '/#skills'}">skills</a>
-    <a href="${onHome ? '#contact' : '/#contact'}">contact</a>
+    <a href="${onHome ? '#contact' : '/#contact'}">${esc((c.labels?.navContact || 'contact').toLowerCase())}</a>
   </nav>
 </div>`;
 }
@@ -2037,7 +2037,7 @@ function wrap(c, currentPath, body) {
   const description = c.tagline || c.portfolioAbout || c.aboutText || `${c.businessName} — software engineer`;
   return `<!DOCTYPE html>
 <!-- Pixie Portfolio — Developer v2 — generated for ${esc(c.businessName)} -->
-<html lang="en">
+<html lang="${esc(c.htmlLang || 'en')}">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">

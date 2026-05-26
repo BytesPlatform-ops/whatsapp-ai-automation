@@ -1,0 +1,22 @@
+{
+  "name": "portuguese-bot-replies-in-portuguese",
+  "description": "Regression: bot was replying in English when the user wrote in Portuguese. Root cause was quickDetect in src/utils/localizer.js — Portuguese has no markers in the Roman-script non-English regex, so 'Oi Pixie! Quero um site pro meu salão' fast-pathed to 'english' and localize() returned the English template unchanged. After the fix (Portuguese accent triad ãõç + Portuguese marker words + fall-through to LLM detection on unsure), the bot's webDev trigger and the followup composer both produce Portuguese. This fixture pins the first turn to ensure the bot's webDev intake reply is in Portuguese (substring 'negócio' or 'empresa' or 'salão' or 'nome') and NOT the canonical English ('What\\u2019s your business name').",
+  "channel": "whatsapp",
+  "turns": [
+    {
+      "user": "Oi Pixie! Quero um site pro meu salão",
+      "expect": {
+        "sent_count_gte": 1,
+        "reply_not_contains": ["What's your business name", "Let's build it"]
+      }
+    },
+    {
+      "user": "Salão da Maria",
+      "expect": {
+        "metadata.websiteData.businessName": "Salão Da Maria",
+        "state_not": "WELCOME",
+        "sent_count_gte": 1
+      }
+    }
+  ]
+}

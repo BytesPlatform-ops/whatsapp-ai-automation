@@ -18,7 +18,7 @@ function generateAboutPage(c) {
   const hero = `
     <section class="page-hero">
       <div class="ctn">
-        <p class="crumb"><a href="/">Home</a> &rsaquo; About</p>
+        <p class="crumb"><a href="/">${esc(c.labels?.navHome || 'Home')}</a> &rsaquo; ${esc(c.labels?.navAbout || 'About')}</p>
         <h1 class="h1">About ${esc(c.businessName)}.</h1>
         <p class="body-lg">${esc(c.aboutTagline || tc.aboutTaglineFallback(city))}</p>
         <div class="trust-row" style="display:inline-flex;margin-top:28px">

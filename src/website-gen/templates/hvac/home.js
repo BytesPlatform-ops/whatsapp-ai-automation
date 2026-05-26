@@ -34,10 +34,11 @@ function generateHomePage(c) {
       </div>
     </div>`;
 
+  const L = c.labels || {};
   const trustChips = [
-    { icon: 'checkCircle', label: 'Licensed & Insured' },
-    { icon: 'clock', label: 'Same-Day Service' },
-    { icon: 'dollar', label: 'Upfront Pricing' },
+    { icon: 'checkCircle', label: L.badgeLicensed || 'Licensed & Insured' },
+    { icon: 'clock', label: L.badgeSameDay || 'Same-Day Service' },
+    { icon: 'dollar', label: L.badgeUpfront || 'Upfront Pricing' },
     years ? { icon: 'award', label: `${esc(years)}+ Years Experience` } : null,
   ].filter(Boolean);
 
@@ -58,8 +59,8 @@ function generateHomePage(c) {
             <h1 class="h1 mb-4">${city ? `${esc(city)}'s Trusted` : 'Your Trusted'}<br><span style="color:${TOKENS.action}">${esc(tc.heroAccent)}</span> Experts.</h1>
             <p class="body-lg mb-6" style="max-width:560px">${esc(c.heroSub || tc.heroSub)}</p>
             <div class="flex flex-wrap gap-12 mb-6">
-              <a href="/contact" class="btn btn-orange btn-lg">Request Free Quote ${icon('arrowRight', 18, '#fff')}</a>
-              ${phone ? `<a href="tel:${esc(tel)}" class="btn btn-outline btn-lg">${icon('phone', 18)} Call Now: ${esc(phone)}</a>` : ''}
+              <a href="/contact" class="btn btn-orange btn-lg">${esc(L.btnRequestQuote || 'Request a Free Quote')} ${icon('arrowRight', 18, '#fff')}</a>
+              ${phone ? `<a href="tel:${esc(tel)}" class="btn btn-outline btn-lg">${icon('phone', 18)} ${esc(L.btnCallNow || 'Call Now')}: ${esc(phone)}</a>` : ''}
             </div>
             <div class="trust-row">${trustRow}</div>
           </div>
@@ -102,17 +103,17 @@ function generateHomePage(c) {
         </div>
         <div class="grid grid-3">${services}</div>
         <div class="center mt-8 rv">
-          <a href="/services" class="btn btn-blue">View All Services ${icon('arrowRight', 16, '#fff')}</a>
+          <a href="/services" class="btn btn-blue">${esc(L.btnViewServices || 'View All Services')} ${icon('arrowRight', 16, '#fff')}</a>
         </div>
       </div>
     </section>`;
 
   // ─── Why Choose Us — horizontal bars (different layout from services) ────
   const pillars = (c.whyChooseUs && c.whyChooseUs.length >= 4 ? c.whyChooseUs.slice(0, 4) : [
-    { title: '24/7 Emergency Response', description: 'Day or night, we\u2019re one call away.', icon: 'siren' },
-    { title: 'Upfront, Honest Pricing', description: 'No hidden fees. Know the cost before we start.', icon: 'dollar' },
-    { title: 'Licensed & Certified Techs', description: 'Trained, background-checked, fully insured professionals.', icon: 'shieldCheck' },
-    { title: '100% Satisfaction Guarantee', description: 'Not happy? We\u2019ll make it right. No questions asked.', icon: 'checkCircle' },
+    { title: L.badgeSameDay || '24/7 Emergency Response', description: 'Day or night, we\u2019re one call away.', icon: 'siren' },
+    { title: L.badgeUpfront || 'Upfront, Honest Pricing', description: 'No hidden fees. Know the cost before we start.', icon: 'dollar' },
+    { title: L.badgeLicensed || 'Licensed & Certified Techs', description: 'Trained, background-checked, fully insured professionals.', icon: 'shieldCheck' },
+    { title: L.badgeSatisfaction || '100% Satisfaction Guarantee', description: 'Not happy? We\u2019ll make it right. No questions asked.', icon: 'checkCircle' },
   ]);
 
   const whyChoose = `
@@ -148,7 +149,7 @@ function generateHomePage(c) {
     <section class="sect sect-soft">
       <div class="ctn">
         <div class="center mb-8 rv">
-          <span class="eyebrow" style="display:inline-block">What Our Customers Say</span>
+          <span class="eyebrow" style="display:inline-block">${esc(L.secTestimonials || 'What Our Customers Say')}</span>
           <h2 class="h2 mt-4">Trusted by ${esc(reviewCount)} homeowners${city ? ` in ${esc(city)}` : ''}.</h2>
           <span class="bar-accent"></span>
           <div style="display:inline-flex;align-items:center;gap:10px;font-weight:600;color:${TOKENS.heading};margin-top:18px;flex-wrap:wrap;justify-content:center">
@@ -191,7 +192,7 @@ function generateHomePage(c) {
     <section class="sect">
       <div class="ctn">
         <div class="center mb-8 rv">
-          <span class="eyebrow" style="display:inline-block">Service Areas</span>
+          <span class="eyebrow" style="display:inline-block">${esc(L.secServiceAreas || 'Service Areas')}</span>
           <h2 class="h2 mt-4">Proudly serving${city ? ` greater ${esc(city)}` : ' your neighborhood'}.</h2>
           <span class="bar-accent"></span>
           <p class="area-stat" style="margin-top:24px">${icon('mapPin', 16, TOKENS.action)} <strong>${areas.length}</strong> cities &middot; ${radius} service radius &middot; avg response 30 min</p>
@@ -227,7 +228,7 @@ function generateHomePage(c) {
             }).join('')}
           </div>
         </div>
-        <div class="center mt-8 rv"><a href="/areas" class="btn btn-outline btn-sm">View All Service Areas ${icon('arrowRight', 14)}</a></div>
+        <div class="center mt-8 rv"><a href="/areas" class="btn btn-outline btn-sm">${esc(L.btnViewAll || 'View All')} ${esc(L.secServiceAreas || 'Service Areas')} ${icon('arrowRight', 14)}</a></div>
       </div>
     </section>` : '';
 
@@ -238,8 +239,8 @@ function generateHomePage(c) {
         <h2 class="h2">Need HVAC service? We&apos;re ready.</h2>
         <p class="body-lg">Same-day appointments available. Call now or request a free quote online.</p>
         <div class="flex flex-wrap gap-12" style="justify-content:center">
-          <a href="/contact" class="btn btn-orange btn-lg">Get a Free Quote ${icon('arrowRight', 18, '#fff')}</a>
-          ${phone ? `<a href="tel:${esc(tel)}" class="btn btn-outline-white btn-lg">${icon('phone', 18, '#fff')} Call ${esc(phone)}</a>` : ''}
+          <a href="/contact" class="btn btn-orange btn-lg">${esc(L.btnGetQuote || 'Get a Quote')} ${icon('arrowRight', 18, '#fff')}</a>
+          ${phone ? `<a href="tel:${esc(tel)}" class="btn btn-outline-white btn-lg">${icon('phone', 18, '#fff')} ${esc(L.btnCallNow || 'Call')} ${esc(phone)}</a>` : ''}
         </div>
       </div>
     </section>`;

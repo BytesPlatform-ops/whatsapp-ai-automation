@@ -895,12 +895,12 @@ function getNav(c, currentPath) {
     <a class="nav-mark" href="/">${esc(firstName)}</a>
     <div class="nav-right">
       <nav class="nav-links" aria-label="Primary">
-        ${link('Work', 'work')}
-        ${link('About', 'about')}
+        ${link(c.labels?.navProjects || 'Work', 'work')}
+        ${link(c.labels?.navAbout || 'About', 'about')}
         ${link('Packages', 'packages')}
-        ${link('Contact', 'contact')}
+        ${link(c.labels?.navContact || 'Contact', 'contact')}
       </nav>
-      <a href="${onHome ? '#contact' : '/#contact'}" class="nav-cta">Book a session</a>
+      <a href="${onHome ? '#contact' : '/#contact'}" class="nav-cta">${esc(c.labels?.btnBookSession || 'Book a session')}</a>
       <button class="nav-burger" id="nav-burger" aria-label="Open menu" aria-expanded="false"><span></span><span></span></button>
     </div>
   </div>
@@ -911,10 +911,10 @@ function getNav(c, currentPath) {
     <button class="nav-overlay-close" id="nav-overlay-close" aria-label="Close menu">Close</button>
   </div>
   <nav class="nav-overlay-links" aria-label="Mobile">
-    <a href="${onHome ? '#work' : '/#work'}">Work</a>
-    <a href="${onHome ? '#about' : '/#about'}">About</a>
+    <a href="${onHome ? '#work' : '/#work'}">${esc(c.labels?.navProjects || 'Work')}</a>
+    <a href="${onHome ? '#about' : '/#about'}">${esc(c.labels?.navAbout || 'About')}</a>
     <a href="${onHome ? '#packages' : '/#packages'}">Packages</a>
-    <a href="${onHome ? '#contact' : '/#contact'}">Contact</a>
+    <a href="${onHome ? '#contact' : '/#contact'}">${esc(c.labels?.navContact || 'Contact')}</a>
   </nav>
 </div>`;
 }
@@ -1094,7 +1094,7 @@ function wrap(c, currentPath, body) {
   const description = c.tagline || c.portfolioAbout || c.aboutText || `${c.businessName} — photography`;
   return `<!DOCTYPE html>
 <!-- Pixie Portfolio — Photographer v1.0 — generated for ${esc(c.businessName)} -->
-<html lang="en">
+<html lang="${esc(c.htmlLang || 'en')}">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -1245,7 +1245,7 @@ function generateHomePage(c) {
     <div class="hero-bot">
       <p class="hero-tagline">${esc(tagline)}</p>
       <div class="hero-cta">
-        <a href="#contact" class="btn btn-primary">Book a session</a>
+        <a href="#contact" class="btn btn-primary">${esc(c.labels?.btnBookSession || 'Book a session')}</a>
         <a href="#work" class="btn btn-text">View portfolio <svg viewBox="0 0 14 10" fill="currentColor"><path d="M8.5 0l4.8 5L8.5 10l-.7-.7L11.4 5.7H0v-1.4h11.4L7.8.7z"/></svg></a>
       </div>
     </div>
@@ -1377,7 +1377,7 @@ function generateAboutPage(c) {
   const body = `
 <section class="page-section">
   <div class="container">
-    <span class="eyebrow reveal">About</span>
+    <span class="eyebrow reveal">${esc(c.labels?.navAbout || 'About')}</span>
     <h1 class="page-h1 reveal">${italicAccent("Hi, I'm " + firstName)}</h1>
     <div class="page-body reveal">
       ${paragraphs.map((p) => `<p>${esc(p)}</p>`).join('')}

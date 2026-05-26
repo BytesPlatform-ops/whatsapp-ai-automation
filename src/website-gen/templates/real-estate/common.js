@@ -901,18 +901,19 @@ function getRealEstateScript() {
 
 // ─── Navigation ─────────────────────────────────────────────────────────────
 
-function getRealEstatePages() {
+function getRealEstatePages(c) {
+  const L = (c && c.labels) || {};
   return [
-    { n: 'Home', h: '/' },
+    { n: L.navHome || 'Home', h: '/' },
     { n: 'Listings', h: '/listings' },
     { n: 'Neighborhoods', h: '/neighborhoods' },
-    { n: 'About', h: '/about' },
-    { n: 'Contact', h: '/contact' },
+    { n: L.navAbout || 'About', h: '/about' },
+    { n: L.navContact || 'Contact', h: '/contact' },
   ];
 }
 
 function getNav(c, cur) {
-  const pages = getRealEstatePages();
+  const pages = getRealEstatePages(c);
   const phone = c.contactPhone || '';
   const tel = telHref(phone);
   const brokerage = c.brokerageName ? `<span class="nav-brand-line">${esc(c.brokerageName)}</span>` : '';
@@ -952,7 +953,7 @@ function getNav(c, cur) {
 // ─── Footer ─────────────────────────────────────────────────────────────────
 
 function getFooter(c) {
-  const pages = getRealEstatePages();
+  const pages = getRealEstatePages(c);
   const phone = c.contactPhone || '';
   const tel = telHref(phone);
   const email = c.contactEmail || '';
@@ -971,7 +972,7 @@ function getFooter(c) {
         <ul>${pages.map((p) => `<li><a href="${p.h}">${p.n}</a></li>`).join('')}</ul>
       </div>
       <div>
-        <h5>Contact</h5>
+        <h5>${esc(c.labels?.navContact || 'Contact')}</h5>
         <ul>
           ${phone ? `<li><a href="tel:${esc(tel)}">${esc(phone)}</a></li>` : ''}
           ${email ? `<li><a href="mailto:${esc(email)}">${esc(email)}</a></li>` : ''}
@@ -1063,7 +1064,7 @@ function wrapRealEstatePage(c, cur, body, opts = {}) {
   const title = esc(opts.title || `${c.businessName}${city ? ` — Real Estate in ${city}` : ''}${c.brokerageName ? ` | ${c.brokerageName}` : ''}`);
   const desc = esc(opts.description || `${c.businessName}: ${city ? `your trusted real estate expert in ${city}. ` : ''}${phone ? `Call ${phone}.` : ''}`.trim());
   const schemas = (opts.schemas || [getRealEstateAgentSchema(c)]).join('\n');
-  return `<!DOCTYPE html><html lang="en"><head>
+  return `<!DOCTYPE html><html lang="${esc(c.htmlLang || 'en')}"><head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>${title}</title>
