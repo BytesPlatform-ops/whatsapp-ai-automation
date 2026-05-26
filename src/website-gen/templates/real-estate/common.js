@@ -905,8 +905,8 @@ function getRealEstatePages(c) {
   const L = (c && c.labels) || {};
   return [
     { n: L.navHome || 'Home', h: '/' },
-    { n: 'Listings', h: '/listings' },
-    { n: 'Neighborhoods', h: '/neighborhoods' },
+    { n: L.navListings || 'Listings', h: '/listings' },
+    { n: L.navNeighborhoods || 'Neighborhoods', h: '/neighborhoods' },
     { n: L.navAbout || 'About', h: '/about' },
     { n: L.navContact || 'Contact', h: '/contact' },
   ];
@@ -937,7 +937,7 @@ function getNav(c, cur) {
       ${pages.filter((p) => p.h !== '/').map((p) => `<a href="${p.h}"${p.h === cur ? ' class="active"' : ''}>${p.n}</a>`).join('')}
     </div>
     <div class="nav-right">
-      <a href="/contact" class="btn btn-outline-gold btn-sm nav-cta">Schedule a Call</a>
+      <a href="/contact" class="btn btn-outline-gold btn-sm nav-cta">${esc(c.labels?.btnScheduleCall || 'Schedule a Call')}</a>
       ${phone ? `<a class="nav-phone-m" href="tel:${esc(tel)}" aria-label="Call">${icon('phone', 16)}</a>` : ''}
       <button class="ham" aria-label="Menu"><span></span><span></span><span></span></button>
     </div>
@@ -946,7 +946,7 @@ function getNav(c, cur) {
     <button class="mm-close" aria-label="Close">&times;</button>
     ${pages.map((p) => `<a class="mm-link" href="${p.h}">${p.n}</a>`).join('')}
     ${phone ? `<a class="btn btn-outline mt-6" href="tel:${esc(tel)}" style="margin-top:24px">Call ${esc(phone)}</a>` : ''}
-    <a class="btn btn-gold" href="/contact" style="margin-top:12px">Schedule a Call</a>
+    <a class="btn btn-gold" href="/contact" style="margin-top:12px">${esc(c.labels?.btnScheduleCall || 'Schedule a Call')}</a>
   </div>`;
 }
 
@@ -968,7 +968,7 @@ function getFooter(c) {
         ${c.licenseNumber ? `<span class="foot-license">License #${esc(c.licenseNumber)}</span>` : ''}
       </div>
       <div>
-        <h5>Pages</h5>
+        <h5>${esc(c.labels?.footPages || 'Pages')}</h5>
         <ul>${pages.map((p) => `<li><a href="${p.h}">${p.n}</a></li>`).join('')}</ul>
       </div>
       <div>

@@ -52,28 +52,33 @@ function renderActivationBanner(config = {}) {
   const discountPct = Number(config.discountPct) || 0;
   const hasDiscount = discountPct > 0 && origAmount > amount;
 
-  // CTA button label — price lives here, nowhere else.
+  // CTA button label — price lives here, nowhere else. Localized via the
+  // generator's chrome labels block when the site is non-English.
+  const L = (config && config.labels) || {};
+  const activateWord = L.bnrActivateNow || 'Activate Now';
   let ctaLabel;
   if (!isActivationLink) {
-    ctaLabel = 'Activate →';
+    ctaLabel = `${escapeHtml(activateWord)} →`;
   } else if (amount <= 0) {
-    ctaLabel = 'Activate Now';
+    ctaLabel = escapeHtml(activateWord);
   } else if (hasDiscount) {
-    ctaLabel = `Activate — <span class="pixie-cta-strike">$${origAmount}</span> $${amount}`;
+    ctaLabel = `${escapeHtml(activateWord)} — <span class="pixie-cta-strike">$${origAmount}</span> $${amount}`;
   } else {
-    ctaLabel = `Activate — $${amount}`;
+    ctaLabel = `${escapeHtml(activateWord)} — $${amount}`;
   }
 
   // Leading badge — tone changes with state. Green "PREVIEW" normally,
   // orange "20% OFF" during the discount window (more urgent feel).
   const badgeClass = hasDiscount ? 'pixie-badge pixie-badge-discount' : 'pixie-badge';
-  const badgeText = hasDiscount ? `${discountPct}% OFF` : 'PREVIEW MODE';
+  const badgeText = hasDiscount ? `${discountPct}% OFF` : escapeHtml(L.bnrPreviewMode || 'PREVIEW MODE');
 
   // Descriptive line (desktop only — hidden on mobile for space).
   // Kept consistent across discount/no-discount so desktop layout doesn't
   // shift under the customer's feet when the 22h discount fires. Only the
   // badge + button price change; the copy stays the same.
-  const descText = `Activate this site to make it live${config.businessName ? ` for ${escapeHtml(config.businessName)}` : ''}.`;
+  const descText = config.businessName
+    ? `${escapeHtml(L.bnrActivateText || 'Activate this site to make it live')} — ${escapeHtml(config.businessName)}.`
+    : `${escapeHtml(L.bnrActivateText || 'Activate this site to make it live')}.`;
 
   // Styles use hard-coded colors (not template tokens) so the banner looks
   // identical across HVAC / Real Estate / Salon / Generic — it's an
@@ -289,7 +294,7 @@ function renderActivationBanner(config = {}) {
   // form activates after payment, and stop submits. Leads would otherwise
   // go to an abandoned preview site and evaporate.
   function lockForms(){
-    var label = 'Contact forms activate once the site is published — click Activate above.';
+    var label = ${JSON.stringify(L.bnrFormLock || 'Contact forms activate once the site is published — click Activate above.')};
     var forms = document.querySelectorAll('form');
     for (var i = 0; i < forms.length; i++) {
       var f = forms[i];
