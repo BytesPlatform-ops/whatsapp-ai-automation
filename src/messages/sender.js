@@ -66,7 +66,7 @@ async function sendInteractiveButtons(to, bodyText, buttons, headerText = null) 
   // so the next inbound text reply can be matched back to a button — lets
   // users who prefer typing (or whose client doesn't render buttons as
   // interactive) still pick an option without the bot fumbling.
-  const bodyWithHint = maybeAppendHint(bodyText, buttons);
+  const bodyWithHint = await maybeAppendHint(bodyText, buttons);
   const result = await getSender().sendInteractiveButtons(to, bodyWithHint, buttons, headerText);
   noteSendSucceeded();
   const btnLabels = (buttons || []).map((b) => b?.title || b?.text || '').filter(Boolean).join(' | ');
@@ -81,7 +81,7 @@ async function sendInteractiveList(to, bodyText, buttonText, sections, headerTex
   const flatRows = Array.isArray(sections)
     ? sections.flatMap((s) => Array.isArray(s?.rows) ? s.rows : [])
     : [];
-  const bodyWithHint = maybeAppendHint(bodyText, flatRows);
+  const bodyWithHint = await maybeAppendHint(bodyText, flatRows);
   const result = await getSender().sendInteractiveList(to, bodyWithHint, buttonText, sections, headerText);
   noteSendSucceeded();
   const rowLabels = flatRows.map((r) => r?.title || '').filter(Boolean).join(' | ');

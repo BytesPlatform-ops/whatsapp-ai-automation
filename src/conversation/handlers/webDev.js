@@ -748,6 +748,46 @@ async function handleCollectName(user, message) {
     return STATES.WEB_COLLECT_NAME;
   }
 
+  // Shape-only rejection of inputs that are clearly NOT a business name.
+  // Real fix for: a Facebook URL "https://facebook.com/share/…" being
+  // accepted as the business name because the cheap `isSimple` fast-path
+  // below didn't check for URLs/emails/phone-only inputs. We don't ask the
+  // LLM here because (a) it's a deterministic shape check that costs no
+  // tokens and adds no latency, and (b) the wizard-state extractor already
+  // runs the LLM for the AMBIGUOUS cases — this gate only catches the
+  // unambiguous junk shapes. Re-prompt is context-aware so the user knows
+  // why we're asking again.
+  const urlOnly = /^(https?:\/\/|www\.)[^\s]+\s*$/i.test(text) ||
+    /^[a-z0-9-]+\.(com|net|org|io|co|us|uk|de|fr|it|es|br|pt|in|pk|ae|nl|au)(\/[^\s]*)?$/i.test(text);
+  const emailOnly = /^\S+@\S+\.\S+\s*$/i.test(text) && !/\s/.test(text);
+  const phoneOnly = /^[\d\s+()\-.]{7,}$/.test(text);
+  const handleOnly = /^@[a-z0-9_.]+$/i.test(text);
+  // Drop anything that's mostly digits — a 10+ digit string with maybe a
+  // few stray letters is almost never a business name.
+  const mostlyDigits = (text.match(/\d/g) || []).length >= 7 &&
+    (text.match(/\d/g) || []).length / text.length > 0.5;
+  // Bracketed parser-placeholder text — "[Image]", "[Sticker]", "[Document]",
+  // "[Location: lat,lng]", "[Unsupported message type: …]" (see
+  // src/webhook/parser.js). The router-level non-text guard catches these
+  // upstream, but defense in depth means this handler refuses to ever
+  // capture them as a business name even if a future code path skips the
+  // router guard.
+  const placeholderShape = /^\[[^\]]+\]$/.test(text);
+
+  if (urlOnly || emailOnly || phoneOnly || handleOnly || mostlyDigits || placeholderShape) {
+    let reason = 'That looks like contact info, not a business name';
+    if (urlOnly) reason = "Got the link — but I need the actual business *name* for the site";
+    else if (emailOnly) reason = "That's an email — what's the business *name* I should put on the site?";
+    else if (phoneOnly || mostlyDigits) reason = "That looks like a phone number — what's the business *name*?";
+    else if (handleOnly) reason = "Got the handle — what's the actual business *name*?";
+    else if (placeholderShape) reason = "Hmm, that didn't come through as text I can read — what's the business *name*?";
+    await sendTextMessage(
+      user.phone_number,
+      await dynamicPhrase(`${reason}.`, user, message.text)
+    );
+    return STATES.WEB_COLLECT_NAME;
+  }
+
   // Create site record if not yet. Rate-limit gate: non-tester / non-paid
   // users are capped at WEBSITE_RATE_LIMIT_PER_DAY new sites per rolling
   // window — see src/db/siteRateLimit.js. Only checked on the first turn of
@@ -785,11 +825,29 @@ async function handleCollectName(user, message) {
   // treat the whole text as the business name. Longer / multi-clause messages
   // get parsed by the extractor (which knows to find businessName + other
   // fields like industry, city, services, contact).
+  //
+  // Anti-name signals also flip `isSimple` to false so a request sentence
+  // like "Oi Pixie! Quero um site pro meu salão" (38 chars, no commas, no
+  // locator words) doesn't get captured as the business name. These cases
+  // fall through to smartAdvance's LLM extractor below, which correctly
+  // refuses to extract a name from conversational fluff.
+  const lc = text.toLowerCase();
+  const mentionsPixie = /\bpixie\b/i.test(text);
+  const startsWithGreeting = /^(oi|olá|ola|hi|hello|hey|hola|bonjour|hallo|ciao|salut|salaam|namaste|sup)\b[\s,!.?]/i.test(text);
+  const hasRequestVerb = /\b(want|need|build|make|gimme|quero|queria|preciso|gostaria|quiero|necesito|me\s+gustar(?:ia|ía)|je\s+veux|j['']?ai\s+besoin|voglio|ho\s+bisogno|möchte|brauche|chahiye|mujhe|chcę)\b/i.test(lc);
+  const hasServiceNoun = /\b(site|website|web|app|chatbot|store|shop|loja|tienda|sitio|webseite|sito|application|sitio\s*web)\b/i.test(lc);
+  const wordCount = lc.split(/\s+/).filter(Boolean).length;
+  const looksLikeRequest =
+    mentionsPixie ||
+    (startsWithGreeting && wordCount >= 3) ||
+    (hasRequestVerb && hasServiceNoun);
+
   const isSimple =
     text.length < 50 &&
     !/[,;\n]/.test(text) &&
     !/@/.test(text) &&
-    !/\b(in|at|serving|email|phone|located|based)\b/i.test(text);
+    !/\b(in|at|serving|email|phone|located|based)\b/i.test(text) &&
+    !looksLikeRequest;
 
   if (isSimple) {
     const businessName = normalizeBusinessName(text);

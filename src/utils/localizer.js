@@ -84,16 +84,24 @@ async function resolveLanguage(user, latestUserMessage) {
   if (!effectiveLatest && user?.id) {
     try {
       const { getConversationHistory } = require('../db/conversations');
-      const hist = await getConversationHistory(user.id, 5, {
+      const hist = await getConversationHistory(user.id, 10, {
         afterTimestamp: user?.metadata?.lastResetAt || null,
       });
       if (Array.isArray(hist)) {
-        for (let i = hist.length - 1; i >= 0; i--) {
+        // Gather the last 3 user messages and join them — a single
+        // English-code-switched word like "Silly" at the tail of a
+        // Portuguese conversation must not tip the verdict to English.
+        // The joined string carries enough Portuguese signal (accents,
+        // marker words) that quickDetect / the LLM correctly pick
+        // 'portuguese'. History limit bumped to 10 so we have headroom
+        // to find 3 user rows even when interleaved with assistant rows.
+        const userMsgs = [];
+        for (let i = hist.length - 1; i >= 0 && userMsgs.length < 3; i--) {
           if (hist[i].role === 'user' && hist[i].message_text) {
-            effectiveLatest = hist[i].message_text;
-            break;
+            userMsgs.unshift(hist[i].message_text);
           }
         }
+        effectiveLatest = userMsgs.join(' ').trim() || null;
       }
     } catch {
       // DB hiccup — fall through with undefined; cache-check below handles it.

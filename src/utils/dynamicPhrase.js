@@ -53,7 +53,8 @@ async function dynamicPhrase(canonical, user, latestUserMessage, opts = {}) {
 Rules:
 - Reply in ${targetLang}.${isRoman ? ' Use Latin/Roman script (NOT the native alphabet).' : ''}
 - Preserve every URL, *bold marker*, _italic marker_, backtick, emoji, phone number, email, @handle, and any [TAGS_IN_BRACKETS] exactly as-is.
-- Preserve every literal value the source uses (business names, prices, service names, numbers) — translate the surrounding words only.
+- Preserve every literal value the source uses (real user-supplied data: their business name, their prices, their service names, their numbers) — translate the surrounding words only.
+- EXCEPTION for example blocks: when the source contains an example introduced by "e.g.", "ex.:", "example:", "(e.g.", or "(ex.", the example contents are placeholders, NOT real data. Localize them too — service names should become equivalent service names in ${targetLang}, currency formatting should match the locale, and the example should read like a natural example a ${targetLang} speaker would write. (E.g. for Portuguese, "Haircut 30min $40, Color 90min $120, Manicure 45min $30" should become "Corte 30min R$40, Coloração 90min R$120, Manicure 45min R$30".)
 - Keep the meaning, the formatting structure (line breaks, bullets), and any explicit instruction the user must respond to. Don't add information the source doesn't have.
 - Vary the wording from what's listed under "already used" so two replies in a row never read the same.
 - No preambles, no quotes around your answer, no commentary. Output ONLY the message text.

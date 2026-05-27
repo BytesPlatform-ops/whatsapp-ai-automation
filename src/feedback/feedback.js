@@ -30,6 +30,22 @@ const { sendInteractiveButtons, sendTextMessage } = require('../messages/sender'
 const { runWithContext } = require('../messages/channelContext');
 const { logMessage, getConversationHistory } = require('../db/conversations');
 const { updateUserMetadata } = require('../db/users');
+const { localize } = require('../utils/localizer');
+
+// Localize a WhatsApp reply-button title. WhatsApp caps title length at 20
+// chars; if the translation overshoots, fall back to the English original.
+async function localizeButtonTitle(englishTitle, user) {
+  try {
+    const out = await localize(englishTitle, user, null);
+    if (typeof out === 'string' && out.length <= 20) return out;
+    // Translation too long — keep the English title rather than break the
+    // button rendering. Tradeoff: a few non-English users see the English
+    // button, but they still get the localized body + buttons render.
+    return englishTitle;
+  } catch {
+    return englishTitle;
+  }
+}
 
 // Button IDs for the post-delivery prompt. Match on these in the router
 // to route the user's tap into the feedback-response handler.
@@ -593,17 +609,25 @@ async function offerHumanHandoff(user, reason) {
     handoffOfferReason: reason,
   });
 
-  const body = reason === TRIGGER.HELP_ESCAPE
+  const englishBody = reason === TRIGGER.HELP_ESCAPE
     ? "got it — want me to loop in a human? they'll jump in on this same thread."
     : "looks like I'm not getting this right — want me to loop in a human to help?";
 
   try {
+    // Localize the body + button titles so a Portuguese / Spanish / Roman-
+    // Urdu user gets the handoff offer in their language. Button-title
+    // localization has a length guard (20-char WhatsApp limit).
+    const body = await localize(englishBody, user, null);
+    const [titleYes, titleNo] = await Promise.all([
+      localizeButtonTitle("👋 Get a human", user),
+      localizeButtonTitle("🔄 Keep trying", user),
+    ]);
     await sendInteractiveButtons(
       user.phone_number,
       body,
       [
-        { id: 'fb_handoff_yes', title: "👋 Get a human" },
-        { id: 'fb_handoff_no', title: "🔄 Keep trying" },
+        { id: 'fb_handoff_yes', title: titleYes },
+        { id: 'fb_handoff_no', title: titleNo },
       ]
     );
     await logMessage(user.id, body, 'assistant');
@@ -631,7 +655,8 @@ async function handleHandoffButton(user, message) {
       handoffOfferReason: null,
       handoffAcceptedAt: new Date().toISOString(),
     });
-    const body = "done — i've pinged the team, they'll reach out from this same chat soon. thanks for your patience 🙏";
+    const englishBody = "done — i've pinged the team, they'll reach out from this same chat soon. thanks for your patience 🙏";
+    const body = await localize(englishBody, user, null);
     await sendTextMessage(user.phone_number, body);
     await logMessage(user.id, body, 'assistant');
     // Upgrade the existing handoff-offer feedback row to mark accepted.

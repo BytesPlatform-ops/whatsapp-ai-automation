@@ -18,7 +18,7 @@ function runWithContext({ channel, phoneNumberId }, fn) {
   // single inbound message — set by the router after findOrCreateUser
   // and read by classifierDecisions.recordClassifierDecision so each
   // verdict can be tied back to the user-message that triggered it.
-  return channelStore.run({ channel, phoneNumberId: phoneNumberId || null, sendCount: 0, userId: null, turnId: null }, fn);
+  return channelStore.run({ channel, phoneNumberId: phoneNumberId || null, sendCount: 0, userId: null, turnId: null, preferredLanguage: null }, fn);
 }
 
 /**
@@ -90,6 +90,22 @@ function getCurrentPhoneNumberId() {
   return channelStore.getStore()?.phoneNumberId || null;
 }
 
+/**
+ * Stash the current user's preferred language on the async-context store.
+ * Set once per turn by the router after resolveLanguage runs. Read by
+ * sender-side helpers (e.g. the interactive-buttons hint generator in
+ * interactiveReplyMatcher.js) so they can localize without plumbing a
+ * user object through every send call.
+ */
+function setPreferredLanguage(lang) {
+  const store = channelStore.getStore();
+  if (store) store.preferredLanguage = lang || null;
+}
+
+function getPreferredLanguage() {
+  return channelStore.getStore()?.preferredLanguage || null;
+}
+
 module.exports = {
   runWithContext,
   runWithChannel,
@@ -101,4 +117,6 @@ module.exports = {
   getUserId,
   setTurnId,
   getTurnId,
+  setPreferredLanguage,
+  getPreferredLanguage,
 };

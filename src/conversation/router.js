@@ -697,6 +697,47 @@ async function _routeMessage(message) {
     logger.warn(`[FEEDBACK] Router hook failed: ${err.message}`);
   }
 
+  // ── Language cache-once ────────────────────────────────────────────────
+  // The salesBot LLM detects + replies in the user's language via its
+  // system prompt, but that detection lives inside the LLM and is never
+  // persisted. Background jobs (exploratory followups, 22h discount,
+  // meeting reminders) call resolveLanguage(user, null) hours later — at
+  // which point a single recent code-switched message ("Silly") can tip
+  // the verdict to English even for a Portuguese-speaking user. Caching
+  // here once, on the first text-bearing turn of every user, costs one
+  // LLM detection call per new non-English user, then never again.
+  //
+  // Gated on:
+  //   - text actually present (non-empty user message we can detect from)
+  //   - no cached preferredLanguage yet (so this fires at most once per user)
+  //   - text isn't just a slash-command or button-id substitute
+  const firstTurnText = (message.text || '').trim();
+  if (
+    firstTurnText &&
+    firstTurnText.length >= 2 &&
+    !firstTurnText.startsWith('/') &&
+    !message.buttonId &&
+    !message.listId &&
+    !user.metadata?.preferredLanguage
+  ) {
+    try {
+      const { resolveLanguage } = require('../utils/localizer');
+      await resolveLanguage(user, firstTurnText);
+      // resolveLanguage writes to user.metadata.preferredLanguage internally;
+      // no additional work needed here.
+    } catch (err) {
+      logger.warn(`[ROUTER] resolveLanguage on first turn failed: ${err.message}`);
+    }
+  }
+  // Stash the (possibly just-detected) language on the per-turn async-context
+  // store so sender-side helpers (e.g. the "Or type 1 or 2" hint generator
+  // in interactiveReplyMatcher.js) can localize without plumbing a user
+  // object through every send call.
+  try {
+    const { setPreferredLanguage } = require('../messages/channelContext');
+    setPreferredLanguage(user.metadata?.preferredLanguage || null);
+  } catch { /* defensive — never break the turn for a context stash */ }
+
   // ── Interactive reply matcher (Phase 10) ───────────────────────────────
   // If the last bot message to this user had buttons/list and this inbound
   // is plain text that looks like a pick ("2", "second one", "website",
@@ -1785,24 +1826,73 @@ async function _routeMessage(message) {
     STATES.AD_COLLECT_IMAGE,
   ]);
 
-  if (message.type === 'image' && !IMAGE_AWARE_STATES.has(user.state)) {
+  // Non-text message types that should never reach text-collection handlers.
+  // Audio is NOT included — it's transcribed earlier in the router so by the
+  // time we get here it arrives as real text.
+  const NON_TEXT_TYPES = new Set(['image', 'sticker', 'document', 'location']);
+  // The parser injects placeholder text shaped like "[Image]" / "[Sticker]" /
+  // "[Unsupported message type: X]" / "[Location: lat,lng]" (parser.js:133).
+  // Catching the shape as a fallback covers any future unrecognized type.
+  const PLACEHOLDER_RE = /^\[[^\]]+\]$/;
+  const trimmedText = String(message.text || '').trim();
+  const isImageMsg = message.type === 'image';
+  const isNonTextMsg =
+    NON_TEXT_TYPES.has(message.type) ||
+    (trimmedText && PLACEHOLDER_RE.test(trimmedText) && message.type !== 'text');
+
+  // Images flow through to handlers at image-aware states (logo upload,
+  // portfolio/listing photos, etc.). Every other non-text shape gets a
+  // type-specific reply with a hardcoded English fallback if the LLM is
+  // unavailable — this branch must NEVER let an exception bubble up to
+  // the "glitched" catch-all at line ~478.
+  if (isNonTextMsg && !(isImageMsg && IMAGE_AWARE_STATES.has(user.state))) {
     const wd = user.metadata?.websiteData || {};
-    const currentQuestion = questionForState(user.state, wd);
-    if (currentQuestion) {
-      // Mid-wizard state — remind them of the current step
-      await sendTextMessage(user.phone_number, await dynamicPhrase(
-        `Images can only be added at specific steps — like uploading a logo or photos for your site. For now, ${currentQuestion}`,
-        user, ''
-      ));
-    } else {
-      // salesBot / general state — acknowledge without committing to viewing the image.
-      // Hardcoded (no dynamicPhrase) to avoid the async failure that previously
-      // caused "something glitched" when questionForState returned empty string.
-      const knownTrade = user.metadata?.salesContext?.industry || user.metadata?.adIndustry || null;
-      const redirect = knownTrade
-        ? `got your photo! I can't view images at this stage, but I've got everything I need — just drop your business name and I'll spin up a preview for you 🚀`
-        : `got your photo! I work with text in this chat — tell me what kind of business you have and I'll show you a live example in seconds.`;
-      await sendTextMessage(user.phone_number, redirect);
+    let currentQuestion = '';
+    try { currentQuestion = questionForState(user.state, wd) || ''; } catch { /* defensive */ }
+
+    let englishMsg;
+    switch (message.type) {
+      case 'image':
+        englishMsg = currentQuestion
+          ? `I can't read images here — could you send your answer as text? Right now I'm asking: ${currentQuestion}`
+          : `I got your photo, but I work with text in this chat — tell me what kind of business you have and I'll show you a live example in seconds.`;
+        break;
+      case 'sticker':
+        englishMsg = currentQuestion
+          ? `I can't read stickers — please type your answer. ${currentQuestion}`
+          : `I can't read stickers — please type your message.`;
+        break;
+      case 'document':
+        englishMsg = currentQuestion
+          ? `I can't read documents in this chat — please type your answer. ${currentQuestion}`
+          : `I can't read documents in this chat — please type your message.`;
+        break;
+      case 'location':
+        englishMsg = currentQuestion
+          ? `Got the location pin, but I need your answer as text here — ${currentQuestion}`
+          : `Got the location pin, but I work with text here — tell me what you'd like to do.`;
+        break;
+      default:
+        englishMsg = currentQuestion
+          ? `That message type isn't supported here — please send your answer as text. ${currentQuestion}`
+          : `That message type isn't supported here — please send your message as text.`;
+        break;
+    }
+
+    // safeLocalize — localize with a hardcoded English fallback. The whole
+    // point of this branch is to NEVER produce the generic "glitched"
+    // message, even if the LLM path throws (timeout, rate-limit, DB hiccup).
+    let outText = englishMsg;
+    try {
+      const { localize } = require('../utils/localizer');
+      outText = await localize(englishMsg, user, '');
+    } catch (err) {
+      logger.warn(`[ROUTER] non-text guard: localize failed (${err.message}) — using English fallback`);
+    }
+    try {
+      await sendTextMessage(user.phone_number, outText);
+    } catch (err) {
+      logger.warn(`[ROUTER] non-text guard: sendTextMessage failed (${err.message})`);
     }
     return;
   }

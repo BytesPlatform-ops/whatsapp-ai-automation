@@ -237,17 +237,32 @@ async function matchReply(to, text, opts = {}) {
 /**
  * Append the digit hint to an outgoing interactive body, but only if the
  * body doesn't already contain a hint (defensive against double-appending
- * if a caller wraps the sender). Intentionally lightweight — we don't
- * try to translate the hint into the user's language; "1", "2", "3"
- * are universal and italic markdown keeps the hint visually quiet.
+ * if a caller wraps the sender). The hint is localized into the current
+ * turn's preferred language (stashed on channelContext by the router) so
+ * a Portuguese user sees "_Ou digite 1 ou 2._" instead of "_Or type 1 or 2._".
+ * Async because localization is async; sender.js awaits.
  */
-function maybeAppendHint(bodyText, items) {
+async function maybeAppendHint(bodyText, items) {
   const body = String(bodyText || '');
-  // Heuristic: look for "type 1" or "or type" in the body already.
-  if (/or\s+type\s+/i.test(body)) return body;
+  // Heuristic: look for "type 1" or "or type" / "ou digite" / "o escriba"
+  // in the body already, defensively skipping in any common locale.
+  if (/\b(?:or\s+type|ou\s+digite|o\s+escriba|escribe|tape|tippe|или\s+набери)\b/i.test(body)) return body;
   const hint = buildHintForItems(items);
   if (!hint) return body;
-  return body + hint;
+  // Try to translate the hint into the user's language. The router stashed
+  // their preferredLanguage on the per-turn async-context store; for
+  // English-or-uncached users we skip the LLM and just append the original.
+  let { getPreferredLanguage } = {};
+  try { ({ getPreferredLanguage } = require('./channelContext')); } catch {}
+  const lang = (typeof getPreferredLanguage === 'function') ? getPreferredLanguage() : null;
+  if (!lang || lang === 'english') return body + hint;
+  try {
+    const { localize } = require('../utils/localizer');
+    const translated = await localize(hint, { metadata: { preferredLanguage: lang } }, null);
+    return body + (translated || hint);
+  } catch {
+    return body + hint;  // localize failure → fall back to English hint
+  }
 }
 
 // Stats helpers for tests and diagnostics
