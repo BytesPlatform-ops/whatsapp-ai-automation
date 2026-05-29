@@ -1,0 +1,19 @@
+{
+  "name": "portuguese-services-answer-in-portuguese",
+  "description": "Regression from a real transcript: a Portuguese user asking 'Que serviços vocês oferecem?' got a mixed reply — an English service list ('main thing I handle here is websites - logos, ads, SEO audits, chatbots ... go through our team directly') tailing into a Portuguese question. Root cause was a verbatim English template at prompts.js:548. After converting it to language-neutral intent guidance, the whole reply must be in the user's language, carrying none of the English template fragments.",
+  "channel": "whatsapp",
+  "turns": [
+    {
+      "user": "Que serviços vocês oferecem?",
+      "expect": {
+        "sent_count_gte": 1,
+        "reply_not_contains": [
+          "main thing I handle here",
+          "go through our team",
+          "what kind of business is it",
+          "also available but go through"
+        ]
+      }
+    }
+  ]
+}
