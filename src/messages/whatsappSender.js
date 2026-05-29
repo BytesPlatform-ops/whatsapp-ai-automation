@@ -318,6 +318,43 @@ async function sendWithMenuButton(to, text, extraButtons = []) {
 }
 
 /**
+ * Send an interactive Flow message (the "Get Started" CTA that opens a
+ * native WhatsApp Flow). flowToken must be unique per user per send — we
+ * store the user's ctwa_clid + resolved language against it (see
+ * flows/store.js) so the endpoint and the final build stay attributed.
+ *
+ * @param {string} to             user's wa number
+ * @param {string} bodyText       message body shown above the button
+ * @param {object} opts
+ * @param {string} opts.flowId    published Flow id
+ * @param {string} opts.flowToken unique-per-user token
+ * @param {string} [opts.cta]     button label (default "Get Started")
+ * @param {string} [opts.startScreen] first screen id (default "COMMON")
+ */
+async function sendFlowMessage(to, bodyText, { flowId, flowToken, cta = 'Get Started', startScreen = 'COMMON' } = {}) {
+  return sendRequest({
+    messaging_product: 'whatsapp',
+    to,
+    type: 'interactive',
+    interactive: {
+      type: 'flow',
+      body: { text: bodyText },
+      action: {
+        name: 'flow',
+        parameters: {
+          flow_message_version: '3',
+          flow_token: flowToken,
+          flow_id: flowId,
+          flow_cta: cta,
+          flow_action: 'navigate',
+          flow_action_payload: { screen: startScreen },
+        },
+      },
+    },
+  });
+}
+
+/**
  * Mark a message as read.
  */
 async function markAsRead(messageId) {
@@ -402,6 +439,7 @@ module.exports = {
   sendImage,
   sendAudioMessage,
   sendAudioBuffer,
+  sendFlowMessage,
   markAsRead,
   downloadMedia,
   showTyping,

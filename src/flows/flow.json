@@ -1,0 +1,166 @@
+{
+  "version": "7.0",
+  "data_api_version": "3.0",
+  "routing_model": {
+    "COMMON": ["THEME"],
+    "THEME": ["FINISH"],
+    "FINISH": []
+  },
+  "screens": [
+    {
+      "id": "COMMON",
+      "title": "About your business",
+      "data": {
+        "l_name": { "type": "string", "__example__": "What's your business name?" },
+        "l_email": { "type": "string", "__example__": "What's your email?" },
+        "l_industry": { "type": "string", "__example__": "What industry are you in?" },
+        "l_next": { "type": "string", "__example__": "Next" }
+      },
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          {
+            "type": "Form",
+            "name": "f1",
+            "children": [
+              {
+                "type": "TextInput",
+                "name": "business_name",
+                "label": "${data.l_name}",
+                "required": true
+              },
+              {
+                "type": "TextInput",
+                "name": "email",
+                "input-type": "email",
+                "label": "${data.l_email}",
+                "required": true
+              },
+              {
+                "type": "TextInput",
+                "name": "industry",
+                "label": "${data.l_industry}",
+                "required": true
+              },
+              {
+                "type": "Footer",
+                "label": "${data.l_next}",
+                "on-click-action": {
+                  "name": "data_exchange",
+                  "payload": {
+                    "business_name": "${form.business_name}",
+                    "email": "${form.email}",
+                    "industry": "${form.industry}"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "THEME",
+      "title": "${data.theme_title}",
+      "data": {
+        "theme_title": { "type": "string", "__example__": "Details" },
+        "q1_label": { "type": "string", "__example__": "Question 1" },
+        "q2_label": { "type": "string", "__example__": "Question 2" },
+        "q3_label": { "type": "string", "__example__": "Question 3" },
+        "q4_label": { "type": "string", "__example__": "Question 4" },
+        "q2_visible": { "type": "boolean", "__example__": true },
+        "q3_visible": { "type": "boolean", "__example__": false },
+        "q4_visible": { "type": "boolean", "__example__": false },
+        "l_next": { "type": "string", "__example__": "Next" }
+      },
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          {
+            "type": "Form",
+            "name": "f2",
+            "children": [
+              {
+                "type": "TextArea",
+                "name": "a1",
+                "label": "${data.q1_label}",
+                "required": true
+              },
+              {
+                "type": "TextArea",
+                "name": "a2",
+                "label": "${data.q2_label}",
+                "required": false,
+                "visible": "${data.q2_visible}"
+              },
+              {
+                "type": "TextArea",
+                "name": "a3",
+                "label": "${data.q3_label}",
+                "required": false,
+                "visible": "${data.q3_visible}"
+              },
+              {
+                "type": "TextArea",
+                "name": "a4",
+                "label": "${data.q4_label}",
+                "required": false,
+                "visible": "${data.q4_visible}"
+              },
+              {
+                "type": "Footer",
+                "label": "${data.l_next}",
+                "on-click-action": {
+                  "name": "data_exchange",
+                  "payload": {
+                    "a1": "${form.a1}",
+                    "a2": "${form.a2}",
+                    "a3": "${form.a3}",
+                    "a4": "${form.a4}"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "FINISH",
+      "title": "${data.finish_title}",
+      "terminal": true,
+      "data": {
+        "finish_title": { "type": "string", "__example__": "Almost done" },
+        "l_contact": { "type": "string", "__example__": "Contact info?" },
+        "l_build": { "type": "string", "__example__": "Build my site" }
+      },
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          {
+            "type": "Form",
+            "name": "f3",
+            "children": [
+              {
+                "type": "TextArea",
+                "name": "contact_info",
+                "label": "${data.l_contact}",
+                "required": true
+              },
+              {
+                "type": "Footer",
+                "label": "${data.l_build}",
+                "on-click-action": {
+                  "name": "data_exchange",
+                  "payload": {
+                    "contact_info": "${form.contact_info}"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

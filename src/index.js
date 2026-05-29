@@ -133,6 +133,13 @@ app.use('/', leadRoutes);
 // advance the state machine, and ping the user back.
 app.use('/', servicesFormRoutes);
 
+// WhatsApp Flows endpoint — the dynamic, encrypted data-exchange route
+// for the native website-builder Flow (multi-niche, multi-language). The
+// body is JSON with base64 fields, so it works fine after express.json();
+// req.rawBody (captured above) is used for signature verification.
+const flowRoutes = require('./flows/routes');
+app.use('/', flowRoutes);
+
 // Messenger & Instagram webhook routes
 const messengerRoutes = require('./webhook/messengerRoutes');
 app.use('/', messengerRoutes);

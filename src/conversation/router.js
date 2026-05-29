@@ -1123,6 +1123,31 @@ async function _routeMessage(message) {
     return;
   }
 
+  // ── WhatsApp Flow: completion ───────────────────────────────────────────
+  // The user submitted the native website-builder Flow. The parser put the
+  // answers on message.flowReply. Map them → websiteData and build. Inert
+  // unless a flow was actually sent (no flowReply otherwise).
+  if (message.flowReply) {
+    try {
+      const { handleFlowCompletion } = require('../flows/intake');
+      await handleFlowCompletion(user, message);
+    } catch (err) {
+      logger.error(`[FLOW] completion handling failed for ${from}: ${err.message}`);
+      await sendTextMessage(user.phone_number, "Got your details! Let me put your site together — one moment.");
+    }
+    return;
+  }
+
+  // ── WhatsApp Flow: send to fresh CTWA users ─────────────────────────────
+  // v1 scope: ad (CTWA) users get the native Flow instead of the chat
+  // intake. Fully inert until PIXIE_FLOW_ID is set (see flows/send.js).
+  try {
+    const { maybeSendWebsiteFlow } = require('../flows/send');
+    if (await maybeSendWebsiteFlow(user, message)) return;
+  } catch (err) {
+    logger.warn(`[FLOW] send check failed for ${from}: ${err.message} — continuing with chat`);
+  }
+
   // ── Disabled-service redirect ───────────────────────────────────────────
   // If the user is mid-flow on a service we've disabled (see
   // src/config/services.js — currently SEO / chatbot / ad / logo /

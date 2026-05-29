@@ -18,3 +18,6 @@ src/website-gen/templates/real-estate/smoke-out/
 # Next.js incremental TypeScript build info
 landing/tsconfig.tsbuildinfo
 landing/.next/
+
+# WhatsApp Flow RSA keys (never commit)
+scripts/flows/.keys/

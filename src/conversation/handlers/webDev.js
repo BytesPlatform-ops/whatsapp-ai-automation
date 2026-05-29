@@ -8441,4 +8441,8 @@ module.exports = {
   // reads them as 'menu' and routes the user to service-selection
   // instead of the paid-claim handler inside handleRevisions.
   PAID_CLAIM_RX,
+  // Exposed so the WhatsApp Flow intake (src/flows/intake.js) can trigger
+  // the build directly once the Flow is submitted, reusing the exact same
+  // generate → deploy → send-preview → CAPI path the chat flow uses.
+  generateWebsite,
 };

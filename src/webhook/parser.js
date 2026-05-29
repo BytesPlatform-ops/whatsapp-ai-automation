@@ -93,6 +93,16 @@ function parseWebhookPayload(body) {
         } else if (message.interactive?.type === 'list_reply') {
           parsed.text = message.interactive.list_reply.title;
           parsed.listId = message.interactive.list_reply.id;
+        } else if (message.interactive?.type === 'nfm_reply') {
+          // WhatsApp Flow completion. response_json is a JSON string with
+          // all the answers the user submitted across the flow screens.
+          parsed.text = '[Flow submitted]';
+          parsed.flowReply = {};
+          try {
+            parsed.flowReply = JSON.parse(message.interactive.nfm_reply.response_json || '{}');
+          } catch (_) {
+            parsed.flowReply = {};
+          }
         }
         break;
 
