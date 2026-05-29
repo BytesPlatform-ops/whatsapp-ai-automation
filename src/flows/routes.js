@@ -22,6 +22,32 @@ const { logger } = require('../utils/logger');
 
 const router = Router();
 
+// Secret-gated diagnostic — reports whether the private key loads on the
+// server and its derived public-key fingerprint, WITHOUT exposing the key.
+// Lets us confirm the env value is a valid PEM and matches the public key
+// uploaded to the phone number. Gated on WHATSAPP_APP_SECRET so only we
+// can call it. Safe to leave in — returns nothing sensitive.
+router.get('/flow/keycheck', (req, res) => {
+  if (!env.whatsapp.appSecret || req.query.secret !== env.whatsapp.appSecret) {
+    return res.status(403).json({ error: 'forbidden' });
+  }
+  const out = { keyEnvPresent: !!(process.env.WHATSAPP_FLOW_PRIVATE_KEY || process.env.FLOW_PRIVATE_KEY) };
+  const rawLen = (process.env.WHATSAPP_FLOW_PRIVATE_KEY || process.env.FLOW_PRIVATE_KEY || '').length;
+  out.rawLen = rawLen;
+  try {
+    const { loadPrivateKey } = require('./crypto');
+    const key = loadPrivateKey();
+    const keyObj = crypto.createPrivateKey(key);
+    const pub = crypto.createPublicKey(keyObj).export({ type: 'spki', format: 'pem' });
+    out.keyLoads = true;
+    out.pubFingerprint = crypto.createHash('sha256').update(pub).digest('hex').slice(0, 16);
+  } catch (err) {
+    out.keyLoads = false;
+    out.error = err.message;
+  }
+  return res.json(out);
+});
+
 // Verify Meta's X-Hub-Signature-256 over the raw body (same scheme as the
 // WhatsApp webhook). Skips when no app secret is configured.
 function verifySignature(req) {
