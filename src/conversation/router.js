@@ -18,6 +18,7 @@ const {
 } = require('./undoStack');
 const messageBuffer = require('./messageBuffer');
 const { handleObjection } = require('./handlers/objectionHandler');
+const { localize } = require('../utils/localizer');
 
 // ── Message dedup ─────────────────────────────────────────────────────────
 // WhatsApp can occasionally redeliver the same inbound message (network blip,
@@ -564,7 +565,11 @@ async function _routeMessage(message) {
       }
     } catch (error) {
       logger.error('Audio transcription failed:', error);
-      await sendTextMessage(from, "I couldn't process that voice message - could you type it out instead?");
+      const audioErrUser = await findOrCreateUser(from, channel, message.phoneNumberId || null).catch(() => null);
+      const audioErrMsg = audioErrUser
+        ? await localize("I couldn't process that voice message - could you type it out instead?", audioErrUser, '')
+        : "I couldn't process that voice message - could you type it out instead?";
+      await sendTextMessage(from, audioErrMsg);
       return;
     }
   }
@@ -1387,7 +1392,7 @@ async function _routeMessage(message) {
       });
     }
     if (intent === 'undo') {
-      await handleUndo(user);
+      await handleUndo(user, message);
       return;
     }
     if (intent === 'keep') {

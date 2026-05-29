@@ -142,6 +142,23 @@ router.get('/api/conversations/bulk-export', async (_req, res) => {
   }
 });
 
+router.post('/api/conversations/bulk-export-selected', async (req, res) => {
+  try {
+    const { userIds } = req.body || {};
+    if (!Array.isArray(userIds) || !userIds.length) {
+      return res.status(400).json({ error: 'userIds array required' });
+    }
+    const txt = await queries.getSelectedConversationsBulk(userIds);
+    const date = new Date().toISOString().slice(0, 10);
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="pixie_selected_chats_${date}.txt"`);
+    res.send(txt);
+  } catch (err) {
+    logger.error('[ADMIN] Selected bulk export error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.get('/api/conversations/:userId', async (req, res) => {
   try {
     const data = await queries.getConversation(req.params.userId);

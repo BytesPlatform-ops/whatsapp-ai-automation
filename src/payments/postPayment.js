@@ -21,6 +21,7 @@ const { updateUserMetadata } = require('../db/users');
 const { logMessage } = require('../db/conversations');
 const { sendTextMessage } = require('../messages/sender');
 const { runWithContext } = require('../messages/channelContext');
+const { localize } = require('../utils/localizer');
 
 /**
  * Apply the post-payment flow for a confirmed Stripe session. Call this
@@ -109,6 +110,12 @@ async function handleConfirmedPayment(payment, paidSession) {
     channel:     targetChannel,
   });
 
+  // Minimal user object for localize() — enough for language detection via
+  // cached preferredLanguage or DB history lookup. No latestUserMessage since
+  // this is a webhook callback (no inbound message); localize falls back to
+  // DB history to find the user's language.
+  const payLocaleUser = { id: p.user_id, phone_number: targetPhone, metadata: paidUserRecord?.metadata || {} };
+
   const amountDisplay = `$${(p.amount / 100).toLocaleString()}`;
   const isDomainAddon = p.service_type === 'domain_addon';
   const isWebsitePayment = !isDomainAddon && (/website|web/i.test(p.service_type || '') || /website|web/i.test(p.description || ''));
@@ -125,11 +132,9 @@ async function handleConfirmedPayment(payment, paidSession) {
 
     if (!selectedDomain) {
       logger.error(`[PAY] domain_addon paid for ${p.id} but no selectedDomain on user metadata — manual setup needed`);
+      const missingDomainMsg = await localize(`Payment received! There was a hiccup looking up which domain you picked — our team will sort it out within 2 business days.`, payLocaleUser, '');
       await runWithContext({ channel: targetChannel, phoneNumberId: targetVia }, () =>
-        sendTextMessage(
-          targetPhone,
-          `Payment received! There was a hiccup looking up which domain you picked — our team will sort it out within 2 business days.`
-        )
+        sendTextMessage(targetPhone, missingDomainMsg)
       );
       return { ok: true };
     }
@@ -182,23 +187,25 @@ async function handleConfirmedPayment(payment, paidSession) {
             domainStatus: 'purchased',
             domainPurchasedAt: new Date().toISOString(),
           });
+          const domainLiveMsg = await localize(
+            `✅ *${selectedDomain}* is registered and pointed at your site!\n\n` +
+            `DNS is propagating now — it'll be live at *${selectedDomain}* within 5–60 minutes. ` +
+            `HTTPS sets up automatically.\n\n` +
+            `I'll ping you once it's fully live! 🚀`,
+            payLocaleUser, ''
+          );
           await runWithContext({ channel: targetChannel, phoneNumberId: targetVia }, () =>
-            sendTextMessage(
-              targetPhone,
-              `✅ *${selectedDomain}* is registered and pointed at your site!\n\n` +
-              `DNS is propagating now — it'll be live at *${selectedDomain}* within 5–60 minutes. ` +
-              `HTTPS sets up automatically.\n\n` +
-              `I'll ping you once it's fully live! 🚀`
-            )
+            sendTextMessage(targetPhone, domainLiveMsg)
           );
           await logMessage(p.user_id, `Late-domain registered + attached: ${selectedDomain}`, 'assistant');
         } else {
           if (site) await updateSite(site.id, { custom_domain: selectedDomain, status: 'domain_setup_pending' });
+          const domainManualMsg = await localize(
+            `Domain registration for *${selectedDomain}* needs manual setup (${result.error}). Our team will handle it within 2 business days — we'll keep you posted!`,
+            payLocaleUser, ''
+          );
           await runWithContext({ channel: targetChannel, phoneNumberId: targetVia }, () =>
-            sendTextMessage(
-              targetPhone,
-              `Domain registration for *${selectedDomain}* needs manual setup (${result.error}). Our team will handle it within 2 business days — we'll keep you posted!`
-            )
+            sendTextMessage(targetPhone, domainManualMsg)
           );
           await logMessage(p.user_id, `Late-domain auto-purchase failed: ${result.error} — manual setup needed`, 'assistant');
         }
@@ -207,17 +214,16 @@ async function handleConfirmedPayment(payment, paidSession) {
         try {
           if (site) await updateSite(site.id, { custom_domain: selectedDomain, status: 'domain_setup_pending' });
         } catch (_) { /* ignore */ }
+        const domainErrMsg = await localize(`Domain setup for *${selectedDomain}* is being handled by our team. We'll update you within 2 business days!`, payLocaleUser, '');
         await runWithContext({ channel: targetChannel, phoneNumberId: targetVia }, () =>
-          sendTextMessage(targetPhone, `Domain setup for *${selectedDomain}* is being handled by our team. We'll update you within 2 business days!`)
+          sendTextMessage(targetPhone, domainErrMsg)
         );
       }
     } else {
       if (site) await updateSite(site.id, { custom_domain: selectedDomain, status: 'domain_setup_pending' });
+      const domainTeamMsg = await localize(`Payment received! Our team will set up *${selectedDomain}* for your website within 2 business days. We'll send you the live link once it's ready!`, payLocaleUser, '');
       await runWithContext({ channel: targetChannel, phoneNumberId: targetVia }, () =>
-        sendTextMessage(
-          targetPhone,
-          `Payment received! Our team will set up *${selectedDomain}* for your website within 2 business days. We'll send you the live link once it's ready!`
-        )
+        sendTextMessage(targetPhone, domainTeamMsg)
       );
     }
     return { ok: true };
@@ -366,15 +372,16 @@ async function handleConfirmedPayment(payment, paidSession) {
               domainStatus: 'purchased',
               domainPurchasedAt: new Date().toISOString(),
             });
+            const domainConfiguredMsg = await localize(
+              `✅ *${selectedDomain}* is registered and configured!\n\n` +
+              `DNS is propagating now — your site will be live at *${selectedDomain}* within 5-60 minutes. ` +
+              `HTTPS is set up automatically.\n\n` +
+              `I'll send you a message once it's fully live! 🚀\n\n` +
+              `_If anything's off later or you've got thoughts, just type *feedback* any time and i'll capture it for the team._`,
+              payLocaleUser, ''
+            );
             await runWithContext({ channel: targetChannel, phoneNumberId: targetVia }, () =>
-              sendTextMessage(
-                targetPhone,
-                `✅ *${selectedDomain}* is registered and configured!\n\n` +
-                `DNS is propagating now — your site will be live at *${selectedDomain}* within 5-60 minutes. ` +
-                `HTTPS is set up automatically.\n\n` +
-                `I'll send you a message once it's fully live! 🚀\n\n` +
-                `_If anything's off later or you've got thoughts, just type *feedback* any time and i'll capture it for the team._`
-              )
+              sendTextMessage(targetPhone, domainConfiguredMsg)
             );
             await logMessage(p.user_id, `Domain purchased and configured: ${selectedDomain}`, 'assistant');
 
@@ -454,11 +461,12 @@ async function handleConfirmedPayment(payment, paidSession) {
             }
           } else {
             if (site) await updateSite(site.id, { custom_domain: selectedDomain, status: 'domain_setup_pending' });
+            const domainManualMsg2 = await localize(
+              `Domain registration for *${selectedDomain}* needs manual setup (${result.error}). Our team will handle it within 2 business days — we'll keep you posted!`,
+              payLocaleUser, ''
+            );
             await runWithContext({ channel: targetChannel, phoneNumberId: targetVia }, () =>
-              sendTextMessage(
-                targetPhone,
-                `Domain registration for *${selectedDomain}* needs manual setup (${result.error}). Our team will handle it within 2 business days — we'll keep you posted!`
-              )
+              sendTextMessage(targetPhone, domainManualMsg2)
             );
             await logMessage(p.user_id, `Domain auto-purchase failed: ${result.error} — manual setup needed`, 'assistant');
           }
@@ -468,17 +476,19 @@ async function handleConfirmedPayment(payment, paidSession) {
             const site = await getLatestSite(p.user_id);
             if (site) await updateSite(site.id, { custom_domain: selectedDomain, status: 'domain_setup_pending' });
           } catch (_) { /* ignore */ }
+          const domainErrMsg2 = await localize(`Domain setup for *${selectedDomain}* is being handled by our team. We'll update you within 2 business days!`, payLocaleUser, '');
           await runWithContext({ channel: targetChannel, phoneNumberId: targetVia }, () =>
-            sendTextMessage(targetPhone, `Domain setup for *${selectedDomain}* is being handled by our team. We'll update you within 2 business days!`)
+            sendTextMessage(targetPhone, domainErrMsg2)
           );
         }
       } else {
         // No Namecheap API — manual flow
         if (site) await updateSite(site.id, { custom_domain: selectedDomain, status: 'domain_setup_pending' });
+        const domainTeamMsg2 = await localize(`Payment received! Our team will set up *${selectedDomain}* for your website within 2 business days. We'll send you the live link once it's ready!`, payLocaleUser, '');
         await runWithContext({ channel: targetChannel, phoneNumberId: targetVia }, () =>
           sendTextMessage(
             targetPhone,
-            `Payment received! Our team will set up *${selectedDomain}* for your website within 2 business days. We'll send you the live link once it's ready!`
+            domainTeamMsg2
           )
         );
       }
@@ -505,11 +515,14 @@ async function handleConfirmedPayment(payment, paidSession) {
         logger.warn(`[PAY] Failed to mark no-domain site status='paid': ${err.message}`);
       }
 
-      await runWithContext({ channel: targetChannel, phoneNumberId: targetVia }, () => sendTextMessage(
-        targetPhone,
+      const noDomainConfirmMsg = await localize(
         `Payment of *${amountDisplay}* received! 🎉\n\n` +
-          `*Package:* ${p.description || p.service_type}\n\n` +
-          `Your site is fully yours — watermark gone, contact form live. I'm here if you need anything — and if anything's off later or you've got thoughts, just type *feedback* any time and i'll capture it for the team.`
+        `*Package:* ${p.description || p.service_type}\n\n` +
+        `Your site is fully yours — watermark gone, contact form live. I'm here if you need anything — and if anything's off later or you've got thoughts, just type *feedback* any time and i'll capture it for the team.`,
+        payLocaleUser, ''
+      );
+      await runWithContext({ channel: targetChannel, phoneNumberId: targetVia }, () => sendTextMessage(
+        targetPhone, noDomainConfirmMsg
       ));
       await logMessage(p.user_id, `Payment confirmed: ${amountDisplay} (no domain)`, 'assistant');
 
@@ -541,11 +554,14 @@ async function handleConfirmedPayment(payment, paidSession) {
     }
   } else {
     // Non-website payment
-    await runWithContext({ channel: targetChannel, phoneNumberId: targetVia }, () => sendTextMessage(
-      targetPhone,
+    const nonWebPayMsg = await localize(
       `Payment of *${amountDisplay}* received! Thank you for choosing Pixie.\n\n` +
-        `*Package:* ${p.description || p.service_type}\n\n` +
-        `Our team will be in touch shortly to kick things off. If you have any questions in the meantime, just message here.`
+      `*Package:* ${p.description || p.service_type}\n\n` +
+      `Our team will be in touch shortly to kick things off. If you have any questions in the meantime, just message here.`,
+      payLocaleUser, ''
+    );
+    await runWithContext({ channel: targetChannel, phoneNumberId: targetVia }, () => sendTextMessage(
+      targetPhone, nonWebPayMsg
     ));
     await logMessage(p.user_id, `Payment confirmed: ${amountDisplay} for ${p.service_type}`, 'assistant');
     await updateUserMetadata(p.user_id, {

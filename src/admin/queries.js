@@ -1077,11 +1077,57 @@ async function getAllConversationsBulk() {
   return lines.join('\n');
 }
 
+async function getSelectedConversationsBulk(userIds) {
+  if (!userIds || !userIds.length) return '';
+  const [usersResult, msgsResult] = await Promise.all([
+    supabase.from('users').select('id, phone_number, name, channel').in('id', userIds),
+    supabase.from('conversations').select('user_id, role, message_text, created_at, seq').in('user_id', userIds).order('seq', { ascending: true }).order('created_at', { ascending: true }),
+  ]);
+
+  const users = usersResult.data || [];
+  const msgs = msgsResult.data || [];
+
+  const byUser = {};
+  for (const m of msgs) {
+    if (!byUser[m.user_id]) byUser[m.user_id] = [];
+    byUser[m.user_id].push(m);
+  }
+
+  const lines = [];
+  lines.push('Pixie — Selected Chats Export');
+  lines.push('Exported: ' + new Date().toLocaleString());
+  lines.push('');
+
+  for (const u of users) {
+    const userMsgs = byUser[u.id] || [];
+    if (!userMsgs.length) continue;
+    const label = (u.name ? u.name + ' ' : '') + '(' + (u.phone_number || u.id) + ')' + (u.channel && u.channel !== 'whatsapp' ? ' [' + u.channel + ']' : '');
+    lines.push('════════════════════════════════════════');
+    lines.push('Contact: ' + label);
+    lines.push('Messages: ' + userMsgs.length);
+    lines.push('────────────────────────────────────────');
+    for (const m of userMsgs) {
+      if (m.role === 'system') {
+        lines.push('── ' + (m.message_text || 'system event') + ' ──');
+      } else {
+        const who = m.role === 'user' ? (u.name || u.phone_number || 'User') : 'Pixie';
+        const ts = m.created_at ? new Date(m.created_at).toLocaleString() : '';
+        lines.push('[' + ts + '] ' + who + ':');
+        lines.push(m.message_text || '(media/non-text)');
+      }
+      lines.push('');
+    }
+  }
+
+  return lines.join('\n');
+}
+
 module.exports = {
   getOverviewMetrics,
   getLeads,
   getConversation,
   getAllConversationsBulk,
+  getSelectedConversationsBulk,
   getFeedback,
   getDropoffs,
   getSites,

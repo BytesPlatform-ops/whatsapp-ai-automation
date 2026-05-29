@@ -302,7 +302,7 @@ async function handleSalesBot(user, message) {
     logger.error('Sales bot LLM error:', error);
     await sendTextMessage(
       user.phone_number,
-      "Sorry, something went wrong on my end. Give me a moment and try again."
+      await dynamicPhrase("Sorry, something went wrong on my end. Give me a moment and try again.", user, message?.text || '')
     );
     return STATES.SALES_CHAT;
   }

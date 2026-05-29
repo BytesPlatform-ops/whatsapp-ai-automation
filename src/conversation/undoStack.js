@@ -238,7 +238,8 @@ function storedAnswerForState(state, metadata) {
  * is?" prompt. Returns true if the undo was applied, false if there was
  * nothing to undo.
  */
-async function handleUndo(user) {
+async function handleUndo(user, message) {
+  const latestUserMessage = message?.text || '';
   const history = Array.isArray(user.metadata?.stateHistory)
     ? [...user.metadata.stateHistory]
     : [];
@@ -246,7 +247,8 @@ async function handleUndo(user) {
   if (history.length === 0) {
     const msg = await localize(
       "Nothing to go back to — we haven't filled anything in yet.",
-      user
+      user,
+      latestUserMessage
     );
     await sendTextMessage(user.phone_number, msg);
     return false;
@@ -280,7 +282,7 @@ async function handleUndo(user) {
     msg = `Sure, going back one step. What would you like to change?`;
   }
 
-  const localized = await localize(msg, user);
+  const localized = await localize(msg, user, latestUserMessage);
   await sendTextMessage(user.phone_number, localized);
   await logMessage(user.id, `Undo: popped to ${prevState}`, 'assistant');
   logger.info(`[UNDO] ${user.phone_number} popped to ${prevState}`);

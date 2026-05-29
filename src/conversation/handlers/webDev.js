@@ -202,6 +202,7 @@ async function offerServicesForm(user, kind, opts = {}) {
   const prefixAck = (opts && typeof opts.prefixAck === 'string' && opts.prefixAck.trim())
     ? opts.prefixAck.trim()
     : '';
+  const latestUserMessage = (opts && typeof opts.latestUserMessage === 'string') ? opts.latestUserMessage : '';
 
   // Internal fallback when we can't issue a working form link (env unset
   // or token-create failure). Sends the bare chat question for the state
@@ -210,7 +211,7 @@ async function offerServicesForm(user, kind, opts = {}) {
     const msg = prefixAck
       ? `${prefixAck}\n\n${questionForState(fallbackState, wd)}`
       : questionForState(fallbackState, wd);
-    await sendTextMessage(user.phone_number, await dynamicPhrase(msg, user));
+    await sendTextMessage(user.phone_number, await dynamicPhrase(msg, user, latestUserMessage));
     return fallbackState;
   };
 
@@ -241,7 +242,7 @@ async function offerServicesForm(user, kind, opts = {}) {
   await updateUserMetadata(user.id, { websiteData: merged });
   user.metadata = { ...(user.metadata || {}), websiteData: merged };
 
-  await sendTextMessage(user.phone_number, await dynamicPhrase(intro, user));
+  await sendTextMessage(user.phone_number, await dynamicPhrase(intro, user, latestUserMessage));
   return kind === 'salon' ? STATES.WEB_COLLECT_SERVICES : STATES.WEB_COLLECT_LISTINGS_ASK;
 }
 
@@ -439,7 +440,7 @@ async function smartAdvance(user, message, ackPrefix = null) {
   // offer body (one bot message per turn instead of two stacked ones).
   const offerKind = shouldOfferServicesForm(nextState, merged);
   if (offerKind) {
-    return offerServicesForm(user, offerKind, { prefixAck: ack });
+    return offerServicesForm(user, offerKind, { prefixAck: ack, latestUserMessage: (message?.text || '') });
   }
 
   const nextQuestion = questionForState(nextState, merged);
@@ -661,7 +662,7 @@ async function handleWebDev(user, message) {
       // Only render a peek — never the full confirm-style summary, since
       // that trailing "Reply yes to build" line is misleading when we're
       // still mid-collection.
-      await showSummaryPeek(user);
+      await showSummaryPeek(user, text);
       // After the peek, re-send the question we were asking so the user
       // knows we haven't jumped states and can keep answering.
       const currentQuestion = questionForState(user.state, user.metadata?.websiteData || {});
@@ -2804,7 +2805,7 @@ async function handleCollectListingsPhotos(user, message) {
   // Any other text — gentle nudge
   await sendTextMessage(
     user.phone_number,
-    'Send a listing photo (image), or reply *done* / *skip* to use stock photos.'
+    await localize('Send a listing photo (image), or reply *done* / *skip* to use stock photos.', user, raw)
   );
   return STATES.WEB_COLLECT_LISTINGS_PHOTOS;
 }
@@ -3920,7 +3921,7 @@ async function handleCollectProjectsPhotos(user, message) {
   if (pending != null) {
     const verdict = await classifyPhotoAssignTurn(raw, projects.length, user.id);
     if (!verdict) {
-      await sendTextMessage(user.phone_number, `Please tell me which project this image is for — reply with a number ${projects.map((_, i) => i + 1).join(', ')} (or "first", "second", etc.), or *skip*.`);
+      await sendTextMessage(user.phone_number, await localize(`Please tell me which project this image is for — reply with a number ${projects.map((_, i) => i + 1).join(', ')} (or "first", "second", etc.), or *skip*.`, user, raw));
       return STATES.WEB_COLLECT_PROJECTS_PHOTOS;
     }
     if (verdict.action === 'discard') {
@@ -4108,7 +4109,7 @@ async function handleCollectContact(user, message) {
         );
         return STATES.WEB_COLLECT_CONTACT;
       }
-      return showConfirmSummary(user);
+      return showConfirmSummary(user, '', contactText);
     }
   }
 
@@ -4157,7 +4158,7 @@ async function handleCollectContact(user, message) {
         )
       );
       await logMessage(user.id, 'Contact: skipped via delegation', 'assistant');
-      return showConfirmSummary(user);
+      return showConfirmSummary(user, '', contactText);
     }
   }
 
@@ -4184,7 +4185,7 @@ async function handleCollectContact(user, message) {
       await logMessage(user.id, `Edit at contact step: ${kind}`, 'assistant');
       // Re-enter WEB_CONFIRM's summary display so the user sees the
       // updated state and can confirm before we build.
-      return showConfirmSummary(user);
+      return showConfirmSummary(user, '', contactText);
     }
   }
 
@@ -4319,12 +4320,12 @@ async function handleCollectContact(user, message) {
   const wdAfter = user.metadata.websiteData;
   if (!wdAfter.logoUrl && !wdAfter.logoSkipped) {
     const prompt = "Got a logo? Send it as an image (JPG or PNG) — I'll clean up the background automatically. Or reply *skip* and I'll use a text logo with your brand initial.";
-    await sendTextMessage(user.phone_number, await dynamicPhrase(prompt, user));
+    await sendTextMessage(user.phone_number, await dynamicPhrase(prompt, user, contactText));
     await logMessage(user.id, 'Asking for logo upload', 'assistant');
     return STATES.WEB_COLLECT_LOGO;
   }
 
-  return showConfirmSummary(user);
+  return showConfirmSummary(user, '', contactText);
 }
 
 // Render the pre-generation confirmation summary. Shared by handleCollectContact,
@@ -4371,7 +4372,7 @@ function renderServicesLine(wd) {
  * line and without forcing a state transition, because we're still in the
  * middle of collecting.
  */
-async function showSummaryPeek(user) {
+async function showSummaryPeek(user, latestUserMessage = '') {
   const { isRealEstate, isHvac } = require('../../website-gen/templates');
 
   let wd;
@@ -4435,14 +4436,14 @@ async function showSummaryPeek(user) {
   // localize() handles the English-override safety net internally by
   // fetching the latest user message when none is passed.
   const summary = lines.join('\n');
-  const localized = await dynamicPhrase(summary, user);
+  const localized = await dynamicPhrase(summary, user, latestUserMessage);
   await sendTextMessage(user.phone_number, localized);
   // Log the actual peek text so the admin conversation page shows what the
   // user saw on WhatsApp, not a placeholder label.
   await logMessage(user.id, localized, 'assistant');
 }
 
-async function showConfirmSummary(user, prefix = '') {
+async function showConfirmSummary(user, prefix = '', latestUserMessage = '') {
   const { isRealEstate, isHvac } = require('../../website-gen/templates');
 
   // Re-fetch from DB so we never render stale data after a sub-flow updated
@@ -4542,7 +4543,7 @@ async function showConfirmSummary(user, prefix = '') {
   // into the wrong language.
   const summary = lines.join('\n');
   const combined = prefix ? `${prefix.trim()}\n\n${summary}` : summary;
-  const localized = await dynamicPhrase(combined, user);
+  const localized = await dynamicPhrase(combined, user, latestUserMessage);
   await sendTextMessage(user.phone_number, localized);
   // sendTextMessage now auto-logs the outbound text via the sender
   // facade's autoLogOutbound (channelContext + db/conversations). The
@@ -4901,7 +4902,7 @@ async function handleConfirm(user, message) {
     const reroute = await maybeAskNewServicePricing(`✅ ${ackLabel}.`);
     if (reroute) return reroute;
     const ackPrefix = `✅ ${ackLabel}. Here's the updated summary:`;
-    return showConfirmSummary(user, ackPrefix);
+    return showConfirmSummary(user, ackPrefix, originalText);
   };
 
   // Field-edit detection is LLM-only — the prior regex layer kept
@@ -5157,7 +5158,7 @@ async function handleConfirm(user, message) {
       user.metadata = { ...(user.metadata || {}), websiteData: wd };
       const reroute = await maybeAskNewServicePricing(`${parts.join('. ')}.`);
       if (reroute) return reroute;
-      return showConfirmSummary(user, ackPrefix);
+      return showConfirmSummary(user, ackPrefix, originalText);
     }
   }
 
@@ -6016,7 +6017,7 @@ async function handleRevisions(user, message) {
   if (buttonId.startsWith('target_') && user.metadata?.pendingImageUpload?.url) {
     const site = await getLatestSite(user.id);
     if (!site?.preview_url) {
-      await sendTextMessage(user.phone_number, "Hm — I lost track of your site. Tell me what to do?");
+      await sendTextMessage(user.phone_number, await localize("Hm — I lost track of your site. Tell me what to do?", user, message?.text || ''));
       await updateUserMetadata(user.id, { pendingImageUpload: null });
       return STATES.WEB_REVISIONS;
     }
@@ -6025,7 +6026,7 @@ async function handleRevisions(user, message) {
     const targets = getAvailableTargets(currentConfig);
     const targetId = restoreTargetId(buttonId, targets);
     if (!targets.find((t) => t.id === targetId)) {
-      await sendTextMessage(user.phone_number, "That slot isn't on your site — try picking another option.");
+      await sendTextMessage(user.phone_number, await localize("That slot isn't on your site — try picking another option.", user, message?.text || ''));
       return STATES.WEB_REVISIONS;
     }
 
@@ -6131,7 +6132,7 @@ Reply with ONLY one word: swap, feedback, or unclear.`,
       logger.error(`[WEB_REVISIONS] Image download failed: ${err.message}`);
     }
     if (!buffer) {
-      await sendTextMessage(user.phone_number, "I couldn't download that image. Mind sending it again?");
+      await sendTextMessage(user.phone_number, await localize("I couldn't download that image. Mind sending it again?", user, message?.text || ''));
       return STATES.WEB_REVISIONS;
     }
 
@@ -6174,7 +6175,7 @@ Reply with ONLY one word: swap, feedback, or unclear.`,
         uploadedImage = { url, source: 'user_upload' };
       } catch (err) {
         logger.error(`[WEB_REVISIONS] Image upload failed: ${err.message}`);
-        await sendTextMessage(user.phone_number, "Something went wrong uploading that image — try sending it again in a moment?");
+        await sendTextMessage(user.phone_number, await localize("Something went wrong uploading that image — try sending it again in a moment?", user, message?.text || ''));
         return STATES.WEB_REVISIONS;
       }
     }
