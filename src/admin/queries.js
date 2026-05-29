@@ -1079,13 +1079,14 @@ async function getAllConversationsBulk() {
 
 async function getSelectedConversationsBulk(userIds) {
   if (!userIds || !userIds.length) return '';
-  const [usersResult, msgsResult] = await Promise.all([
+  const [usersResult, msgs] = await Promise.all([
     supabase.from('users').select('id, phone_number, name, channel').in('id', userIds),
-    supabase.from('conversations').select('user_id, role, message_text, created_at, seq').in('user_id', userIds).order('seq', { ascending: true }).order('created_at', { ascending: true }),
+    fetchAllConversationRows(userIds, 'user_id, role, message_text, created_at, seq', (q) =>
+      q.order('seq', { ascending: true }).order('created_at', { ascending: true })
+    ),
   ]);
 
   const users = usersResult.data || [];
-  const msgs = msgsResult.data || [];
 
   const byUser = {};
   for (const m of msgs) {
