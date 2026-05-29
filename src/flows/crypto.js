@@ -38,6 +38,16 @@ const TAG_LENGTH = 16; // AES-GCM auth tag, bytes
 function loadPrivateKey() {
   let pem = process.env.WHATSAPP_FLOW_PRIVATE_KEY || process.env.FLOW_PRIVATE_KEY || '';
   if (!pem) throw new Error('WHATSAPP_FLOW_PRIVATE_KEY (or FLOW_PRIVATE_KEY) not set');
+  pem = pem.trim();
+  // Strip an accidental KEY= prefix (pasting the whole .env line).
+  pem = pem.replace(/^WHATSAPP_FLOW_PRIVATE_KEY\s*=\s*/, '');
+  // Strip wrapping quotes — the .env single-line form is quoted, but pasting
+  // that quoted value straight into a dashboard env field (Render, etc.)
+  // keeps the quotes, leaving a stray " inside the PEM → decrypt failure.
+  if ((pem.startsWith('"') && pem.endsWith('"')) || (pem.startsWith("'") && pem.endsWith("'"))) {
+    pem = pem.slice(1, -1);
+  }
+  // Normalize escaped newlines to real ones.
   if (pem.includes('\\n')) pem = pem.replace(/\\n/g, '\n');
   const passphrase = process.env.WHATSAPP_FLOW_PRIVATE_KEY_PASSPHRASE
     || process.env.FLOW_PRIVATE_KEY_PASSPHRASE
