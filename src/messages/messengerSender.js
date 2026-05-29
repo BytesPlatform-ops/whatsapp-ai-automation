@@ -204,6 +204,40 @@ async function sendImage(to, imageUrl, caption = '') {
   });
 }
 
+async function sendAudioMessage(to, audioUrl) {
+  return sendRequest({
+    recipient: { id: to },
+    message: {
+      attachment: {
+        type: 'audio',
+        payload: { url: audioUrl, is_reusable: true },
+      },
+    },
+  });
+}
+
+async function sendAudioBuffer(to, buffer, mimeType = 'audio/ogg') {
+  const FormData = require('form-data');
+  const form = new FormData();
+  form.append('recipient', JSON.stringify({ id: to }));
+  form.append('message', JSON.stringify({
+    attachment: { type: 'audio', payload: { is_reusable: true } },
+  }));
+  form.append('filedata', buffer, { filename: 'voice.ogg', contentType: mimeType });
+
+  try {
+    const response = await axios.post(getApiBase(), form, {
+      headers: {
+        Authorization: `Bearer ${env.messenger.pageAccessToken}`,
+        ...form.getHeaders(),
+      },
+    });
+    return response.data;
+  } catch (error) {
+    logger.error('Messenger audio upload error:', error.response?.data);
+  }
+}
+
 async function sendWithMenuButton(to, text, extraButtons = []) {
   return sendTextMessage(to, text);
 }
@@ -241,6 +275,8 @@ module.exports = {
   sendDocument,
   sendDocumentBuffer,
   sendImage,
+  sendAudioMessage,
+  sendAudioBuffer,
   markAsRead,
   downloadMedia,
   showTyping,

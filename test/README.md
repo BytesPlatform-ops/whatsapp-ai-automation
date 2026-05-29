@@ -72,6 +72,7 @@ rows in Supabase after a crash, run a one-off cleanup query manually.
 | `reply_contains` (string OR array) | Case-insensitive substring; ALL items in the array must be found |
 | `reply_not_contains` | Case-insensitive substring negation |
 | `sent_count_gte` / `sent_count_lte` | Send-count bounds (defensive — reasonable assertion that bot replied) |
+| `sent_kind_contains` / `sent_kind_not_contains` (string OR array) | Assert a send of a given kind happened / didn't this turn. Kinds: `text`, `buttons`, `list`, `cta`, `doc`, `docbuf`, `image`, `audio` |
 
 `turn.user` is the user's message text. `turn.type` defaults to `"text"`. For
 non-text turns (location pin, button tap, image upload), put the relevant

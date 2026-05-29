@@ -118,6 +118,20 @@ async function sendDocumentBuffer(to, buffer, caption = '', filename = 'report.p
   return result;
 }
 
+async function sendAudioMessage(to, audioUrl) {
+  const result = await getSender().sendAudioMessage(to, audioUrl);
+  noteSendSucceeded();
+  autoLogOutbound('[Voice note]', 'audio', extractPlatformMessageId(result), audioUrl, 'audio/ogg').catch(() => {});
+  return result;
+}
+
+async function sendAudioBuffer(to, buffer, mimeType = 'audio/ogg') {
+  const result = await getSender().sendAudioBuffer(to, buffer, mimeType);
+  noteSendSucceeded();
+  autoLogOutbound('[Voice note]', 'audio', extractPlatformMessageId(result), null, mimeType).catch(() => {});
+  return result;
+}
+
 async function sendImage(to, imageUrl, caption = '') {
   const result = await getSender().sendImage(to, imageUrl, caption);
   noteSendSucceeded();
@@ -150,6 +164,8 @@ module.exports = {
   sendDocument,
   sendDocumentBuffer,
   sendImage,
+  sendAudioMessage,
+  sendAudioBuffer,
   markAsRead,
   downloadMedia,
   showTyping,

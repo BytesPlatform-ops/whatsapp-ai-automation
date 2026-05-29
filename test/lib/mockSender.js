@@ -69,10 +69,31 @@ function installMocks() {
     return { success: true, mocked: true };
   };
 
+  // Audio sends must be stubbed too — otherwise a voice-note flow would
+  // hit Meta's media-upload endpoint (and, upstream, OpenAI TTS) during a
+  // replay. We capture without generating real audio.
+  sender.sendAudioMessage = async (to, audioUrl) => {
+    captured.push({ kind: 'audio', to, url: audioUrl || null });
+    return { success: true, mocked: true };
+  };
+
+  if (typeof sender.sendAudioBuffer === 'function') {
+    sender.sendAudioBuffer = async (to, ...args) => {
+      captured.push({ kind: 'audio', to, args });
+      return { success: true, mocked: true };
+    };
+  }
+
   sender.markAsRead = async () => ({ success: true, mocked: true });
   sender.showTyping = async () => ({ success: true, mocked: true });
   sender.setLastMessageId = () => {};
   sender.downloadMedia = async () => null;
+
+  // Stub TTS so a voice-note flow doesn't call OpenAI's speech endpoint
+  // during a replay. salesBot requires this lazily, so mutating the
+  // exports in place (same trick as the senders) is enough.
+  const tts = require('../../src/llm/tts');
+  tts.synthesizeSpeech = async () => ({ buffer: Buffer.from('mock-audio'), mimeType: 'audio/ogg' });
 }
 
 /**

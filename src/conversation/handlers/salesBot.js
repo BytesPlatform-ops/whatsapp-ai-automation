@@ -1,4 +1,4 @@
-const { sendTextMessage, sendCTAButton, sendImage } = require('../../messages/sender');
+const { sendTextMessage, sendCTAButton, sendImage, sendAudioBuffer } = require('../../messages/sender');
 const { logMessage, getConversationHistory } = require('../../db/conversations');
 const { generateResponse } = require('../../llm/provider');
 const { classifyIntent } = require('../../llm/intentClassifier');
@@ -463,6 +463,13 @@ async function handleSalesBot(user, message) {
   // they'll ever get from us. See PIXIE_CHAT_FLOW_PLAN.md Section A.0.1.
   const optOutRequested = /\[OPT_OUT\]/i.test(cleanText);
 
+  // [SEND_VOICE_NOTE] — LLM emits this ONLY when the user asks for a
+  // voice/audio reply ("voice note bhejo", "send it as audio", etc.). We
+  // synthesize the cleaned reply text with OpenAI TTS and send it as a
+  // WhatsApp/Messenger voice note right after the text. Intent-driven, not
+  // keyword-matched — the prompt decides when it's warranted.
+  const voiceNoteRequested = /\[SEND_VOICE_NOTE\]/i.test(cleanText);
+
   // [SEND_SAMPLE_IMAGE: industry=salon] — LLM emits this whenever it
   // shares a sample preview URL (in the first greeting, or when a user
   // asks for examples mid-chat). We send the matching screenshot as a
@@ -772,6 +779,7 @@ async function handleSalesBot(user, message) {
     .replace(/\[SEND_SAMPLE_IMAGE[^\]]*\]/gi, '')
     .replace(/\[LEVER:[^\]]*\]/gi, '')
     .replace(/\[OPT_OUT\]/gi, '')
+    .replace(/\[SEND_VOICE_NOTE\]/gi, '')
     .trim();
 
   // Persist any security flags collected this turn (from JS detectors +
@@ -844,6 +852,20 @@ async function handleSalesBot(user, message) {
     // surfaces as a visible duplicate in the admin transcript and as
     // duplicated history in subsequent LLM calls.
     await sendTextMessage(user.phone_number, formatted);
+  }
+
+  // Voice note: only when the LLM flagged that the user asked for one.
+  // We speak the same cleaned reply (textWithoutLink — plain, pre-WhatsApp-
+  // formatting). Non-fatal: a TTS or upload failure leaves the text reply
+  // already delivered, so the conversation continues either way.
+  if (voiceNoteRequested && !skipLlmResponse && textWithoutLink) {
+    try {
+      const { synthesizeSpeech } = require('../../llm/tts');
+      const { buffer, mimeType } = await synthesizeSpeech(textWithoutLink);
+      await sendAudioBuffer(user.phone_number, buffer, mimeType);
+    } catch (err) {
+      logger.warn(`[VOICE] voice note failed for ${user.phone_number}: ${err.message}`);
+    }
   }
 
   // Persist the lever this turn used so the NEXT prompt build can ban it.

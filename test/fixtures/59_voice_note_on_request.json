@@ -1,0 +1,15 @@
+{
+  "name": "voice-note-when-user-asks",
+  "description": "When the user explicitly asks for the reply as a voice note/audio, the salesbot must emit [SEND_VOICE_NOTE], which the handler turns into a real voice-note send (TTS + audio upload, both mocked in tests). The tag must be stripped from the visible text, and an audio send must be captured this turn alongside the text.",
+  "channel": "whatsapp",
+  "turns": [
+    {
+      "user": "can you reply to me in a voice note instead of typing? just tell me what services you offer",
+      "expect": {
+        "sent_kind_contains": "audio",
+        "reply_not_contains": ["[SEND_VOICE_NOTE]", "SEND_VOICE_NOTE"],
+        "sent_count_gte": 1
+      }
+    }
+  ]
+}

@@ -251,6 +251,50 @@ async function sendDocumentBuffer(to, buffer, caption = '', filename = 'report.p
 }
 
 /**
+ * Send an audio message via public URL (renders as a voice note in WhatsApp
+ * when the file is OGG/Opus).
+ */
+async function sendAudioMessage(to, audioUrl) {
+  return sendRequest({
+    messaging_product: 'whatsapp',
+    to,
+    type: 'audio',
+    audio: { link: audioUrl },
+  });
+}
+
+/**
+ * Upload an audio buffer (e.g. TTS output) as media and send it. OGG/Opus
+ * shows up as a true voice note. Mirrors sendDocumentBuffer's two-step
+ * upload-then-send so we don't need to host the file anywhere.
+ */
+async function sendAudioBuffer(to, buffer, mimeType = 'audio/ogg') {
+  const FormData = require('form-data');
+  const form = new FormData();
+  form.append('messaging_product', 'whatsapp');
+  form.append('type', mimeType);
+  form.append('file', buffer, { filename: 'voice.ogg', contentType: mimeType });
+
+  const uploadUrl = `https://graph.facebook.com/v21.0/${activePhoneNumberId()}/media`;
+  const uploadRes = await axios.post(uploadUrl, form, {
+    headers: {
+      Authorization: `Bearer ${env.whatsapp.accessToken}`,
+      ...form.getHeaders(),
+    },
+  });
+
+  const mediaId = uploadRes.data.id;
+  logger.debug(`Audio media uploaded: ${mediaId}`);
+
+  return sendRequest({
+    messaging_product: 'whatsapp',
+    to,
+    type: 'audio',
+    audio: { id: mediaId },
+  });
+}
+
+/**
  * Send an image message.
  */
 async function sendImage(to, imageUrl, caption = '') {
@@ -356,6 +400,8 @@ module.exports = {
   sendDocument,
   sendDocumentBuffer,
   sendImage,
+  sendAudioMessage,
+  sendAudioBuffer,
   markAsRead,
   downloadMedia,
   showTyping,

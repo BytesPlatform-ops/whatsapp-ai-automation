@@ -13,6 +13,8 @@
 //   reply_contains:       substring (string OR array of strings — all required)
 //   reply_not_contains:   substring negation (string OR array of strings)
 //   sent_count_gte:       at least N captured outbound sends this turn
+//   sent_kind_contains:   a send of this kind happened (text|image|audio|…)
+//   sent_kind_not_contains: no send of this kind happened
 //
 // Throws AssertionError on any miss. Test runner catches and reports.
 
@@ -94,6 +96,23 @@ function runExpectations(expect, user, captured, replyText) {
   for (const needle of arrify(expect.reply_not_contains)) {
     if (replies.toLowerCase().includes(String(needle).toLowerCase())) {
       errors.push(`reply_not_contains: found forbidden "${needle}" in replies`);
+    }
+  }
+
+  // ── Send-kind assertions (optional) ──────────────────────────────
+  // Assert a specific kind of send happened (or didn't) this turn —
+  // e.g. sent_kind_contains: "audio" to confirm a voice note went out,
+  // sent_kind_not_contains: "image" to confirm no screenshot. Kinds come
+  // from mockSender (text, buttons, list, cta, doc, docbuf, image, audio).
+  const kinds = captured.map((s) => s.kind);
+  for (const k of arrify(expect.sent_kind_contains)) {
+    if (!kinds.includes(k)) {
+      errors.push(`sent_kind_contains: no "${k}" send this turn; kinds: [${kinds.join(', ')}]`);
+    }
+  }
+  for (const k of arrify(expect.sent_kind_not_contains)) {
+    if (kinds.includes(k)) {
+      errors.push(`sent_kind_not_contains: found forbidden "${k}" send; kinds: [${kinds.join(', ')}]`);
     }
   }
 
