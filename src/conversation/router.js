@@ -1274,6 +1274,10 @@ async function _routeMessage(message) {
       // Humanize flags that gate per-user behavior across turns.
       objectionTopics: [],
       preferredLanguage: null,
+      // Voice-reply mode is a sticky preference; a /reset is a clean slate,
+      // so drop it too — otherwise a user who turned voice on stays in voice
+      // forever and can't get back to text via reset.
+      voiceReplies: false,
       postWebsiteUpsellSent: false,
       postWebsiteUpsellKind: null,
       postWebsiteUpsellAt: null,
@@ -1293,6 +1297,13 @@ async function _routeMessage(message) {
       // with us before.
     });
     user.state = STATES.SALES_CHAT;
+    // Mirror the voice-mode clear onto the in-memory user + per-turn context
+    // so anything sent during this reset turn goes out as text, not voice.
+    if (user.metadata) user.metadata.voiceReplies = false;
+    try {
+      const { setVoiceMode } = require('../messages/channelContext');
+      setVoiceMode(false);
+    } catch { /* defensive */ }
     logger.info(`User ${from} reset conversation state + metadata (history preserved for admin)`);
 
     // /reset now keeps past conversation rows in the DB so the admin

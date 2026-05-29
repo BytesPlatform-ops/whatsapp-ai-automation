@@ -1,0 +1,22 @@
+{
+  "name": "voice-switch-back-to-text",
+  "description": "After turning voice replies on, the user can switch back to text with phrasings like 'can you talk to me on text?'. Regression: the prefilter previously missed 'on text' / 'in text' / 'text karo' so the OFF toggle never fired. Turning off must clear metadata.voiceReplies and the ack must go out as text, not audio.",
+  "channel": "whatsapp",
+  "turns": [
+    {
+      "user": "voice note mein baat karo",
+      "expect": {
+        "metadata.voiceReplies": true,
+        "sent_kind_contains": "audio"
+      }
+    },
+    {
+      "user": "can you talk to me on text?",
+      "expect": {
+        "metadata.voiceReplies": false,
+        "sent_kind_contains": "text",
+        "sent_kind_not_contains": "audio"
+      }
+    }
+  ]
+}

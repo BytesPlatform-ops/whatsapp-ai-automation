@@ -14,7 +14,7 @@ const { logger } = require('../utils/logger');
 // Broad, intentionally over-eager gate. Latin + Urdu/Arabic script + a few
 // other languages we see. A match just means "worth asking the LLM."
 const VOICE_PREFILTER =
-  /\b(voice|audio|vn|voicenote|voz|áudio|audios?)\b|voice\s*note|\baaw?az\b|آواز|صوت|صوتي|بول|بولو|\bbol\s*(ke|kar|kr)\b|\bsun(a|ao|na)?\b|\blikh\s*(ke|kar|kr)\b|\btype\b|text\s*(me|mein|mai|pe|par)\b/i;
+  /\b(voice|audio|vn|voicenote|voz|áudio|audios?)\b|voice\s*note|\baaw?az\b|آواز|صوت|صوتي|بول|بولو|\bbol\s*(ke|kar|kr)\b|\bsun(a|ao|na)?\b|\blikh\b|\btype\b|\btext\s*(me|mein|mai|pe|par|karo|kro|reply|message|back|only|please)|\b(on|in|via|through|by|to)\s+text\b/i;
 
 function prefilterMatches(text) {
   return VOICE_PREFILTER.test(String(text || ''));

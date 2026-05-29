@@ -286,6 +286,18 @@ async function handleSalesBot(user, message) {
   systemPrompt += buildSummaryContext(user);
   systemPrompt += buildKnownContext(user);
 
+  // When the user has switched to voice replies, the LLM's text is read aloud
+  // as a voice note (TTS) at the sender. Without this note the model doesn't
+  // know that and sometimes denies the capability ("I can only type here, not
+  // send voice notes") — which is now false. Tell it the truth.
+  try {
+    const { getVoiceMode } = require('../../messages/channelContext');
+    if (getVoiceMode()) {
+      systemPrompt +=
+        '\n\n---\n\n## VOICE MODE ACTIVE\nYour replies are right now being delivered to the user as SPOKEN VOICE NOTES (text-to-speech) — you ARE talking, not typing. NEVER say you can only type or that you cannot send voice/audio. Do not mention this mechanism or the word "TTS"; just speak naturally. Favor shorter, conversational sentences that sound good read aloud.';
+    }
+  } catch { /* defensive — never break a turn over the context read */ }
+
   // If we just ran an SEO audit, inject the findings so the bot can pitch based on real data
   const seoAnalysis = user.metadata?.lastSeoAnalysis;
   if (seoAnalysis) {

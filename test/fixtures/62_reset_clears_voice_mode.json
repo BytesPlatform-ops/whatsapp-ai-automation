@@ -1,0 +1,21 @@
+{
+  "name": "reset-clears-voice-mode",
+  "description": "Regression: /reset wipes in-progress metadata but previously left voiceReplies set, so a user who turned voice on stayed stuck in voice forever and couldn't get back to text via reset. /reset must clear voiceReplies (clean slate → text).",
+  "channel": "whatsapp",
+  "turns": [
+    {
+      "user": "voice note mein baat karo",
+      "expect": {
+        "metadata.voiceReplies": true,
+        "sent_kind_contains": "audio"
+      }
+    },
+    {
+      "user": "/reset",
+      "expect": {
+        "state": "SALES_CHAT",
+        "metadata.voiceReplies": false
+      }
+    }
+  ]
+}

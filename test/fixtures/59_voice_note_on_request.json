@@ -15,7 +15,8 @@
       "user": "what services do you offer?",
       "expect": {
         "metadata.voiceReplies": true,
-        "sent_kind_contains": "audio"
+        "sent_kind_contains": "audio",
+        "reply_not_contains": ["only type", "can only type", "cannot send voice", "can't send voice", "not send voice"]
       }
     }
   ]
