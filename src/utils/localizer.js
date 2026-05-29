@@ -30,6 +30,13 @@ const ROMAN_NON_ENGLISH_RE = /\b(?:hai|hain|karein|karna|karo|karenge|chahiye|mu
 // French, Italian, etc. — near-deterministic Portuguese signal.
 const PORTUGUESE_ACCENTS_RE = /[ãõç]/i;
 
+// Pure command/confirmation tokens carry no language signal — a flow that
+// ends on "skip / yes / skip" (e.g. the webdev builder right before
+// generation) would otherwise starve detection and fall through to English.
+// When sampling the user's language from history we skip these so we land on
+// a substantive, language-bearing message instead.
+const COMMAND_TOKEN_RE = /^(?:yes|no|ok|okay|sure|y|n|skip|default|stop|start|reset|undo|back|\d+)$/i;
+
 // Positive English signal — common function words / sales-bot greetings that
 // strongly indicate the message is English. We only fast-path to 'english'
 // when one of these matches AND no foreign marker did; otherwise we let the
@@ -88,20 +95,31 @@ async function resolveLanguage(user, latestUserMessage) {
         afterTimestamp: user?.metadata?.lastResetAt || null,
       });
       if (Array.isArray(hist)) {
-        // Gather the last 3 user messages and join them — a single
-        // English-code-switched word like "Silly" at the tail of a
+        // Gather the last few substantive user messages and join them — a
+        // single English-code-switched word like "Silly" at the tail of a
         // Portuguese conversation must not tip the verdict to English.
         // The joined string carries enough Portuguese signal (accents,
         // marker words) that quickDetect / the LLM correctly pick
         // 'portuguese'. History limit bumped to 10 so we have headroom
-        // to find 3 user rows even when interleaved with assistant rows.
+        // to find enough user rows even when interleaved with assistant rows.
+        //
+        // Pure command tokens (yes / no / skip / default / numbers) are
+        // skipped — a flow that ends on "skip → yes → skip" (the webdev
+        // builder right before generation) would otherwise sample only
+        // signal-free tokens and wrongly resolve to English. We collect up
+        // to 5 language-bearing messages, falling back to the raw tail only
+        // if every recent message was a command token.
         const userMsgs = [];
-        for (let i = hist.length - 1; i >= 0 && userMsgs.length < 3; i--) {
-          if (hist[i].role === 'user' && hist[i].message_text) {
-            userMsgs.unshift(hist[i].message_text);
-          }
+        const rawTail = [];
+        for (let i = hist.length - 1; i >= 0 && userMsgs.length < 5; i--) {
+          if (hist[i].role !== 'user' || !hist[i].message_text) continue;
+          const text = String(hist[i].message_text).trim();
+          if (!text) continue;
+          if (rawTail.length < 5) rawTail.unshift(text);
+          if (COMMAND_TOKEN_RE.test(text)) continue;
+          userMsgs.unshift(text);
         }
-        effectiveLatest = userMsgs.join(' ').trim() || null;
+        effectiveLatest = (userMsgs.length ? userMsgs : rawTail).join(' ').trim() || null;
       }
     } catch {
       // DB hiccup — fall through with undefined; cache-check below handles it.

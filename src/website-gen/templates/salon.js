@@ -447,7 +447,7 @@ function generateHomePage(c) {
     .split(/[.!?]/)
     .map((s) => s.trim())
     .filter((s) => s.length > 40 && s.length < 180)[0]
-    || 'Every appointment is a chance to make someone feel a little more themselves.';
+    || c.labels?.salonQuoteFallback || 'Every appointment is a chance to make someone feel a little more themselves.';
 
   const igPhoto = (c.salonServices || []).find((s) => s.image)?.image;
 
@@ -459,7 +459,7 @@ function generateHomePage(c) {
   <div class="hero-inner">
     <div class="hero-kicker">
       <span class="divider divider--light"></span>
-      <span class="eyebrow eyebrow--light">${esc(c.industry || 'Atelier & Salon')}</span>
+      <span class="eyebrow eyebrow--light">${esc(c.labels?.heroEyebrow || 'Atelier & Salon')}</span>
     </div>
     <h1 class="hero-h1 rv">${esc(c.headline)}</h1>
     <p class="hero-tag rv d1">${esc(c.tagline)}</p>
@@ -468,10 +468,10 @@ function generateHomePage(c) {
       ${(c.salonServices || []).length > 0 ? `<a href="/services" class="btn btn-g">${esc(c.labels?.btnViewMenu || 'The Menu')}</a>` : ''}
     </div>
     <div class="hero-meta rv d3">
-      <div class="hero-meta-item"><span class="k">Reservations</span><span class="v">Online in under a minute</span></div>
-      <div class="hero-meta-item"><span class="k">Cancellation</span><span class="v">Free up to 24h before</span></div>
-      ${c.contactAddress ? `<div class="hero-meta-item"><span class="k">Address</span><span class="v">${esc(c.contactAddress)}</span></div>` : ''}
-      ${c.contactPhone ? `<div class="hero-meta-item"><span class="k">Call us</span><span class="v">${esc(c.contactPhone)}</span></div>` : ''}
+      <div class="hero-meta-item"><span class="k">${esc(c.labels?.heroReservations || 'Reservations')}</span><span class="v">${esc(c.labels?.heroReservationsNote || 'Online in under a minute')}</span></div>
+      <div class="hero-meta-item"><span class="k">${esc(c.labels?.heroCancellation || 'Cancellation')}</span><span class="v">${esc(c.labels?.heroCancellationNote || 'Free up to 24h before')}</span></div>
+      ${c.contactAddress ? `<div class="hero-meta-item"><span class="k">${esc(c.labels?.lblAddress || 'Address')}</span><span class="v">${esc(c.contactAddress)}</span></div>` : ''}
+      ${c.contactPhone ? `<div class="hero-meta-item"><span class="k">${esc(c.labels?.lblCallUs || 'Call us')}</span><span class="v">${esc(c.contactPhone)}</span></div>` : ''}
     </div>
   </div>
   <div class="hero-scroll">${esc(c.labels?.lblScroll || 'Scroll')}</div>
@@ -491,7 +491,7 @@ ${featured.length > 0 ? `
       <p class="eyebrow" style="margin-bottom:18px">— ${esc(c.labels?.secSignatureServices || 'Signature Services')} —</p>
       <h2 class="sig-title">${esc(c.servicesTitle || 'The treatments we are known for')}</h2>
     </div>
-    <p class="sig-sub">A curated list of the treatments our regulars return for. Every appointment is handled by a senior stylist — no shortcuts.</p>
+    <p class="sig-sub">${esc(c.labels?.sigSubtitle || 'A curated list of the treatments our regulars return for. Every appointment is handled by a senior stylist — no shortcuts.')}</p>
   </div>
   <div class="svc-grid">${featuredCards}</div>
   ${(c.salonServices || []).length > featured.length ? `<div style="text-align:center;margin-top:80px"><a href="/services" class="btn btn-ink">${esc(c.labels?.btnFullMenu || 'The Full Menu')} <svg class="arr" viewBox="0 0 14 10" fill="currentColor"><path d="M8.5 0l4.8 5L8.5 10l-.7-.7L11.4 5.7H0v-1.4h11.4L7.8.7z"/></svg></a></div>` : ''}
@@ -511,16 +511,16 @@ ${c.instagramHandle ? `
       <p class="ig-handle">@${esc(c.instagramHandle)}</p>
     </div>
     <div class="rv d1">
-      <p class="eyebrow" style="margin-bottom:18px">— In the chair —</p>
-      <h2 style="font-size:clamp(36px,4.6vw,58px);font-weight:500;line-height:1.08;letter-spacing:-0.015em;margin-bottom:24px">Follow along for our latest work.</h2>
-      <p style="font-size:16px;color:var(--mute);line-height:1.8;font-weight:300;margin-bottom:28px;max-width:440px">Fresh transformations, styling notes, and the occasional behind-the-chair moment. No filters required.</p>
+      <p class="eyebrow" style="margin-bottom:18px">— ${esc(c.labels?.secInTheChair || 'In the chair')} —</p>
+      <h2 style="font-size:clamp(36px,4.6vw,58px);font-weight:500;line-height:1.08;letter-spacing:-0.015em;margin-bottom:24px">${esc(c.labels?.igFollowAlong || 'Follow along for our latest work.')}</h2>
+      <p style="font-size:16px;color:var(--mute);line-height:1.8;font-weight:300;margin-bottom:28px;max-width:440px">${esc(c.labels?.igBody || 'Fresh transformations, styling notes, and the occasional behind-the-chair moment. No filters required.')}</p>
       <a href="https://instagram.com/${attr(c.instagramHandle)}" target="_blank" rel="noopener" class="btn btn-ink">Follow @${esc(c.instagramHandle)} <svg class="arr" viewBox="0 0 14 10" fill="currentColor"><path d="M8.5 0l4.8 5L8.5 10l-.7-.7L11.4 5.7H0v-1.4h11.4L7.8.7z"/></svg></a>
     </div>
   </div>
 </section>` : ''}
 
 <section class="close-cta">
-  <p class="eyebrow eyebrow--light rv" style="margin-bottom:22px">— Appointments now open —</p>
+  <p class="eyebrow eyebrow--light rv" style="margin-bottom:22px">— ${esc(c.labels?.secAppointmentsOpen || 'Appointments now open')} —</p>
   <h2 class="rv d1">${esc(c.ctaTitle || 'Make it your next ritual.')}</h2>
   <p class="rv d2">${esc(c.ctaText || 'Reserve a time in under a minute. We will confirm by email and send a reminder the day before.')}</p>
   <a href="/booking" class="btn btn-w rv d3">${esc(c.labels?.btnReserveVisit || 'Reserve a Visit')} <svg class="arr" viewBox="0 0 14 10" fill="currentColor"><path d="M8.5 0l4.8 5L8.5 10l-.7-.7L11.4 5.7H0v-1.4h11.4L7.8.7z"/></svg></a>
@@ -542,14 +542,14 @@ function generateServicesPage(c) {
   <div class="page-head-inner">
     <p class="eyebrow rv">— ${esc(c.labels?.btnViewMenu || 'The Menu')} —</p>
     <h1 class="rv d1">${esc(c.servicesTitle || 'Services')}<em>.</em></h1>
-    <p class="rv d2" style="max-width:560px;margin-top:32px;color:var(--mute);font-size:17px;line-height:1.75;font-weight:300">Every treatment below is handled by a trained stylist. Reserve one online, or give us a call — we are happy to help you pick the right one.</p>
+    <p class="rv d2" style="max-width:560px;margin-top:32px;color:var(--mute);font-size:17px;line-height:1.75;font-weight:300">${esc(c.labels?.servicesIntro || 'Every treatment below is handled by a trained stylist. Reserve one online, or give us a call — we are happy to help you pick the right one.')}</p>
   </div>
 </section>
 
 <section style="padding:90px 0 120px;background:var(--paper)"><div class="ctn">
   ${svcs.length > 0
     ? `<div class="svc-grid">${cards}</div>`
-    : '<p style="text-align:center;color:var(--mute);padding:60px 0">Menu coming soon — give us a call to book.</p>'}
+    : `<p style="text-align:center;color:var(--mute);padding:60px 0">${esc(c.labels?.menuComingSoon || 'Menu coming soon — give us a call to book.')}</p>`}
   <div style="text-align:center;margin-top:90px"><a href="/booking" class="btn btn-p">${esc(c.labels?.btnReserveVisit || 'Reserve a Visit')} <svg class="arr" viewBox="0 0 14 10" fill="currentColor"><path d="M8.5 0l4.8 5L8.5 10l-.7-.7L11.4 5.7H0v-1.4h11.4L7.8.7z"/></svg></a></div>
 </div></section>`;
 
@@ -563,7 +563,7 @@ function generateAboutPage(c) {
     .map((p) => p.trim())
     .filter(Boolean);
   const sentences = String(c.aboutText || '').split(/[.!?]/).map((s) => s.trim()).filter((s) => s.length > 40 && s.length < 200);
-  const pullQuote = sentences[Math.floor(sentences.length / 2)] || sentences[0] || 'We believe a salon should feel like a retreat, not a rush.';
+  const pullQuote = sentences[Math.floor(sentences.length / 2)] || sentences[0] || c.labels?.salonPullQuoteFallback || 'We believe a salon should feel like a retreat, not a rush.';
 
   const bodyParas = (paras.length ? paras : [c.aboutText]).map((p, i) => `<p class="rv d${Math.min(i + 1, 5)}">${esc(p)}</p>`).join('');
 
@@ -572,7 +572,7 @@ function generateAboutPage(c) {
   const body = `
 <section class="page-head">
   <div class="page-head-inner">
-    <p class="eyebrow rv">— Our Story —</p>
+    <p class="eyebrow rv">— ${esc(c.labels?.secOurStory || 'Our Story')} —</p>
     <h1 class="rv d1">${esc(c.aboutTitle || 'About')}<em>.</em></h1>
   </div>
 </section>
@@ -595,10 +595,10 @@ function generateAboutPage(c) {
 </section>
 
 <section class="close-cta">
-  <p class="eyebrow eyebrow--light rv" style="margin-bottom:22px">— Reservations —</p>
-  <h2 class="rv d1">Come and see for yourself.</h2>
-  <p class="rv d2">Book a treatment online, or call us if you would rather chat it through first.</p>
-  <a href="/booking" class="btn btn-w rv d3">Reserve a Visit</a>
+  <p class="eyebrow eyebrow--light rv" style="margin-bottom:22px">— ${esc(c.labels?.secReservations || 'Reservations')} —</p>
+  <h2 class="rv d1">${esc(c.labels?.aboutComeSee || 'Come and see for yourself.')}</h2>
+  <p class="rv d2">${esc(c.labels?.aboutComeSeeBody || 'Book a treatment online, or call us if you would rather chat it through first.')}</p>
+  <a href="/booking" class="btn btn-w rv d3">${esc(c.labels?.btnReserveVisit || 'Reserve a Visit')}</a>
 </section>`;
 
   return wrap(c, '/about', body);
@@ -699,7 +699,7 @@ function generateBookingPage(c) {
             loadingEl.style.display='none';
             if(!x.ok){showError(x.j.error||${JSON.stringify(c.labels?.couldNotLoadTimes || 'Could not load times')});return;}
             var slots=x.j.slots||[];
-            if(slots.length===0){slotsEl.innerHTML='<p style="grid-column:1/-1;color:var(--mute);padding:18px 0;text-align:center">No times available this day.</p>';return;}
+            if(slots.length===0){slotsEl.innerHTML='<p style="grid-column:1/-1;color:var(--mute);padding:18px 0;text-align:center">'+${JSON.stringify(c.labels?.noTimesAvailable || 'No times available this day.')}+'</p>';return;}
             slots.forEach(function(s){
               var b=document.createElement('button');b.type='button';b.className='slot';b.textContent=s.label;b.dataset.start=s.startAt;
               b.addEventListener('click',function(){
@@ -711,22 +711,22 @@ function generateBookingPage(c) {
               });
               slotsEl.appendChild(b);
             });
-          }).catch(function(e){loadingEl.style.display='none';showError('Network error: '+e.message);});
+          }).catch(function(e){loadingEl.style.display='none';showError(${JSON.stringify((c.labels?.networkErrorPrefix || 'Network error') + ': ')}+e.message);});
         }
         svcSel.addEventListener('change',function(){state.service=svcSel.value;loadSlots();});
         dateInp.addEventListener('change',function(){state.date=dateInp.value;loadSlots();});
         submitBtn.addEventListener('click',function(){
           clearError();
-          if(!state.slot){showError('Please pick a time.');return;}
+          if(!state.slot){showError(${JSON.stringify(c.labels?.pickTime || 'Please pick a time.')});return;}
           var name=document.getElementById('bk-name').value.trim();
           var email=document.getElementById('bk-email').value.trim();
           var phone=document.getElementById('bk-phone').value.trim();
           var notes=document.getElementById('bk-notes').value.trim();
-          if(!name){showError('Please enter your name.');return;}
-          if(!email&&!phone){showError('Please share an email or phone so we can confirm.');return;}
+          if(!name){showError(${JSON.stringify(c.labels?.enterName || 'Please enter your name.')});return;}
+          if(!email&&!phone){showError(${JSON.stringify(c.labels?.shareContact || 'Please share an email or phone so we can confirm.')});return;}
           var consentEl=document.getElementById('bk-consent');
-          if(!consentEl||!consentEl.checked){showError('Please agree to the Privacy Policy to continue.');return;}
-          submitBtn.disabled=true;submitBtn.textContent='Booking…';
+          if(!consentEl||!consentEl.checked){showError(${JSON.stringify(c.labels?.agreePrivacy || 'Please agree to the Privacy Policy to continue.')});return;}
+          submitBtn.disabled=true;submitBtn.textContent=${JSON.stringify(c.labels?.bookingInProgress || 'Booking…')};
           fetch(API+'/api/booking/'+SITE,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
             service:state.service,startAt:state.slot,customerName:name,customerEmail:email,customerPhone:phone,notes:notes,consentGiven:true
           })}).then(function(r){return r.json().then(function(j){return {ok:r.ok,j:j}})}).then(function(x){
@@ -746,7 +746,7 @@ function generateBookingPage(c) {
             window.location.href='/thank-you/?'+q;
           }).catch(function(e){
             submitBtn.disabled=false;submitBtn.textContent=${JSON.stringify(c.labels?.btnConfirmReservation || 'Confirm Reservation')};
-            showError('Network error: '+e.message);
+            showError(${JSON.stringify((c.labels?.networkErrorPrefix || 'Network error') + ': ')}+e.message);
           });
         });
         loadSlots();
@@ -756,10 +756,10 @@ function generateBookingPage(c) {
     content = `
       <div class="bk-wrap">
         <div class="success">
-          <p class="eyebrow" style="margin-bottom:14px">— Reservations —</p>
-          <h3>Book by phone</h3>
-          <p style="color:#4a4540;margin:10px 0 30px">Give us a call and we will get you in.</p>
-          ${c.contactPhone ? `<a href="tel:${attr(c.contactPhone)}" class="btn btn-p">Call ${esc(c.contactPhone)}</a>` : ''}
+          <p class="eyebrow" style="margin-bottom:14px">— ${esc(c.labels?.secReservations || 'Reservations')} —</p>
+          <h3>${esc(c.labels?.bookByPhone || 'Book by phone')}</h3>
+          <p style="color:#4a4540;margin:10px 0 30px">${esc(c.labels?.bookByPhoneBody || 'Give us a call and we will get you in.')}</p>
+          ${c.contactPhone ? `<a href="tel:${attr(c.contactPhone)}" class="btn btn-p">${esc(c.labels?.lblCallPrefix || 'Call')} ${esc(c.contactPhone)}</a>` : ''}
         </div>
       </div>`;
   }
@@ -767,9 +767,9 @@ function generateBookingPage(c) {
   const body = `
 <section class="page-head">
   <div class="page-head-inner">
-    <p class="eyebrow rv">— Reservations —</p>
-    <h1 class="rv d1">Reserve a visit<em>.</em></h1>
-    <p class="rv d2" style="max-width:560px;margin-top:32px;color:var(--mute);font-size:17px;line-height:1.75;font-weight:300">${isEmbed ? 'Managed by our booking partner.' : (c.bookingMode === 'native' ? `Times shown in ${esc(c.timezone || 'local time')}. Free cancellation up to 24 hours before your visit.` : 'Give us a call to reserve your spot.')}</p>
+    <p class="eyebrow rv">— ${esc(c.labels?.secReservations || 'Reservations')} —</p>
+    <h1 class="rv d1">${esc(c.labels?.bookingReserveVisitTitle || 'Reserve a visit')}<em>.</em></h1>
+    <p class="rv d2" style="max-width:560px;margin-top:32px;color:var(--mute);font-size:17px;line-height:1.75;font-weight:300">${isEmbed ? esc(c.labels?.bookingManaged || 'Managed by our booking partner.') : (c.bookingMode === 'native' ? `${esc(c.labels?.bookingTimesShownIn || 'Times shown in')} ${esc(c.timezone || 'local time')}. ${esc(c.labels?.bookingNativeNote || 'Free cancellation up to 24 hours before your visit.')}` : esc(c.labels?.bookingPhoneNote || 'Give us a call to reserve your spot.'))}</p>
   </div>
 </section>
 
@@ -785,30 +785,42 @@ function generateContactPage(c) {
   const formAction = PUBLIC_API_BASE && c.siteId
     ? `${PUBLIC_API_BASE}/public/leads/${c.siteId}`
     : '/thank-you/';
+  // Make a translated label safe to sit inside a single-quoted JS string
+  // that itself lives inside the double-quoted `onsubmit` attribute below.
+  // Quotes/backslashes are JS-escaped; `&`/`<` are HTML-entity-encoded so the
+  // browser decodes them back to literals before the JS parser sees them.
+  const jsq = (s) => String(s)
+    .replace(/\\/g, '\\\\').replace(/'/g, "\\'")
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;');
+  const lblSending = jsq(c.labels?.formSending || 'Sending...');
+  const lblMsgReceived = jsq(c.labels?.thankYouHeading || 'Message received');
+  const lblInTouch = jsq(c.labels?.contactInTouch || "We'll be in touch soon.");
+  const lblSendMessage = jsq(c.labels?.btnSendMessage || 'Send message');
+  const lblSendError = jsq(c.labels?.contactSendError || 'Something went wrong — please try again or email us directly.');
 
   const body = `
 <section class="page-head">
   <div class="page-head-inner">
-    <p class="eyebrow rv">— Visit —</p>
-    <h1 class="rv d1">Find us<em>.</em></h1>
+    <p class="eyebrow rv">— ${esc(c.labels?.footVisit || 'Visit')} —</p>
+    <h1 class="rv d1">${esc(c.labels?.contactFindUs || 'Find us')}<em>.</em></h1>
   </div>
 </section>
 
 <section style="padding:90px 0 110px;background:var(--paper)">
   <div class="contact-grid">
     <div class="contact-block rv">
-      <h3>In person</h3>
+      <h3>${esc(c.labels?.contactInPerson || 'In person')}</h3>
       ${c.contactAddress ? `<p>${esc(c.contactAddress)}</p>` : ''}
       ${c.contactPhone ? `<a href="tel:${attr(c.contactPhone)}">${esc(c.contactPhone)}</a>` : ''}
       ${c.contactEmail ? `<a href="mailto:${attr(c.contactEmail)}">${esc(c.contactEmail)}</a>` : ''}
       ${c.instagramHandle ? `<a href="https://instagram.com/${attr(c.instagramHandle)}" target="_blank" rel="noopener">Instagram — @${esc(c.instagramHandle)}</a>` : ''}
-      <div style="margin-top:34px"><a href="/booking" class="btn btn-ink">Reserve a Visit</a></div>
+      <div style="margin-top:34px"><a href="/booking" class="btn btn-ink">${esc(c.labels?.btnReserveVisit || 'Reserve a Visit')}</a></div>
     </div>
     ${hours ? `
     <div class="contact-block rv d1">
-      <h3>Opening hours</h3>
+      <h3>${esc(c.labels?.contactOpeningHours || 'Opening hours')}</h3>
       <ul style="list-style:none;padding:0;margin-top:10px">${hours}</ul>
-      <p class="bk-note" style="margin-top:24px;text-align:left">Last booking 30 min before close.</p>
+      <p class="bk-note" style="margin-top:24px;text-align:left">${esc(c.labels?.contactLastBooking || 'Last booking 30 min before close.')}</p>
     </div>` : ''}
   </div>
 </section>
@@ -816,12 +828,12 @@ function generateContactPage(c) {
 <section style="padding:20px 0 130px;background:var(--paper)">
   <div class="bk-wrap rv">
     <div style="text-align:center;margin-bottom:40px">
-      <p class="eyebrow" style="margin-bottom:14px">— Write to us —</p>
-      <h2 style="font-family:'Cormorant Garamond',serif;font-size:44px;font-weight:500;letter-spacing:-0.01em;color:var(--ink);margin:0">Send a note<em style="color:var(--pc);font-style:normal">.</em></h2>
-      <p class="bk-note" style="margin-top:14px;max-width:440px;margin-left:auto;margin-right:auto">For questions, private events, or a service you can&rsquo;t find &mdash; we&rsquo;ll write back shortly.</p>
+      <p class="eyebrow" style="margin-bottom:14px">— ${esc(c.labels?.contactWriteToUs || 'Write to us')} —</p>
+      <h2 style="font-family:'Cormorant Garamond',serif;font-size:44px;font-weight:500;letter-spacing:-0.01em;color:var(--ink);margin:0">${esc(c.labels?.contactSendNote || 'Send a note')}<em style="color:var(--pc);font-style:normal">.</em></h2>
+      <p class="bk-note" style="margin-top:14px;max-width:440px;margin-left:auto;margin-right:auto">${esc(c.labels?.contactSendNoteBody || "For questions, private events, or a service you can't find — we'll write back shortly.")}</p>
     </div>
 
-    <form name="contact" method="POST" action="${attr(formAction)}" data-pixie-form="1" data-thank-you="/contact/?sent=1" onsubmit="event.preventDefault();var f=this;var b=f.querySelector('.bk-submit');var s=f.querySelector('.bk-status');b.disabled=true;b.innerText='Sending...';fetch(f.action,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded','Accept':'application/json'},body:new URLSearchParams(new FormData(f)).toString()}).then(function(r){return r.json().catch(function(){return{}})}).then(function(j){if(j&&j.ok===false){throw new Error(j.error||'send-failed')}s.className='success';s.innerHTML='<h3>Message received<em style=&quot;color:var(--pc);font-style:normal&quot;>.</em></h3><p style=&quot;color:var(--mute);font-weight:300;margin-top:4px&quot;>We&rsquo;ll be in touch soon.</p>';f.reset();f.style.display='none'}).catch(function(){b.disabled=false;b.innerText='Send message';s.className='error';s.innerText='Something went wrong &mdash; please try again or email us directly.'})">
+    <form name="contact" method="POST" action="${attr(formAction)}" data-pixie-form="1" data-thank-you="/contact/?sent=1" onsubmit="event.preventDefault();var f=this;var b=f.querySelector('.bk-submit');var s=f.querySelector('.bk-status');b.disabled=true;b.innerText='${lblSending}';fetch(f.action,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded','Accept':'application/json'},body:new URLSearchParams(new FormData(f)).toString()}).then(function(r){return r.json().catch(function(){return{}})}).then(function(j){if(j&&j.ok===false){throw new Error(j.error||'send-failed')}s.className='success';s.innerHTML='<h3>${lblMsgReceived}<em style=&quot;color:var(--pc);font-style:normal&quot;>.</em></h3><p style=&quot;color:var(--mute);font-weight:300;margin-top:4px&quot;>${lblInTouch}</p>';f.reset();f.style.display='none'}).catch(function(){b.disabled=false;b.innerText='${lblSendMessage}';s.className='error';s.innerText='${lblSendError}'})">
       <input type="hidden" name="form_name" value="contact">
       <input type="hidden" name="source_page" value="/contact">
       <input type="hidden" name="_honey" value="" tabindex="-1" autocomplete="off" aria-hidden="true" style="position:absolute;left:-9999px;width:1px;height:1px;opacity:0;pointer-events:none">
@@ -830,38 +842,38 @@ function generateContactPage(c) {
 
       <div class="bk-row">
         <div>
-          <label class="bk-label" for="contact-first">First name</label>
-          <input id="contact-first" class="bk-input" type="text" name="first-name" required placeholder="Jane">
+          <label class="bk-label" for="contact-first">${esc(c.labels?.formFirstName || 'First name')}</label>
+          <input id="contact-first" class="bk-input" type="text" name="first-name" required placeholder="${attr(c.labels?.phFirstName || 'Jane')}">
         </div>
         <div>
-          <label class="bk-label" for="contact-last">Last name</label>
-          <input id="contact-last" class="bk-input" type="text" name="last-name" placeholder="Doe">
+          <label class="bk-label" for="contact-last">${esc(c.labels?.formLastName || 'Last name')}</label>
+          <input id="contact-last" class="bk-input" type="text" name="last-name" placeholder="${attr(c.labels?.phLastName || 'Doe')}">
         </div>
       </div>
       <div class="bk-row">
         <div>
-          <label class="bk-label" for="contact-email">Email</label>
-          <input id="contact-email" class="bk-input" type="email" name="email" required placeholder="you@email.com">
+          <label class="bk-label" for="contact-email">${esc(c.labels?.formEmail || 'Email')}</label>
+          <input id="contact-email" class="bk-input" type="email" name="email" required placeholder="${attr(c.labels?.phEmail || 'you@email.com')}">
         </div>
         <div>
-          <label class="bk-label" for="contact-phone">Phone <span style="text-transform:none;letter-spacing:0;opacity:0.55">(optional)</span></label>
-          <input id="contact-phone" class="bk-input" type="tel" name="phone" placeholder="+1 (555) 123-4567">
+          <label class="bk-label" for="contact-phone">${esc(c.labels?.formPhone || 'Phone')} <span style="text-transform:none;letter-spacing:0;opacity:0.55">(${esc(c.labels?.lblOptional || 'optional')})</span></label>
+          <input id="contact-phone" class="bk-input" type="tel" name="phone" placeholder="${attr(c.labels?.phPhone || '+1 (555) 123-4567')}">
         </div>
       </div>
       <div style="margin-bottom:28px">
-        <label class="bk-label" for="contact-message">Message</label>
-        <textarea id="contact-message" class="bk-input" name="message" required placeholder="Tell us what you&rsquo;re looking for&hellip;" style="min-height:140px;resize:vertical;font-family:inherit"></textarea>
+        <label class="bk-label" for="contact-message">${esc(c.labels?.formMessage || 'Message')}</label>
+        <textarea id="contact-message" class="bk-input" name="message" required placeholder="${attr(c.labels?.phLookingFor || "Tell us what you're looking for…")}" style="min-height:140px;resize:vertical;font-family:inherit"></textarea>
       </div>
       ${consentField(c, { idPrefix: 'sc' })}
-      <button type="submit" class="bk-submit">Send message</button>
+      <button type="submit" class="bk-submit">${esc(c.labels?.btnSendMessage || 'Send message')}</button>
     </form>
   </div>
 </section>
 
 <section class="close-cta">
-  <p class="eyebrow eyebrow--light rv" style="margin-bottom:22px">— See you soon —</p>
-  <h2 class="rv d1">A warm welcome awaits.</h2>
-  <a href="/booking" class="btn btn-w rv d2" style="margin-top:20px">Reserve a Visit</a>
+  <p class="eyebrow eyebrow--light rv" style="margin-bottom:22px">— ${esc(c.labels?.contactSeeYouSoon || 'See you soon')} —</p>
+  <h2 class="rv d1">${esc(c.labels?.contactWarmWelcome || 'A warm welcome awaits.')}</h2>
+  <a href="/booking" class="btn btn-w rv d2" style="margin-top:20px">${esc(c.labels?.btnReserveVisit || 'Reserve a Visit')}</a>
 </section>`;
 
   return wrap(c, '/contact', body);
@@ -883,7 +895,7 @@ function generateThankYouPage(c) {
   <div class="ty-shell rv">
     <p class="eyebrow">— ${esc(c.labels?.secReserved || 'Reserved')} —</p>
     <h1 class="ty-title">${esc(c.labels?.thankYouTitle || 'Thank you.').replace(/\.$/, '')}<em>.</em></h1>
-    <p id="ty-greet" class="ty-greet">Your reservation is confirmed. We look forward to seeing you.</p>
+    <p id="ty-greet" class="ty-greet">${esc(c.labels?.tyConfirmed || 'Your reservation is confirmed. We look forward to seeing you.')}</p>
 
     <div id="ty-card" class="ty-card" style="display:none">
       <div class="ty-row">
@@ -891,11 +903,11 @@ function generateThankYouPage(c) {
         <span id="ty-svc" class="ty-val"></span>
       </div>
       <div class="ty-row">
-        <span class="ty-key">When</span>
+        <span class="ty-key">${esc(c.labels?.tyWhen || 'When')}</span>
         <span id="ty-time" class="ty-val"></span>
       </div>
       <div class="ty-row" id="ty-tz-row" style="display:none">
-        <span class="ty-key">Timezone</span>
+        <span class="ty-key">${esc(c.labels?.tyTimezone || 'Timezone')}</span>
         <span id="ty-tz" class="ty-val ty-val-sm"></span>
       </div>
     </div>
@@ -946,7 +958,8 @@ function generateThankYouPage(c) {
   function esc(s){return String(s).replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/&/g,'&amp;')}
   if(name){
     var first=name.split(/\\s+/)[0];
-    document.getElementById('ty-greet').innerHTML='Hi '+esc(first)+', your reservation is confirmed. We look forward to seeing you.';
+    var GREET=${JSON.stringify(c.labels?.tyGreetingName || 'Hi __NAME__, your reservation is confirmed. We look forward to seeing you.')};
+    document.getElementById('ty-greet').innerHTML=GREET.replace('__NAME__', esc(first));
   }
   if(svc && time){
     document.getElementById('ty-svc').textContent=svc;

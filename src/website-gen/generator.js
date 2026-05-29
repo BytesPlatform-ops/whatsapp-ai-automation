@@ -126,6 +126,66 @@ const DEFAULT_CHROME_LABELS = {
   lblClosed: 'Closed',
   lblLocation: 'Location',
   lblScroll: 'Scroll',
+  // Salon template chrome (previously hardcoded English in salon.js — moved
+  // here so non-English sites translate them in the same content-gen call).
+  heroEyebrow: 'Atelier & Salon',
+  heroReservations: 'Reservations',
+  heroReservationsNote: 'Online in under a minute',
+  heroCancellation: 'Cancellation',
+  heroCancellationNote: 'Free up to 24h before',
+  lblAddress: 'Address',
+  lblCallUs: 'Call us',
+  sigSubtitle: 'A curated list of the treatments our regulars return for. Every appointment is handled by a senior stylist — no shortcuts.',
+  igFollowAlong: 'Follow along for our latest work.',
+  igBody: 'Fresh transformations, styling notes, and the occasional behind-the-chair moment. No filters required.',
+  secReservations: 'Reservations',
+  aboutComeSee: 'Come and see for yourself.',
+  aboutComeSeeBody: 'Book a treatment online, or call us if you would rather chat it through first.',
+  servicesIntro: 'Every treatment below is handled by a trained stylist. Reserve one online, or give us a call — we are happy to help you pick the right one.',
+  menuComingSoon: 'Menu coming soon — give us a call to book.',
+  bookingReserveVisitTitle: 'Reserve a visit',
+  bookingManaged: 'Managed by our booking partner.',
+  bookingTimesShownIn: 'Times shown in',
+  bookingNativeNote: 'Free cancellation up to 24 hours before your visit.',
+  bookingPhoneNote: 'Give us a call to reserve your spot.',
+  bookByPhone: 'Book by phone',
+  bookByPhoneBody: 'Give us a call and we will get you in.',
+  lblCallPrefix: 'Call',
+  // Salon contact page
+  contactFindUs: 'Find us',
+  contactInPerson: 'In person',
+  contactOpeningHours: 'Opening hours',
+  contactLastBooking: 'Last booking 30 min before close.',
+  contactWriteToUs: 'Write to us',
+  contactSendNote: 'Send a note',
+  contactSendNoteBody: "For questions, private events, or a service you can't find — we'll write back shortly.",
+  contactInTouch: "We'll be in touch soon.",
+  contactSendError: 'Something went wrong — please try again or email us directly.',
+  contactSeeYouSoon: 'See you soon',
+  contactWarmWelcome: 'A warm welcome awaits.',
+  lblOptional: 'optional',
+  phPhone: '+1 (555) 123-4567',
+  phLookingFor: "Tell us what you're looking for…",
+  // Salon thank-you page. __NAME__ is a placeholder token the booking JS
+  // substitutes with the guest's first name — kept verbatim through
+  // translation (the localizer preserves placeholder values).
+  tyConfirmed: 'Your reservation is confirmed. We look forward to seeing you.',
+  tyGreetingName: 'Hi __NAME__, your reservation is confirmed. We look forward to seeing you.',
+  tyWhen: 'When',
+  tyTimezone: 'Timezone',
+  // Salon manifesto / about pull-quote fallbacks (only used when LLM aboutText
+  // has no sentence of pull-quote length — kept translated for completeness).
+  salonQuoteFallback: 'Every appointment is a chance to make someone feel a little more themselves.',
+  salonPullQuoteFallback: 'We believe a salon should feel like a retreat, not a rush.',
+  // Salon booking inline-JS validation copy (injected as JSON into the page
+  // script — same mechanism as couldNotLoadTimes / bookingFailed below).
+  noTimesAvailable: 'No times available this day.',
+  pickTime: 'Please pick a time.',
+  enterName: 'Please enter your name.',
+  shareContact: 'Please share an email or phone so we can confirm.',
+  agreePrivacy: 'Please agree to the Privacy Policy to continue.',
+  bookingInProgress: 'Booking…',
+  networkErrorPrefix: 'Network error',
   // Portfolio process-step defaults (used when no LLM-generated processSteps)
   procDiscovery: 'Discovery',
   procDirection: 'Direction',
@@ -160,7 +220,7 @@ function buildLabelsDirective(userLanguage) {
     .join(',\n');
   return `
 
-ALSO include a "labels" object in your JSON response. Translate each value below into ${userLanguage} (the user's language). Use natural phrasing for the locale — don't word-for-word translate. Keep keys exactly as listed. If the language label starts with "roman-" (e.g. roman-urdu), use Latin/Roman script, NOT the native alphabet.
+ALSO include a "labels" object in your JSON response. Translate each value below into ${userLanguage} (the user's language). Use natural phrasing for the locale — don't word-for-word translate. Keep keys exactly as listed. Preserve any ALL-CAPS placeholder token wrapped in double underscores (e.g. __NAME__) EXACTLY as-is — it is substituted at runtime, do not translate or remove it. If the language label starts with "roman-" (e.g. roman-urdu), use Latin/Roman script, NOT the native alphabet.
 
 Format:
 "labels": {

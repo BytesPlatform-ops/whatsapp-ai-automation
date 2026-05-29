@@ -5267,6 +5267,12 @@ async function generateWebsite(user) {
   // offer the user a way out instead of infinitely replying "Still generating…".
   await updateUserMetadata(user.id, { webGenStartedAt: new Date().toISOString() });
 
+  // Once the preview link is sent, the build genuinely succeeded — any later
+  // hiccup (CAPI, logging, the revision-cap message) must NOT surface a
+  // "generation failed" message. This flag lets the catch suppress the
+  // failure UI in that case. See the post-deploy block + catch below.
+  let previewSent = false;
+
   try {
     const { generateWebsiteContent } = require('../../website-gen/generator');
     const { deployToNetlify } = require('../../website-gen/deployer');
@@ -5381,10 +5387,22 @@ async function generateWebsite(user) {
     // for businesses with words like "salon" in the name even when the
     // entire WhatsApp chat was in English. Best-effort: failure falls
     // back to 'english' inside resolveLanguage.
+    // The most reliable language signal at generation time is the business
+    // data the user typed themselves — by now the recent conversation is
+    // mostly command tokens (skip / yes / default) that carry no signal.
+    // Feed the collected name + industry + services + about copy as the
+    // detection sample so e.g. "salão / coloração" deterministically
+    // resolves to Portuguese instead of falling through to English.
     let userLanguage = 'english';
     try {
       const { resolveLanguage } = require('../../utils/localizer');
-      userLanguage = await resolveLanguage(freshUser, null);
+      const langSample = [
+        websiteData.businessName,
+        websiteData.industry,
+        Array.isArray(websiteData.services) ? websiteData.services.join(', ') : '',
+        websiteData.aboutText,
+      ].filter(Boolean).join('. ').trim();
+      userLanguage = await resolveLanguage(freshUser, langSample || null);
     } catch (err) {
       logger.warn(`[WEBGEN] Language resolution failed, defaulting to english: ${err.message}`);
     }
@@ -5451,7 +5469,12 @@ async function generateWebsite(user) {
       user.phone_number,
       `Your website is ready! Here's the preview:\n\n${previewUrl}\n\nHave a look - it's a ${pageSummary}.`
     );
+    // Build succeeded the moment the preview is in the user's hands. From
+    // here everything is best-effort — wrapped below so a failure can't fall
+    // through to the catch and emit a contradictory "generation failed".
+    previewSent = true;
 
+    try {
     // CAPI: report website preview as a Lead event for ad attribution
     const { trackWebsitePreview } = require('../integrations/metaCapi');
     await trackWebsitePreview({
@@ -5500,6 +5523,12 @@ async function generateWebsite(user) {
       `There you go! Have a look and let me know what you think — want any changes, or are you happy with it?\n\n_You get *${FREE_REVISIONS} free rounds of revisions*; once you activate the site you unlock *unlimited revisions* — keep tweaking until it's exactly right._`
     );
     await logMessage(user.id, 'Website preview sent, asking for feedback (with revision cap note)', 'assistant');
+    } catch (postErr) {
+      // Best-effort post-deploy steps failed AFTER the preview was sent.
+      // The site is live and the user has the link — log and move on; do
+      // NOT fall through to the failure path.
+      logger.warn(`[WEBGEN] Post-deploy step failed (preview already sent): ${postErr.message}`);
+    }
 
     return STATES.WEB_REVISIONS;
   } catch (error) {
@@ -5509,6 +5538,15 @@ async function generateWebsite(user) {
       data: error.response?.data,
       stack: error.stack,
     });
+
+    // Defense-in-depth: if the preview was already delivered, the build
+    // succeeded — never contradict it with a failure message. (The inner
+    // try/catch above should already swallow post-deploy errors; this
+    // guards any path that escapes it.)
+    if (previewSent) {
+      logger.warn('[WEBGEN] Error after preview was sent — suppressing failure UI, staying in revisions.');
+      return STATES.WEB_REVISIONS;
+    }
 
     // Distinguish "deploy provider rate-limited us" from a true generation
     // failure. The deployer's retryOn429 attaches code='NETLIFY_RATE_LIMITED'
@@ -5522,8 +5560,21 @@ async function generateWebsite(user) {
       ? "Looks like our deploy provider is rate-limiting us right now (we've published a few sites in a row). Should clear in 2-3 minutes — message me back then or tap *Try Again* below and I'll retry."
       : '😔 Sorry, there was an issue generating your website. Our team has been notified.\n\nWould you like to try again or chat with our team?';
 
-    await sendTextMessage(user.phone_number, failureMsg);
-    await sendInteractiveButtons(user.phone_number, 'What would you like to do?', [
+    // Localize the failure copy so it matches the rest of the conversation —
+    // the interactive-button hint is auto-localized downstream, so an English
+    // body would otherwise read as a mixed-language ("…do?" + "Ou digite 1 ou 2").
+    let localizedFailureMsg = failureMsg;
+    let localizedButtonBody = 'What would you like to do?';
+    try {
+      const { localize } = require('../../utils/localizer');
+      localizedFailureMsg = await localize(failureMsg, user, null);
+      localizedButtonBody = await localize('What would you like to do?', user, null);
+    } catch (err) {
+      logger.warn(`[WEBGEN] Failure-message localization failed: ${err.message}`);
+    }
+
+    await sendTextMessage(user.phone_number, localizedFailureMsg);
+    await sendInteractiveButtons(user.phone_number, localizedButtonBody, [
       { id: 'web_retry', title: '🔄 Try Again' },
       { id: 'svc_general', title: '💬 Chat with Us' },
     ]);
