@@ -96,8 +96,10 @@ async function genkeys() {
   fs.chmodSync(priv, 0o600);
   const privPem = fs.readFileSync(priv, 'utf8');
   console.log('\n✅ Keys generated in scripts/flows/.keys/ (gitignored).');
-  console.log('\nAdd the PRIVATE key to your server env as WHATSAPP_FLOW_PRIVATE_KEY.');
-  console.log('Single-line form for a .env file (literal \\n):\n');
+  console.log('\nAdd the PRIVATE key to your server env. PREFERRED — base64 (a single');
+  console.log('clean token; no newlines/quotes for a dashboard to mangle):\n');
+  console.log('WHATSAPP_FLOW_PRIVATE_KEY_B64=' + Buffer.from(privPem, 'utf8').toString('base64'));
+  console.log('\n(Alternative \\n-escaped form, only for .env files — dashboards mangle it):');
   console.log('WHATSAPP_FLOW_PRIVATE_KEY="' + privPem.trim().replace(/\n/g, '\\n') + '"');
   console.log('\nThen run: provision-flow.js upload-key\n');
 }

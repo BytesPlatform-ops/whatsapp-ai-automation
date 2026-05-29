@@ -36,8 +36,20 @@ const TAG_LENGTH = 16; // AES-GCM auth tag, bytes
  * generated with -des3 like the spec's openssl command).
  */
 function loadPrivateKey() {
+  // Preferred: base64-encoded PEM in WHATSAPP_FLOW_PRIVATE_KEY_B64. A single
+  // base64 token has no newlines/quotes for an env-var UI (Render, etc.) to
+  // mangle — the \n-escaped form keeps getting corrupted on paste. Decode
+  // it back to a normal multi-line PEM.
+  const b64 = (process.env.WHATSAPP_FLOW_PRIVATE_KEY_B64 || process.env.FLOW_PRIVATE_KEY_B64 || '').trim();
+  if (b64) {
+    const decoded = Buffer.from(b64.replace(/\s+/g, ''), 'base64').toString('utf8');
+    const passphraseB = process.env.WHATSAPP_FLOW_PRIVATE_KEY_PASSPHRASE
+      || process.env.FLOW_PRIVATE_KEY_PASSPHRASE || undefined;
+    return passphraseB ? { key: decoded, passphrase: passphraseB } : decoded;
+  }
+
   let pem = process.env.WHATSAPP_FLOW_PRIVATE_KEY || process.env.FLOW_PRIVATE_KEY || '';
-  if (!pem) throw new Error('WHATSAPP_FLOW_PRIVATE_KEY (or FLOW_PRIVATE_KEY) not set');
+  if (!pem) throw new Error('WHATSAPP_FLOW_PRIVATE_KEY_B64 / WHATSAPP_FLOW_PRIVATE_KEY not set');
   pem = pem.trim();
   // Strip an accidental KEY= prefix (pasting the whole .env line).
   pem = pem.replace(/^WHATSAPP_FLOW_PRIVATE_KEY\s*=\s*/, '');
