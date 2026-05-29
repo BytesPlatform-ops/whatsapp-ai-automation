@@ -18,7 +18,12 @@ function runWithContext({ channel, phoneNumberId }, fn) {
   // single inbound message — set by the router after findOrCreateUser
   // and read by classifierDecisions.recordClassifierDecision so each
   // verdict can be tied back to the user-message that triggered it.
-  return channelStore.run({ channel, phoneNumberId: phoneNumberId || null, sendCount: 0, userId: null, turnId: null, preferredLanguage: null }, fn);
+  // `voiceMode` mirrors user.metadata.voiceReplies for the current turn so
+  // the sender facade — which only has the async context, not the user
+  // object — can turn every plain-text reply into a voice note when the
+  // user has opted in. Set by the router at turn start (and flipped live by
+  // the voice-preference interceptor when the user toggles it this turn).
+  return channelStore.run({ channel, phoneNumberId: phoneNumberId || null, sendCount: 0, userId: null, turnId: null, preferredLanguage: null, voiceMode: false }, fn);
 }
 
 /**
@@ -106,6 +111,20 @@ function getPreferredLanguage() {
   return channelStore.getStore()?.preferredLanguage || null;
 }
 
+/**
+ * Voice-reply mode for the current turn. When true, the sender facade sends
+ * plain-text replies as voice notes (TTS) instead of text, falling back to
+ * text if synthesis fails. Set by the router from user.metadata.voiceReplies.
+ */
+function setVoiceMode(on) {
+  const store = channelStore.getStore();
+  if (store) store.voiceMode = !!on;
+}
+
+function getVoiceMode() {
+  return channelStore.getStore()?.voiceMode || false;
+}
+
 module.exports = {
   runWithContext,
   runWithChannel,
@@ -119,4 +138,6 @@ module.exports = {
   getTurnId,
   setPreferredLanguage,
   getPreferredLanguage,
+  setVoiceMode,
+  getVoiceMode,
 };

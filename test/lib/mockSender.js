@@ -28,7 +28,17 @@ function installMocks() {
   const sender = require('../../src/messages/sender');
 
   sender.sendTextMessage = async (to, text) => {
-    captured.push({ kind: 'text', to, text: String(text || '') });
+    // Mirror the real sender's voice-mode fork: when the per-turn context
+    // has voiceMode on, a plain-text reply goes out as a voice note instead
+    // of text. The mock replaces the real fn, so it must replicate this or
+    // voice-reply fixtures would never see an 'audio' capture.
+    let voiceMode = false;
+    try { voiceMode = require('../../src/messages/channelContext').getVoiceMode(); } catch {}
+    if (voiceMode && text) {
+      captured.push({ kind: 'audio', to, text: String(text || '') });
+    } else {
+      captured.push({ kind: 'text', to, text: String(text || '') });
+    }
     return { success: true, mocked: true };
   };
 

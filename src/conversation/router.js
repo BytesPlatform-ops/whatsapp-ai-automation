@@ -739,8 +739,12 @@ async function _routeMessage(message) {
   // in interactiveReplyMatcher.js) can localize without plumbing a user
   // object through every send call.
   try {
-    const { setPreferredLanguage } = require('../messages/channelContext');
+    const { setPreferredLanguage, setVoiceMode } = require('../messages/channelContext');
     setPreferredLanguage(user.metadata?.preferredLanguage || null);
+    // Mirror the sticky voice-reply preference onto the per-turn context so
+    // the sender speaks every plain-text reply this turn. The interceptor
+    // below can flip this live when the user toggles it.
+    setVoiceMode(!!user.metadata?.voiceReplies);
   } catch { /* defensive — never break the turn for a context stash */ }
 
   // ── Interactive reply matcher (Phase 10) ───────────────────────────────
@@ -1340,6 +1344,54 @@ async function _routeMessage(message) {
     const { sendMainMenu } = require('./handlers/serviceSelection');
     await sendMainMenu(user);
     return;
+  }
+
+  // ── Voice-reply preference interceptor (global, all states) ───────────────
+  // Voice replies are a sticky cross-flow preference, not a salesbot tag.
+  // When the user asks to receive replies as voice notes (or to switch back
+  // to text), flip user.metadata.voiceReplies, ack, and short-circuit so a
+  // pure "voice note mein baat karo" request never reaches a collection
+  // handler and gets mistaken for field data (e.g. a business name). A cheap
+  // multilingual prefilter gates the LLM call so normal turns pay nothing.
+  if (
+    text &&
+    !message.buttonId &&
+    !message.listId &&
+    message.type === 'text' &&
+    !user.metadata?.humanTakeover
+  ) {
+    try {
+      const {
+        prefilterMatches,
+        classifyVoicePreference,
+        ackVoiceOn,
+        ackVoiceOff,
+      } = require('../llm/voicePreference');
+      if (prefilterMatches(text)) {
+        const { wantsVoice, wantsText } = await classifyVoicePreference(text, user.id);
+        const alreadyOn = !!user.metadata?.voiceReplies;
+        if (wantsVoice && !wantsText && !alreadyOn) {
+          const { setVoiceMode } = require('../messages/channelContext');
+          await updateUserMetadata(user.id, { voiceReplies: true });
+          user.metadata = { ...(user.metadata || {}), voiceReplies: true };
+          setVoiceMode(true); // so the ack itself goes out as a voice note
+          logger.info(`[VOICE] ${user.phone_number} voice mode ON`);
+          await sendTextMessage(user.phone_number, await ackVoiceOn(text));
+          return;
+        }
+        if (wantsText && !wantsVoice && alreadyOn) {
+          const { setVoiceMode } = require('../messages/channelContext');
+          await updateUserMetadata(user.id, { voiceReplies: false });
+          user.metadata = { ...(user.metadata || {}), voiceReplies: false };
+          setVoiceMode(false); // ack goes out as text
+          logger.info(`[VOICE] ${user.phone_number} voice mode OFF`);
+          await sendTextMessage(user.phone_number, await ackVoiceOff(text));
+          return;
+        }
+      }
+    } catch (err) {
+      logger.warn(`[VOICE] preference interceptor failed: ${err.message}`);
+    }
   }
 
   // ── Salon owner commands (run before state routing) ───────────────────────

@@ -5,7 +5,7 @@
  * channel from AsyncLocalStorage and delegates to the correct platform sender.
  */
 
-const { getCurrentChannel, noteSendSucceeded, getUserId } = require('./channelContext');
+const { getCurrentChannel, noteSendSucceeded, getUserId, getVoiceMode } = require('./channelContext');
 const whatsappSender = require('./whatsappSender');
 const messengerSender = require('./messengerSender');
 const { rememberInteractive, maybeAppendHint } = require('./interactiveReplyMatcher');
@@ -55,6 +55,30 @@ async function sendTextMessage(to, text, options = {}) {
   // `options.instant` flag is kept as a no-op so existing call sites
   // (admin operator sends) don't need to change.
   void options;
+
+  // Voice-reply mode (sticky, set per-turn from user.metadata.voiceReplies):
+  // speak this plain-text reply as a voice note INSTEAD of sending text.
+  // This is the one chokepoint every handler funnels through, so the feature
+  // works across all flows without per-handler wiring. Only plain text is
+  // converted — interactive buttons/lists/CTA, images and documents below
+  // render normally (buttons must stay actionable). The conversations row is
+  // still logged with the text content (type 'audio') so the LLM history and
+  // admin transcript keep the words. On ANY synthesis/upload failure we fall
+  // back to sending the text so the conversation never dies.
+  if (text && getVoiceMode()) {
+    try {
+      const { synthesizeSpeech } = require('../llm/tts');
+      const { buffer, mimeType } = await synthesizeSpeech(text);
+      const result = await getSender().sendAudioBuffer(to, buffer, mimeType);
+      noteSendSucceeded();
+      autoLogOutbound(text, 'audio', extractPlatformMessageId(result), null, mimeType).catch(() => {});
+      return result;
+    } catch (err) {
+      logger.warn(`[VOICE] voice send failed, falling back to text: ${err.message}`);
+      // fall through to the normal text send below
+    }
+  }
+
   const result = await getSender().sendTextMessage(to, text);
   noteSendSucceeded();
   autoLogOutbound(text, 'text', extractPlatformMessageId(result)).catch(() => {});

@@ -1,0 +1,20 @@
+{
+  "name": "voice-request-not-captured-as-business-name",
+  "description": "Regression from a real transcript: a user mid-website-wizard who says 'Mujh se voice note mein baat karo' had it stored as their business NAME. The global voice interceptor must short-circuit BEFORE the webDev name handler, so the request toggles voice mode instead of becoming field data. State stays at WEB_COLLECT_NAME and no businessName is captured.",
+  "channel": "whatsapp",
+  "seed": {
+    "state": "WEB_COLLECT_NAME",
+    "metadata": { "websiteData": {} }
+  },
+  "turns": [
+    {
+      "user": "Mujh se voice note mein baat karo",
+      "expect": {
+        "state": "WEB_COLLECT_NAME",
+        "metadata.websiteData.businessName": "*missing*",
+        "metadata.voiceReplies": true,
+        "sent_kind_contains": "audio"
+      }
+    }
+  ]
+}

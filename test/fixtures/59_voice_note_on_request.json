@@ -1,14 +1,21 @@
 {
-  "name": "voice-note-when-user-asks",
-  "description": "When the user explicitly asks for the reply as a voice note/audio, the salesbot must emit [SEND_VOICE_NOTE], which the handler turns into a real voice-note send (TTS + audio upload, both mocked in tests). The tag must be stripped from the visible text, and an audio send must be captured this turn alongside the text.",
+  "name": "voice-replies-sticky-global",
+  "description": "When the user asks to receive replies as voice notes, the global router interceptor sets a sticky metadata.voiceReplies flag and acks (the ack itself goes out as a voice note). The preference persists across turns and every subsequent plain-text reply is sent as audio — not just in salesBot. TTS + audio send are mocked.",
   "channel": "whatsapp",
   "turns": [
     {
-      "user": "can you reply to me in a voice note instead of typing? just tell me what services you offer",
+      "user": "can you reply to me in voice notes from now on instead of typing?",
       "expect": {
+        "metadata.voiceReplies": true,
         "sent_kind_contains": "audio",
-        "reply_not_contains": ["[SEND_VOICE_NOTE]", "SEND_VOICE_NOTE"],
-        "sent_count_gte": 1
+        "reply_not_contains": ["[SEND_VOICE_NOTE]", "SEND_VOICE_NOTE"]
+      }
+    },
+    {
+      "user": "what services do you offer?",
+      "expect": {
+        "metadata.voiceReplies": true,
+        "sent_kind_contains": "audio"
       }
     }
   ]
