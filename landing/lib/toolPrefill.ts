@@ -152,10 +152,10 @@ export function buildToolPrefill(slug: string, data: PrefillData): ToolPrefillRe
 
     case 'dots-calculator':
       return {
-        headline: 'Teach physics or linear algebra?',
-        subhead: 'Pixie generates your tutoring website in 60 seconds.',
+        headline: 'Run a powerlifting gym or coaching service?',
+        subhead: 'Pixie generates your website in 60 seconds.',
         whatsappPrefill:
-          'Hi! Just used your Dots Calculator. I teach math/physics — interested in a tutoring site.',
+          'Hi! Just used your DOTS Calculator. I run a powerlifting gym / coaching service — interested in a website.',
       };
 
     case 'middle-name-generator':
@@ -168,10 +168,10 @@ export function buildToolPrefill(slug: string, data: PrefillData): ToolPrefillRe
 
     case 'era-calculator':
       return {
-        headline: 'Running a music blog or fan site?',
+        headline: 'Run a baseball academy or sports blog?',
         subhead: 'Pixie generates your website in 60 seconds.',
         whatsappPrefill:
-          'Hi! Just used your Era Calculator. I run a music/pop culture site — interested in a website.',
+          'Hi! Just used your ERA Calculator. I run a baseball academy / sports site — interested in a website.',
       };
 
     case 'uma-affinity-calculator':
