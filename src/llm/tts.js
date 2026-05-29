@@ -35,10 +35,12 @@ const MAX_TTS_CHARS = 900;
 // is the one place this earns its keep: Roman Urdu/Hindi/Arabic is Latin
 // text that a TTS engine would otherwise read with an English accent.
 const VOICE_INSTRUCTIONS =
-  'Read this aloud as a warm, friendly, natural voice note. Speak it in the ' +
-  'same language the text is written in — do not translate or switch languages. ' +
-  'If the text is romanized (written in Latin letters) Urdu, Hindi, or Arabic, ' +
-  'pronounce it as the natural spoken language, not as English.';
+  'Read this aloud as an energetic, upbeat voice note — lively and enthusiastic, ' +
+  'like a confident, excited salesperson who genuinely loves what they do. Keep ' +
+  'the energy high but natural, not over-the-top. Speak it in the same language ' +
+  'the text is written in — do not translate or switch languages. If the text is ' +
+  'romanized (written in Latin letters) Urdu, Hindi, or Arabic, pronounce it as ' +
+  'the natural spoken language, not as English.';
 
 /**
  * Synthesize speech from text using OpenAI TTS.
@@ -56,7 +58,7 @@ async function synthesizeSpeech(text) {
   const openai = getClient();
   const response = await openai.audio.speech.create({
     model: 'gpt-4o-mini-tts',
-    voice: 'nova',
+    voice: 'onyx',
     input: spoken,
     instructions: VOICE_INSTRUCTIONS,
     response_format: 'opus',
