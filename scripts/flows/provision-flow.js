@@ -12,7 +12,9 @@
  *
  * Requires a token with whatsapp_business_management (+ messaging). The
  * spec calls it META_TOKEN; this script reads, in order:
- *   META_FLOW_TOKEN → META_TOKEN → META_CAPI_ACCESS_TOKEN → WHATSAPP_ACCESS_TOKEN
+ *   META_FLOW_TOKEN → META_TOKEN → WHATSAPP_ACCESS_TOKEN
+ * (META_CAPI_ACCESS_TOKEN is intentionally NOT used — it's a dataset-scoped
+ *  token with only read_ads_dataset_quality and fails Flow management.)
  *
  * Usage:
  *   node -r dotenv/config scripts/flows/provision-flow.js genkeys
@@ -33,7 +35,6 @@ const WABA = process.env.WHATSAPP_BUSINESS_ACCOUNT_ID || '946247001439181';
 const TOKEN =
   process.env.META_FLOW_TOKEN ||
   process.env.META_TOKEN ||
-  process.env.META_CAPI_ACCESS_TOKEN ||
   process.env.WHATSAPP_ACCESS_TOKEN;
 const FLOW_ID = process.env.PIXIE_FLOW_ID || '';
 const ENDPOINT_URI = process.env.FLOW_ENDPOINT_URI || 'https://pixiebot.co/flow';
