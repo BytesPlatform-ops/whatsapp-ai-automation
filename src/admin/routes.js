@@ -179,7 +179,7 @@ router.get('/api/conversations/:userId/llm-usage', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
-
+0.
 // Phase 1 observability — every classifier decision recorded for this
 // user, ordered newest-first. The dashboard groups them by turn_id in
 // JS to render a per-turn "🔍 Trace" panel inline with the message
@@ -219,6 +219,7 @@ router.post('/api/conversations/:userId/translate', async (req, res) => {
     // Build a single LLM input — index every message by its DB id so the
     // frontend can match the result back. Truncate per-message to a
     // sane upper bound so a runaway-long row doesn't blow the context.
+
     const llmInput = translatable
       .map((m, i) => `[#${i}] ${m.role}: ${String(m.message_text).slice(0, 800).replace(/\n/g, ' ')}`)
       .join('\n');
