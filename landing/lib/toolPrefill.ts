@@ -182,6 +182,86 @@ export function buildToolPrefill(slug: string, data: PrefillData): ToolPrefillRe
           'Hi! Just used your Uma Affinity Calculator. I run a gaming blog — interested in a website.',
       };
 
+    case 'fancy-text-generator':
+      return {
+        headline: 'Run a creator business?',
+        subhead: 'Pixie builds creator sites with shop, links, and content blocks.',
+        whatsappPrefill:
+          "Hi! Just used your Fancy Text Generator. I'm a creator — interested in a personal-brand site.",
+      };
+
+    case 'glitch-text-generator':
+      return {
+        headline: 'Run a gaming or streaming brand?',
+        subhead: 'Pixie generates your website in 60 seconds.',
+        whatsappPrefill:
+          'Hi! Just used your Glitch Text Generator. I run a gaming/streaming brand — interested in a website.',
+      };
+
+    case 'heart-symbol-generator':
+      return {
+        headline: 'Run a shop or creator brand?',
+        subhead: 'Pixie builds full sites — shop, links, and content blocks.',
+        whatsappPrefill:
+          'Hi! Just used your Heart Symbol Generator. I run a creator/shop brand — interested in a website.',
+      };
+
+    case 'tiny-text-generator':
+      return {
+        headline: 'Building a personal brand?',
+        subhead: 'Pixie builds creator sites with shop, links, and content blocks.',
+        whatsappPrefill:
+          "Hi! Just used your Tiny Text Generator. I'm a creator — interested in a personal-brand site.",
+      };
+
+    case 'upside-down-text-generator':
+      return {
+        headline: 'Run a creator or fun brand?',
+        subhead: 'Pixie generates your website in 60 seconds.',
+        whatsappPrefill:
+          "Hi! Just used your Upside Down Text Generator. I'm a creator — interested in a website.",
+      };
+
+    case 'invisible-text-generator':
+      return {
+        headline: 'Need a real website, not a blank space?',
+        subhead: 'Pixie builds full websites in 60 seconds.',
+        whatsappPrefill:
+          'Hi! Just used your Invisible Text Generator — interested in a website for my business.',
+      };
+
+    case 'bold-text-generator':
+      return {
+        headline: 'Posting to grow a brand?',
+        subhead: 'Pixie builds creator and business sites in 60 seconds.',
+        whatsappPrefill:
+          'Hi! Just used your Bold Text Generator. I post to grow my brand — interested in a website.',
+      };
+
+    case 'strikethrough-text-generator':
+      return {
+        headline: 'Run an online store?',
+        subhead: 'Pixie builds full ecommerce sites — price drops and all.',
+        whatsappPrefill:
+          'Hi! Just used your Strikethrough Text Generator. I run an online store — interested in a website.',
+      };
+
+    case 'text-summarizer':
+      return {
+        headline: 'Run a tutoring or content business?',
+        subhead: 'Pixie builds full sites — course pages, lead forms, checkout.',
+        whatsappPrefill:
+          'Hi! Just used your Text Summarizer. I run a tutoring/content business — interested in a website.',
+      };
+
+    case 'ai-text-humanizer':
+      return {
+        headline: 'Run a content or marketing business?',
+        subhead: 'Pixie builds full sites in 60 seconds — text us on WhatsApp.',
+        whatsappPrefill:
+          'Hi! Just used your AI Text Humanizer. I run a content/marketing business — interested in a website.',
+      };
+
     default:
       return {
         headline: 'Want a site like this?',

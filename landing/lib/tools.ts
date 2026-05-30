@@ -1156,6 +1156,496 @@ export const TOOLS: ToolDefinition[] = [
     about:
       'In Uma Musume Pretty Derby, every trained Uma can be used as a parent to pass inherited "factors" (sparks) to the next trainee. How much carries over depends on affinity — the compatibility score between the trainee and each parent, and between the two parents themselves. The game evaluates three relationships and rates each ◎/○/△/✕. Affinity is driven mainly by shared major race wins (when both parents won the same G1 races), fixed character relationships (same series, rival pairs, or story links), and shared aptitudes. A ◎/◎/◎ pairing maximizes both base stat inheritance and the activation rate of blue (stat) and pink (aptitude) factors, which is why experienced players plan inherit pairs carefully across generations rather than breeding at random. This calculator estimates that affinity from its main public drivers so you can compare candidate parent pairs before committing a breeding slot — the exact in-game value also includes Cygames\' internal per-character relationship table.',
   },
+  {
+    slug: 'fancy-text-generator',
+    title: 'Fancy Text Generator — Cool Fonts to Copy & Paste',
+    h1: 'Fancy Text Generator',
+    shortName: 'Fancy Text Generator',
+    tagline: 'Turn plain text into dozens of cool fonts you can copy and paste anywhere.',
+    metaDescription:
+      'Free fancy text generator. Type once and copy cool fonts — bold, italic, script, cursive, gothic and more — for Instagram, TikTok, Discord and bios.',
+    keywords: ['fancy text generator', 'cool text generator', 'text fonts', 'font generator', 'cool fonts copy and paste', 'stylish text'],
+    category: 'Generator',
+    emoji: '✨',
+    image: '/tools/fancy-text-generator.jpg',
+    imageAlt: 'Colorful neon typography and lettering on a dark wall',
+    primaryKeyword: 'fancy text generator',
+    intro:
+      'Type your text once and instantly get dozens of fancy font styles — bold, italic, cursive script, gothic fraktur, double-struck outline, small caps and more. Every style is made of real Unicode characters, so you can copy and paste them straight into Instagram bios, TikTok captions, Discord, Twitter/X, or anywhere else that accepts plain text. No app, no signup, no images — just tap copy.',
+    howItWorks: [
+      { title: 'Type your text', description: 'Enter any word, name, or sentence in the box. Every style updates live as you type.' },
+      { title: 'Pick a style', description: 'Scroll the list of fancy fonts — bold, script, cursive, gothic, outline, small caps and more.' },
+      { title: 'Copy & paste', description: 'Tap copy on the style you like and paste it anywhere — bios, captions, usernames, chats.' },
+    ],
+    faqs: [
+      {
+        q: 'How does a fancy text generator work?',
+        a: 'It does not really change the font — it swaps each letter for a look-alike Unicode character (like 𝐛𝐨𝐥𝐝 or 𝓼𝓬𝓻𝓲𝓹𝓽). Because these are standard characters, they keep their styled look when you paste them anywhere, even where custom fonts are not allowed.',
+      },
+      {
+        q: 'Where can I paste fancy text?',
+        a: 'Anywhere that accepts text: Instagram and TikTok bios and captions, Twitter/X, Facebook, Discord, YouTube comments, WhatsApp, and most usernames. A few apps strip unusual characters, so paste and check before posting.',
+      },
+      {
+        q: 'Is the fancy text free to use?',
+        a: 'Yes — it is completely free, with no signup and no limits. The characters are part of the Unicode standard, so you can use them in personal and commercial posts.',
+      },
+      {
+        q: 'Why do some letters look like a plain box?',
+        a: 'A box (▯) means the device or app you pasted into does not have a glyph for that character. Try a different style — sans-serif, bold, and italic are the most widely supported across phones and browsers.',
+      },
+      {
+        q: 'Will fancy text hurt my SEO or accessibility?',
+        a: 'Avoid it for important on-page content. Screen readers can mispronounce styled Unicode, and search engines may not index it well. Use it for decorative bios and captions, not your headlines or body copy.',
+      },
+    ],
+    relatedSlugs: ['bold-text-generator', 'glitch-text-generator', 'tiny-text-generator'],
+    ctaHook: 'Building a creator or personal brand? Pixie builds your full site — shop, links, content — in 60 seconds. Text us on WhatsApp.',
+    aboutHeading: 'How fancy fonts and Unicode text styles actually work',
+    about:
+      'A "fancy text generator" does not install a font — it maps each character you type to a different code point in the Unicode standard. Unicode includes whole alphabets of styled letters in its Mathematical Alphanumeric Symbols block: bold (𝐀–𝐳), italic (𝐴–𝑧), bold-italic, script/cursive (𝒜–𝓏), fraktur/gothic (𝔄–𝔷), double-struck/outline (𝔸–𝕫), sans-serif, monospace and more. There are also enclosed alphanumerics (Ⓐ, ⓐ), full-width forms (Ａ, ａ) used in CJK typography, and phonetic small caps (ᴀ, ʙ, ᴄ). Because these are genuine characters rather than formatting, they survive copy-paste into apps that strip styling — which is exactly why they are popular for Instagram and TikTok bios, Discord names, and aesthetic captions. The trade-offs are worth knowing: not every device ships a glyph for every style (you may see a placeholder box), some platforms filter unusual characters out of usernames, and assistive technology can read styled letters incorrectly or skip them entirely. For that reason, fancy text is best used sparingly and decoratively — a stylized name or a highlight word — rather than for the main, meaningful text people and search engines need to read. This generator renders the most widely supported styles first and lets you copy any one with a single tap, so you can experiment, paste, and keep whatever looks right on your platform of choice.',
+  },
+  {
+    slug: 'glitch-text-generator',
+    title: 'Glitch Text Generator — Zalgo & Cursed Text',
+    h1: 'Glitch Text Generator',
+    shortName: 'Glitch Text Generator',
+    tagline: 'Create creepy zalgo and cursed glitch text with an adjustable intensity.',
+    metaDescription:
+      'Free glitch text generator. Make zalgo, cursed and corrupted text with an intensity slider, then copy and paste it into Discord, Instagram and more.',
+    keywords: ['glitch text generator', 'zalgo text generator', 'cursed text generator', 'zalgo text', 'glitch text', 'creepy text'],
+    category: 'Generator',
+    emoji: '👾',
+    image: '/tools/glitch-text-generator.jpg',
+    imageAlt: 'Blurred, distorted black-and-white portrait',
+    primaryKeyword: 'glitch text generator',
+    intro:
+      'Turn normal text into glitchy, corrupted "zalgo" text dripping with combining marks. Use the intensity slider to go from a subtle creepy wobble to fully cursed chaos, then hit re-roll for a fresh distortion and copy the result into Discord, Instagram, Twitter/X, or your next horror-themed post. Every character is standard Unicode, so it pastes anywhere that accepts text.',
+    howItWorks: [
+      { title: 'Type your text', description: 'Enter the word or phrase you want to corrupt in the input box.' },
+      { title: 'Set the intensity', description: 'Drag the slider for more or fewer combining marks above, through, and below each letter.' },
+      { title: 'Re-roll & copy', description: 'Hit re-roll for a new random glitch, then copy and paste it anywhere.' },
+    ],
+    faqs: [
+      {
+        q: 'What is zalgo or glitch text?',
+        a: 'Zalgo text stacks lots of Unicode "combining marks" (accents and diacritics) onto normal letters. The marks pile up above and below each character, creating the corrupted, glitchy, "cursed" look that spills out of the line.',
+      },
+      {
+        q: 'Why does my glitch text look less intense after pasting?',
+        a: 'Many apps cap how many combining marks they render per character for safety and performance. If your destination tames the effect, lower the intensity slightly so it looks intentional rather than clipped.',
+      },
+      {
+        q: 'Where can I use glitch text?',
+        a: 'Discord, Instagram, TikTok, Twitter/X, and most chat apps. Some platforms limit or filter heavy combining marks in usernames, so test before you rely on it there.',
+      },
+      {
+        q: 'Is glitch text safe to copy and paste?',
+        a: 'Yes. It is just ordinary Unicode characters — there is no code or script involved. Extremely heavy zalgo can briefly lag older apps when rendering, but it cannot harm your device.',
+      },
+      {
+        q: 'Can I make subtle glitch text instead of full chaos?',
+        a: 'Absolutely. Set the intensity slider low for a light, eerie distortion that stays readable, or crank it up for the classic over-the-top cursed effect.',
+      },
+    ],
+    relatedSlugs: ['fancy-text-generator', 'strikethrough-text-generator', 'upside-down-text-generator'],
+    ctaHook: 'Run a gaming, streaming, or horror brand? Pixie builds your full site in 60 seconds — text us on WhatsApp.',
+    aboutHeading: 'The Unicode behind zalgo and cursed text',
+    about:
+      'Glitch or "zalgo" text relies on a quiet feature of Unicode: combining characters. A combining mark (code points roughly U+0300 to U+036F) has no width of its own — it attaches to the character before it. Normally that is how languages stack accents, like the marks in "café" or Vietnamese tone marks. Zalgo abuses the mechanism by attaching many marks to a single base letter: combiners that render above the glyph, ones that render through the middle, and ones that render below. Pile on enough and the text appears to melt, drip, and overflow its line — the signature corrupted look named after an internet horror meme. Because the result is built entirely from valid Unicode, it copies and pastes like any other text and needs no special font. There are practical limits, though. To protect performance and prevent abuse, many platforms normalize text or cap the number of combining marks they will render per base character, so an extreme glitch can look milder once pasted into Discord, iMessage, or a browser. Usernames are the strictest surface and often reject heavy combiners outright. This generator gives you an intensity slider so you can dial the chaos to match where it is going — a faint, unsettling shimmer for a caption, or a fully cursed wall for a horror post — plus a re-roll button that randomizes which marks land where, so no two generations look exactly alike. It is a fun, harmless typographic effect; just keep it out of anything that needs to stay cleanly readable or accessible.',
+  },
+  {
+    slug: 'heart-symbol-generator',
+    title: 'Heart Symbol & Text Symbols — Copy and Paste',
+    h1: 'Heart Symbol Generator',
+    shortName: 'Heart Symbol Generator',
+    tagline: 'Tap to copy hearts, stars, and aesthetic text symbols for any platform.',
+    metaDescription:
+      'Free heart symbol generator. Copy and paste heart text symbols ♥ ♡ ❤, stars, flowers and aesthetic symbols, or wrap your name in hearts in one tap.',
+    keywords: ['heart symbol text', 'heart text symbol', 'text symbols', 'heart symbol copy and paste', 'text emojis', 'aesthetic symbols'],
+    category: 'Generator',
+    emoji: '💕',
+    image: '/tools/heart-symbol-generator.jpg',
+    imageAlt: 'Soft pink hearts and decorative symbols on a pastel background',
+    primaryKeyword: 'heart symbol text',
+    intro:
+      'A tap-to-copy palette of heart symbols (♥ ♡ ❤ 💕), stars, sparkles, flowers, and aesthetic text symbols you can paste anywhere — Instagram and TikTok bios, WhatsApp, Discord, usernames, and captions. Want a quick decoration? Use the builder to wrap your name or text in the heart of your choice and copy the whole thing in one click. No keyboard shortcuts to memorize.',
+    howItWorks: [
+      { title: 'Browse the symbols', description: 'Scroll grouped palettes of hearts, stars, flowers, and decorative symbols.' },
+      { title: 'Tap to copy', description: 'Click any symbol to copy it instantly — then paste it wherever you like.' },
+      { title: 'Or wrap your text', description: 'Pick a heart, type your name, and copy your text wrapped in matching symbols.' },
+    ],
+    faqs: [
+      {
+        q: 'How do I type a heart symbol without emoji?',
+        a: 'Use the text heart characters ♥ (solid) or ♡ (outline) from the palette above — just tap to copy. Unlike the 💕 emoji, these are monochrome text symbols that take on your text colour.',
+      },
+      {
+        q: 'What is the difference between a heart symbol and a heart emoji?',
+        a: 'A heart emoji (❤️, 💖) is a colour pictograph that looks different on each device. A heart text symbol (♥, ♡) is a single character that inherits your font colour and size, so it blends into text and usernames more cleanly.',
+      },
+      {
+        q: 'Where can I paste these symbols?',
+        a: 'Instagram, TikTok, WhatsApp, Discord, Twitter/X, YouTube, and most usernames and bios. They are standard Unicode characters, so they work almost everywhere text is allowed.',
+      },
+      {
+        q: 'Can I use these symbols in my username?',
+        a: 'Often yes, but it depends on the platform. Many allow ♥ and ★ in display names; some restrict symbols in handles. Paste and save to check whether your platform accepts it.',
+      },
+      {
+        q: 'Are these symbols free to use?',
+        a: 'Yes. They are part of Unicode and free for personal and commercial use — no attribution, signup, or limits.',
+      },
+    ],
+    relatedSlugs: ['fancy-text-generator', 'tiny-text-generator', 'bold-text-generator'],
+    ctaHook: 'Run a shop or creator brand? Pixie builds your full site in 60 seconds — text us on WhatsApp.',
+    aboutHeading: 'Heart symbols, text symbols, and how copy-paste characters work',
+    about:
+      'Text symbols like ♥, ★, ✿, and ➳ are single Unicode characters — not images and not emoji. That distinction matters. An emoji such as 💖 is rendered by your operating system as a small colour picture that looks different on iPhone, Android, Windows, and each app. A text symbol such as ♥ is a monochrome glyph that behaves like a letter: it takes your current font, colour, and size, and it sits neatly inline with the rest of your text. That is why aesthetic bios and usernames lean on text symbols — they look consistent and tidy across platforms in a way emoji cannot. These characters come from a handful of Unicode blocks: Miscellaneous Symbols (hearts, stars, suits), Dingbats (decorative florals, arrows, check marks, snowflakes), and various arrow and geometric ranges. Because they are standard characters, copying one and pasting it into Instagram, TikTok, WhatsApp, Discord, or a document just works almost everywhere — no special keyboard, shortcut codes, or app required. The main caveat is usernames and handles: some platforms allow symbols in display names but restrict them in the unique handle, and a few strip non-letter characters entirely, so it is worth pasting and saving to confirm. This tool gives you a click-to-copy palette grouped by theme — hearts, stars and sparkles, flowers and nature, and a grab-bag of arrows and decorative marks — plus a small builder that wraps your name or phrase in the heart symbol of your choice so you can copy a finished, decorated string in one tap. Everything here is free Unicode you can reuse however you like.',
+  },
+  {
+    slug: 'tiny-text-generator',
+    title: 'Tiny Text Generator — Small Text Copy & Paste',
+    h1: 'Tiny Text Generator',
+    shortName: 'Tiny Text Generator',
+    tagline: 'Shrink your words into tiny superscript, subscript, and small-caps text.',
+    metaDescription:
+      'Free tiny text generator. Convert your words into small Unicode text — superscript, subscript and small caps — to copy and paste into bios and captions.',
+    keywords: ['tiny text generator', 'small text', 'small text generator', 'tiny text copy and paste', 'small caps generator', 'mini text'],
+    category: 'Generator',
+    emoji: '🔡',
+    image: '/tools/tiny-text-generator.jpg',
+    imageAlt: 'Drawers of vintage metal letterpress type',
+    primaryKeyword: 'tiny text generator',
+    intro:
+      'Convert your text into tiny letters using real Unicode characters — superscript (ᵗⁱⁿʸ), subscript (ₜᵢₙᵧ), and small caps (ᴛɪɴʏ). Type once and copy whichever small style fits your Instagram or TikTok bio, caption, or username. No images and no formatting tricks — just small, copy-paste-ready text that works almost anywhere.',
+    howItWorks: [
+      { title: 'Type your text', description: 'Enter any word or phrase. All three tiny styles update as you type.' },
+      { title: 'Choose a style', description: 'Pick superscript, subscript, or small caps depending on the look you want.' },
+      { title: 'Copy & paste', description: 'Tap copy and paste the small text into your bio, caption, or username.' },
+    ],
+    faqs: [
+      {
+        q: 'How does a tiny text generator work?',
+        a: 'It replaces your normal letters with smaller Unicode look-alikes — superscript, subscript, and small-capital characters. Because these are real characters, the tiny look survives copy-paste, even in apps that do not let you change font size.',
+      },
+      {
+        q: 'Why are some tiny letters missing or full-size?',
+        a: 'Unicode does not have a small version of every letter. Subscript in particular is missing many letters, so unsupported characters stay full size. Superscript and small caps cover more of the alphabet.',
+      },
+      {
+        q: 'Where can I use tiny text?',
+        a: 'Instagram and TikTok bios and captions, Twitter/X, Discord, and many usernames. As always, paste and preview first — a few platforms normalize or strip unusual characters.',
+      },
+      {
+        q: 'Is tiny text bad for accessibility?',
+        a: 'It can be. Screen readers may skip or mispronounce superscript and small-caps characters, so keep tiny text decorative and avoid it for information people actually need to read.',
+      },
+      {
+        q: 'Is the tiny text generator free?',
+        a: 'Yes, completely free with no signup or limits. The characters are standard Unicode, free for personal and commercial use.',
+      },
+    ],
+    relatedSlugs: ['fancy-text-generator', 'bold-text-generator', 'heart-symbol-generator'],
+    ctaHook: 'Building a personal brand or creator page? Pixie builds your full site in 60 seconds — text us on WhatsApp.',
+    aboutHeading: 'How tiny text is made from Unicode',
+    about:
+      'Tiny text is not a smaller font size — it is a set of genuinely smaller characters that already exist in Unicode. Three families do most of the work. Superscript characters (the small raised letters and digits used in footnotes and maths, like ⁿ and ²) give you a compact, slightly-above-the-line look. Subscript characters (the small lowered letters and digits used in chemistry, like the 2 in H₂O) give a similar shrunk look sitting on the baseline, though Unicode only defines a limited set of subscript letters, so several letters of the alphabet have no subscript form and will appear full size. Small capitals (ᴀ, ʙ, ᴄ — borrowed from the phonetic alphabet) fold every letter to a uniform petite capital and tend to look the most polished for names and bios. Because all three are ordinary characters rather than styling, the tiny effect is preserved when you copy and paste into places that do not let you resize text at all, which is exactly why people use them for Instagram and TikTok bios, aesthetic captions, and compact usernames. The same caveats apply as with any decorative Unicode: not every device has a glyph for every small character, some platforms normalize text and may convert it back to full size, and assistive technology can read these characters incorrectly or skip them. The practical advice is to keep tiny text for decoration — a stylized handle or a quiet sub-line — and to keep the important, meaningful words in normal text so everyone, including screen readers and search engines, can read them. This generator shows all three tiny styles at once so you can compare and copy whichever one renders best where you are pasting it.',
+  },
+  {
+    slug: 'upside-down-text-generator',
+    title: 'Upside Down Text Generator — Flip Your Text',
+    h1: 'Upside Down Text Generator',
+    shortName: 'Upside Down Text Generator',
+    tagline: 'Flip your text upside down to copy and paste anywhere.',
+    metaDescription:
+      'Free upside down text generator. Flip and reverse your text into ʇxǝʇ uʍop ǝpᴉsdn, then copy and paste it into Instagram, TikTok and messages.',
+    keywords: ['upside down text', 'upside down text generator', 'flip text', 'reverse text', 'flip text generator', 'text flipper'],
+    category: 'Generator',
+    emoji: '🙃',
+    image: '/tools/upside-down-text-generator.jpg',
+    imageAlt: 'A child hanging upside down',
+    primaryKeyword: 'upside down text generator',
+    intro:
+      'Flip your text completely upside down — uʍop ǝpᴉsdn — using look-alike Unicode characters, then copy and paste it into Instagram, TikTok, Twitter/X, Discord, or a text message for a fun, attention-grabbing effect. It works on letters, numbers, and common punctuation, and reverses the order so the whole sentence reads as if it were turned 180°.',
+    howItWorks: [
+      { title: 'Type your text', description: 'Enter any word or sentence in the box.' },
+      { title: 'See it flip', description: 'Your text is mapped to upside-down characters and reversed automatically.' },
+      { title: 'Copy & paste', description: 'Tap copy and paste the flipped text anywhere you like.' },
+    ],
+    faqs: [
+      {
+        q: 'How does upside down text work?',
+        a: 'Each letter is swapped for a Unicode character that looks like the original turned 180° (for example a → ɐ, e → ǝ), and the whole string is reversed so it reads correctly when flipped. It is not an image — it is real, copy-paste-ready text.',
+      },
+      {
+        q: 'Where can I paste upside down text?',
+        a: 'Instagram, TikTok, Twitter/X, Facebook, Discord, WhatsApp, and most text fields. A few platforms strip unusual characters from usernames, so test there before relying on it.',
+      },
+      {
+        q: 'Why do a few characters not flip?',
+        a: 'Unicode does not have an upside-down look-alike for every symbol. Unsupported characters are left as-is, so an occasional letter or symbol may appear normal in the flipped output.',
+      },
+      {
+        q: 'Can I flip numbers too?',
+        a: 'Yes — digits are mapped to their closest upside-down forms (for example 3 → Ɛ, 4 → ㄣ), so phone-number-style strings and dates flip along with your words.',
+      },
+      {
+        q: 'Is the upside down text generator free?',
+        a: 'Completely free, no signup or limits. The flipped characters are standard Unicode and free to use in personal and commercial posts.',
+      },
+    ],
+    relatedSlugs: ['fancy-text-generator', 'glitch-text-generator', 'strikethrough-text-generator'],
+    ctaHook: 'Run a creator or fun brand? Pixie builds your full site in 60 seconds — text us on WhatsApp.',
+    aboutHeading: 'How flipping text upside down works',
+    about:
+      'Upside down text is a clever bit of Unicode substitution. There is no single switch that rotates text, so a flipper does two things at once. First, it replaces each character with a different Unicode character that happens to look like the original rotated 180 degrees. Some of these are intuitive — the letter "n" upside down looks like "u", and "p" looks like "d" — while others borrow glyphs from completely unrelated scripts and symbol sets to find a convincing match (for example, the turned "a" ɐ, turned "e" ǝ, and turned capital "A" ∀ come from phonetic and mathematical ranges). Second, it reverses the order of the characters, because when you physically flip a line of text the last letter ends up on the left. Combine the two steps and the result reads naturally when the page — or the reader — is turned over. Because the output is built from ordinary characters, it copies and pastes anywhere text is accepted and needs no special font, which is why it is a staple of playful Instagram and TikTok captions, novelty usernames, and surprise messages. The limitations are the same as with other Unicode tricks: not every glyph has a good upside-down counterpart, so a stray character may stay upright; some platforms normalize or reject unusual characters in handles; and screen readers will not interpret the flipped text the way a human eye does, so it should stay decorative. This generator handles letters, digits, and the most common punctuation, mapping and reversing your text instantly so you can copy a perfectly flipped string with a single tap.',
+  },
+  {
+    slug: 'invisible-text-generator',
+    title: 'Invisible Text Generator — Blank Character Copy & Paste',
+    h1: 'Invisible Text Generator',
+    shortName: 'Invisible Text Generator',
+    tagline: 'Copy invisible blank characters for empty messages, names, and bios.',
+    metaDescription:
+      'Free invisible text generator. Copy blank Unicode characters to send empty messages, set a blank username or bio, and paste invisible space anywhere.',
+    keywords: ['invisible text', 'blank text copy paste', 'invisible character', 'empty character', 'blank space copy paste', 'invisible text generator'],
+    category: 'Generator',
+    emoji: '👻',
+    image: '/tools/invisible-text-generator.jpg',
+    imageAlt: 'A blank white sheet of paper on a wooden table',
+    primaryKeyword: 'invisible text',
+    intro:
+      'Generate and copy invisible blank characters — text that looks completely empty but is actually there. Use it to send a "blank" message, set an empty username or bio, leave a hidden space, or separate elements where a normal space gets trimmed. Pick how many invisible characters you need and copy them in one tap.',
+    howItWorks: [
+      { title: 'Choose how many', description: 'Use the slider to pick how many invisible characters you want to copy.' },
+      { title: 'Copy the blank text', description: 'Tap copy — it looks like nothing was copied, but the invisible characters are on your clipboard.' },
+      { title: 'Paste anywhere', description: 'Paste into a username, bio, message, or form field that needs to look empty.' },
+    ],
+    faqs: [
+      {
+        q: 'What is an invisible character?',
+        a: 'It is a real Unicode character that renders with no visible mark — like a blank space that most apps will not trim. This tool uses the Hangul Filler (U+3164), which behaves like a real character so it survives in places that strip ordinary spaces.',
+      },
+      {
+        q: 'How do I send a blank message?',
+        a: 'Copy one or more invisible characters here, paste them into your chat box, and send. The message looks empty but contains the invisible characters, so the app accepts it as non-empty.',
+      },
+      {
+        q: 'Can I set an invisible username or bio?',
+        a: 'On many platforms, yes — paste the invisible characters where the name or bio goes. Some apps reject blank-looking input or normalize it, so if it does not save, try copying a few more characters.',
+      },
+      {
+        q: 'Why did my invisible text disappear after pasting?',
+        a: 'Some platforms strip or collapse blank characters for safety. If that happens, copy a larger batch, or the destination simply does not allow invisible input.',
+      },
+      {
+        q: 'Is invisible text safe to use?',
+        a: 'Yes — it is just a standard Unicode character with no code attached. It cannot harm your device or account; it simply takes up space without showing anything.',
+      },
+    ],
+    relatedSlugs: ['fancy-text-generator', 'tiny-text-generator', 'heart-symbol-generator'],
+    ctaHook: 'Need a real website, not just a blank space? Pixie builds your full site in 60 seconds — text us on WhatsApp.',
+    aboutHeading: 'How invisible characters and blank text work',
+    about:
+      'Invisible text is exactly what it sounds like: characters that occupy space but render nothing you can see. The everyday space bar produces U+0020, an ordinary space — but apps love to trim leading, trailing, and repeated spaces, so a "blank" built from normal spaces often collapses to nothing or is rejected as empty. The trick is to use characters that look blank yet behave like ordinary letters so they are not trimmed. There are several candidates in Unicode: the zero-width space (U+200B) which truly has no width, various fixed-width spaces, and the Hangul Filler (U+3164), a character originally meant as a placeholder in Korean text that most systems treat as a normal visible-width-but-blank character. This tool uses the Hangul Filler because it is the most reliable across chat apps, profiles, and games — it usually survives where a zero-width space would be stripped. People reach for invisible characters for a handful of practical reasons: sending a message that appears empty, setting a blank-looking username or display name, leaving an empty line where an app trims whitespace, or nudging layout in bios and forms. The behaviour is never guaranteed, though, because platforms increasingly normalize input to fight spam and impersonation — some collapse blank characters, some reject blank-looking names outright, and some allow them in one field but not another. That is why this generator lets you copy a single character or a whole batch at once: if one does not stick, a longer run sometimes does. It is a harmless typographic curiosity — just standard Unicode on your clipboard — useful whenever you need something that is present to the computer but invisible to the eye.',
+  },
+  {
+    slug: 'bold-text-generator',
+    title: 'Bold Text Generator — Copy & Paste Bold Font',
+    h1: 'Bold Text Generator',
+    shortName: 'Bold Text Generator',
+    tagline: 'Make real bold text that stays bold when you copy and paste it.',
+    metaDescription:
+      'Free bold text generator. Convert text into Unicode bold fonts — serif, sans, italic and script bold — that stay bold on Instagram, LinkedIn and Facebook.',
+    keywords: ['bold text', 'bold text generator', 'bold font copy and paste', 'bold text for instagram', 'bold letters', 'bold unicode'],
+    category: 'Generator',
+    emoji: '🅱️',
+    image: '/tools/bold-text-generator.jpg',
+    imageAlt: 'Bold block lettering on a billboard against a brick wall',
+    primaryKeyword: 'bold text',
+    intro:
+      'Make genuine bold text that keeps its weight wherever you paste it — even in apps with no formatting button. Type once and copy from several bold styles: classic serif bold (𝐛𝐨𝐥𝐝), bold italic, bold sans-serif, and bold script. Perfect for Instagram and LinkedIn posts, Facebook, Twitter/X, and Discord where you cannot otherwise format text.',
+    howItWorks: [
+      { title: 'Type your text', description: 'Enter the words you want in bold. Every bold style previews live.' },
+      { title: 'Pick a bold style', description: 'Choose serif bold, bold italic, bold sans, or bold script.' },
+      { title: 'Copy & paste', description: 'Tap copy and paste bold text into posts, bios, headlines, and chats.' },
+    ],
+    faqs: [
+      {
+        q: 'How can text stay bold where there is no formatting?',
+        a: 'This tool uses Unicode bold characters (𝐀–𝐳) rather than rich-text formatting. Because the bold look is built into the characters themselves, it survives in plain-text fields like Instagram captions and LinkedIn posts that have no bold button.',
+      },
+      {
+        q: 'Is bold text good for LinkedIn and Instagram posts?',
+        a: 'Used sparingly, yes — a bold opening line or key phrase draws the eye. Avoid bolding whole paragraphs: it hurts readability and can be mispronounced or skipped by screen readers.',
+      },
+      {
+        q: 'Why does my bold text show as boxes on some phones?',
+        a: 'A box means that device lacks a glyph for those bold characters. Bold sans-serif and serif bold are the most widely supported; switch styles if one is not rendering.',
+      },
+      {
+        q: 'Will bold Unicode hurt my accessibility or SEO?',
+        a: 'It can. Screen readers may read bold Unicode letter-by-letter or skip them, and search engines may not index them well. Keep it decorative — never use it for headings or important body text.',
+      },
+      {
+        q: 'Is the bold text generator free?',
+        a: 'Yes — free, no signup, no limits. Unicode bold characters are free to use in personal and commercial content.',
+      },
+    ],
+    relatedSlugs: ['fancy-text-generator', 'strikethrough-text-generator', 'tiny-text-generator'],
+    ctaHook: 'Posting to grow a brand? Pixie builds your full site in 60 seconds — text us on WhatsApp.',
+    aboutHeading: 'Why Unicode bold text works in plain-text apps',
+    about:
+      'Most social platforms give you a plain-text box with no bold button — Instagram captions, LinkedIn posts, Twitter/X, Facebook, and Discord all store what you type as unformatted text. A bold text generator gets around that by not using formatting at all. Instead, it swaps each letter for a pre-bolded character from Unicode\'s Mathematical Alphanumeric Symbols block, which contains complete bold alphabets in several styles: bold serif (𝐀–𝐳 and digits 𝟎–𝟗), bold italic, bold sans-serif (𝗔–𝘇), bold sans-serif italic, and bold script/cursive (𝓐–𝔃). Since the heaviness lives in the characters themselves rather than in a style attribute, it is preserved when the text is copied and pasted into a field that otherwise cannot bold anything. That makes it a popular way to add a strong opening line, highlight a key phrase, or make a heading stand out in a feed. The trade-offs are important to respect. Not every device ships glyphs for every bold style, so a reader on an older phone might see placeholder boxes — bold sans-serif and bold serif have the widest support. More importantly, these are decorative substitutions, not semantic emphasis: assistive technologies often read mathematical bold characters one letter at a time, pronounce them oddly, or skip them, and search engines may fail to index them as normal words. The right approach is to use bold Unicode for emphasis and flair on a word or a line, while keeping your actual headings, links, and core message in ordinary text so everyone can read it and platforms can understand it. This generator previews each bold style side by side so you can copy whichever one looks best where you are posting.',
+  },
+  {
+    slug: 'strikethrough-text-generator',
+    title: 'Strikethrough Text Generator — Cross Out Text',
+    h1: 'Strikethrough Text Generator',
+    shortName: 'Strikethrough Text Generator',
+    tagline: 'Cross out your text with strikethrough, slash, and underline styles.',
+    metaDescription:
+      'Free strikethrough text generator. Cross out text with Unicode strikethrough, slash and underline styles, then copy and paste into chats and posts.',
+    keywords: ['strikethrough text', 'strikethrough text generator', 'cross out text', 'strikethrough copy and paste', 'crossed out text', 'underline text'],
+    category: 'Generator',
+    emoji: '🚫',
+    image: '/tools/strikethrough-text-generator.jpg',
+    imageAlt: 'A hand marking white paper with a red pen',
+    primaryKeyword: 'strikethrough text',
+    intro:
+      'Cross out your text using Unicode combining marks so the line stays attached even in apps with no formatting. Type once and copy three styles: classic strikethrough (s̶t̶r̶i̶k̶e̶), a slashed look, and underline. Great for to-do lists, price drops, jokes, and edits on Instagram, WhatsApp, Discord, and Twitter/X.',
+    howItWorks: [
+      { title: 'Type your text', description: 'Enter the words you want to cross out.' },
+      { title: 'Pick a style', description: 'Choose strikethrough, slashed, or underline — each previews live.' },
+      { title: 'Copy & paste', description: 'Tap copy and paste the crossed-out text anywhere.' },
+    ],
+    faqs: [
+      {
+        q: 'How does strikethrough text work without formatting?',
+        a: 'It adds a Unicode "combining" mark after each character — a line that renders through or under the letter. Because the line is part of the text, the strikethrough survives copy-paste into plain-text apps that have no formatting toolbar.',
+      },
+      {
+        q: 'Where can I use strikethrough text?',
+        a: 'Instagram, Twitter/X, Discord, and many other text fields. Note that some apps (like WhatsApp) already have their own ~strikethrough~ shortcut; the Unicode version works where that shortcut does not.',
+      },
+      {
+        q: 'Why does the line look slightly off on some devices?',
+        a: 'Combining marks are positioned by each font, so the exact placement of the line varies a little between devices and apps. The effect stays clearly readable as crossed-out text everywhere it renders.',
+      },
+      {
+        q: 'Is strikethrough text accessible?',
+        a: 'Not very. Screen readers may read the combining marks oddly or ignore them, so the "crossed out" meaning can be lost. Use it decoratively and do not rely on it to convey essential meaning.',
+      },
+      {
+        q: 'Is the strikethrough generator free?',
+        a: 'Yes — free, no signup, no limits. The combining marks are standard Unicode and free to use anywhere.',
+      },
+    ],
+    relatedSlugs: ['fancy-text-generator', 'bold-text-generator', 'glitch-text-generator'],
+    ctaHook: 'Running a store with price drops to show off? Pixie builds your full site in 60 seconds — text us on WhatsApp.',
+    aboutHeading: 'How strikethrough and overline text are built',
+    about:
+      'Strikethrough you can copy and paste is made the same way as glitch text — with Unicode combining marks — just used tastefully. A combining mark is a zero-width character that attaches to the character before it; instead of stacking many for a corrupted look, a strikethrough tool adds exactly one line-style mark after each letter. The long stroke overlay (U+0336) draws a line straight through the middle of the character for the classic crossed-out effect; the short solidus overlay (U+0337) gives a slashed look; and the combining low line (U+0332) sits beneath the character for a continuous underline. Because the mark is part of the text rather than a formatting attribute, the line travels with the characters wherever they go, which is why it works in plain-text fields — Instagram captions, Discord messages, Twitter/X, and forms — that offer no strikethrough button. People use it for to-do lists where an item is done, for showing an old price next to a new one, for edits and corrections, and for the comedic "I said too much" effect. A few things are worth knowing. Each font decides exactly where a combining mark lands, so the line can sit a hair high or low depending on the device, though it stays clearly legible as a strike. Spaces are usually left unmarked so the line breaks naturally between words. And, as with all decorative Unicode, accessibility suffers: a screen reader may not announce that text is struck through, so never depend on strikethrough alone to carry meaning that a reader must not miss. Some apps — WhatsApp and Telegram, for instance — already support their own native strikethrough via markup like tildes; this tool is most useful precisely where that native option does not exist. It previews all three line styles at once so you can copy whichever renders best in your destination.',
+  },
+  {
+    slug: 'text-summarizer',
+    title: 'Free Text Summarizer — Summarize Any Text with AI',
+    h1: 'AI Text Summarizer',
+    shortName: 'Text Summarizer',
+    tagline: 'Paste any text and get a clear AI summary with key points.',
+    metaDescription:
+      'Free AI text summarizer. Paste an article, essay, email or notes and get a concise summary plus key points in seconds — no signup, choose short to long.',
+    keywords: ['text summarizer', 'summarize text', 'ai summarizer', 'article summarizer', 'summary generator', 'free text summarizer'],
+    category: 'Generator',
+    emoji: '📝',
+    image: '/tools/text-summarizer.jpg',
+    imageAlt: 'A printed document resting on office stationery',
+    primaryKeyword: 'text summarizer',
+    intro:
+      'Paste an article, essay, report, email thread, or any long block of text and get a clear, faithful summary in seconds — plus a short list of key points. Choose short, medium, or long depending on how much detail you want. The summary sticks strictly to what your text says, so you get the gist without invented facts. Free, no signup, and it works in your text\'s own language.',
+    howItWorks: [
+      { title: 'Paste your text', description: 'Drop in an article, essay, notes, or email — up to a few thousand words.' },
+      { title: 'Choose a length', description: 'Pick short, medium, or long for the level of detail you want.' },
+      { title: 'Get your summary', description: 'Read a concise summary plus key bullet points, then copy them in one tap.' },
+    ],
+    faqs: [
+      {
+        q: 'Is this text summarizer free?',
+        a: 'Yes — it is free to use with no signup. To keep it available for everyone, there is a light rate limit on rapid repeated requests.',
+      },
+      {
+        q: 'Does the summarizer make up facts?',
+        a: 'It is instructed to summarize only what your text actually says and not to add outside information. As with any AI tool, skim the summary against the source for anything important before you rely on it.',
+      },
+      {
+        q: 'What kind of text can I summarize?',
+        a: 'Articles, blog posts, essays, research, meeting notes, transcripts, and long emails all work well. Paste up to roughly six thousand characters at a time for best results.',
+      },
+      {
+        q: 'What languages does it support?',
+        a: 'It summarizes in the same language as your input, so you can paste text in many languages and get a summary back in that language.',
+      },
+      {
+        q: 'Are the key points different from the summary?',
+        a: 'Yes — the summary is a short paragraph, while the key points break out the main ideas as quick, scannable bullets. Use whichever fits how you want to share or save the gist.',
+      },
+    ],
+    relatedSlugs: ['ai-text-humanizer', 'fancy-text-generator', 'bold-text-generator'],
+    ctaHook: 'Run a tutoring, research, or content business? Pixie builds your full site in 60 seconds — text us on WhatsApp.',
+    aboutHeading: 'What an AI text summarizer does well — and where to double-check it',
+    about:
+      'An AI text summarizer reads a long passage and produces a much shorter version that keeps the main ideas while dropping the detail. Modern summarizers are "abstractive": rather than just stitching together sentences pulled from the original, a language model rewrites the gist in fresh wording, which usually reads more naturally than older extractive tools. That makes them genuinely useful for getting through a long article quickly, turning a dense report into a few takeaways, catching up on a sprawling email thread, or condensing study notes and transcripts into something you can review at a glance. This tool asks the model to stay faithful to the source — to summarize only what the text says and to avoid introducing outside facts — and returns both a paragraph summary and a handful of key points so you can pick the format that suits you. It also works in the language of whatever you paste, summarizing back in that same language. A few practical notes. Summarization is lossy by design: nuance, caveats, and supporting evidence get compressed away, so for anything high-stakes — legal, medical, financial, or academic — treat the summary as a fast first pass and check the original before acting on it. Very long inputs are best broken into sections, since every model has a limit on how much it can consider at once; this tool accepts up to a few thousand characters per request. And while the model is instructed to be faithful, no AI summarizer is perfect, so a quick skim against the source is always wise when accuracy matters. Used with that light supervision, an AI summarizer is one of the highest-leverage everyday tools available — it turns the time-consuming job of reading-to-extract into a few seconds, and gives you a clean, copy-ready summary and bullet list you can paste into notes, messages, or documents.',
+  },
+  {
+    slug: 'ai-text-humanizer',
+    title: 'AI Text Humanizer — Make AI Text Sound Human',
+    h1: 'AI Text Humanizer',
+    shortName: 'AI Text Humanizer',
+    tagline: 'Rewrite stiff or AI-sounding text so it reads naturally human.',
+    metaDescription:
+      'Free AI text humanizer. Rewrite robotic or AI-generated text to sound natural and human, with a tone you choose. Paste, humanize, and copy in seconds.',
+    keywords: ['ai text humanizer', 'humanize ai text', 'text humanizer', 'humanize ai text free', 'ai to human text', 'make ai text sound human'],
+    category: 'Generator',
+    emoji: '🧑‍💻',
+    image: '/tools/ai-text-humanizer.jpg',
+    imageAlt: 'A person writing in a notebook beside a laptop',
+    primaryKeyword: 'ai text humanizer',
+    intro:
+      'Paste stiff, robotic, or AI-generated text and get a rewrite that reads like a real person wrote it — natural rhythm, plain wording, and none of the tell-tale AI filler. Choose a tone (casual, professional, friendly, or confident) to match where the text is going. It keeps your meaning and language intact while making the writing flow. Free, no signup, copy your result in one tap.',
+    howItWorks: [
+      { title: 'Paste your text', description: 'Drop in text that sounds stiff or machine-generated.' },
+      { title: 'Pick a tone', description: 'Choose casual, professional, friendly, or confident.' },
+      { title: 'Humanize & copy', description: 'Get a natural rewrite that keeps your meaning, then copy it.' },
+    ],
+    faqs: [
+      {
+        q: 'What does an AI text humanizer do?',
+        a: 'It rewrites text so it reads more naturally — varying sentence length, swapping jargon for plain words, and removing robotic phrasing — while keeping your original meaning and language. Think of it as an editor that smooths stiff writing.',
+      },
+      {
+        q: 'Will this guarantee my text passes AI detectors?',
+        a: 'No. AI detectors are unreliable and change constantly, and we make no claim to beat them. This tool focuses on making writing clearer and more natural to read — not on gaming detection.',
+      },
+      {
+        q: 'Does it keep my meaning and facts?',
+        a: 'It is instructed to preserve your meaning and not add new claims. Because any rewrite can subtly shift emphasis, always read the result and confirm it still says what you intended before you use it.',
+      },
+      {
+        q: 'Is the AI text humanizer free?',
+        a: 'Yes — free with no signup. A light rate limit applies to rapid repeated requests so the tool stays available to everyone.',
+      },
+      {
+        q: 'Should I use humanized AI text for schoolwork?',
+        a: 'Follow your school or employer\'s rules on AI assistance and disclosure. Use this to improve your own writing\'s clarity, not to misrepresent authorship where that is against the rules.',
+      },
+    ],
+    relatedSlugs: ['text-summarizer', 'fancy-text-generator', 'bold-text-generator'],
+    ctaHook: 'Run a content, marketing, or tutoring business? Pixie builds your full site in 60 seconds — text us on WhatsApp.',
+    aboutHeading: 'How AI text humanizers work, honestly',
+    about:
+      'An "AI text humanizer" is, under the hood, an AI editor. You give it a passage that sounds stiff, generic, or obviously machine-written, and a language model rewrites it to read more like natural human prose: it varies sentence length and rhythm, prefers plain words over jargon, trims filler and hedging, and strips out the tell-tale phrases that flag machine writing — the "in today\'s fast-paced world" openings, the relentless "moreover" and "it is important to note", the over-balanced both-sides sentences. The goal is clarity and flow, while keeping your meaning and your language intact. That is genuinely useful: first drafts, translated text, and quick AI outputs are often correct but lifeless, and a humanizing pass can make them readable and engaging without you rewriting from scratch. It is worth being clear-eyed about what these tools cannot do. Many are marketed as a way to "bypass AI detectors", but detection itself is unreliable — detectors produce false positives on human writing and false negatives on machine writing, and they shift constantly — so no rewrite can honestly promise to beat them, and this tool makes no such claim. What it can do is improve how the writing reads. Two cautions matter. First, any rewrite can subtly change emphasis or introduce a small inaccuracy, so always read the output and confirm it still says exactly what you meant before you publish or send it. Second, authorship rules apply: schools and many employers have policies on AI assistance and disclosure, and using a humanizer to misrepresent who or what wrote something can violate them. Used the right way — as an editing aid that makes your own ideas clearer and more natural, with a tone you choose to fit the context — an AI humanizer is a fast, practical writing assistant. This tool keeps your input under a sensible length per request, offers a few common tones, and returns a clean rewrite you can copy in a single tap.',
+  },
 ];
 
 export function getTool(slug: string): ToolDefinition | undefined {
