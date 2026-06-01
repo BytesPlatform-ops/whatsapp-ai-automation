@@ -1240,6 +1240,14 @@ async function _routeMessage(message) {
       revisionCount: 0,
       bonusRevisionUsed: false,
       lastRevisionComplexity: null,
+      // WhatsApp Flow send-once guard (src/flows/send.js:46). Without
+      // clearing these, a CTWA user who /resets never gets the website
+      // Flow re-sent — flowSentAt stays set, so maybeSendWebsiteFlow
+      // short-circuits forever. The CTWA gate (adReferral.ctwaClid) is
+      // intentionally preserved, so clearing just the guard lets the Flow
+      // be offered exactly once more after reset.
+      flowSentAt: null,
+      flowToken: null,
       // Step-completed flags — without clearing these, a prior session's
       // skip leaks across and suppresses the matching question forever.
       emailSkipped: false,
