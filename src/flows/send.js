@@ -108,10 +108,11 @@ async function sendWebsiteFlowOffer(user, message) {
   // Framed as a secondary option: the chat greeting (sent just before this
   // by salesBot) already invited the user to chat, so this offers the form
   // as the "or, if it's easier" alternative rather than the only path.
-  const body = lang === 'pt'
-    ? 'Ou, se for mais fácil que digitar — toque abaixo e eu monto seu site com algumas perguntas rápidas. Grátis pra ver, fica pronto em uns 60 segundos 👇'
-    : "Or, if it's easier than typing — tap below and I'll build your site from a few quick questions. Free to preview, ready in about 60 seconds 👇";
-  const cta = lang === 'pt' ? 'Começar' : 'Get Started';
+  // flow_offer is part of the translatable bundle (ensureLanguage ran
+  // above), so it follows the user's language. Fall back to EN if missing.
+  const qb = require('./questionBank');
+  const body = (qb.L[lang] && qb.L[lang].flow_offer) || qb.L.en.flow_offer;
+  const cta = (qb.L[lang] && qb.L[lang].next) || 'Get Started';
 
   try {
     const whatsappSender = require('../messages/whatsappSender');
