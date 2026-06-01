@@ -15,7 +15,7 @@
 
 const {
   classifyTheme, VALID_THEMES, INDUSTRY_OPTIONS, CURRENCY_OPTIONS,
-  BOOKING_OPTIONS, DETAILS, L, pick,
+  BOOKING_OPTIONS, ADDMORE_OPTIONS, DETAILS, L, pick,
 } = require('./questionBank');
 const { getSession, patchSession } = require('./store');
 const { logger } = require('../utils/logger');
@@ -45,9 +45,39 @@ function salonScreen(lang) {
       booking_options: BOOKING_OPTIONS[lang] || BOOKING_OPTIONS.en,
       l_hours: L[lang].l_hours,
       hours_helper: L[lang].hours_helper,
-      l_services: L[lang].l_services,
-      services_helper: L[lang].services_helper,
       l_next: L[lang].next,
+    },
+  };
+}
+
+// Format the running "added so far" summary for the SERVICE screen.
+function summarizeServices(list, lang) {
+  if (!Array.isArray(list) || list.length === 0) return '';
+  const parts = list.map((s) => {
+    const extra = [s.price, s.duration].filter(Boolean).join(', ');
+    return extra ? `${s.name} (${extra})` : s.name;
+  });
+  return (L[lang].added_prefix || 'Added so far: ') + parts.join(' · ');
+}
+
+// SERVICE screen — structured name/price/duration with an "add another"
+// loop. `list` is the services accumulated so far (shown as a summary).
+function serviceScreen(lang, list) {
+  const summary = summarizeServices(list, lang);
+  return {
+    screen: 'SERVICE',
+    data: {
+      service_title: L[lang].service_title,
+      added_summary: summary || '—',
+      added_visible: !!summary,
+      l_sname: L[lang].l_sname,
+      l_sprice: L[lang].l_sprice,
+      sprice_helper: L[lang].sprice_helper,
+      l_sdur: L[lang].l_sdur,
+      sdur_helper: L[lang].sdur_helper,
+      l_addmore: L[lang].l_addmore,
+      addmore_options: ADDMORE_OPTIONS[lang] || ADDMORE_OPTIONS.en,
+      l_continue: L[lang].continue,
     },
   };
 }
@@ -124,7 +154,8 @@ async function handleFlow(req, ctx = {}) {
       return theme === 'salon' ? salonScreen(lang) : detailsScreen(theme, lang);
     }
 
-    // SALON → persist tailored answers → FINISH.
+    // SALON → persist currency/booking/hours → go to SERVICE (collect
+    // services one at a time, structured).
     if (screen === 'SALON') {
       if (flowToken) {
         await patchSession(flowToken, {
@@ -132,9 +163,38 @@ async function handleFlow(req, ctx = {}) {
             currency: data.currency || '',
             booking: data.booking || '',
             hours: data.hours || '',
-            services: data.services || '',
+            services_list: [],
           },
         }).catch((err) => logger.warn(`[FLOW] persist SALON failed: ${err.message}`));
+      }
+      return serviceScreen(lang, []);
+    }
+
+    // SERVICE → append this service, then loop ("add another" → refresh
+    // the SERVICE screen) or proceed to FINISH. The accumulated list lives
+    // in the session (services_list); the nfm_reply only carries the last
+    // row, so the session is the source of truth for the build.
+    if (screen === 'SERVICE') {
+      const list = Array.isArray(session?.answers?.services_list)
+        ? session.answers.services_list.slice()
+        : [];
+      const name = String(data.sname || '').trim();
+      if (name) {
+        list.push({
+          name,
+          price: String(data.sprice || '').trim(),
+          duration: String(data.sdur || '').trim(),
+        });
+      }
+      if (flowToken) {
+        await patchSession(flowToken, { answersPatch: { services_list: list } })
+          .catch((err) => logger.warn(`[FLOW] persist SERVICE failed: ${err.message}`));
+      }
+      // "add" → loop for one more (only if they actually named this one);
+      // anything else (done / blank) → proceed.
+      if (data.addmore === 'add' && name) {
+        logger.info(`[FLOW] SERVICE loop (${list.length} so far) token=${flowToken}`);
+        return serviceScreen(lang, list);
       }
       return finishScreen(lang);
     }
@@ -173,4 +233,4 @@ async function handleFlow(req, ctx = {}) {
   return { data: { acknowledged: true } };
 }
 
-module.exports = { handleFlow, commonScreen, salonScreen, detailsScreen, finishScreen };
+module.exports = { handleFlow, commonScreen, salonScreen, serviceScreen, detailsScreen, finishScreen };

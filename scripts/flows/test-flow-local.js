@@ -100,7 +100,7 @@ async function roundtrip(reqObj) {
   ];
   for (const [ind, exp] of themeCases) ok(`"${ind}" → ${exp}`, classifyTheme(ind) === exp);
 
-  console.log('\n=== 4. Full salon journey (COMMON→SALON→FINISH→SUCCESS) ===');
+  console.log('\n=== 4. Full salon journey w/ multi-service loop (COMMON→SALON→SERVICE×2→FINISH→SUCCESS) ===');
   const tok = 'ft_salon';
   await storeStub.createSession({ flowToken: tok, lang: 'en' });
   const r1 = await roundtrip({
@@ -114,10 +114,28 @@ async function roundtrip(reqObj) {
 
   const r2 = await roundtrip({
     action: 'data_exchange', screen: 'SALON', flow_token: tok,
-    data: { currency: 'USD', booking: 'build', hours: 'Tue-Sat 9-7', services: 'Haircut 30min 25' },
+    data: { currency: 'USD', booking: 'build', hours: 'Tue-Sat 9-7' },
   });
-  ok('SALON→FINISH', r2.screen === 'FINISH');
-  ok('FINISH has 3 contact labels', !!r2.data.l_cemail && !!r2.data.l_cphone && !!r2.data.l_caddress);
+  ok('SALON→SERVICE', r2.screen === 'SERVICE');
+  ok('SERVICE has name/price/duration labels', !!r2.data.l_sname && !!r2.data.l_sprice && !!r2.data.l_sdur);
+  ok('SERVICE summary hidden initially', r2.data.added_visible === false);
+
+  // Add service #1, choose "add another" → loop back to SERVICE.
+  const s1 = await roundtrip({
+    action: 'data_exchange', screen: 'SERVICE', flow_token: tok,
+    data: { sname: 'Haircut', sprice: '25', sdur: '30 min', addmore: 'add' },
+  });
+  ok('SERVICE loops on "add"', s1.screen === 'SERVICE');
+  ok('summary now visible w/ 1 service', s1.data.added_visible === true && /Haircut/.test(s1.data.added_summary));
+
+  // Add service #2, "done" → FINISH.
+  const s2 = await roundtrip({
+    action: 'data_exchange', screen: 'SERVICE', flow_token: tok,
+    data: { sname: 'Color', sprice: '85', sdur: '90 min', addmore: 'done' },
+  });
+  ok('SERVICE→FINISH on "done"', s2.screen === 'FINISH');
+  ok('both services accumulated in session', (sessionMem[tok].answers.services_list || []).length === 2);
+  ok('FINISH has 3 contact labels', !!s2.data.l_cemail && !!s2.data.l_cphone && !!s2.data.l_caddress);
 
   const r3 = await roundtrip({
     action: 'data_exchange', screen: 'FINISH', flow_token: tok,
@@ -128,7 +146,7 @@ async function roundtrip(reqObj) {
   ok('session persisted all answers',
     sessionMem[tok].answers.business_name === 'Glow Studio' &&
     sessionMem[tok].answers.currency === 'USD' &&
-    sessionMem[tok].answers.booking === 'build' &&
+    sessionMem[tok].answers.services_list[0].name === 'Haircut' &&
     sessionMem[tok].answers.c_phone.includes('555'));
 
   console.log('\n=== 5. Non-salon (hvac) → DETAILS with f2 visible ===');

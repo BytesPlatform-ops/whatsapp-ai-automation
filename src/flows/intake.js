@@ -11,6 +11,31 @@
 
 const { logger } = require('../utils/logger');
 
+// "30 min" / "1 hr" / "45" → minutes (default 30). "1h"/"1 hour" → 60.
+function parseDurationMin(text) {
+  const t = String(text || '').toLowerCase().trim();
+  if (!t) return 30;
+  const hr = t.match(/(\d+(?:\.\d+)?)\s*(?:h|hr|hour)/);
+  if (hr) return Math.round(parseFloat(hr[1]) * 60);
+  const min = t.match(/(\d+)/);
+  if (min) {
+    const n = parseInt(min[1], 10);
+    if (n > 0 && n <= 600) return n;
+  }
+  return 30;
+}
+
+// Keep the user's price as written; if they typed a bare number and we
+// know the currency, prefix a symbol so the site reads naturally.
+function normalizePrice(price, currency) {
+  const p = String(price || '').trim();
+  if (!p) return '';
+  if (/[^\d.,\s]/.test(p)) return p.slice(0, 40); // already has a symbol/word
+  const SYM = { USD: '$', EUR: '€', GBP: '£', BRL: 'R$', AED: 'dh ', INR: '₹', PKR: 'Rs ' };
+  const sym = SYM[String(currency || '').toUpperCase()] || '';
+  return (sym + p).slice(0, 40);
+}
+
 // Light, dependency-free contact splitter for the single contact_info
 // field. Pulls email + phone by shape; whatever's left (with a street/
 // place hint) becomes the address. Mirrors the spirit of webDev's
@@ -52,7 +77,7 @@ function splitContact(text) {
  * @returns {Promise<object>} websiteData patch
  */
 async function buildWebsiteDataFromFlow(answers = {}, theme, userId) {
-  const { extractServices, extractPricesByService } = require('../conversation/entityAccumulator');
+  const { extractServices } = require('../conversation/entityAccumulator');
   const { THEME_TO_INDUSTRY } = require('./questionBank');
 
   const businessName = String(answers.business_name || '').trim();
@@ -80,7 +105,7 @@ async function buildWebsiteDataFromFlow(answers = {}, theme, userId) {
   try {
     if (theme === 'salon') {
       // currency (dropdown id like "USD"), booking ('build'|'own'),
-      // hours (free text), services (free text w/ durations+prices).
+      // hours (free text), services_list (structured [{name,price,duration}]).
       if (!blank(answers.currency)) wd.currency = String(answers.currency).trim().slice(0, 8);
       wd.bookingMode = answers.booking === 'own' ? 'embed_pending' : 'native';
       if (!blank(answers.hours)) {
@@ -90,19 +115,17 @@ async function buildWebsiteDataFromFlow(answers = {}, theme, userId) {
           wd.weeklyHours = hours;
         } catch (e) { logger.warn(`[FLOW-INTAKE] hours parse failed: ${e.message}`); }
       }
-      if (!blank(answers.services)) {
-        const services = (await extractServices(answers.services, { businessName, industry, userId })) || [];
-        wd.services = services;
-        if (services.length) {
-          try {
-            const prices = await extractPricesByService(answers.services, services, userId);
-            if (prices && Object.keys(prices).length) {
-              wd.salonServices = services.map((name) => ({
-                name, durationMinutes: 0, priceText: prices[name] || '', addressed: false,
-              }));
-            }
-          } catch (e) { logger.warn(`[FLOW-INTAKE] price extract failed: ${e.message}`); }
-        }
+      // Structured services from the looped SERVICE screen — no LLM needed.
+      const list = Array.isArray(answers.services_list) ? answers.services_list : [];
+      const clean = list.filter((s) => s && String(s.name || '').trim());
+      if (clean.length) {
+        wd.services = clean.map((s) => String(s.name).trim());
+        wd.salonServices = clean.map((s) => ({
+          name: String(s.name).trim(),
+          durationMinutes: parseDurationMin(s.duration),
+          priceText: normalizePrice(s.price, wd.currency),
+          addressed: true,
+        }));
       }
     } else if (theme === 'hvac') {
       // f1 = "City: area, area"; f2 = services

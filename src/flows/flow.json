@@ -3,7 +3,8 @@
   "data_api_version": "3.0",
   "routing_model": {
     "COMMON": ["SALON", "DETAILS"],
-    "SALON": ["FINISH"],
+    "SALON": ["SERVICE"],
+    "SERVICE": ["FINISH"],
     "DETAILS": ["FINISH"],
     "FINISH": []
   },
@@ -51,7 +52,7 @@
       "title": "${data.salon_title}",
       "data": {
         "salon_title": { "type": "string", "__example__": "Salon details" },
-        "l_currency": { "type": "string", "__example__": "Currency for prices" },
+        "l_currency": { "type": "string", "__example__": "Currency" },
         "currency_options": {
           "type": "array",
           "items": { "type": "object", "properties": { "id": { "type": "string" }, "title": { "type": "string" } } },
@@ -63,10 +64,8 @@
           "items": { "type": "object", "properties": { "id": { "type": "string" }, "title": { "type": "string" } } },
           "__example__": [{ "id": "build", "title": "Build booking into my site" }, { "id": "own", "title": "I use my own tool" }]
         },
-        "l_hours": { "type": "string", "__example__": "Opening hours (optional)" },
+        "l_hours": { "type": "string", "__example__": "Opening hours" },
         "hours_helper": { "type": "string", "__example__": "e.g. Tue-Sat 9-7" },
-        "l_services": { "type": "string", "__example__": "Services & prices (optional)" },
-        "services_helper": { "type": "string", "__example__": "e.g. Haircut 30min 25" },
         "l_next": { "type": "string", "__example__": "Next" }
       },
       "layout": {
@@ -79,13 +78,57 @@
               { "type": "Dropdown", "name": "currency", "label": "${data.l_currency}", "data-source": "${data.currency_options}", "required": true },
               { "type": "RadioButtonsGroup", "name": "booking", "label": "${data.l_booking}", "data-source": "${data.booking_options}", "required": true },
               { "type": "TextInput", "name": "hours", "input-type": "text", "label": "${data.l_hours}", "helper-text": "${data.hours_helper}", "required": false },
-              { "type": "TextArea", "name": "services", "label": "${data.l_services}", "helper-text": "${data.services_helper}", "required": false },
               {
                 "type": "Footer",
                 "label": "${data.l_next}",
                 "on-click-action": {
                   "name": "data_exchange",
-                  "payload": { "currency": "${form.currency}", "booking": "${form.booking}", "hours": "${form.hours}", "services": "${form.services}" }
+                  "payload": { "currency": "${form.currency}", "booking": "${form.booking}", "hours": "${form.hours}" }
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "SERVICE",
+      "title": "${data.service_title}",
+      "data": {
+        "service_title": { "type": "string", "__example__": "Your services" },
+        "added_summary": { "type": "string", "__example__": "Added so far: Haircut" },
+        "added_visible": { "type": "boolean", "__example__": false },
+        "l_sname": { "type": "string", "__example__": "Service name" },
+        "l_sprice": { "type": "string", "__example__": "Price" },
+        "sprice_helper": { "type": "string", "__example__": "e.g. 25 or $25" },
+        "l_sdur": { "type": "string", "__example__": "Duration" },
+        "sdur_helper": { "type": "string", "__example__": "e.g. 30 min" },
+        "l_addmore": { "type": "string", "__example__": "Add more?" },
+        "addmore_options": {
+          "type": "array",
+          "items": { "type": "object", "properties": { "id": { "type": "string" }, "title": { "type": "string" } } },
+          "__example__": [{ "id": "add", "title": "Add another service" }, { "id": "done", "title": "That's all" }]
+        },
+        "l_continue": { "type": "string", "__example__": "Continue" }
+      },
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          { "type": "TextBody", "text": "${data.added_summary}", "visible": "${data.added_visible}" },
+          {
+            "type": "Form",
+            "name": "f_service",
+            "children": [
+              { "type": "TextInput", "name": "sname", "input-type": "text", "label": "${data.l_sname}", "required": true },
+              { "type": "TextInput", "name": "sprice", "input-type": "text", "label": "${data.l_sprice}", "helper-text": "${data.sprice_helper}", "required": false },
+              { "type": "TextInput", "name": "sdur", "input-type": "text", "label": "${data.l_sdur}", "helper-text": "${data.sdur_helper}", "required": false },
+              { "type": "RadioButtonsGroup", "name": "addmore", "label": "${data.l_addmore}", "data-source": "${data.addmore_options}", "required": false },
+              {
+                "type": "Footer",
+                "label": "${data.l_continue}",
+                "on-click-action": {
+                  "name": "data_exchange",
+                  "payload": { "sname": "${form.sname}", "sprice": "${form.sprice}", "sdur": "${form.sdur}", "addmore": "${form.addmore}" }
                 }
               }
             ]
@@ -133,9 +176,9 @@
       "terminal": true,
       "data": {
         "finish_title": { "type": "string", "__example__": "Contact details" },
-        "l_cemail": { "type": "string", "__example__": "Email to show on site (optional)" },
-        "l_cphone": { "type": "string", "__example__": "Phone (optional)" },
-        "l_caddress": { "type": "string", "__example__": "Address (optional)" },
+        "l_cemail": { "type": "string", "__example__": "Contact email" },
+        "l_cphone": { "type": "string", "__example__": "Phone" },
+        "l_caddress": { "type": "string", "__example__": "Address" },
         "build": { "type": "string", "__example__": "Build my site" }
       },
       "layout": {

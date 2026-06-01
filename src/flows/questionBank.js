@@ -97,29 +97,53 @@ const BOOKING_OPTIONS = {
   ],
 };
 
+// ── "Add another?" radio on the SERVICE screen. Not required — leaving it
+//    blank (or picking "done") proceeds; picking "add" loops for one more.
+const ADDMORE_OPTIONS = {
+  en: [
+    { id: 'add', title: '➕ Add another service' },
+    { id: 'done', title: '✓ That\'s all my services' },
+  ],
+  pt: [
+    { id: 'add', title: '➕ Adicionar outro serviço' },
+    { id: 'done', title: '✓ Esses são todos' },
+  ],
+};
+
 // ── Common labels (Screen 1 + Screen 3 + buttons). ──────────────────────
+// NOTE: WhatsApp auto-appends " (Optional)" to any non-required field's
+// label — so labels here must NEVER include "(optional)" themselves, and
+// stay short (the review screen truncates long labels).
 const L = {
   en: {
     common_title: 'About your business',
-    l_name: "Business name",
-    l_email: "Your email",
+    l_name: 'Business name',
+    l_email: 'Your email',
     l_industry: 'What kind of business?',
     next: 'Next',
     // salon
     salon_title: 'Salon details',
-    l_currency: 'Currency for prices',
+    l_currency: 'Currency',
     l_booking: 'Booking',
-    l_hours: 'Opening hours (optional)',
-    hours_helper: 'e.g. Tue–Sat 9–7. Leave blank for standard hours.',
-    l_services: 'Services & prices (optional)',
-    services_helper: 'e.g. Haircut 30min 25, Colour 90min 85. Leave blank to add later.',
+    l_hours: 'Opening hours',
+    hours_helper: 'e.g. Tue–Sat 9–7. Blank = standard hours.',
+    // services (salon — structured, looped)
+    service_title: 'Your services',
+    l_sname: 'Service name',
+    l_sprice: 'Price',
+    sprice_helper: 'e.g. 25 or $25',
+    l_sdur: 'Duration',
+    sdur_helper: 'e.g. 30 min',
+    l_addmore: 'Add more?',
+    added_prefix: 'Added so far: ',
+    continue: 'Continue',
     // details (non-salon)
     details_title: 'A few details',
     // finish
     finish_title: 'Contact details',
-    l_cemail: 'Email to show on site (optional)',
-    l_cphone: 'Phone (optional)',
-    l_caddress: 'Address (optional)',
+    l_cemail: 'Contact email',
+    l_cphone: 'Phone',
+    l_caddress: 'Address',
     build: 'Build my site',
   },
   pt: {
@@ -129,17 +153,24 @@ const L = {
     l_industry: 'Que tipo de negócio?',
     next: 'Próximo',
     salon_title: 'Detalhes do salão',
-    l_currency: 'Moeda dos preços',
+    l_currency: 'Moeda',
     l_booking: 'Agendamento',
-    l_hours: 'Horário (opcional)',
-    hours_helper: 'Ex: Ter–Sáb 9–19. Deixe vazio para horário padrão.',
-    l_services: 'Serviços & preços (opcional)',
-    services_helper: 'Ex: Corte 30min 50, Cor 90min 120. Deixe vazio para adicionar depois.',
+    l_hours: 'Horário',
+    hours_helper: 'Ex: Ter–Sáb 9–19. Vazio = horário padrão.',
+    service_title: 'Seus serviços',
+    l_sname: 'Nome do serviço',
+    l_sprice: 'Preço',
+    sprice_helper: 'Ex: 50 ou R$50',
+    l_sdur: 'Duração',
+    sdur_helper: 'Ex: 30 min',
+    l_addmore: 'Adicionar mais?',
+    added_prefix: 'Adicionados: ',
+    continue: 'Continuar',
     details_title: 'Alguns detalhes',
     finish_title: 'Contato',
-    l_cemail: 'Email para mostrar no site (opcional)',
-    l_cphone: 'Telefone (opcional)',
-    l_caddress: 'Endereço (opcional)',
+    l_cemail: 'Email de contato',
+    l_cphone: 'Telefone',
+    l_caddress: 'Endereço',
     build: 'Criar meu site',
   },
 };
@@ -193,6 +224,7 @@ module.exports = {
   INDUSTRY_OPTIONS,
   CURRENCY_OPTIONS,
   BOOKING_OPTIONS,
+  ADDMORE_OPTIONS,
   DETAILS,
   L,
   pick,
