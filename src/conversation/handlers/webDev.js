@@ -7675,6 +7675,18 @@ async function selectDomainInline(user, option) {
 async function classifyLateDomainIntent(text, userId) {
   const t = String(text || '').trim();
   if (!t || t.length > 200) return false;
+
+  // Deterministic fast-path. The LLM was inconsistent on terse phrasings
+  // ("i need a domain", "domain name?", "domain?") — sometimes reading them
+  // as off-topic. In the revisions context, any short message that mentions
+  // a domain is a domain-add request, UNLESS they're asking what their
+  // current domain is. This makes the common cases reliable; the LLM below
+  // still handles mixed-intent / multilingual phrasings that omit the word.
+  const tl = t.toLowerCase();
+  if (/\bdomains?\b/.test(tl) && !/\b(what'?s?|which|where'?s?)\b[^.?!]*\bdomain/.test(tl)) {
+    return true;
+  }
+
   try {
     const resp = await generateResponse(
       `Classify whether the user is asking to ADD a custom domain to their already-built website — regardless of any other content in the same message.
