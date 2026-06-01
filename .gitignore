@@ -21,3 +21,6 @@ landing/.next/
 
 # WhatsApp Flow RSA keys (never commit)
 scripts/flows/.keys/
+
+# local test artifact (form screenshot)
+form.jpeg
