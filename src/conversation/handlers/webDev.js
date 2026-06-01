@@ -5528,7 +5528,7 @@ async function generateWebsite(user) {
     try {
       await sendTextMessage(
         user.phone_number,
-        `There you go! Have a look and let me know what you think — want any changes, or are you happy with it?\n\n_You get *${FREE_REVISIONS} free rounds of revisions*; once you activate the site you unlock *unlimited revisions* — keep tweaking until it's exactly right._`
+        `There you go! Have a look and let me know what you think — want any changes, or are you happy with it?`
       );
       await logMessage(user.id, 'Website preview sent, asking for feedback (with revision cap note)', 'assistant');
     } catch (revErr) {

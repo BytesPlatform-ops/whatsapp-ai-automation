@@ -214,12 +214,30 @@ async function handleFlowCompletion(user, message) {
   const { updateUserMetadata } = require('../db/users');
   const prevWd = user.metadata?.websiteData || {};
   const mergedWd = { ...prevWd, ...patch };
+
+  // Create the site DB record if one doesn't exist yet. The chat path does
+  // this in handleCollectName; without it, generateWebsite deploys to
+  // Netlify but has no siteId to persist preview_url against — so the later
+  // revisions / domain steps (getLatestSite) can't find the site and reply
+  // "I don't have a generated website for you yet."
+  let currentSiteId = user.metadata?.currentSiteId || null;
+  if (!currentSiteId) {
+    try {
+      const { createSite } = require('../db/sites');
+      const site = await createSite(user.id, 'business-starter');
+      currentSiteId = site.id;
+    } catch (err) {
+      logger.warn(`[FLOW-INTAKE] createSite failed: ${err.message}`);
+    }
+  }
+
   await updateUserMetadata(user.id, {
     websiteData: mergedWd,
     websiteDemoTriggered: true,
+    currentSiteId,
     email: patch.contactEmail || user.metadata?.email || null,
   });
-  user.metadata = { ...(user.metadata || {}), websiteData: mergedWd, websiteDemoTriggered: true };
+  user.metadata = { ...(user.metadata || {}), websiteData: mergedWd, websiteDemoTriggered: true, currentSiteId };
 
   if (flowToken) {
     try {
