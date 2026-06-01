@@ -41,10 +41,20 @@ function shouldOfferWebsiteFlow(user, message) {
   // adReferral is set on user.metadata by the router before salesBot runs,
   // so the metadata branch covers the case where message.referral isn't
   // threaded through to the handler.
+  //
+  // Testers (TESTER_PHONES) bypass the CTWA gate so the Flow can be exercised
+  // without clicking a real ad. Combined with /reset clearing flowSentAt, a
+  // tester can re-trigger the offer on every reset (unlimited test runs).
   const ctwaClid = user.metadata?.adReferral?.ctwaClid || message.referral?.ctwaClid || null;
-  if (!ctwaClid) return false;
+  let tester = false;
+  try {
+    const { isTester } = require('../feedback/feedback');
+    tester = isTester(user);
+  } catch { /* feedback module optional — fall back to CTWA-only */ }
+  if (!ctwaClid && !tester) return false;
 
-  // Send once. flowSentAt guards re-sends on subsequent messages.
+  // Send once. flowSentAt guards re-sends on subsequent messages (cleared by
+  // /reset, so testers get a fresh offer each reset).
   if (user.metadata?.flowSentAt) return false;
 
   return true;

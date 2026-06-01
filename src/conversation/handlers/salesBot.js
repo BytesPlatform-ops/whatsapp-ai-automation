@@ -257,9 +257,12 @@ async function handleSalesBot(user, message) {
     afterTimestamp: user.metadata?.lastResetAt || null,
   });
 
-  // Entry turn (no prior post-reset history) — used below to offer the
-  // WhatsApp Flow form as an alternative right after the chat greeting.
-  const isFirstTurn = history.length === 0;
+  // Entry turn — the bot hasn't spoken yet this (post-reset) session.
+  // We test for the absence of any assistant turn rather than an empty
+  // history: the inbound message is logged to `conversations` by the
+  // router BEFORE this handler runs, so it's already in `history` and
+  // `history.length === 0` is never true on a real turn.
+  const isFirstTurn = !history.some((h) => h.role === 'assistant');
 
   // First message ever - let the LLM generate the greeting so it matches
   // the user's language and tone from their very first message.
