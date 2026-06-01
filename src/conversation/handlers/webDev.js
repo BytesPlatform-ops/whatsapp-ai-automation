@@ -5474,60 +5474,65 @@ async function generateWebsite(user) {
     // through to the catch and emit a contradictory "generation failed".
     previewSent = true;
 
+    // CAPI: report website preview as a Lead event for ad attribution.
+    // Isolated — a CAPI failure (e.g. an invalid/test ctwa_clid that Meta
+    // rejects) must NOT block the payment link or the revision prompt.
     try {
-    // CAPI: report website preview as a Lead event for ad attribution
-    const { trackWebsitePreview } = require('../integrations/metaCapi');
-    await trackWebsitePreview({
-      phone:    user.phone_number,
-      email:    user.metadata?.email || websiteData?.contactEmail,
-      previewUrl,
-      ctwaClid: user.metadata?.adReferral?.ctwaClid,
-      channel:  user.channel,
-    });
+      const { trackWebsitePreview } = require('../integrations/metaCapi');
+      await trackWebsitePreview({
+        phone:    user.phone_number,
+        email:    user.metadata?.email || websiteData?.contactEmail,
+        previewUrl,
+        ctwaClid: user.metadata?.adReferral?.ctwaClid,
+        channel:  user.channel,
+      });
+    } catch (capiErr) {
+      logger.warn(`[WEBGEN] CAPI preview event failed (non-fatal): ${capiErr.message}`);
+    }
 
     // Send the Stripe activation link as its own message so the user sees
     // the EXACT same URL in chat that the "Activate Now" button on the
-    // site points to. One tap either way — same outcome. The total includes
-    // the domain price if one was selected, so the chat CTA and the banner
-    // always match.
-    if (chatPaymentUrl) {
-      // Format prices with 2 decimals when they have cents, plain integer
-      // when whole-dollar (so $199 doesn't render as $199.00).
-      const fmt = (n) => (Number.isInteger(n) ? `$${n}` : `$${Number(n).toFixed(2)}`);
-      const priceLine = domainPrice > 0 && selectedDomain
-        ? `*${fmt(activationTotal)}* — ${fmt(websitePrice)} website + ${fmt(domainPrice)} for *${selectedDomain}*.`
-        : selectedDomain
-          ? `*${fmt(activationTotal)}* — I'll point *${selectedDomain}* at your new site right after payment.`
-          : `*${fmt(activationTotal)}*.`;
-      await sendTextMessage(
-        user.phone_number,
-        `🔒 *Preview mode.* ${priceLine}\n\nActivate to make it live and unlock the contact form:\n\n👉 ${chatPaymentUrl}\n\nSame checkout as the *Activate Now* button on your site.`
-      );
-      await logMessage(
-        user.id,
-        `Activation link sent (Stripe direct): $${activationTotal} (${selectedDomain || 'no domain'}) ${chatPaymentUrl}`,
-        'assistant'
-      );
+    // site points to. Isolated so a Stripe/send hiccup can't swallow the
+    // revision prompt below.
+    try {
+      if (chatPaymentUrl) {
+        // Format prices with 2 decimals when they have cents, plain integer
+        // when whole-dollar (so $199 doesn't render as $199.00).
+        const fmt = (n) => (Number.isInteger(n) ? `$${n}` : `$${Number(n).toFixed(2)}`);
+        const priceLine = domainPrice > 0 && selectedDomain
+          ? `*${fmt(activationTotal)}* — ${fmt(websitePrice)} website + ${fmt(domainPrice)} for *${selectedDomain}*.`
+          : selectedDomain
+            ? `*${fmt(activationTotal)}* — I'll point *${selectedDomain}* at your new site right after payment.`
+            : `*${fmt(activationTotal)}*.`;
+        await sendTextMessage(
+          user.phone_number,
+          `🔒 *Preview mode.* ${priceLine}\n\nActivate to make it live and unlock the contact form:\n\n👉 ${chatPaymentUrl}\n\nSame checkout as the *Activate Now* button on your site.`
+        );
+        await logMessage(
+          user.id,
+          `Activation link sent (Stripe direct): $${activationTotal} (${selectedDomain || 'no domain'}) ${chatPaymentUrl}`,
+          'assistant'
+        );
+      }
+    } catch (payErr) {
+      logger.warn(`[WEBGEN] Activation link message failed (non-fatal): ${payErr.message}`);
     }
 
-    await logMessage(user.id, `Website deployed: ${previewUrl}`, 'assistant');
+    await logMessage(user.id, `Website deployed: ${previewUrl}`, 'assistant').catch(() => {});
     logger.info(`[WEBGEN] ✅ Complete! Preview sent to ${user.phone_number}: ${previewUrl}`);
 
-    // Always go to revisions state — user can approve, request changes, or reject.
-    // Surfacing the revision policy here avoids the trust-breaking moment of
-    // hitting the wall later. The pitch is: 3 free rounds + unlimited once
-    // they activate the site, which doubles as a soft conversion lever
-    // (more tweaks = activate to unlock).
-    await sendTextMessage(
-      user.phone_number,
-      `There you go! Have a look and let me know what you think — want any changes, or are you happy with it?\n\n_You get *${FREE_REVISIONS} free rounds of revisions*; once you activate the site you unlock *unlimited revisions* — keep tweaking until it's exactly right._`
-    );
-    await logMessage(user.id, 'Website preview sent, asking for feedback (with revision cap note)', 'assistant');
-    } catch (postErr) {
-      // Best-effort post-deploy steps failed AFTER the preview was sent.
-      // The site is live and the user has the link — log and move on; do
-      // NOT fall through to the failure path.
-      logger.warn(`[WEBGEN] Post-deploy step failed (preview already sent): ${postErr.message}`);
+    // Always go to revisions state — user can approve, request changes, or
+    // reject. This "what next?" prompt is the most important post-preview
+    // message (it drives the whole approve → domain → activate flow), so it
+    // gets its OWN guard — nothing above can prevent it from sending.
+    try {
+      await sendTextMessage(
+        user.phone_number,
+        `There you go! Have a look and let me know what you think — want any changes, or are you happy with it?\n\n_You get *${FREE_REVISIONS} free rounds of revisions*; once you activate the site you unlock *unlimited revisions* — keep tweaking until it's exactly right._`
+      );
+      await logMessage(user.id, 'Website preview sent, asking for feedback (with revision cap note)', 'assistant');
+    } catch (revErr) {
+      logger.warn(`[WEBGEN] Revision prompt failed to send: ${revErr.message}`);
     }
 
     return STATES.WEB_REVISIONS;
