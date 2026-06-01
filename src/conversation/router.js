@@ -1290,11 +1290,13 @@ async function _routeMessage(message) {
       sessionRecapLastAt: null,
       // Phase 12: multi-service queue.
       serviceQueue: [],
-      // NOTE: lastBusinessName / lastCompletedProjectType / lastCompletedProjectAt
-      // are INTENTIONALLY NOT cleared here. Phase 15 uses them to personalize
-      // the return-visitor greeting across sessions — a /reset should wipe
-      // in-progress state, not the memory that the user has completed work
-      // with us before.
+      // Phase 15 return-visitor memory. Previously preserved across /reset
+      // so a completed customer got a "welcome back" greeting. Now cleared
+      // too — /reset is a full wipe: the bot forgets that prior work was
+      // ever done with us, treating the user as brand new.
+      lastBusinessName: null,
+      lastCompletedProjectType: null,
+      lastCompletedProjectAt: null,
     });
     user.state = STATES.SALES_CHAT;
     // Mirror the voice-mode clear onto the in-memory user + per-turn context

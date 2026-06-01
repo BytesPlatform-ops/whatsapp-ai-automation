@@ -62,7 +62,14 @@ export function TextSummarizerWidget() {
           maxLength={6000}
           className="w-full resize-y rounded-xl border border-ink-200 bg-white px-4 py-3 text-base text-ink-900 outline-none transition focus:border-wa-green focus:ring-2 focus:ring-wa-green/20"
         />
-        <div className="mt-1 text-xs text-ink-400">{text.length}/6000 characters</div>
+        <div className="mt-1 flex items-center justify-between text-xs">
+          <span className={text.trim().length > 0 && text.trim().length < 40 ? 'text-amber-600' : 'text-ink-400'}>
+            {text.trim().length < 40
+              ? `Add at least ${40 - text.trim().length} more character${40 - text.trim().length === 1 ? '' : 's'} to summarize`
+              : 'Ready to summarize'}
+          </span>
+          <span className="text-ink-400">{text.length}/6000</span>
+        </div>
       </div>
 
       <div className="flex flex-wrap items-center gap-3">
@@ -83,7 +90,7 @@ export function TextSummarizerWidget() {
         <button
           type="button"
           onClick={handleSummarize}
-          disabled={loading || text.trim().length < 40}
+          disabled={loading}
           className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-wa-teal px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-navy-700 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {loading ? (
