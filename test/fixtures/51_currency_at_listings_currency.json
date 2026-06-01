@@ -1,0 +1,30 @@
+{
+  "name": "real-estate-currency-step-sets-site-currency-and-advances",
+  "description": "Real-estate flow. New WEB_COLLECT_LISTINGS_CURRENCY step (parallel to salon's SALON_CURRENCY) asked once right after the agent profile. User replies 'PKR'; bot must store websiteData.currency='PKR' and advance to WEB_COLLECT_LISTINGS_ASK. This is the site-wide currency used as the default for every listing (real or placeholder) so a non-USD agent doesn't get '$' prices.",
+  "channel": "whatsapp",
+  "seed": {
+    "state": "WEB_COLLECT_LISTINGS_CURRENCY",
+    "metadata": {
+      "websiteData": {
+        "businessName": "Sarah Khan Realty",
+        "industry": "Real Estate",
+        "primaryCity": "Karachi",
+        "serviceAreas": ["Clifton", "DHA"],
+        "agentProfileCollected": true,
+        "yearsExperience": 8
+      },
+      "websiteDemoTriggered": true,
+      "emailSkipped": true
+    }
+  },
+  "turns": [
+    {
+      "user": "PKR",
+      "expect": {
+        "metadata.websiteData.currency": "PKR",
+        "state": "WEB_COLLECT_LISTINGS_ASK",
+        "sent_count_gte": 1
+      }
+    }
+  ]
+}

@@ -145,6 +145,10 @@ async function buildWebsiteDataFromFlow(answers = {}, theme, userId) {
         wd.services = (await extractServices(answers.f2, { businessName, industry, userId })) || [];
       }
     } else if (theme === 'realestate') {
+      // currency (dropdown id like "USD") — site-wide currency for listing
+      // prices; mirrors the salon branch and is used as the per-listing
+      // default when listings are refined in chat / generated.
+      if (!blank(answers.currency)) wd.currency = String(answers.currency).trim().slice(0, 8);
       // f1 = agent profile (raw); f2 = listings (raw, refined in chat)
       if (!blank(answers.f1)) wd.agentProfileRaw = String(answers.f1).trim();
       wd.agentProfileCollected = true;

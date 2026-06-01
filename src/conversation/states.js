@@ -18,6 +18,9 @@ const STATES = {
   WEB_COLLECT_AREAS: 'WEB_COLLECT_AREAS',
   // Real-estate-specific: brokerage, years, designations in one step
   WEB_COLLECT_AGENT_PROFILE: 'WEB_COLLECT_AGENT_PROFILE',
+  // Real-estate-specific: site-wide currency for listing prices (asked once,
+  // upfront — parallel to salon's SALON_CURRENCY). Defaults per-listing currency.
+  WEB_COLLECT_LISTINGS_CURRENCY: 'WEB_COLLECT_LISTINGS_CURRENCY',
   // Real-estate-specific: optional featured listings (max 3) + optional photos
   WEB_COLLECT_LISTINGS_ASK: 'WEB_COLLECT_LISTINGS_ASK',
   WEB_COLLECT_LISTINGS_DETAILS: 'WEB_COLLECT_LISTINGS_DETAILS',

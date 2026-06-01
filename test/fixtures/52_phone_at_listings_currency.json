@@ -1,0 +1,31 @@
+{
+  "name": "phone-at-listings-currency-side-channels-into-contact",
+  "description": "Real-estate flow. User at the new WEB_COLLECT_LISTINGS_CURRENCY step types their phone instead of a currency. Bot must side-channel the phone into contactPhone (deterministic tryApplyContactFormat — no LLM) AND stay at WEB_COLLECT_LISTINGS_CURRENCY so the currency question gets re-asked. Without the cross-field short-circuit the phone would be read as a (failed) currency and lost.",
+  "channel": "whatsapp",
+  "seed": {
+    "state": "WEB_COLLECT_LISTINGS_CURRENCY",
+    "metadata": {
+      "websiteData": {
+        "businessName": "Sarah Khan Realty",
+        "industry": "Real Estate",
+        "primaryCity": "Karachi",
+        "serviceAreas": ["Clifton", "DHA"],
+        "agentProfileCollected": true,
+        "yearsExperience": 8
+      },
+      "websiteDemoTriggered": true,
+      "emailSkipped": true
+    }
+  },
+  "turns": [
+    {
+      "user": "+15677656788",
+      "expect": {
+        "metadata.websiteData.contactPhone": "*exists*",
+        "metadata.websiteData.currency": "*missing*",
+        "state": "WEB_COLLECT_LISTINGS_CURRENCY",
+        "sent_count_gte": 1
+      }
+    }
+  ]
+}

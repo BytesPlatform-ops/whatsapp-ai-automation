@@ -89,10 +89,16 @@ function serviceScreen(lang, list) {
 function detailsScreen(theme, lang) {
   const d = DETAILS[theme] || DETAILS.general;
   const f2 = pick(d.f2, lang);
+  // Currency only shown for real estate (listing prices). The Dropdown is
+  // hidden + non-required for every other niche via currency_visible.
+  const currencyVisible = theme === 'realestate';
   return {
     screen: 'DETAILS',
     data: {
       details_title: pick(d.title, lang),
+      l_currency: L[lang].l_currency,
+      currency_options: CURRENCY_OPTIONS[lang] || CURRENCY_OPTIONS.en,
+      currency_visible: currencyVisible,
       f1_label: pick(d.f1, lang),
       f1_helper: pick(d.f1_helper, lang),
       f2_label: f2 || '—',
@@ -209,7 +215,7 @@ async function handleFlow(req, ctx = {}) {
     if (screen === 'DETAILS') {
       if (flowToken) {
         await patchSession(flowToken, {
-          answersPatch: { f1: data.f1 || '', f2: data.f2 || '' },
+          answersPatch: { currency: data.currency || '', f1: data.f1 || '', f2: data.f2 || '' },
         }).catch((err) => logger.warn(`[FLOW] persist DETAILS failed: ${err.message}`));
       }
       return finishScreen(lang);

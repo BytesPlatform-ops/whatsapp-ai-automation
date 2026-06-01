@@ -147,6 +147,13 @@
       "title": "${data.details_title}",
       "data": {
         "details_title": { "type": "string", "__example__": "A few details" },
+        "l_currency": { "type": "string", "__example__": "Currency" },
+        "currency_options": {
+          "type": "array",
+          "items": { "type": "object", "properties": { "id": { "type": "string" }, "title": { "type": "string" } } },
+          "__example__": [{ "id": "USD", "title": "USD ($)" }, { "id": "EUR", "title": "EUR (€)" }]
+        },
+        "currency_visible": { "type": "boolean", "__example__": false },
         "f1_label": { "type": "string", "__example__": "Tell us about your work" },
         "f1_helper": { "type": "string", "__example__": "" },
         "f2_label": { "type": "string", "__example__": "More" },
@@ -161,6 +168,7 @@
             "type": "Form",
             "name": "f_details",
             "children": [
+              { "type": "Dropdown", "name": "currency", "label": "${data.l_currency}", "data-source": "${data.currency_options}", "visible": "${data.currency_visible}", "required": "${data.currency_visible}" },
               { "type": "TextArea", "name": "f1", "label": "${data.f1_label}", "helper-text": "${data.f1_helper}", "required": false },
               { "type": "TextArea", "name": "f2", "label": "${data.f2_label}", "helper-text": "${data.f2_helper}", "required": false, "visible": "${data.f2_visible}" },
               {
@@ -168,7 +176,7 @@
                 "label": "${data.l_next}",
                 "on-click-action": {
                   "name": "data_exchange",
-                  "payload": { "f1": "${form.f1}", "f2": "${form.f2}" }
+                  "payload": { "currency": "${form.currency}", "f1": "${form.f1}", "f2": "${form.f2}" }
                 }
               }
             ]

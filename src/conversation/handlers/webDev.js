@@ -318,6 +318,10 @@ function nextMissingWebDevState(websiteData, fullMetadata = {}) {
   // no services section — whyChooseUs + featuredListings carry that load.
   if (isRealEstate(websiteData.industry, websiteData.industryKey)) {
     if (!websiteData.agentProfileCollected) return STATES.WEB_COLLECT_AGENT_PROFILE;
+    // Site-wide currency, asked once upfront (parallel to salon's SALON_CURRENCY)
+    // so listing prices — real or placeholder — render in the right symbol.
+    // Flow-intake users already have websiteData.currency set and skip this.
+    if (!websiteData.currency) return STATES.WEB_COLLECT_LISTINGS_CURRENCY;
     if (!websiteData.listingsFlowDone) {
       // Phase-gated: ASK → DETAILS → PHOTOS. If agent said skip at the ask
       // step we set listingsFlowDone immediately without entering the loop.
@@ -510,6 +514,8 @@ function questionForState(state, websiteData) {
         '• Designations (CRS, ABR, SRS, GRI, etc. — or *none*)\n\n' +
         'Answer all three in one message, or skip to use sensible defaults.'
       );
+    case STATES.WEB_COLLECT_LISTINGS_CURRENCY:
+      return 'What currency should I show your listing prices in? e.g. *USD*, *GBP*, *PKR*, *AED*, *EUR*, *INR*';
     case STATES.WEB_COLLECT_LISTINGS_ASK:
       return (
         "Any current listings you'd like to showcase? I can feature up to 3 on the homepage.\n\n" +
@@ -628,6 +634,7 @@ const SUMMARY_REQUEST_STATES = new Set([
   STATES.WEB_COLLECT_AREAS,
   STATES.WEB_COLLECT_SERVICES,
   STATES.WEB_COLLECT_AGENT_PROFILE,
+  STATES.WEB_COLLECT_LISTINGS_CURRENCY,
   STATES.WEB_COLLECT_LISTINGS_ASK,
   STATES.WEB_COLLECT_LISTINGS_DETAILS,
   STATES.WEB_COLLECT_LISTINGS_PHOTOS,
@@ -686,6 +693,8 @@ async function handleWebDev(user, message) {
       return handleCollectServices(user, message);
     case STATES.WEB_COLLECT_AGENT_PROFILE:
       return handleCollectAgentProfile(user, message);
+    case STATES.WEB_COLLECT_LISTINGS_CURRENCY:
+      return handleListingsCurrency(user, message);
     case STATES.WEB_COLLECT_LISTINGS_ASK:
       return handleCollectListingsAsk(user, message);
     case STATES.WEB_COLLECT_LISTINGS_DETAILS:
@@ -1734,6 +1743,63 @@ Rules:
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// REAL-ESTATE SITE CURRENCY — asked once, upfront (parallel to handleSalonCurrency).
+// Stores websiteData.currency (ISO code) so every listing price, real or
+// placeholder, renders in the right symbol. Used as the per-listing default in
+// handleCollectListingsDetails and stamped onto generated listings in the generator.
+// ═══════════════════════════════════════════════════════════════════════════
+async function handleListingsCurrency(user, message) {
+  const raw = (message.text || '').trim();
+  const wd = { ...(user.metadata?.websiteData || {}) };
+
+  // Explicit currency from the TEXT only (no city fallback here). Passing the
+  // primaryCity would make detectCurrency resolve ANY input to the city's
+  // currency, which would swallow a volunteered phone / correction at this
+  // step. The city fallback is applied only in the delegation branch below.
+  let currency = detectCurrency(raw, null);
+
+  // Not a recognizable currency. Before re-asking, handle the cross-field
+  // cases — a volunteered phone/email or a prior-field correction ("change
+  // name to X") typed here would otherwise be read as a (failed) currency and
+  // lost. Same pattern as the agent-profile / listings steps. (A clean
+  // currency answer skips this entirely — no extra LLM call.)
+  if (!currency) {
+    const reaskCurrency = 'Which currency? Just type the code or symbol — e.g. *USD*, *GBP*, *PKR*, *AED*, *EUR*, *INR*';
+    if (raw) {
+      const fmt = await tryApplyContactFormat(user, raw);
+      if (fmt) {
+        await sendTextMessage(user.phone_number, await dynamicPhrase(`${fmt.ackPart} ${reaskCurrency}`, user, raw));
+        await logMessage(user.id, 'Listings-currency step: applied contact format short-circuit', 'assistant');
+        return STATES.WEB_COLLECT_LISTINGS_CURRENCY;
+      }
+    }
+    if (raw && raw.length >= 3) {
+      const sc = await tryApplySideChannel(user, 'listingsCurrency', raw);
+      if (sc) {
+        await sendTextMessage(user.phone_number, await dynamicPhrase(`${sc.ackPart} ${reaskCurrency}`, user, raw));
+        await logMessage(user.id, `Listings-currency step: applied side-channel ${sc.side.kind}`, 'assistant');
+        return STATES.WEB_COLLECT_LISTINGS_CURRENCY;
+      }
+    }
+    // Delegating / unsure ("idk", "whatever", "skip" in any language) → fall
+    // back to the city-inferred currency or USD and move on. Otherwise re-ask.
+    const delegated = await classifyDelegation(raw, 'What currency are your listing prices in?');
+    if (delegated) {
+      currency = detectCurrency('', wd.primaryCity) || 'USD';
+    } else {
+      await sendTextMessage(user.phone_number, await dynamicPhrase(reaskCurrency, user, raw));
+      return STATES.WEB_COLLECT_LISTINGS_CURRENCY;
+    }
+  }
+
+  const merged = { ...wd, currency };
+  await updateUserMetadata(user.id, { websiteData: merged });
+  user.metadata = { ...(user.metadata || {}), websiteData: merged };
+  await logMessage(user.id, `Real-estate currency set: ${currency}`, 'assistant');
+  return smartAdvance(user, message, `Got it — prices in *${currency}*.`);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // REAL-ESTATE LISTINGS COLLECTION (optional, 3-phase: ASK → DETAILS → PHOTOS)
 // If agent skips at any point we mark listingsFlowDone=true and the
 // generator falls back to LLM-hallucinated defaults + Unsplash.
@@ -2587,7 +2653,9 @@ async function handleCollectListingsDetails(user, message) {
   const listing = {
     address: parsed.address || 'Address on request',
     price: parsed.price || 0,
-    currency: parsed.currency || null, // null = unknown, will ask below
+    // Per-listing currency from the text, else the site currency collected at
+    // WEB_COLLECT_LISTINGS_CURRENCY. null = still unknown → ask below (rare now).
+    currency: parsed.currency || wd.currency || null,
     beds: parsed.beds != null ? parsed.beds : 3,
     baths: parsed.baths != null ? parsed.baths : 2,
     sqft: parsed.sqft != null ? parsed.sqft : 1800,

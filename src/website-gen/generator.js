@@ -317,6 +317,10 @@ async function generateWebsiteContent(businessData, extras = {}) {
     designations,
     specialty,
     calendlyUrl,
+    // Site-wide currency (ISO code) collected at WEB_COLLECT_LISTINGS_CURRENCY
+    // or the Flow form. Used as the default for every listing's currency so
+    // real and placeholder prices render in the right symbol.
+    currency: siteCurrency,
     // User-provided listings (from the WhatsApp collection flow). When
     // present, these override the LLM-generated featuredListings so the
     // site shows real properties instead of hallucinated ones.
@@ -609,7 +613,7 @@ Generate compelling website copy for this business. Return ONLY valid JSON.${lan
       generatedContent.featuredListings = userListings.map((l) => ({
         address: l.address || 'Address on request',
         price: Number(l.price) || 0,
-        currency: l.currency || null,
+        currency: l.currency || siteCurrency || null,
         beds: Number(l.beds) || 3,
         baths: Number(l.baths) || 2,
         sqft: Number(l.sqft) || 1800,
@@ -620,6 +624,14 @@ Generate compelling website copy for this business. Return ONLY valid JSON.${lan
           : undefined,
       }));
       logger.info(`[WEBGEN] Using ${userListings.length} user-provided listings (${userListings.filter((l) => l.photoUrl).length} with photos)`);
+    }
+    // Stamp the site currency onto any listing that lacks one — covers the
+    // LLM-generated placeholder listings used when the agent skipped the
+    // listings step, so a non-USD agent doesn't get "$" placeholder prices.
+    if (siteCurrency && Array.isArray(generatedContent.featuredListings)) {
+      generatedContent.featuredListings = generatedContent.featuredListings.map((l) => (
+        l && !l.currency ? { ...l, currency: siteCurrency } : l
+      ));
     }
     const [listingRes, neighRes, agentRes] = await Promise.allSettled([
       Array.isArray(generatedContent.featuredListings) && generatedContent.featuredListings.length > 0
