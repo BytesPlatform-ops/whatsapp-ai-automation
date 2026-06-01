@@ -78,10 +78,10 @@ function serviceScreen(lang, list) {
       l_addmore: L[lang].l_addmore,
       addmore_options: ADDMORE_OPTIONS[lang] || ADDMORE_OPTIONS.en,
       l_continue: L[lang].continue,
-      // Always empty — bound to each input's init-value so the fields
-      // reset to blank every time the screen (re)loads, instead of
-      // retaining the previous service's values on "add another".
-      blank: '',
+      // Always-empty initial values bound to the Form's init-values, so
+      // the inputs reset to blank every time the screen (re)loads — they
+      // no longer retain the previous service's values on "add another".
+      service_init: { sname: '', sprice: '', sdur: '' },
     },
   };
 }

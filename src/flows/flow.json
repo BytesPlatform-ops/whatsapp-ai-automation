@@ -110,7 +110,11 @@
           "__example__": [{ "id": "add", "title": "Add another service" }, { "id": "done", "title": "That's all" }]
         },
         "l_continue": { "type": "string", "__example__": "Continue" },
-        "blank": { "type": "string", "__example__": "" }
+        "service_init": {
+          "type": "object",
+          "properties": { "sname": { "type": "string" }, "sprice": { "type": "string" }, "sdur": { "type": "string" } },
+          "__example__": { "sname": "", "sprice": "", "sdur": "" }
+        }
       },
       "layout": {
         "type": "SingleColumnLayout",
@@ -119,10 +123,11 @@
           {
             "type": "Form",
             "name": "f_service",
+            "init-values": "${data.service_init}",
             "children": [
-              { "type": "TextInput", "name": "sname", "input-type": "text", "label": "${data.l_sname}", "init-value": "${data.blank}", "required": true },
-              { "type": "TextInput", "name": "sprice", "input-type": "text", "label": "${data.l_sprice}", "helper-text": "${data.sprice_helper}", "init-value": "${data.blank}", "required": false },
-              { "type": "TextInput", "name": "sdur", "input-type": "text", "label": "${data.l_sdur}", "helper-text": "${data.sdur_helper}", "init-value": "${data.blank}", "required": false },
+              { "type": "TextInput", "name": "sname", "input-type": "text", "label": "${data.l_sname}", "required": true },
+              { "type": "TextInput", "name": "sprice", "input-type": "text", "label": "${data.l_sprice}", "helper-text": "${data.sprice_helper}", "required": false },
+              { "type": "TextInput", "name": "sdur", "input-type": "text", "label": "${data.l_sdur}", "helper-text": "${data.sdur_helper}", "required": false },
               { "type": "RadioButtonsGroup", "name": "addmore", "label": "${data.l_addmore}", "data-source": "${data.addmore_options}", "required": false },
               {
                 "type": "Footer",
