@@ -323,15 +323,19 @@ async function sendWithMenuButton(to, text, extraButtons = []) {
  * store the user's ctwa_clid + resolved language against it (see
  * flows/store.js) so the endpoint and the final build stay attributed.
  *
+ * Uses flow_action 'data_exchange' so the endpoint receives an INIT
+ * request on open and supplies the first screen's labels + dropdown
+ * options (in the resolved language). 'navigate' would skip INIT and the
+ * first screen's dynamic labels would render as "undefined".
+ *
  * @param {string} to             user's wa number
  * @param {string} bodyText       message body shown above the button
  * @param {object} opts
  * @param {string} opts.flowId    published Flow id
  * @param {string} opts.flowToken unique-per-user token
  * @param {string} [opts.cta]     button label (default "Get Started")
- * @param {string} [opts.startScreen] first screen id (default "COMMON")
  */
-async function sendFlowMessage(to, bodyText, { flowId, flowToken, cta = 'Get Started', startScreen = 'COMMON' } = {}) {
+async function sendFlowMessage(to, bodyText, { flowId, flowToken, cta = 'Get Started' } = {}) {
   return sendRequest({
     messaging_product: 'whatsapp',
     to,
@@ -346,8 +350,7 @@ async function sendFlowMessage(to, bodyText, { flowId, flowToken, cta = 'Get Sta
           flow_token: flowToken,
           flow_id: flowId,
           flow_cta: cta,
-          flow_action: 'navigate',
-          flow_action_payload: { screen: startScreen },
+          flow_action: 'data_exchange',
         },
       },
     },

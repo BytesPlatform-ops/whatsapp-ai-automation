@@ -86,65 +86,78 @@ async function roundtrip(reqObj) {
   const ping = await roundtrip({ action: 'ping', version: '3.0' });
   ok('ping returns {data:{status:active}}', ping?.data?.status === 'active');
 
-  console.log('\n=== 2. INIT → COMMON labels ===');
+  console.log('\n=== 2. INIT → COMMON (labels + industry dropdown options) ===');
   const init = await roundtrip({ action: 'INIT', flow_token: 'ft_test1', version: '3.0' });
   ok('INIT returns COMMON screen', init.screen === 'COMMON');
   ok('COMMON has business-name label', typeof init.data.l_name === 'string' && init.data.l_name.length > 0);
+  ok('COMMON has 5 industry options', Array.isArray(init.data.industry_options) && init.data.industry_options.length === 5);
+  ok('industry option ids are themes', init.data.industry_options.every((o) => ['salon', 'hvac', 'realestate', 'portfolio', 'general'].includes(o.id)));
 
-  console.log('\n=== 3. classifyTheme ===');
+  console.log('\n=== 3. classifyTheme (dropdown id + free-text fallback) ===');
   const themeCases = [
-    ['hair salon', 'salon'], ['barbershop', 'salon'], ['HVAC', 'hvac'],
-    ['plumber', 'hvac'], ['real estate agent', 'realestate'],
-    ['freelance photographer', 'portfolio'], ['coffee shop', 'general'],
+    ['salon', 'salon'], ['hvac', 'hvac'], ['realestate', 'realestate'],
+    ['hair salon', 'salon'], ['plumber', 'hvac'], ['coffee shop', 'general'],
   ];
   for (const [ind, exp] of themeCases) ok(`"${ind}" → ${exp}`, classifyTheme(ind) === exp);
 
-  console.log('\n=== 4. Full salon journey (COMMON→THEME→FINISH→SUCCESS) ===');
+  console.log('\n=== 4. Full salon journey (COMMON→SALON→FINISH→SUCCESS) ===');
   const tok = 'ft_salon';
   await storeStub.createSession({ flowToken: tok, lang: 'en' });
   const r1 = await roundtrip({
     action: 'data_exchange', screen: 'COMMON', flow_token: tok,
-    data: { business_name: 'Glow Studio', email: 'g@glow.com', industry: 'hair salon' },
+    data: { business_name: 'Glow Studio', email: 'g@glow.com', industry: 'salon' },
   });
-  ok('COMMON→THEME', r1.screen === 'THEME');
-  ok('theme classified salon (session)', sessionMem[tok].theme === 'salon');
-  ok('salon q1 = currency', /currency|moeda/i.test(r1.data.q1_label));
-  ok('salon q4 visible', r1.data.q4_visible === true);
+  ok('COMMON→SALON', r1.screen === 'SALON');
+  ok('theme persisted salon', sessionMem[tok].theme === 'salon');
+  ok('SALON has currency options', Array.isArray(r1.data.currency_options) && r1.data.currency_options.length > 0);
+  ok('SALON has booking options (radio)', Array.isArray(r1.data.booking_options) && r1.data.booking_options.length === 2);
 
   const r2 = await roundtrip({
-    action: 'data_exchange', screen: 'THEME', flow_token: tok,
-    data: { a1: 'USD', a2: 'no', a3: 'Tue-Sat 9-7', a4: 'Haircut 30min 25' },
+    action: 'data_exchange', screen: 'SALON', flow_token: tok,
+    data: { currency: 'USD', booking: 'build', hours: 'Tue-Sat 9-7', services: 'Haircut 30min 25' },
   });
-  ok('THEME→FINISH', r2.screen === 'FINISH');
-  ok('FINISH has contact label', typeof r2.data.l_contact === 'string');
+  ok('SALON→FINISH', r2.screen === 'FINISH');
+  ok('FINISH has 3 contact labels', !!r2.data.l_cemail && !!r2.data.l_cphone && !!r2.data.l_caddress);
 
   const r3 = await roundtrip({
     action: 'data_exchange', screen: 'FINISH', flow_token: tok,
-    data: { contact_info: 'g@glow.com, +1 555 111 2222' },
+    data: { c_email: 'g@glow.com', c_phone: '+1 555 111 2222', c_address: '5 Main St' },
   });
   ok('FINISH→SUCCESS', r3.screen === 'SUCCESS');
   ok('SUCCESS carries flow_token', r3.data?.extension_message_response?.params?.flow_token === tok);
-  ok('session has all answers persisted',
+  ok('session persisted all answers',
     sessionMem[tok].answers.business_name === 'Glow Studio' &&
-    sessionMem[tok].answers.a1 === 'USD' &&
-    sessionMem[tok].answers.contact_info.includes('@'));
+    sessionMem[tok].answers.currency === 'USD' &&
+    sessionMem[tok].answers.booking === 'build' &&
+    sessionMem[tok].answers.c_phone.includes('555'));
 
-  console.log('\n=== 5. HVAC theme hides q3/q4 ===');
+  console.log('\n=== 5. Non-salon (hvac) → DETAILS with f2 visible ===');
   const tok2 = 'ft_hvac';
   await storeStub.createSession({ flowToken: tok2, lang: 'en' });
   const h1 = await roundtrip({
     action: 'data_exchange', screen: 'COMMON', flow_token: tok2,
-    data: { business_name: 'CoolAir', email: 'c@air.com', industry: 'HVAC and AC repair' },
+    data: { business_name: 'CoolAir', email: 'c@air.com', industry: 'hvac' },
   });
-  ok('hvac q2 visible', h1.data.q2_visible === true);
-  ok('hvac q3 hidden', h1.data.q3_visible === false);
-  ok('hvac q4 hidden', h1.data.q4_visible === false);
+  ok('hvac → DETAILS', h1.screen === 'DETAILS');
+  ok('DETAILS f1 label present', typeof h1.data.f1_label === 'string' && h1.data.f1_label.length > 0);
+  ok('hvac f2 visible (services)', h1.data.f2_visible === true);
 
-  console.log('\n=== 6. Portuguese labels ===');
+  console.log('\n=== 6. General → DETAILS with f2 hidden ===');
+  const tok4 = 'ft_general';
+  await storeStub.createSession({ flowToken: tok4, lang: 'en' });
+  const g1 = await roundtrip({
+    action: 'data_exchange', screen: 'COMMON', flow_token: tok4,
+    data: { business_name: 'Acme', email: 'a@acme.com', industry: 'general' },
+  });
+  ok('general → DETAILS', g1.screen === 'DETAILS');
+  ok('general f2 hidden', g1.data.f2_visible === false);
+
+  console.log('\n=== 7. Portuguese labels + options ===');
   const tok3 = 'ft_pt';
   await storeStub.createSession({ flowToken: tok3, lang: 'pt' });
   const p1 = await roundtrip({ action: 'INIT', flow_token: tok3, version: '3.0' });
   ok('PT INIT label is Portuguese', /negócio|nome/i.test(p1.data.l_name));
+  ok('PT industry options Portuguese', /Salão|Imóveis/i.test(JSON.stringify(p1.data.industry_options)));
 
   console.log(`\n=== RESULT: ${pass} passed, ${fail} failed ===\n`);
   process.exit(fail === 0 ? 0 : 1);

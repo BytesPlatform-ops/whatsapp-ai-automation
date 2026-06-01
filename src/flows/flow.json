@@ -2,8 +2,9 @@
   "version": "7.0",
   "data_api_version": "3.0",
   "routing_model": {
-    "COMMON": ["THEME"],
-    "THEME": ["FINISH"],
+    "COMMON": ["SALON", "DETAILS"],
+    "SALON": ["FINISH"],
+    "DETAILS": ["FINISH"],
     "FINISH": []
   },
   "screens": [
@@ -11,9 +12,15 @@
       "id": "COMMON",
       "title": "About your business",
       "data": {
-        "l_name": { "type": "string", "__example__": "What's your business name?" },
-        "l_email": { "type": "string", "__example__": "What's your email?" },
-        "l_industry": { "type": "string", "__example__": "What industry are you in?" },
+        "common_title": { "type": "string", "__example__": "About your business" },
+        "l_name": { "type": "string", "__example__": "Business name" },
+        "l_email": { "type": "string", "__example__": "Your email" },
+        "l_industry": { "type": "string", "__example__": "What kind of business?" },
+        "industry_options": {
+          "type": "array",
+          "items": { "type": "object", "properties": { "id": { "type": "string" }, "title": { "type": "string" } } },
+          "__example__": [{ "id": "salon", "title": "Salon & Beauty" }, { "id": "general", "title": "Other" }]
+        },
         "l_next": { "type": "string", "__example__": "Next" }
       },
       "layout": {
@@ -23,35 +30,15 @@
             "type": "Form",
             "name": "f1",
             "children": [
-              {
-                "type": "TextInput",
-                "name": "business_name",
-                "label": "${data.l_name}",
-                "required": true
-              },
-              {
-                "type": "TextInput",
-                "name": "email",
-                "input-type": "email",
-                "label": "${data.l_email}",
-                "required": true
-              },
-              {
-                "type": "TextInput",
-                "name": "industry",
-                "label": "${data.l_industry}",
-                "required": true
-              },
+              { "type": "TextInput", "name": "business_name", "label": "${data.l_name}", "input-type": "text", "required": true },
+              { "type": "TextInput", "name": "email", "input-type": "email", "label": "${data.l_email}", "required": true },
+              { "type": "Dropdown", "name": "industry", "label": "${data.l_industry}", "data-source": "${data.industry_options}", "required": true },
               {
                 "type": "Footer",
                 "label": "${data.l_next}",
                 "on-click-action": {
                   "name": "data_exchange",
-                  "payload": {
-                    "business_name": "${form.business_name}",
-                    "email": "${form.email}",
-                    "industry": "${form.industry}"
-                  }
+                  "payload": { "business_name": "${form.business_name}", "email": "${form.email}", "industry": "${form.industry}" }
                 }
               }
             ]
@@ -60,17 +47,26 @@
       }
     },
     {
-      "id": "THEME",
-      "title": "${data.theme_title}",
+      "id": "SALON",
+      "title": "${data.salon_title}",
       "data": {
-        "theme_title": { "type": "string", "__example__": "Details" },
-        "q1_label": { "type": "string", "__example__": "Question 1" },
-        "q2_label": { "type": "string", "__example__": "Question 2" },
-        "q3_label": { "type": "string", "__example__": "Question 3" },
-        "q4_label": { "type": "string", "__example__": "Question 4" },
-        "q2_visible": { "type": "boolean", "__example__": true },
-        "q3_visible": { "type": "boolean", "__example__": false },
-        "q4_visible": { "type": "boolean", "__example__": false },
+        "salon_title": { "type": "string", "__example__": "Salon details" },
+        "l_currency": { "type": "string", "__example__": "Currency for prices" },
+        "currency_options": {
+          "type": "array",
+          "items": { "type": "object", "properties": { "id": { "type": "string" }, "title": { "type": "string" } } },
+          "__example__": [{ "id": "USD", "title": "USD ($)" }, { "id": "EUR", "title": "EUR (€)" }]
+        },
+        "l_booking": { "type": "string", "__example__": "Booking" },
+        "booking_options": {
+          "type": "array",
+          "items": { "type": "object", "properties": { "id": { "type": "string" }, "title": { "type": "string" } } },
+          "__example__": [{ "id": "build", "title": "Build booking into my site" }, { "id": "own", "title": "I use my own tool" }]
+        },
+        "l_hours": { "type": "string", "__example__": "Opening hours (optional)" },
+        "hours_helper": { "type": "string", "__example__": "e.g. Tue-Sat 9-7" },
+        "l_services": { "type": "string", "__example__": "Services & prices (optional)" },
+        "services_helper": { "type": "string", "__example__": "e.g. Haircut 30min 25" },
         "l_next": { "type": "string", "__example__": "Next" }
       },
       "layout": {
@@ -78,46 +74,52 @@
         "children": [
           {
             "type": "Form",
-            "name": "f2",
+            "name": "f_salon",
             "children": [
-              {
-                "type": "TextArea",
-                "name": "a1",
-                "label": "${data.q1_label}",
-                "required": true
-              },
-              {
-                "type": "TextArea",
-                "name": "a2",
-                "label": "${data.q2_label}",
-                "required": false,
-                "visible": "${data.q2_visible}"
-              },
-              {
-                "type": "TextArea",
-                "name": "a3",
-                "label": "${data.q3_label}",
-                "required": false,
-                "visible": "${data.q3_visible}"
-              },
-              {
-                "type": "TextArea",
-                "name": "a4",
-                "label": "${data.q4_label}",
-                "required": false,
-                "visible": "${data.q4_visible}"
-              },
+              { "type": "Dropdown", "name": "currency", "label": "${data.l_currency}", "data-source": "${data.currency_options}", "required": true },
+              { "type": "RadioButtonsGroup", "name": "booking", "label": "${data.l_booking}", "data-source": "${data.booking_options}", "required": true },
+              { "type": "TextInput", "name": "hours", "input-type": "text", "label": "${data.l_hours}", "helper-text": "${data.hours_helper}", "required": false },
+              { "type": "TextArea", "name": "services", "label": "${data.l_services}", "helper-text": "${data.services_helper}", "required": false },
               {
                 "type": "Footer",
                 "label": "${data.l_next}",
                 "on-click-action": {
                   "name": "data_exchange",
-                  "payload": {
-                    "a1": "${form.a1}",
-                    "a2": "${form.a2}",
-                    "a3": "${form.a3}",
-                    "a4": "${form.a4}"
-                  }
+                  "payload": { "currency": "${form.currency}", "booking": "${form.booking}", "hours": "${form.hours}", "services": "${form.services}" }
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "DETAILS",
+      "title": "${data.details_title}",
+      "data": {
+        "details_title": { "type": "string", "__example__": "A few details" },
+        "f1_label": { "type": "string", "__example__": "Tell us about your work" },
+        "f1_helper": { "type": "string", "__example__": "" },
+        "f2_label": { "type": "string", "__example__": "More" },
+        "f2_helper": { "type": "string", "__example__": "" },
+        "f2_visible": { "type": "boolean", "__example__": true },
+        "l_next": { "type": "string", "__example__": "Next" }
+      },
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          {
+            "type": "Form",
+            "name": "f_details",
+            "children": [
+              { "type": "TextArea", "name": "f1", "label": "${data.f1_label}", "helper-text": "${data.f1_helper}", "required": false },
+              { "type": "TextArea", "name": "f2", "label": "${data.f2_label}", "helper-text": "${data.f2_helper}", "required": false, "visible": "${data.f2_visible}" },
+              {
+                "type": "Footer",
+                "label": "${data.l_next}",
+                "on-click-action": {
+                  "name": "data_exchange",
+                  "payload": { "f1": "${form.f1}", "f2": "${form.f2}" }
                 }
               }
             ]
@@ -130,9 +132,11 @@
       "title": "${data.finish_title}",
       "terminal": true,
       "data": {
-        "finish_title": { "type": "string", "__example__": "Almost done" },
-        "l_contact": { "type": "string", "__example__": "Contact info?" },
-        "l_build": { "type": "string", "__example__": "Build my site" }
+        "finish_title": { "type": "string", "__example__": "Contact details" },
+        "l_cemail": { "type": "string", "__example__": "Email to show on site (optional)" },
+        "l_cphone": { "type": "string", "__example__": "Phone (optional)" },
+        "l_caddress": { "type": "string", "__example__": "Address (optional)" },
+        "build": { "type": "string", "__example__": "Build my site" }
       },
       "layout": {
         "type": "SingleColumnLayout",
@@ -141,20 +145,15 @@
             "type": "Form",
             "name": "f3",
             "children": [
-              {
-                "type": "TextArea",
-                "name": "contact_info",
-                "label": "${data.l_contact}",
-                "required": true
-              },
+              { "type": "TextInput", "name": "c_email", "input-type": "email", "label": "${data.l_cemail}", "required": false },
+              { "type": "TextInput", "name": "c_phone", "input-type": "phone", "label": "${data.l_cphone}", "required": false },
+              { "type": "TextArea", "name": "c_address", "label": "${data.l_caddress}", "required": false },
               {
                 "type": "Footer",
-                "label": "${data.l_build}",
+                "label": "${data.build}",
                 "on-click-action": {
                   "name": "data_exchange",
-                  "payload": {
-                    "contact_info": "${form.contact_info}"
-                  }
+                  "payload": { "c_email": "${form.c_email}", "c_phone": "${form.c_phone}", "c_address": "${form.c_address}" }
                 }
               }
             ]

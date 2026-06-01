@@ -1,62 +1,92 @@
 'use strict';
 
 // The Flow endpoint "brain". Pure decision logic — no crypto, no HTTP.
-// Given the decrypted request + the resolved language, it drives the
-// 3-screen state machine and returns the next screen + its data.
 //
-//   ping                          → health check
-//   INIT                          → render COMMON labels
-//   data_exchange @ COMMON        → classify theme, render THEME questions
-//   data_exchange @ THEME         → render FINISH (contact) labels
-//   data_exchange @ FINISH        → SUCCESS terminal (build handed off
-//                                   to the webhook nfm_reply handler)
+//   ping                         → health check
+//   INIT                         → render COMMON (labels + industry dropdown options)
+//   data_exchange @ COMMON       → industry dropdown id IS the theme; route to
+//                                  SALON (tailored) or DETAILS (generic 2-field)
+//   data_exchange @ SALON        → persist salon answers → FINISH
+//   data_exchange @ DETAILS      → persist details → FINISH
+//   data_exchange @ FINISH       → persist 3 contact fields → SUCCESS
 //
-// Answers are persisted per screen via the store so the final webhook
-// has everything even though the response payloads stay small.
+// Answers persist per screen via the store so the final webhook has the
+// full set even though each response payload stays small.
 
-const { Q, L, classifyTheme, q } = require('./questionBank');
+const {
+  classifyTheme, VALID_THEMES, INDUSTRY_OPTIONS, CURRENCY_OPTIONS,
+  BOOKING_OPTIONS, DETAILS, L, pick,
+} = require('./questionBank');
 const { getSession, patchSession } = require('./store');
 const { logger } = require('../utils/logger');
 
-// Build the data object for the THEME screen from a theme + language.
-// Empty questions (q3/q4 for most non-salon themes) are hidden via the
-// q*_visible booleans. Hidden fields still need a non-empty label (Flow
-// validates labels even when not shown), so we substitute a placeholder.
-function themeScreenData(theme, lang) {
-  const t = Q[theme] || Q.general;
-  const q2 = q(theme, 'q2', lang);
-  const q3 = q(theme, 'q3', lang);
-  const q4 = q(theme, 'q4', lang);
+function commonScreen(lang) {
   return {
-    theme_title: t.title[lang] || t.title.en,
-    q1_label: q(theme, 'q1', lang),
-    q2_label: q2 || '—',
-    q3_label: q3 || '—',
-    q4_label: q4 || '—',
-    q2_visible: !!q2,
-    q3_visible: !!q3,
-    q4_visible: !!q4,
-    l_next: L[lang].next,
-    _theme: theme,
+    screen: 'COMMON',
+    data: {
+      common_title: L[lang].common_title,
+      l_name: L[lang].l_name,
+      l_email: L[lang].l_email,
+      l_industry: L[lang].l_industry,
+      industry_options: INDUSTRY_OPTIONS[lang] || INDUSTRY_OPTIONS.en,
+      l_next: L[lang].next,
+    },
   };
 }
 
-/**
- * @param {object} req decrypted request: { action, screen, data, flow_token, version }
- * @param {object} [ctx]
- * @param {string} [ctx.lang] resolved language ('en'|'pt'); falls back to
- *        the persisted session lang, then 'en'.
- * @returns {Promise<object>} the response object to encrypt + return
- */
+function salonScreen(lang) {
+  return {
+    screen: 'SALON',
+    data: {
+      salon_title: L[lang].salon_title,
+      l_currency: L[lang].l_currency,
+      currency_options: CURRENCY_OPTIONS[lang] || CURRENCY_OPTIONS.en,
+      l_booking: L[lang].l_booking,
+      booking_options: BOOKING_OPTIONS[lang] || BOOKING_OPTIONS.en,
+      l_hours: L[lang].l_hours,
+      hours_helper: L[lang].hours_helper,
+      l_services: L[lang].l_services,
+      services_helper: L[lang].services_helper,
+      l_next: L[lang].next,
+    },
+  };
+}
+
+function detailsScreen(theme, lang) {
+  const d = DETAILS[theme] || DETAILS.general;
+  const f2 = pick(d.f2, lang);
+  return {
+    screen: 'DETAILS',
+    data: {
+      details_title: pick(d.title, lang),
+      f1_label: pick(d.f1, lang),
+      f1_helper: pick(d.f1_helper, lang),
+      f2_label: f2 || '—',
+      f2_helper: pick(d.f2_helper, lang),
+      f2_visible: !!f2,
+      l_next: L[lang].next,
+    },
+  };
+}
+
+function finishScreen(lang) {
+  return {
+    screen: 'FINISH',
+    data: {
+      finish_title: L[lang].finish_title,
+      l_cemail: L[lang].l_cemail,
+      l_cphone: L[lang].l_cphone,
+      l_caddress: L[lang].l_caddress,
+      build: L[lang].build,
+    },
+  };
+}
+
 async function handleFlow(req, ctx = {}) {
   const { action, screen, data = {}, flow_token: flowToken } = req || {};
 
-  // Health check — Meta pings the endpoint. Must return this exact shape.
-  if (action === 'ping') {
-    return { data: { status: 'active' } };
-  }
+  if (action === 'ping') return { data: { status: 'active' } };
 
-  // Client reported an error (e.g. decryption issue on their side).
   if (data && data.error) {
     logger.warn(`[FLOW] client error on token ${flowToken}: ${data.error}`);
     return { data: { acknowledged: true } };
@@ -66,95 +96,81 @@ async function handleFlow(req, ctx = {}) {
   let lang = ctx.lang;
   let session = null;
   if (flowToken) {
-    try {
-      session = await getSession(flowToken);
-    } catch (err) {
-      logger.warn(`[FLOW] getSession(${flowToken}) failed: ${err.message}`);
-    }
+    try { session = await getSession(flowToken); }
+    catch (err) { logger.warn(`[FLOW] getSession(${flowToken}) failed: ${err.message}`); }
   }
   if (!lang) lang = session?.lang || 'en';
   if (!L[lang]) lang = 'en';
 
-  // INIT — first screen load. Return COMMON labels.
-  if (action === 'INIT') {
-    return {
-      screen: 'COMMON',
-      data: {
-        l_name: L[lang].name,
-        l_email: L[lang].email,
-        l_industry: L[lang].industry,
-        l_next: L[lang].next,
-      },
-    };
-  }
+  // INIT — flow opened. Return COMMON (labels + dropdown options).
+  if (action === 'INIT') return commonScreen(lang);
 
   if (action === 'data_exchange') {
-    // After COMMON → classify theme, persist, render THEME questions.
+    // COMMON → classify (dropdown id = theme), route to the right screen.
     if (screen === 'COMMON') {
       const businessName = String(data.business_name || '').trim();
       const email = String(data.email || '').trim();
-      const industry = String(data.industry || '').trim();
-      const theme = classifyTheme(industry);
+      const industryId = String(data.industry || '').trim();
+      const theme = VALID_THEMES.includes(industryId) ? industryId : classifyTheme(industryId);
 
       if (flowToken) {
         await patchSession(flowToken, {
-          answersPatch: { business_name: businessName, email, industry },
-          theme,
-          lang,
+          answersPatch: { business_name: businessName, email, industry: industryId },
+          theme, lang,
         }).catch((err) => logger.warn(`[FLOW] persist COMMON failed: ${err.message}`));
       }
       logger.info(`[FLOW] COMMON → theme=${theme} lang=${lang} token=${flowToken}`);
 
-      return { screen: 'THEME', data: themeScreenData(theme, lang) };
+      return theme === 'salon' ? salonScreen(lang) : detailsScreen(theme, lang);
     }
 
-    // After THEME → persist answers, render FINISH (contact) screen.
-    if (screen === 'THEME') {
-      const themeAnswers = {
-        a1: data.a1 || '',
-        a2: data.a2 || '',
-        a3: data.a3 || '',
-        a4: data.a4 || '',
-      };
+    // SALON → persist tailored answers → FINISH.
+    if (screen === 'SALON') {
       if (flowToken) {
-        await patchSession(flowToken, { answersPatch: themeAnswers })
-          .catch((err) => logger.warn(`[FLOW] persist THEME failed: ${err.message}`));
+        await patchSession(flowToken, {
+          answersPatch: {
+            currency: data.currency || '',
+            booking: data.booking || '',
+            hours: data.hours || '',
+            services: data.services || '',
+          },
+        }).catch((err) => logger.warn(`[FLOW] persist SALON failed: ${err.message}`));
       }
-      return {
-        screen: 'FINISH',
-        data: {
-          finish_title: L[lang].finish_title,
-          l_contact: L[lang].contact,
-          l_build: L[lang].build,
-        },
-      };
+      return finishScreen(lang);
     }
 
-    // After FINISH → persist contact, complete. The actual build is
-    // triggered by the webhook nfm_reply handler (it gets the full
-    // payload from Meta); here we just persist + return the terminal
-    // SUCCESS response Meta expects.
+    // DETAILS → persist generic 2-field answers → FINISH.
+    if (screen === 'DETAILS') {
+      if (flowToken) {
+        await patchSession(flowToken, {
+          answersPatch: { f1: data.f1 || '', f2: data.f2 || '' },
+        }).catch((err) => logger.warn(`[FLOW] persist DETAILS failed: ${err.message}`));
+      }
+      return finishScreen(lang);
+    }
+
+    // FINISH → persist the 3 contact fields → terminal SUCCESS. The build
+    // is triggered by the webhook nfm_reply handler.
     if (screen === 'FINISH') {
       if (flowToken) {
         await patchSession(flowToken, {
-          answersPatch: { contact_info: data.contact_info || '' },
+          answersPatch: {
+            c_email: data.c_email || '',
+            c_phone: data.c_phone || '',
+            c_address: data.c_address || '',
+          },
         }).catch((err) => logger.warn(`[FLOW] persist FINISH failed: ${err.message}`));
       }
       logger.info(`[FLOW] FINISH complete token=${flowToken}`);
       return {
         screen: 'SUCCESS',
-        data: {
-          extension_message_response: {
-            params: { flow_token: flowToken },
-          },
-        },
+        data: { extension_message_response: { params: { flow_token: flowToken } } },
       };
     }
   }
 
-  // Unknown action/screen — return a benign ack so we never hard-fail.
   logger.warn(`[FLOW] unhandled action="${action}" screen="${screen}" token=${flowToken}`);
   return { data: { acknowledged: true } };
 }
 
-module.exports = { handleFlow, themeScreenData };
+module.exports = { handleFlow, commonScreen, salonScreen, detailsScreen, finishScreen };

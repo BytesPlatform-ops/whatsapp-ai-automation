@@ -1,34 +1,30 @@
 'use strict';
 
-// Question bank + theme classifier for the dynamic WhatsApp Flow.
+// Question bank + option lists for the dynamic WhatsApp Flow.
 //
-// ONE flow serves every niche and both languages. Screen 1 (COMMON)
-// collects business_name / email / industry. The endpoint then calls
-// classifyTheme(industry) and serves the matching Screen-2 questions in
-// the resolved language. Screen 3 (FINISH) collects contact info.
+// Foolproof design: the industry is picked from a DROPDOWN whose option id
+// IS the theme (salon/hvac/realestate/portfolio/general) — so the niche is
+// always classified correctly, no free-text guessing. Salon gets a tailored
+// screen (currency dropdown + booking radio); the other niches share a
+// simple 2-field DETAILS screen. Contact is 3 separate optional fields.
 //
-// Theme classification reuses the SAME niche detectors the website
-// generator uses (isHvac / isRealEstate / isPortfolio from templates),
-// so a niche that builds an HVAC site here also classifies as 'hvac'.
-// The salon detector lives inside the big webDev.js handler and isn't
-// exported, so we inline its one-line regex here (kept in sync with
-// isSalonIndustry in webDev.js).
+// Everything is bilingual (en/pt); the endpoint serves the resolved
+// language. classifyTheme() remains only as a fallback for any legacy
+// free-text industry value.
 
 const { isHvac, isRealEstate, isPortfolio } = require('../website-gen/templates');
 
-// Mirror of isSalonIndustry() in src/conversation/handlers/webDev.js.
 const SALON_RX = /\b(salon|beauty|barber|spa|nail|hair|lash|brow|makeup)/i;
 
-/**
- * Classify the industry free-text into one of the 5 flow themes.
- * Order matters: salon is checked first (its keywords like "hair" can
- * overlap other trades), then the trade/real-estate/portfolio detectors,
- * else 'general'. Returns 'salon' | 'hvac' | 'realestate' | 'portfolio'
- * | 'general'.
- */
+// Fallback classifier for free-text industry (the dropdown normally gives
+// the theme id directly, so this is rarely used).
 function classifyTheme(industry) {
   const s = String(industry || '').trim();
   if (!s) return 'general';
+  // Direct theme ids from the dropdown.
+  if (['salon', 'hvac', 'realestate', 'portfolio', 'general'].includes(s.toLowerCase())) {
+    return s.toLowerCase();
+  }
   if (SALON_RX.test(s)) return 'salon';
   if (isHvac(s)) return 'hvac';
   if (isRealEstate(s)) return 'realestate';
@@ -36,114 +32,168 @@ function classifyTheme(industry) {
   return 'general';
 }
 
-// Per-theme Screen-2 questions. Up to 4 fields (a1..a4). Empty string =
-// field not shown (endpoint passes "" → that TextArea is hidden/skipped).
-// Text mirrors Pixie's real chat questions, condensed for a form.
-const Q = {
-  salon: {
-    title: { en: 'Salon details', pt: 'Detalhes do salão' },
-    q1: {
-      en: 'Which currency? e.g. GBP, EUR, USD.',
-      pt: 'Qual moeda? Ex: BRL, R$, USD.',
-    },
-    q2: {
-      en: 'Booking tool link (Fresha/Booksy/Vagaro/Calendly)? Or "no" and I build one.',
-      pt: 'Link de agendamento (Fresha/Booksy/Vagaro/Calendly)? Ou "não" e eu crio um.',
-    },
-    q3: {
-      en: 'Opening hours? e.g. Tue-Sat 9-7. Or "default".',
-      pt: 'Horário de funcionamento? Ex: Ter-Sáb 9-19. Ou "padrão".',
-    },
-    q4: {
-      en: 'Service durations + prices? e.g. Haircut 30min 25. Or "default".',
-      pt: 'Serviços, duração e preços? Ex: Corte 30min 50. Ou "padrão".',
-    },
+const SUPPORTED_LANGS = ['en', 'pt'];
+const VALID_THEMES = ['salon', 'hvac', 'realestate', 'portfolio', 'general'];
+
+// Map a theme id → a clean industry label the site generator's template
+// detectors (isHvac / isSalonIndustry / isRealEstate / isPortfolio)
+// recognize. Used by the intake mapper so the right template is chosen.
+const THEME_TO_INDUSTRY = {
+  salon: 'Salon',
+  hvac: 'HVAC',
+  realestate: 'Real Estate',
+  portfolio: 'Portfolio',
+  general: 'General',
+};
+
+// ── Industry dropdown (Screen 1). Option id === theme. ──────────────────
+const INDUSTRY_OPTIONS = {
+  en: [
+    { id: 'salon', title: 'Salon & Beauty' },
+    { id: 'hvac', title: 'Home Services (HVAC, plumbing…)' },
+    { id: 'realestate', title: 'Real Estate' },
+    { id: 'portfolio', title: 'Creative / Portfolio' },
+    { id: 'general', title: 'Other / General business' },
+  ],
+  pt: [
+    { id: 'salon', title: 'Salão & Beleza' },
+    { id: 'hvac', title: 'Serviços (climatização, encanamento…)' },
+    { id: 'realestate', title: 'Imóveis' },
+    { id: 'portfolio', title: 'Criativo / Portfólio' },
+    { id: 'general', title: 'Outro / Negócio geral' },
+  ],
+};
+
+// ── Currency dropdown (salon Screen 2). ─────────────────────────────────
+const CURRENCY_OPTIONS = {
+  en: [
+    { id: 'USD', title: 'USD ($)' },
+    { id: 'EUR', title: 'EUR (€)' },
+    { id: 'GBP', title: 'GBP (£)' },
+    { id: 'BRL', title: 'BRL (R$)' },
+    { id: 'AED', title: 'AED (dh)' },
+    { id: 'INR', title: 'INR (₹)' },
+    { id: 'PKR', title: 'PKR (Rs)' },
+  ],
+  pt: [
+    { id: 'BRL', title: 'BRL (R$)' },
+    { id: 'USD', title: 'USD ($)' },
+    { id: 'EUR', title: 'EUR (€)' },
+    { id: 'GBP', title: 'GBP (£)' },
+    { id: 'AED', title: 'AED (dh)' },
+    { id: 'INR', title: 'INR (₹)' },
+  ],
+};
+
+// ── Booking radio (salon Screen 2). ─────────────────────────────────────
+const BOOKING_OPTIONS = {
+  en: [
+    { id: 'build', title: 'Build booking into my site' },
+    { id: 'own', title: 'I use my own tool (I\'ll add it later)' },
+  ],
+  pt: [
+    { id: 'build', title: 'Criar agendamento no meu site' },
+    { id: 'own', title: 'Uso minha própria ferramenta (adiciono depois)' },
+  ],
+};
+
+// ── Common labels (Screen 1 + Screen 3 + buttons). ──────────────────────
+const L = {
+  en: {
+    common_title: 'About your business',
+    l_name: "Business name",
+    l_email: "Your email",
+    l_industry: 'What kind of business?',
+    next: 'Next',
+    // salon
+    salon_title: 'Salon details',
+    l_currency: 'Currency for prices',
+    l_booking: 'Booking',
+    l_hours: 'Opening hours (optional)',
+    hours_helper: 'e.g. Tue–Sat 9–7. Leave blank for standard hours.',
+    l_services: 'Services & prices (optional)',
+    services_helper: 'e.g. Haircut 30min 25, Colour 90min 85. Leave blank to add later.',
+    // details (non-salon)
+    details_title: 'A few details',
+    // finish
+    finish_title: 'Contact details',
+    l_cemail: 'Email to show on site (optional)',
+    l_cphone: 'Phone (optional)',
+    l_caddress: 'Address (optional)',
+    build: 'Build my site',
   },
+  pt: {
+    common_title: 'Sobre seu negócio',
+    l_name: 'Nome do negócio',
+    l_email: 'Seu email',
+    l_industry: 'Que tipo de negócio?',
+    next: 'Próximo',
+    salon_title: 'Detalhes do salão',
+    l_currency: 'Moeda dos preços',
+    l_booking: 'Agendamento',
+    l_hours: 'Horário (opcional)',
+    hours_helper: 'Ex: Ter–Sáb 9–19. Deixe vazio para horário padrão.',
+    l_services: 'Serviços & preços (opcional)',
+    services_helper: 'Ex: Corte 30min 50, Cor 90min 120. Deixe vazio para adicionar depois.',
+    details_title: 'Alguns detalhes',
+    finish_title: 'Contato',
+    l_cemail: 'Email para mostrar no site (opcional)',
+    l_cphone: 'Telefone (opcional)',
+    l_caddress: 'Endereço (opcional)',
+    build: 'Criar meu site',
+  },
+};
+
+// ── DETAILS screen fields per non-salon niche (2 TextAreas). ────────────
+// f2 omitted (empty) → hidden. Labels kept ≤ component limits.
+const DETAILS = {
   hvac: {
     title: { en: 'Service details', pt: 'Detalhes do serviço' },
-    q1: {
-      en: 'Which city are you based in, and which areas do you serve? e.g. Austin: Round Rock, Cedar Park.',
-      pt: 'Em qual cidade você atua e quais regiões atende? Ex: São Paulo: Centro, Zona Sul.',
+    f1: {
+      en: 'City + areas you serve',
+      pt: 'Cidade + regiões atendidas',
     },
-    q2: {
-      en: 'Which services do you offer? (AC repair, heating, plumbing, electrical, roofing, etc.)',
-      pt: 'Quais serviços você oferece? (ar-condicionado, aquecimento, encanamento, elétrica, etc.)',
-    },
-    q3: { en: '', pt: '' },
-    q4: { en: '', pt: '' },
+    f1_helper: { en: 'e.g. Austin: Round Rock, Cedar Park', pt: 'Ex: São Paulo: Centro, Zona Sul' },
+    f2: { en: 'Services you offer', pt: 'Serviços que você oferece' },
+    f2_helper: { en: 'e.g. AC repair, heating, duct cleaning', pt: 'Ex: ar-condicionado, aquecimento' },
   },
   realestate: {
     title: { en: 'Agent details', pt: 'Detalhes do corretor' },
-    q1: {
-      en: 'Quick agent profile: brokerage (or "solo"), years in real estate, designations (CRS, ABR, SRS, GRI — or none). All in one message, or "skip".',
-      pt: 'Perfil do corretor: imobiliária (ou "autônomo"), anos de experiência, certificações (CRECI, etc. — ou nenhuma). Tudo numa mensagem, ou "pular".',
-    },
-    q2: {
-      en: 'Any current listings to showcase (up to 3)? Describe one per line: "45 Elm St, $525k, 4 bed 3 bath, 2200 sqft". Or "skip" for placeholders.',
-      pt: 'Imóveis para destacar (até 3)? Um por linha: "Rua Elm 45, R$525mil, 4 quartos, 200m²". Ou "pular" para exemplos.',
-    },
-    q3: { en: '', pt: '' },
-    q4: { en: '', pt: '' },
+    f1: { en: 'Your agent profile', pt: 'Seu perfil de corretor' },
+    f1_helper: { en: 'Brokerage (or solo), years, designations. Or leave blank.', pt: 'Imobiliária (ou autônomo), anos, certificações. Ou deixe vazio.' },
+    f2: { en: 'Listings to showcase (optional)', pt: 'Imóveis para destacar (opcional)' },
+    f2_helper: { en: 'One per line. Or leave blank for placeholders.', pt: 'Um por linha. Ou deixe vazio.' },
   },
   portfolio: {
     title: { en: 'Your work', pt: 'Seu trabalho' },
-    q1: {
-      en: 'Short bio for your hero — 1-2 sentences about you and what you do. Or "skip" and I\'ll generate one.',
-      pt: 'Bio curta para o destaque — 1-2 frases sobre você e o que faz. Ou "pular" e eu gero uma.',
-    },
-    q2: {
-      en: 'Projects to feature (up to 6)? One per line: "BrandX rebrand — 2024 — Lead Designer — behance.net/brandx". Or "skip".',
-      pt: 'Projetos para destacar (até 6)? Um por linha: "Rebrand BrandX — 2024 — Designer — behance.net/brandx". Ou "pular".',
-    },
-    q3: { en: '', pt: '' },
-    q4: { en: '', pt: '' },
+    f1: { en: 'Short bio', pt: 'Bio curta' },
+    f1_helper: { en: '1–2 sentences about you. Or leave blank.', pt: '1–2 frases sobre você. Ou deixe vazio.' },
+    f2: { en: 'Projects to feature (optional)', pt: 'Projetos para destacar (opcional)' },
+    f2_helper: { en: 'One per line. Or leave blank for placeholders.', pt: 'Um por linha. Ou deixe vazio.' },
   },
   general: {
     title: { en: 'Your services', pt: 'Seus serviços' },
-    q1: {
-      en: 'What services or products do you offer? List separated by commas, or "skip".',
-      pt: 'Quais serviços ou produtos você oferece? Separe por vírgulas, ou "pular".',
-    },
-    q2: { en: '', pt: '' },
-    q3: { en: '', pt: '' },
-    q4: { en: '', pt: '' },
+    f1: { en: 'Services or products you offer', pt: 'Serviços ou produtos que você oferece' },
+    f1_helper: { en: 'Separate with commas. Or leave blank.', pt: 'Separe por vírgulas. Ou deixe vazio.' },
+    f2: { en: '', pt: '' }, // hidden
+    f2_helper: { en: '', pt: '' },
   },
 };
 
-// Common screen labels per language (Screen 1 + Screen 3 + buttons).
-const L = {
-  en: {
-    name: "What's your business name?",
-    email: "What's your email? We'll use it to send updates about your website.",
-    industry: 'What industry are you in? e.g. tech, restaurant, real estate, salon, HVAC.',
-    next: 'Next',
-    contact: 'What contact info do you want on the site? Email, phone, and/or address.',
-    build: 'Build my site',
-    common_title: 'About your business',
-    finish_title: 'Almost done',
-  },
-  pt: {
-    name: 'Qual o nome do seu negócio?',
-    email: 'Qual seu email? Usaremos para enviar novidades sobre seu site.',
-    industry: 'Qual seu setor? Ex: tecnologia, restaurante, imóveis, salão, climatização.',
-    next: 'Próximo',
-    contact: 'Quais informações de contato quer no site? Email, telefone e/ou endereço.',
-    build: 'Criar meu site',
-    common_title: 'Sobre seu negócio',
-    finish_title: 'Quase lá',
-  },
-};
-
-const SUPPORTED_LANGS = ['en', 'pt'];
-
-/**
- * Pick the question text for a theme + field + language, with an English
- * fallback if the language key is missing.
- */
-function q(theme, field, lang) {
-  const t = Q[theme] || Q.general;
-  const entry = t[field] || { en: '', pt: '' };
-  return entry[lang] || entry.en || '';
+function pick(obj, lang) {
+  if (!obj) return '';
+  return obj[lang] || obj.en || '';
 }
 
-module.exports = { Q, L, classifyTheme, q, SUPPORTED_LANGS };
+module.exports = {
+  classifyTheme,
+  SUPPORTED_LANGS,
+  VALID_THEMES,
+  THEME_TO_INDUSTRY,
+  INDUSTRY_OPTIONS,
+  CURRENCY_OPTIONS,
+  BOOKING_OPTIONS,
+  DETAILS,
+  L,
+  pick,
+};

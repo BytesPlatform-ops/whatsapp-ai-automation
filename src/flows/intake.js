@@ -40,68 +40,62 @@ function splitContact(text) {
  * Map submitted Flow answers → a websiteData patch. Async because it
  * reuses Pixie's LLM-backed extractors for services / hours / prices.
  *
- * @param {object} answers  flat answers (business_name,email,industry,a1..a4,contact_info)
+ * New form shape:
+ *   COMMON : business_name, email, industry (dropdown id = theme)
+ *   SALON  : currency (id), booking (id 'build'|'own'), hours, services
+ *   DETAILS: f1, f2  (meaning depends on theme)
+ *   FINISH : c_email, c_phone, c_address (3 separate optional fields)
+ *
+ * @param {object} answers  flat submitted answers
  * @param {string} theme    salon|hvac|realestate|portfolio|general
  * @param {string} userId
  * @returns {Promise<object>} websiteData patch
  */
 async function buildWebsiteDataFromFlow(answers = {}, theme, userId) {
   const { extractServices, extractPricesByService } = require('../conversation/entityAccumulator');
+  const { THEME_TO_INDUSTRY } = require('./questionBank');
 
   const businessName = String(answers.business_name || '').trim();
   const email = String(answers.email || '').trim();
-  const industry = String(answers.industry || '').trim();
-  const contact = splitContact(answers.contact_info);
+  // industry arrives as the dropdown id (== theme). Convert to a clean
+  // industry label the site generator's template detectors recognize.
+  const industry = THEME_TO_INDUSTRY[theme] || String(answers.industry || '').trim() || 'General';
+
+  // Contact: 3 separate optional fields — no parsing/guessing needed.
+  const cEmail = String(answers.c_email || '').trim();
+  const cPhone = String(answers.c_phone || '').trim();
+  const cAddress = String(answers.c_address || '').trim();
 
   const wd = {
     businessName,
     industry,
-    contactEmail: contact.contactEmail || email || '',
-    contactPhone: contact.contactPhone || '',
-    contactAddress: contact.contactAddress || '',
+    contactEmail: cEmail || email || '',
+    contactPhone: cPhone || '',
+    contactAddress: cAddress || '',
     flowSource: true, // marks this lead as built via the Flow intake
   };
 
-  const isDefault = (v) => /^\s*(default|skip|no|none|n\/?a)\s*$/i.test(String(v || ''));
+  const blank = (v) => !v || !String(v).trim();
 
   try {
-    if (theme === 'general') {
-      // a1 = services list
-      if (answers.a1 && !isDefault(answers.a1)) {
-        wd.services = (await extractServices(answers.a1, { businessName, industry, userId })) || [];
-      }
-    } else if (theme === 'hvac') {
-      // a1 = "City: area, area"; a2 = services
-      if (answers.a1) {
-        const [city, areasPart] = String(answers.a1).split(':');
-        if (city) wd.primaryCity = city.trim();
-        if (areasPart) wd.serviceAreas = areasPart.split(/[,;]/).map((s) => s.trim()).filter(Boolean);
-      }
-      if (answers.a2 && !isDefault(answers.a2)) {
-        wd.services = (await extractServices(answers.a2, { businessName, industry, userId })) || [];
-      }
-    } else if (theme === 'salon') {
-      // a1=currency, a2=booking, a3=hours, a4=services+durations+prices
-      if (answers.a1 && !isDefault(answers.a1)) wd.currency = String(answers.a1).trim().slice(0, 8);
-      if (answers.a2 && !isDefault(answers.a2)) {
-        wd.bookingMode = 'embed';
-        wd.bookingUrl = String(answers.a2).trim();
-      } else {
-        wd.bookingMode = 'native';
-      }
-      if (answers.a3 && !isDefault(answers.a3)) {
+    if (theme === 'salon') {
+      // currency (dropdown id like "USD"), booking ('build'|'own'),
+      // hours (free text), services (free text w/ durations+prices).
+      if (!blank(answers.currency)) wd.currency = String(answers.currency).trim().slice(0, 8);
+      wd.bookingMode = answers.booking === 'own' ? 'embed_pending' : 'native';
+      if (!blank(answers.hours)) {
         try {
           const { parseWeeklyHours } = require('../website-gen/hoursParser');
-          const { hours } = await parseWeeklyHours(String(answers.a3));
+          const { hours } = await parseWeeklyHours(String(answers.hours));
           wd.weeklyHours = hours;
         } catch (e) { logger.warn(`[FLOW-INTAKE] hours parse failed: ${e.message}`); }
       }
-      if (answers.a4 && !isDefault(answers.a4)) {
-        const services = (await extractServices(answers.a4, { businessName, industry, userId })) || [];
+      if (!blank(answers.services)) {
+        const services = (await extractServices(answers.services, { businessName, industry, userId })) || [];
         wd.services = services;
         if (services.length) {
           try {
-            const prices = await extractPricesByService(answers.a4, services, userId);
+            const prices = await extractPricesByService(answers.services, services, userId);
             if (prices && Object.keys(prices).length) {
               wd.salonServices = services.map((name) => ({
                 name, durationMinutes: 0, priceText: prices[name] || '', addressed: false,
@@ -110,17 +104,32 @@ async function buildWebsiteDataFromFlow(answers = {}, theme, userId) {
           } catch (e) { logger.warn(`[FLOW-INTAKE] price extract failed: ${e.message}`); }
         }
       }
+    } else if (theme === 'hvac') {
+      // f1 = "City: area, area"; f2 = services
+      if (!blank(answers.f1)) {
+        const [city, areasPart] = String(answers.f1).split(':');
+        if (city) wd.primaryCity = city.trim();
+        if (areasPart) wd.serviceAreas = areasPart.split(/[,;]/).map((s) => s.trim()).filter(Boolean);
+      }
+      if (!blank(answers.f2)) {
+        wd.services = (await extractServices(answers.f2, { businessName, industry, userId })) || [];
+      }
     } else if (theme === 'realestate') {
-      // a1 = agent profile (raw); a2 = listings (raw, refined in chat)
-      if (answers.a1 && !isDefault(answers.a1)) wd.agentProfileRaw = String(answers.a1).trim();
+      // f1 = agent profile (raw); f2 = listings (raw, refined in chat)
+      if (!blank(answers.f1)) wd.agentProfileRaw = String(answers.f1).trim();
       wd.agentProfileCollected = true;
-      if (answers.a2 && !isDefault(answers.a2)) wd.listingsRaw = String(answers.a2).trim();
+      if (!blank(answers.f2)) wd.listingsRaw = String(answers.f2).trim();
       wd.services = Array.isArray(wd.services) ? wd.services : [];
     } else if (theme === 'portfolio') {
-      // a1 = bio; a2 = projects (raw)
-      if (answers.a1 && !isDefault(answers.a1)) wd.about = String(answers.a1).trim();
-      if (answers.a2 && !isDefault(answers.a2)) wd.projectsRaw = String(answers.a2).trim();
+      // f1 = bio; f2 = projects (raw)
+      if (!blank(answers.f1)) wd.about = String(answers.f1).trim();
+      if (!blank(answers.f2)) wd.projectsRaw = String(answers.f2).trim();
       wd.services = Array.isArray(wd.services) ? wd.services : [];
+    } else {
+      // general — f1 = services list
+      if (!blank(answers.f1)) {
+        wd.services = (await extractServices(answers.f1, { businessName, industry, userId })) || [];
+      }
     }
   } catch (err) {
     logger.warn(`[FLOW-INTAKE] theme mapping (${theme}) failed: ${err.message}`);
