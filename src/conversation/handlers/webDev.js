@@ -8581,4 +8581,9 @@ module.exports = {
   // the build directly once the Flow is submitted, reusing the exact same
   // generate → deploy → send-preview → CAPI path the chat flow uses.
   generateWebsite,
+  // Exposed so the router can re-check a WEB_REVISIONS message the turn
+  // classifier labelled 'question': an "add a domain" request is actionable
+  // and must reach handleRevisions' late-domain flow, NOT the off-topic aside
+  // (which is scoped to exclude domains).
+  classifyLateDomainIntent,
 };

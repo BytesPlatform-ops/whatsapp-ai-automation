@@ -1827,7 +1827,26 @@ async function _routeMessage(message) {
       // No active question (SALES_CHAT etc.) — fall through to normal handler.
     }
 
-    if (intent === 'question') {
+    // A domain-add request at the revisions step is ACTIONABLE, not a meta
+    // question. The scoped aside (WEB_REVISIONS_ASIDE_PROMPT) is explicitly
+    // told NOT to mention domains, so it would deflect with "I can only change
+    // the site". The turn classifier buckets "i need a domain" / "get me a
+    // domain" as 'question' inconsistently — when it does, route it to
+    // handleRevisions' late-domain flow instead of swallowing it as an aside.
+    let isReviseDomainAsk = false;
+    if (intent === 'question' && user.state === STATES.WEB_REVISIONS) {
+      try {
+        const { classifyLateDomainIntent } = require('./handlers/webDev');
+        isReviseDomainAsk = await classifyLateDomainIntent(text, user.id);
+        if (isReviseDomainAsk) {
+          logger.info(`[ROUTER] WEB_REVISIONS domain-add request classified as 'question' — routing to handler, not aside`);
+        }
+      } catch (err) {
+        logger.warn(`[ROUTER] late-domain re-check failed: ${err.message}`);
+      }
+    }
+
+    if (intent === 'question' && !isReviseDomainAsk) {
       // Answer their question, then bring them back to where they were.
       // If the LLM call fails, skip the aside and just re-prompt — better
       // than stalling silently.
