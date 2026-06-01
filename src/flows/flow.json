@@ -11,7 +11,7 @@
   "screens": [
     {
       "id": "COMMON",
-      "title": "About your business",
+      "title": "${data.common_title}",
       "data": {
         "common_title": { "type": "string", "__example__": "About your business" },
         "l_name": { "type": "string", "__example__": "Business name" },
