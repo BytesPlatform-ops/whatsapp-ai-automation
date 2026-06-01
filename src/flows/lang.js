@@ -71,13 +71,13 @@ async function detectLanguage(firstMessage, opts = {}) {
   }
 
   try {
+    // Detect ANY language — the form is translated at runtime, so we're not
+    // restricted to the hand-authored en/pt. Return the ISO 639-1 code.
     const systemPrompt =
       `You are a language detector. The user sent their first message to a website-builder bot. ` +
-      `Reply with ONLY the 2-letter lowercase code of the language they wrote in. ` +
-      `Supported: ${SUPPORTED_LANGS.join(', ')}. ` +
-      `If the message is in a language not listed, pick the closest of the supported ones ` +
-      `(e.g. Spanish/Italian → pt only if clearly Portuguese, otherwise en). ` +
-      `Output just the code, nothing else.`;
+      `Reply with ONLY the 2-letter lowercase ISO 639-1 code of the language they wrote in ` +
+      `(e.g. en, pt, es, fr, ar, hi, ur, de, it, tr, id, ru, zh). ` +
+      `Roman-script Urdu/Hindi count as ur/hi respectively. Output just the code, nothing else.`;
 
     const response = await generateResponse(
       systemPrompt,
@@ -86,13 +86,13 @@ async function detectLanguage(firstMessage, opts = {}) {
     );
 
     const code = String(response || '').trim().toLowerCase().replace(/[^a-z]/g, '').slice(0, 2);
-    if (SUPPORTED_LANGS.includes(code)) {
+    if (code.length === 2) {
       logger.info(`[FLOW-LANG] detected "${code}" from "${text.slice(0, 30)}"`);
       return code;
     }
-    // LLM returned something unsupported → fallback.
+    // Couldn't parse a code → fallback.
     const fb = langFromPhone(phoneNumberId);
-    logger.info(`[FLOW-LANG] LLM gave "${code}" (unsupported) → fallback ${fb}`);
+    logger.info(`[FLOW-LANG] LLM gave "${code}" (unparseable) → fallback ${fb}`);
     return fb;
   } catch (err) {
     const fb = langFromPhone(phoneNumberId);

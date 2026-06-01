@@ -142,6 +142,13 @@ async function handleFlow(req, ctx = {}) {
     catch (err) { logger.warn(`[FLOW] getSession(${flowToken}) failed: ${err.message}`); }
   }
   if (!lang) lang = session?.lang || 'en';
+  // Materialize the user's language at runtime if it isn't hand-authored
+  // (en/pt). send.js usually pre-warms this; this is the fallback if the
+  // process restarted. Only falls back to English if translation failed.
+  if (!L[lang] && action !== 'ping') {
+    try { const { ensureLanguage } = require('./translate'); await ensureLanguage(lang); }
+    catch (err) { logger.warn(`[FLOW] ensureLanguage(${lang}) failed: ${err.message}`); }
+  }
   if (!L[lang]) lang = 'en';
 
   // INIT — flow opened. Return COMMON (labels + dropdown options).

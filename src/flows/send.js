@@ -80,6 +80,16 @@ async function sendWebsiteFlowOffer(user, message) {
     userId: user.id,
   });
 
+  // Pre-warm the runtime translation so the /flow endpoint serves the form
+  // in the user's language without paying translation latency mid-screen.
+  // Non-blocking for en/pt (already authored); ~one LLM call for new langs.
+  try {
+    const { ensureLanguage } = require('./translate');
+    await ensureLanguage(lang);
+  } catch (err) {
+    logger.warn(`[FLOW-SEND] ensureLanguage(${lang}) failed: ${err.message}`);
+  }
+
   const flowToken = newFlowToken();
   try {
     await createSession({
