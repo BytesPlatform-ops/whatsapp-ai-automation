@@ -86,9 +86,16 @@ async function buildWebsiteDataFromFlow(answers = {}, theme, userId) {
   // industry label the site generator's template detectors recognize.
   const industry = THEME_TO_INDUSTRY[theme] || String(answers.industry || '').trim() || 'General';
 
-  // Contact: 3 separate optional fields — no parsing/guessing needed.
+  // Contact: separate optional fields — no parsing/guessing needed.
+  // Phone may carry a country-code picked from the dropdown; prefix it
+  // when the user didn't already type a leading "+" (and strip a leading
+  // local 0, e.g. UK/PK national format).
   const cEmail = String(answers.c_email || '').trim();
-  const cPhone = String(answers.c_phone || '').trim();
+  const cCode = String(answers.c_code || '').trim();
+  let cPhone = String(answers.c_phone || '').trim();
+  if (cPhone && cCode && !cPhone.startsWith('+')) {
+    cPhone = `${cCode} ${cPhone.replace(/^0+/, '')}`.trim();
+  }
   const cAddress = String(answers.c_address || '').trim();
 
   const wd = {

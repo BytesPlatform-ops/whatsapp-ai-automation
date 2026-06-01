@@ -13,6 +13,7 @@
 // free-text industry value.
 
 const { isHvac, isRealEstate, isPortfolio } = require('../website-gen/templates');
+const { COUNTRY_CODES } = require('./countryCodes');
 
 const SALON_RX = /\b(salon|beauty|barber|spa|nail|hair|lash|brow|makeup)/i;
 
@@ -65,24 +66,52 @@ const INDUSTRY_OPTIONS = {
 };
 
 // ── Currency dropdown (salon Screen 2). ─────────────────────────────────
+const CURRENCY_LIST = [
+  { id: 'USD', title: 'USD ($) — US Dollar' },
+  { id: 'EUR', title: 'EUR (€) — Euro' },
+  { id: 'GBP', title: 'GBP (£) — British Pound' },
+  { id: 'BRL', title: 'BRL (R$) — Brazilian Real' },
+  { id: 'AED', title: 'AED (dh) — UAE Dirham' },
+  { id: 'INR', title: 'INR (₹) — Indian Rupee' },
+  { id: 'PKR', title: 'PKR (Rs) — Pakistani Rupee' },
+  { id: 'CAD', title: 'CAD (C$) — Canadian Dollar' },
+  { id: 'AUD', title: 'AUD (A$) — Australian Dollar' },
+  { id: 'SAR', title: 'SAR (﷼) — Saudi Riyal' },
+  { id: 'QAR', title: 'QAR (﷼) — Qatari Riyal' },
+  { id: 'ZAR', title: 'ZAR (R) — South African Rand' },
+  { id: 'NGN', title: 'NGN (₦) — Nigerian Naira' },
+  { id: 'MXN', title: 'MXN ($) — Mexican Peso' },
+  { id: 'JPY', title: 'JPY (¥) — Japanese Yen' },
+  { id: 'CNY', title: 'CNY (¥) — Chinese Yuan' },
+  { id: 'CHF', title: 'CHF (Fr) — Swiss Franc' },
+  { id: 'SEK', title: 'SEK (kr) — Swedish Krona' },
+  { id: 'NOK', title: 'NOK (kr) — Norwegian Krone' },
+  { id: 'DKK', title: 'DKK (kr) — Danish Krone' },
+  { id: 'PLN', title: 'PLN (zł) — Polish Zloty' },
+  { id: 'TRY', title: 'TRY (₺) — Turkish Lira' },
+  { id: 'EGP', title: 'EGP (£) — Egyptian Pound' },
+  { id: 'KES', title: 'KES (KSh) — Kenyan Shilling' },
+  { id: 'BDT', title: 'BDT (৳) — Bangladeshi Taka' },
+  { id: 'LKR', title: 'LKR (Rs) — Sri Lankan Rupee' },
+  { id: 'IDR', title: 'IDR (Rp) — Indonesian Rupiah' },
+  { id: 'MYR', title: 'MYR (RM) — Malaysian Ringgit' },
+  { id: 'PHP', title: 'PHP (₱) — Philippine Peso' },
+  { id: 'SGD', title: 'SGD (S$) — Singapore Dollar' },
+  { id: 'THB', title: 'THB (฿) — Thai Baht' },
+  { id: 'VND', title: 'VND (₫) — Vietnamese Dong' },
+  { id: 'NZD', title: 'NZD (NZ$) — New Zealand Dollar' },
+  { id: 'KWD', title: 'KWD (د.ك) — Kuwaiti Dinar' },
+  { id: 'BHD', title: 'BHD (.د.ب) — Bahraini Dinar' },
+  { id: 'OMR', title: 'OMR (﷼) — Omani Rial' },
+  { id: 'MAD', title: 'MAD (dh) — Moroccan Dirham' },
+  { id: 'ARS', title: 'ARS ($) — Argentine Peso' },
+  { id: 'CLP', title: 'CLP ($) — Chilean Peso' },
+  { id: 'COP', title: 'COP ($) — Colombian Peso' },
+];
+// PT market sees BRL first.
 const CURRENCY_OPTIONS = {
-  en: [
-    { id: 'USD', title: 'USD ($)' },
-    { id: 'EUR', title: 'EUR (€)' },
-    { id: 'GBP', title: 'GBP (£)' },
-    { id: 'BRL', title: 'BRL (R$)' },
-    { id: 'AED', title: 'AED (dh)' },
-    { id: 'INR', title: 'INR (₹)' },
-    { id: 'PKR', title: 'PKR (Rs)' },
-  ],
-  pt: [
-    { id: 'BRL', title: 'BRL (R$)' },
-    { id: 'USD', title: 'USD ($)' },
-    { id: 'EUR', title: 'EUR (€)' },
-    { id: 'GBP', title: 'GBP (£)' },
-    { id: 'AED', title: 'AED (dh)' },
-    { id: 'INR', title: 'INR (₹)' },
-  ],
+  en: CURRENCY_LIST,
+  pt: [CURRENCY_LIST.find((c) => c.id === 'BRL'), ...CURRENCY_LIST.filter((c) => c.id !== 'BRL')],
 };
 
 // ── Booking radio (salon Screen 2). ─────────────────────────────────────
@@ -142,7 +171,8 @@ const L = {
     // finish
     finish_title: 'Contact details',
     l_cemail: 'Contact email',
-    l_cphone: 'Phone',
+    l_ccode: 'Country code',
+    l_cphone: 'Phone number',
     l_caddress: 'Address',
     build: 'Build my site',
   },
@@ -169,7 +199,8 @@ const L = {
     details_title: 'Alguns detalhes',
     finish_title: 'Contato',
     l_cemail: 'Email de contato',
-    l_cphone: 'Telefone',
+    l_ccode: 'Código do país',
+    l_cphone: 'Número de telefone',
     l_caddress: 'Endereço',
     build: 'Criar meu site',
   },
@@ -225,6 +256,7 @@ module.exports = {
   CURRENCY_OPTIONS,
   BOOKING_OPTIONS,
   ADDMORE_OPTIONS,
+  COUNTRY_CODES,
   DETAILS,
   L,
   pick,

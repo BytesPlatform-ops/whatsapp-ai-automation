@@ -15,7 +15,7 @@
 
 const {
   classifyTheme, VALID_THEMES, INDUSTRY_OPTIONS, CURRENCY_OPTIONS,
-  BOOKING_OPTIONS, ADDMORE_OPTIONS, DETAILS, L, pick,
+  BOOKING_OPTIONS, ADDMORE_OPTIONS, COUNTRY_CODES, DETAILS, L, pick,
 } = require('./questionBank');
 const { getSession, patchSession } = require('./store');
 const { logger } = require('../utils/logger');
@@ -78,6 +78,10 @@ function serviceScreen(lang, list) {
       l_addmore: L[lang].l_addmore,
       addmore_options: ADDMORE_OPTIONS[lang] || ADDMORE_OPTIONS.en,
       l_continue: L[lang].continue,
+      // Always empty — bound to each input's init-value so the fields
+      // reset to blank every time the screen (re)loads, instead of
+      // retaining the previous service's values on "add another".
+      blank: '',
     },
   };
 }
@@ -105,6 +109,8 @@ function finishScreen(lang) {
     data: {
       finish_title: L[lang].finish_title,
       l_cemail: L[lang].l_cemail,
+      l_ccode: L[lang].l_ccode,
+      country_options: COUNTRY_CODES,
       l_cphone: L[lang].l_cphone,
       l_caddress: L[lang].l_caddress,
       build: L[lang].build,
@@ -216,6 +222,7 @@ async function handleFlow(req, ctx = {}) {
         await patchSession(flowToken, {
           answersPatch: {
             c_email: data.c_email || '',
+            c_code: data.c_code || '',
             c_phone: data.c_phone || '',
             c_address: data.c_address || '',
           },
