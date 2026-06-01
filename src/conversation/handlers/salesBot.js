@@ -257,6 +257,10 @@ async function handleSalesBot(user, message) {
     afterTimestamp: user.metadata?.lastResetAt || null,
   });
 
+  // Entry turn (no prior post-reset history) — used below to offer the
+  // WhatsApp Flow form as an alternative right after the chat greeting.
+  const isFirstTurn = history.length === 0;
+
   // First message ever - let the LLM generate the greeting so it matches
   // the user's language and tone from their very first message.
   // (No hardcoded English greeting - the system prompt instructs the LLM
@@ -857,6 +861,20 @@ async function handleSalesBot(user, message) {
     // surfaces as a visible duplicate in the admin transcript and as
     // duplicated history in subsequent LLM calls.
     await sendTextMessage(user.phone_number, formatted);
+  }
+
+  // CTWA entry: on the very first turn, follow the chat greeting with the
+  // WhatsApp Flow form as an alternative — user picks chat (type) or form
+  // (tap). One-time + CTWA-only (gated inside sendWebsiteFlowOffer via the
+  // ctwaClid + flowSentAt checks). Skipped when a demo/handoff already fired
+  // this turn (skipLlmResponse), since the user is already mid-build.
+  if (isFirstTurn && !skipLlmResponse) {
+    try {
+      const { sendWebsiteFlowOffer } = require('../../flows/send');
+      await sendWebsiteFlowOffer(user, message);
+    } catch (err) {
+      logger.warn(`[FLOW-OFFER] failed for ${user.phone_number}: ${err.message}`);
+    }
   }
 
   // Persist the lever this turn used so the NEXT prompt build can ban it.

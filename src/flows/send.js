@@ -27,24 +27,44 @@ function newFlowToken() {
 }
 
 /**
- * Decide whether this turn should be answered with the Flow, and if so
- * send it. Returns true when the Flow was sent (caller should stop normal
- * handling for this turn), false otherwise.
+ * Pure gate: should we offer the website Flow to this user this turn?
+ * No side effects. CTWA-only, WhatsApp-only, once per user (flowSentAt).
  *
- * @param {object} user      the resolved user row (has metadata, channel, phone_number)
- * @param {object} message   parsed inbound (text, phoneNumberId, referral...)
+ * @param {object} user      the resolved user row (has metadata, channel)
+ * @param {object} message   parsed inbound (referral...)
+ * @returns {boolean}
  */
-async function maybeSendWebsiteFlow(user, message) {
+function shouldOfferWebsiteFlow(user, message) {
   if (!flowEnabled()) return false;
   if (user.channel && user.channel !== 'whatsapp') return false; // Flows are WhatsApp-only
 
   // CTWA-only gate: the user must have arrived via a Click-to-WhatsApp ad.
+  // adReferral is set on user.metadata by the router before salesBot runs,
+  // so the metadata branch covers the case where message.referral isn't
+  // threaded through to the handler.
   const ctwaClid = user.metadata?.adReferral?.ctwaClid || message.referral?.ctwaClid || null;
   if (!ctwaClid) return false;
 
   // Send once. flowSentAt guards re-sends on subsequent messages.
   if (user.metadata?.flowSentAt) return false;
 
+  return true;
+}
+
+/**
+ * Offer the website Flow as an alternative to chatting. Sends the Flow
+ * message (after the chat greeting, from salesBot) so the user can pick:
+ * type to keep chatting, or tap to fill the form. One-time per user.
+ * Returns true when the Flow was sent, false otherwise (no-op if the
+ * gate fails or the send errors — caller continues normal chat handling).
+ *
+ * @param {object} user      the resolved user row (has metadata, channel, phone_number)
+ * @param {object} message   parsed inbound (text, phoneNumberId, referral...)
+ */
+async function sendWebsiteFlowOffer(user, message) {
+  if (!shouldOfferWebsiteFlow(user, message)) return false;
+
+  const ctwaClid = user.metadata?.adReferral?.ctwaClid || message.referral?.ctwaClid || null;
   const firstText = String(message.text || '').trim();
   const lang = await detectLanguage(firstText, {
     phoneNumberId: message.phoneNumberId || user.via_phone_number_id,
@@ -66,9 +86,12 @@ async function maybeSendWebsiteFlow(user, message) {
     return false;
   }
 
+  // Framed as a secondary option: the chat greeting (sent just before this
+  // by salesBot) already invited the user to chat, so this offers the form
+  // as the "or, if it's easier" alternative rather than the only path.
   const body = lang === 'pt'
-    ? 'Responda algumas perguntas rápidas e eu crio seu site em ~60 segundos 💚'
-    : "Answer a few quick questions and I'll build your site in ~60 seconds 💚";
+    ? 'Ou, se preferir — toque abaixo e eu crio seu site a partir de um formulário rápido 👇'
+    : "Or, if it's easier — tap below and I'll build your site from a quick form instead 👇";
   const cta = L[lang]?.build && lang === 'pt' ? 'Começar' : 'Get Started';
 
   try {
@@ -91,4 +114,13 @@ async function maybeSendWebsiteFlow(user, message) {
   return true;
 }
 
-module.exports = { maybeSendWebsiteFlow, flowEnabled, newFlowToken };
+// maybeSendWebsiteFlow kept as a back-compat alias for sendWebsiteFlowOffer.
+const maybeSendWebsiteFlow = sendWebsiteFlowOffer;
+
+module.exports = {
+  shouldOfferWebsiteFlow,
+  sendWebsiteFlowOffer,
+  maybeSendWebsiteFlow,
+  flowEnabled,
+  newFlowToken,
+};

@@ -1142,15 +1142,11 @@ async function _routeMessage(message) {
     return;
   }
 
-  // ── WhatsApp Flow: send to fresh CTWA users ─────────────────────────────
-  // v1 scope: ad (CTWA) users get the native Flow instead of the chat
-  // intake. Fully inert until PIXIE_FLOW_ID is set (see flows/send.js).
-  try {
-    const { maybeSendWebsiteFlow } = require('../flows/send');
-    if (await maybeSendWebsiteFlow(user, message)) return;
-  } catch (err) {
-    logger.warn(`[FLOW] send check failed for ${from}: ${err.message} — continuing with chat`);
-  }
+  // ── WhatsApp Flow (CTWA users) ──────────────────────────────────────────
+  // The Flow is no longer sent here as a hard intercept — doing so replaced
+  // the chat greeting entirely. Instead salesBot greets first and then offers
+  // the Flow as an alternative (sendWebsiteFlowOffer), so the user can choose
+  // chat or form. Flow *submissions* are still handled above (message.flowReply).
 
   // ── Disabled-service redirect ───────────────────────────────────────────
   // If the user is mid-flow on a service we've disabled (see
