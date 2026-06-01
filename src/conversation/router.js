@@ -1134,7 +1134,14 @@ async function _routeMessage(message) {
   if (message.flowReply) {
     try {
       const { handleFlowCompletion } = require('../flows/intake');
-      await handleFlowCompletion(user, message);
+      // generateWebsite (inside) sets WEB_GENERATING then RETURNS the
+      // post-build state (WEB_REVISIONS). We must persist it — otherwise
+      // the user is stuck in WEB_GENERATING and the approve → domain →
+      // payment flow never runs.
+      const newState = await handleFlowCompletion(user, message);
+      if (newState && newState !== user.state) {
+        await updateUserState(user.id, newState);
+      }
     } catch (err) {
       logger.error(`[FLOW] completion handling failed for ${from}: ${err.message}`);
       await sendTextMessage(user.phone_number, "Got your details! Let me put your site together — one moment.");

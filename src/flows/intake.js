@@ -184,12 +184,14 @@ async function handleFlowCompletion(user, message) {
   // Resolve theme + lang from the persisted session (authoritative), with
   // the answer payload's _theme as a fallback.
   let theme = answers._theme || null;
+  let lang = 'en';
   try {
     if (flowToken) {
       const { getSession } = require('./store');
       const session = await getSession(flowToken);
       if (session) {
         theme = session.theme || theme;
+        if (session.lang) lang = session.lang;
         // Merge any answers the endpoint persisted but that aren't in the
         // final nfm_reply (defensive — nfm_reply should carry them all).
         if (session.answers && typeof session.answers === 'object') {
@@ -230,8 +232,23 @@ async function handleFlowCompletion(user, message) {
 
   logger.info(`[FLOW-INTAKE] completed theme=${theme} biz="${patch.businessName}" → generating site for ${user.phone_number}`);
 
+  // Acknowledge the submission immediately so the user knows something is
+  // happening — the build + deploy takes ~10-60s before the preview lands.
+  try {
+    const { sendTextMessage } = require('../messages/sender');
+    const name = patch.businessName ? ` for *${patch.businessName}*` : '';
+    const building = lang === 'pt'
+      ? `Perfeito! 🛠️ Estou criando seu site${name} agora — leva uns segundinhos. Já te mando o link do preview. ✨`
+      : `Perfect! 🛠️ I'm building your site${name} now — this takes a few seconds. I'll send you the preview link in a moment. ✨`;
+    await sendTextMessage(user.phone_number, building);
+  } catch (err) {
+    logger.warn(`[FLOW-INTAKE] building-ack send failed: ${err.message}`);
+  }
+
   // Hand off to the proven generator (builds, deploys, sends preview link,
   // fires CAPI). It manages its own state transition to WEB_GENERATING.
+  // The post-preview flow (payment link, revisions, domain offer) is the
+  // SAME as the chat path — generateWebsite + the WEB_* state machine.
   const { generateWebsite } = require('../conversation/handlers/webDev');
   return generateWebsite(user);
 }
