@@ -315,6 +315,57 @@ function renderWebsiteIntake(wd) {
     '</div>';
 }
 
+// Durable WhatsApp Flow form submission, straight from flow_sessions.answers
+// (the raw fields the user typed, keyed by form name). Rendered inline at the
+// "[Flow submitted]" bubble so a submission is never invisible — even after a
+// /reset has cleared the derived websiteData. `theme` decides what f1/f2 mean.
+function renderFlowSubmission(sub) {
+  if (!sub || !sub.answers || typeof sub.answers !== 'object') return '';
+  var a = sub.answers, theme = sub.theme || '';
+  function row(label, val) {
+    if (val == null || val === '' || (Array.isArray(val) && val.length === 0)) return '';
+    return '<p><b>' + esc(label) + ':</b> ' + esc(String(val)) + '</p>';
+  }
+  var parts = [];
+  parts.push(row('Business', a.business_name));
+  parts.push(row('Email', a.email));
+  parts.push(row('Industry', a.industry));
+  parts.push(row('Currency', a.currency));
+  if (a.booking) parts.push(row('Booking', a.booking === 'own' ? ('Own tool' + (a.booking_link ? ' — ' + a.booking_link : '')) : 'Build into site'));
+  parts.push(row('Hours', a.hours));
+  // Salon services — structured name/price/duration rows.
+  if (Array.isArray(a.services_list) && a.services_list.length) {
+    var svc = a.services_list.map(function(s) {
+      var b = [s.name];
+      if (s.price) b.push(s.price);
+      if (s.duration) b.push(s.duration);
+      return esc(b.filter(Boolean).join(' — '));
+    }).join('</li><li>');
+    parts.push('<p><b>Services:</b></p><ul class="list-disc ml-5"><li>' + svc + '</li></ul>');
+  }
+  // f1/f2 are free-text fields whose meaning depends on the niche.
+  var f1Label = theme === 'hvac' ? 'City + areas' : theme === 'realestate' ? 'Agent profile' : theme === 'portfolio' ? 'Bio' : 'Services';
+  var f2Label = theme === 'hvac' ? 'Services' : theme === 'realestate' ? 'Listings' : theme === 'portfolio' ? 'Projects' : 'More';
+  parts.push(row(f1Label, a.f1));
+  parts.push(row(f2Label, a.f2));
+  // Contact — phone may carry a separate country code.
+  var phone = a.c_phone ? (((a.c_code && String(a.c_phone).indexOf('+') !== 0) ? a.c_code + ' ' : '') + a.c_phone) : '';
+  parts.push(row('Contact email', a.c_email));
+  parts.push(row('Contact phone', phone));
+  parts.push(row('Address', a.c_address));
+  if (Array.isArray(a.logo_media) && a.logo_media.length) parts.push(row('Logo', 'uploaded ✓'));
+
+  var body = parts.filter(Boolean).join('');
+  if (!body) return '';
+  var when = sub.submitted_at ? ' · ' + fmtDate(sub.submitted_at) : '';
+  return '<div class="bg-green-50 rounded-lg p-3 mb-4 text-xs space-y-1">' +
+    '<p class="font-semibold text-green-800 mb-1">📝 Flow form submission' + esc(when) + '</p>' +
+    body +
+    '<details class="mt-2"><summary class="cursor-pointer text-green-700">Raw answers</summary>' +
+    '<pre class="whitespace-pre-wrap text-[10px] mt-1 text-gray-600">' + esc(JSON.stringify(a, null, 2)) + '</pre></details>' +
+    '</div>';
+}
+
 function stateBadge(state) {
   var colors = {
     WELCOME: 'bg-gray-100 text-gray-600',
@@ -1354,10 +1405,10 @@ function openConversation(userId, phone, name) {
       }
     }
 
-    // Flow leads get the intake panel inline at the "[Flow submitted]"
-    // bubble (where the admin actually looks); chat leads — who have no
-    // such message — get it here at the top. Avoids showing it twice.
-    var hasFlowSubmission = (msgs || []).some(function(m) { return m.message_text === '[Flow submitted]'; });
+    // Index of the most recent "[Flow submitted]" bubble — the durable flow
+    // form submission (data.flowSubmission) is rendered inline right there.
+    var lastFlowIdx = -1;
+    (msgs || []).forEach(function(m, i) { if (m.message_text === '[Flow submitted]') lastFlowIdx = i; });
 
     var html = windowBanner +
     '<div class="bg-indigo-50 rounded-lg p-3 mb-4 text-xs space-y-1">' +
@@ -1366,14 +1417,14 @@ function openConversation(userId, phone, name) {
       (user.metadata && user.metadata.leadBrief ? '<p><b>Lead Brief:</b> ' + esc(user.metadata.leadBrief).slice(0, 300) + '</p>' : '') +
       (user.metadata && user.metadata.adSource ? '<p><b>Ad Source:</b> ' + esc(user.metadata.adSource) + '</p>' : '') +
     '</div>' +
-    (user.metadata && user.metadata.websiteData && !hasFlowSubmission ? renderWebsiteIntake(user.metadata.websiteData) : '') +
+    (user.metadata && user.metadata.websiteData ? renderWebsiteIntake(user.metadata.websiteData) : '') +
     '<div id="conv-llm-cost" class="bg-amber-50 rounded-lg p-3 mb-4 text-xs">' +
       '<p class="text-gray-500">Calculating LLM cost...</p>' +
     '</div>';
 
     var translateState = translationsByConv[userId] || {};
     var useTranslated = !!translateState.on;
-    msgs.forEach(function(m) {
+    msgs.forEach(function(m, idx) {
       if (m.role === 'system') {
         // /reset sentinels and other system-role rows render as a
         // centered divider instead of a chat bubble so they read as
@@ -1391,10 +1442,12 @@ function openConversation(userId, phone, name) {
         renderMessageContent(m, useTranslated) +
         '<p class="text-[10px] text-gray-400 mt-1">' + fmtDate(m.created_at) + '</p>' +
       '</div>';
-      // A Flow submission only logs the literal "[Flow submitted]" bubble —
-      // surface what they actually entered (from websiteData) right here.
-      if (m.message_text === '[Flow submitted]' && user.metadata && user.metadata.websiteData) {
-        html += renderWebsiteIntake(user.metadata.websiteData);
+      // A Flow submission logs only the literal "[Flow submitted]" bubble.
+      // Surface what the user actually entered, right here at the latest
+      // submission — sourced from flow_sessions (durable; survives /reset),
+      // not user.metadata.websiteData (which a later /reset would wipe).
+      if (idx === lastFlowIdx && data.flowSubmission) {
+        html += renderFlowSubmission(data.flowSubmission);
       }
     });
 

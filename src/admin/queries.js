@@ -294,10 +294,29 @@ async function getConversation(userId) {
     hours_since_inbound: ms != null ? Math.floor(ms / (60 * 60 * 1000)) : null,
   };
 
+  // Latest submitted WhatsApp Flow form. This lives in flow_sessions, which
+  // /reset does NOT clear — unlike user.metadata.websiteData — so the admin
+  // can always see exactly what the user entered in the form, even after a
+  // reset or a later state change. Best-effort: never block the load.
+  let flowSubmission = null;
+  try {
+    const { data: fs } = await supabase
+      .from('flow_sessions')
+      .select('answers, theme, submitted_at')
+      .eq('user_id', userId)
+      .eq('status', 'submitted')
+      .order('submitted_at', { ascending: false, nullsFirst: false })
+      .limit(1);
+    if (fs && fs.length && fs[0].answers && Object.keys(fs[0].answers).length) {
+      flowSubmission = fs[0];
+    }
+  } catch (_) { /* flow_sessions is optional context */ }
+
   return {
     user: userResult.data,
     messages,
     window,
+    flowSubmission,
   };
 }
 
