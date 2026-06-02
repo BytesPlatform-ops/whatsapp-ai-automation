@@ -54,6 +54,8 @@ async function ensureLanguage(code) {
       industry: qb.INDUSTRY_OPTIONS.en.map((o) => o.title),
       booking: qb.BOOKING_OPTIONS.en.map((o) => o.title),
       addmore: qb.ADDMORE_OPTIONS.en.map((o) => o.title),
+      addmore_listing: qb.ADDMORE_LISTING_OPTIONS.en.map((o) => o.title),
+      status: qb.LISTING_STATUS_OPTIONS.en.map((o) => o.title),
       details: detailsSrc,
     };
 
@@ -98,6 +100,17 @@ async function ensureLanguage(code) {
       if (Array.isArray(parsed.addmore)) {
         qb.ADDMORE_OPTIONS[lang] = qb.ADDMORE_OPTIONS.en.map((o, i) => ({
           id: o.id, title: parsed.addmore[i] || o.title,
+        }));
+      }
+      if (Array.isArray(parsed.addmore_listing)) {
+        qb.ADDMORE_LISTING_OPTIONS[lang] = qb.ADDMORE_LISTING_OPTIONS.en.map((o, i) => ({
+          id: o.id, title: parsed.addmore_listing[i] || o.title,
+        }));
+      }
+      if (Array.isArray(parsed.status)) {
+        // Titles localize; ids stay the canonical English status strings.
+        qb.LISTING_STATUS_OPTIONS[lang] = qb.LISTING_STATUS_OPTIONS.en.map((o, i) => ({
+          id: o.id, title: parsed.status[i] || o.title,
         }));
       }
       if (parsed.details && typeof parsed.details === 'object') {

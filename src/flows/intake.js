@@ -189,14 +189,49 @@ async function buildWebsiteDataFromFlow(answers = {}, theme, userId) {
         wd.services = (await extractServices(answers.f2, { businessName, industry, userId })) || [];
       }
     } else if (theme === 'realestate') {
-      // currency (dropdown id like "USD") — site-wide currency for listing
-      // prices; mirrors the salon branch and is used as the per-listing
-      // default when listings are refined in chat / generated.
+      // currency (dropdown id like "USD") — site-wide + per-listing default.
       if (!blank(answers.currency)) wd.currency = String(answers.currency).trim().slice(0, 8);
-      // f1 = agent profile (raw); f2 = listings (raw, refined in chat)
+      // f1 = agent profile (raw, refined in chat).
       if (!blank(answers.f1)) wd.agentProfileRaw = String(answers.f1).trim();
       wd.agentProfileCollected = true;
-      if (!blank(answers.f2)) wd.listingsRaw = String(answers.f2).trim();
+      // Structured listings from the looped LISTING screen → the exact
+      // wd.listings shape the generator + chat web-form produce, so the site
+      // builds identically (mirrors parseRealEstateRows/handleRealEstateSubmit
+      // in services-form). Each listing may carry an optional photo
+      // (PhotoPicker): decrypt + upload here, off the endpoint's budget.
+      const rawListings = (Array.isArray(answers.listings_list) ? answers.listings_list : []).slice(0, 3);
+      const listings = [];
+      for (const r of rawListings) {
+        if (!r || blank(r.address)) continue;
+        let photoUrl = null;
+        if (Array.isArray(r.photo_media) && r.photo_media.length) {
+          try {
+            const { decryptFlowMedia } = require('./media');
+            const { uploadListingPhoto } = require('../website-gen/listingPhotoUploader');
+            const { buffer, mimeType } = await decryptFlowMedia(r.photo_media[0]);
+            photoUrl = await uploadListingPhoto(buffer, mimeType);
+          } catch (err) {
+            logger.warn(`[FLOW-INTAKE] listing photo failed: ${err.message}`);
+          }
+        }
+        const price = parseInt(r.price, 10);
+        const beds = parseInt(r.beds, 10);
+        const baths = parseFloat(r.baths);
+        const sqft = parseInt(r.sqft, 10);
+        const status = ['For Sale', 'Just Listed', 'Pending', 'Sold'].includes(r.status) ? r.status : 'For Sale';
+        listings.push({
+          address: String(r.address).trim().slice(0, 120),
+          price: Number.isFinite(price) && price > 0 ? price : 0,
+          currency: wd.currency || 'USD',
+          beds: Number.isFinite(beds) ? beds : 3,
+          baths: Number.isFinite(baths) ? baths : 2,
+          sqft: Number.isFinite(sqft) && sqft > 0 ? sqft : 1800,
+          status,
+          neighborhood: blank(r.neighborhood) ? '' : String(r.neighborhood).trim().slice(0, 60),
+          photoUrl,
+        });
+      }
+      if (listings.length) wd.listings = listings;
       wd.services = Array.isArray(wd.services) ? wd.services : [];
     } else if (theme === 'portfolio') {
       // f1 = bio; f2 = projects (raw)

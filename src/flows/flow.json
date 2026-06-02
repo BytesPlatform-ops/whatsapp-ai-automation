@@ -5,7 +5,8 @@
     "COMMON": ["SALON", "DETAILS"],
     "SALON": ["SERVICE"],
     "SERVICE": ["FINISH"],
-    "DETAILS": ["FINISH"],
+    "DETAILS": ["FINISH", "LISTING"],
+    "LISTING": ["FINISH"],
     "FINISH": []
   },
   "screens": [
@@ -200,6 +201,85 @@
                 "on-click-action": {
                   "name": "data_exchange",
                   "payload": { "currency": "${form.currency}", "f1": "${form.f1}", "f2": "${form.f2}" }
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "LISTING",
+      "title": "${data.listing_title}",
+      "data": {
+        "listing_title": { "type": "string", "__example__": "Your listings" },
+        "added_summary": { "type": "string", "__example__": "Added so far: 45 Elm St" },
+        "added_visible": { "type": "boolean", "__example__": false },
+        "l_address": { "type": "string", "__example__": "Address" },
+        "address_helper": { "type": "string", "__example__": "e.g. 45 Elm St" },
+        "l_lprice": { "type": "string", "__example__": "Price" },
+        "lprice_helper": { "type": "string", "__example__": "e.g. 525000" },
+        "l_status": { "type": "string", "__example__": "Status" },
+        "status_options": {
+          "type": "array",
+          "items": { "type": "object", "properties": { "id": { "type": "string" }, "title": { "type": "string" } } },
+          "__example__": [{ "id": "For Sale", "title": "For Sale" }, { "id": "Sold", "title": "Sold" }]
+        },
+        "l_beds": { "type": "string", "__example__": "Beds" },
+        "beds_helper": { "type": "string", "__example__": "e.g. 3" },
+        "l_baths": { "type": "string", "__example__": "Baths" },
+        "baths_helper": { "type": "string", "__example__": "e.g. 2" },
+        "l_sqft": { "type": "string", "__example__": "Sqft" },
+        "sqft_helper": { "type": "string", "__example__": "e.g. 1800" },
+        "l_neighborhood": { "type": "string", "__example__": "Neighborhood" },
+        "neighborhood_helper": { "type": "string", "__example__": "e.g. Westlake. Or leave blank." },
+        "l_lphoto": { "type": "string", "__example__": "Listing photo" },
+        "l_lphoto_desc": { "type": "string", "__example__": "Add a photo of this property, or skip for a stock image." },
+        "l_addmore": { "type": "string", "__example__": "Add more?" },
+        "addmore_options": {
+          "type": "array",
+          "items": { "type": "object", "properties": { "id": { "type": "string" }, "title": { "type": "string" } } },
+          "__example__": [{ "id": "add", "title": "Add another listing" }, { "id": "done", "title": "That's all" }]
+        },
+        "l_continue": { "type": "string", "__example__": "Continue" },
+        "listing_init": {
+          "type": "object",
+          "properties": { "address": { "type": "string" }, "price": { "type": "string" }, "beds": { "type": "string" }, "baths": { "type": "string" }, "sqft": { "type": "string" }, "neighborhood": { "type": "string" } },
+          "__example__": { "address": "", "price": "", "beds": "", "baths": "", "sqft": "", "neighborhood": "" }
+        }
+      },
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          { "type": "TextBody", "text": "${data.added_summary}", "visible": "${data.added_visible}" },
+          {
+            "type": "Form",
+            "name": "f_listing",
+            "init-values": "${data.listing_init}",
+            "children": [
+              { "type": "TextInput", "name": "address", "input-type": "text", "label": "${data.l_address}", "helper-text": "${data.address_helper}", "required": true },
+              { "type": "TextInput", "name": "price", "input-type": "number", "label": "${data.l_lprice}", "helper-text": "${data.lprice_helper}", "required": false },
+              { "type": "Dropdown", "name": "status", "label": "${data.l_status}", "data-source": "${data.status_options}", "required": false },
+              { "type": "TextInput", "name": "beds", "input-type": "number", "label": "${data.l_beds}", "helper-text": "${data.beds_helper}", "required": false },
+              { "type": "TextInput", "name": "baths", "input-type": "number", "label": "${data.l_baths}", "helper-text": "${data.baths_helper}", "required": false },
+              { "type": "TextInput", "name": "sqft", "input-type": "number", "label": "${data.l_sqft}", "helper-text": "${data.sqft_helper}", "required": false },
+              { "type": "TextInput", "name": "neighborhood", "input-type": "text", "label": "${data.l_neighborhood}", "helper-text": "${data.neighborhood_helper}", "required": false },
+              {
+                "type": "PhotoPicker",
+                "name": "photo",
+                "label": "${data.l_lphoto}",
+                "description": "${data.l_lphoto_desc}",
+                "photo-source": "camera_gallery",
+                "min-uploaded-photos": 0,
+                "max-uploaded-photos": 1
+              },
+              { "type": "RadioButtonsGroup", "name": "addmore", "label": "${data.l_addmore}", "data-source": "${data.addmore_options}", "required": false },
+              {
+                "type": "Footer",
+                "label": "${data.l_continue}",
+                "on-click-action": {
+                  "name": "data_exchange",
+                  "payload": { "address": "${form.address}", "price": "${form.price}", "status": "${form.status}", "beds": "${form.beds}", "baths": "${form.baths}", "sqft": "${form.sqft}", "neighborhood": "${form.neighborhood}", "photo": "${form.photo}", "addmore": "${form.addmore}" }
                 }
               }
             ]

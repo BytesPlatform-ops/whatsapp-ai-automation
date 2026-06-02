@@ -139,6 +139,36 @@ const ADDMORE_OPTIONS = {
   ],
 };
 
+// ── "Add another?" radio on the LISTING screen (real estate). ───────────
+const ADDMORE_LISTING_OPTIONS = {
+  en: [
+    { id: 'add', title: '➕ Add another listing' },
+    { id: 'done', title: '✓ That\'s all my listings' },
+  ],
+  pt: [
+    { id: 'add', title: '➕ Adicionar outro imóvel' },
+    { id: 'done', title: '✓ Esses são todos' },
+  ],
+};
+
+// ── Listing status dropdown (LISTING screen). IDs stay English — the site
+//    generator matches on these exact strings (['For Sale','Just Listed',
+//    'Pending','Sold']); only the titles are localized. ──────────────────
+const LISTING_STATUS_OPTIONS = {
+  en: [
+    { id: 'For Sale', title: 'For Sale' },
+    { id: 'Just Listed', title: 'Just Listed' },
+    { id: 'Pending', title: 'Pending' },
+    { id: 'Sold', title: 'Sold' },
+  ],
+  pt: [
+    { id: 'For Sale', title: 'À venda' },
+    { id: 'Just Listed', title: 'Recém anunciado' },
+    { id: 'Pending', title: 'Em negociação' },
+    { id: 'Sold', title: 'Vendido' },
+  ],
+};
+
 // ── Common labels (Screen 1 + Screen 3 + buttons). ──────────────────────
 // NOTE: WhatsApp auto-appends " (Optional)" to any non-required field's
 // label — so labels here must NEVER include "(optional)" themselves, and
@@ -173,6 +203,23 @@ const L = {
     l_addmore: 'Add more?',
     added_prefix: 'Added so far: ',
     continue: 'Continue',
+    // listings (real estate — structured, looped)
+    listing_title: 'Your listings',
+    l_address: 'Address',
+    address_helper: 'e.g. 45 Elm St',
+    l_lprice: 'Price',
+    lprice_helper: 'e.g. 525000',
+    l_status: 'Status',
+    l_beds: 'Beds',
+    beds_helper: 'e.g. 3',
+    l_baths: 'Baths',
+    baths_helper: 'e.g. 2',
+    l_sqft: 'Sqft',
+    sqft_helper: 'e.g. 1800',
+    l_neighborhood: 'Neighborhood',
+    neighborhood_helper: 'e.g. Westlake. Or leave blank.',
+    l_lphoto: 'Listing photo',
+    l_lphoto_desc: 'Add a photo of this property, or skip for a stock image.',
     // details (non-salon)
     details_title: 'A few details',
     // finish
@@ -210,6 +257,22 @@ const L = {
     l_addmore: 'Adicionar mais?',
     added_prefix: 'Adicionados: ',
     continue: 'Continuar',
+    listing_title: 'Seus imóveis',
+    l_address: 'Endereço',
+    address_helper: 'Ex: Rua das Flores, 45',
+    l_lprice: 'Preço',
+    lprice_helper: 'Ex: 525000',
+    l_status: 'Situação',
+    l_beds: 'Quartos',
+    beds_helper: 'Ex: 3',
+    l_baths: 'Banheiros',
+    baths_helper: 'Ex: 2',
+    l_sqft: 'Área (sq ft)',
+    sqft_helper: 'Ex: 1800',
+    l_neighborhood: 'Bairro',
+    neighborhood_helper: 'Ex: Centro. Ou deixe vazio.',
+    l_lphoto: 'Foto do imóvel',
+    l_lphoto_desc: 'Adicione uma foto do imóvel, ou pule para uma imagem padrão.',
     details_title: 'Alguns detalhes',
     finish_title: 'Contato',
     l_cemail: 'Email de contato',
@@ -237,8 +300,10 @@ const DETAILS = {
     title: { en: 'Agent details', pt: 'Detalhes do corretor' },
     f1: { en: 'Your agent profile', pt: 'Seu perfil de corretor' },
     f1_helper: { en: 'Brokerage (or solo), years, designations. Or leave blank.', pt: 'Imobiliária (ou autônomo), anos, certificações. Ou deixe vazio.' },
-    f2: { en: 'Listings to showcase (optional)', pt: 'Imóveis para destacar (opcional)' },
-    f2_helper: { en: 'One per line. Or leave blank for placeholders.', pt: 'Um por linha. Ou deixe vazio.' },
+    // Listings are collected on the dedicated structured LISTING screen now,
+    // so the free-text field is hidden (empty → f2_visible false).
+    f2: { en: '', pt: '' },
+    f2_helper: { en: '', pt: '' },
   },
   portfolio: {
     title: { en: 'Your work', pt: 'Seu trabalho' },
@@ -270,6 +335,8 @@ module.exports = {
   CURRENCY_OPTIONS,
   BOOKING_OPTIONS,
   ADDMORE_OPTIONS,
+  ADDMORE_LISTING_OPTIONS,
+  LISTING_STATUS_OPTIONS,
   COUNTRY_CODES,
   DETAILS,
   L,

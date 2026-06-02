@@ -15,7 +15,8 @@
 
 const {
   classifyTheme, VALID_THEMES, INDUSTRY_OPTIONS, CURRENCY_OPTIONS,
-  BOOKING_OPTIONS, ADDMORE_OPTIONS, COUNTRY_CODES, DETAILS, L, pick,
+  BOOKING_OPTIONS, ADDMORE_OPTIONS, ADDMORE_LISTING_OPTIONS,
+  LISTING_STATUS_OPTIONS, COUNTRY_CODES, DETAILS, L, pick,
 } = require('./questionBank');
 const { getSession, patchSession } = require('./store');
 const { logger } = require('../utils/logger');
@@ -88,6 +89,50 @@ function serviceScreen(lang, list) {
       // the inputs reset to blank every time the screen (re)loads — they
       // no longer retain the previous service's values on "add another".
       service_init: { sname: '', sprice: '', sdur: '' },
+    },
+  };
+}
+
+// Format the running "added so far" summary for the LISTING screen.
+function summarizeListings(list, lang) {
+  if (!Array.isArray(list) || list.length === 0) return '';
+  const parts = list.map((l) => l.address).filter(Boolean);
+  return (L[lang].added_prefix || 'Added so far: ') + parts.join(' · ');
+}
+
+// LISTING screen — structured address/price/status/beds/baths/sqft/
+// neighborhood + optional photo, with an "add another" loop. Mirrors
+// serviceScreen. `list` is the listings accumulated so far (shown as a
+// summary). Real estate only.
+function listingScreen(lang, list) {
+  const summary = summarizeListings(list, lang);
+  return {
+    screen: 'LISTING',
+    data: {
+      listing_title: L[lang].listing_title,
+      added_summary: summary || '—',
+      added_visible: !!summary,
+      l_address: L[lang].l_address,
+      address_helper: L[lang].address_helper,
+      l_lprice: L[lang].l_lprice,
+      lprice_helper: L[lang].lprice_helper,
+      l_status: L[lang].l_status,
+      status_options: LISTING_STATUS_OPTIONS[lang] || LISTING_STATUS_OPTIONS.en,
+      l_beds: L[lang].l_beds,
+      beds_helper: L[lang].beds_helper,
+      l_baths: L[lang].l_baths,
+      baths_helper: L[lang].baths_helper,
+      l_sqft: L[lang].l_sqft,
+      sqft_helper: L[lang].sqft_helper,
+      l_neighborhood: L[lang].l_neighborhood,
+      neighborhood_helper: L[lang].neighborhood_helper,
+      l_lphoto: L[lang].l_lphoto,
+      l_lphoto_desc: L[lang].l_lphoto_desc,
+      l_addmore: L[lang].l_addmore,
+      addmore_options: ADDMORE_LISTING_OPTIONS[lang] || ADDMORE_LISTING_OPTIONS.en,
+      l_continue: L[lang].continue,
+      // Reset the text inputs to blank every time the screen (re)loads.
+      listing_init: { address: '', price: '', beds: '', baths: '', sqft: '', neighborhood: '' },
     },
   };
 }
@@ -231,12 +276,54 @@ async function handleFlow(req, ctx = {}) {
       return finishScreen(lang);
     }
 
-    // DETAILS → persist generic 2-field answers → FINISH.
+    // DETAILS → persist generic answers. Real estate then collects listings
+    // on the structured LISTING loop; every other niche goes straight to
+    // FINISH.
     if (screen === 'DETAILS') {
+      const realestate = (session?.theme) === 'realestate';
       if (flowToken) {
-        await patchSession(flowToken, {
-          answersPatch: { currency: data.currency || '', f1: data.f1 || '', f2: data.f2 || '' },
-        }).catch((err) => logger.warn(`[FLOW] persist DETAILS failed: ${err.message}`));
+        const answersPatch = { currency: data.currency || '', f1: data.f1 || '', f2: data.f2 || '' };
+        if (realestate) answersPatch.listings_list = [];
+        await patchSession(flowToken, { answersPatch })
+          .catch((err) => logger.warn(`[FLOW] persist DETAILS failed: ${err.message}`));
+      }
+      return realestate ? listingScreen(lang, []) : finishScreen(lang);
+    }
+
+    // LISTING → append this listing (+ its optional photo descriptor), then
+    // loop ("add another" → refresh the LISTING screen) or proceed to FINISH.
+    // The accumulated list lives in the session (listings_list); the nfm_reply
+    // only carries the last row, so the session is the source of truth.
+    if (screen === 'LISTING') {
+      const list = Array.isArray(session?.answers?.listings_list)
+        ? session.answers.listings_list.slice()
+        : [];
+      const address = String(data.address || '').trim();
+      if (address) {
+        const entry = {
+          address,
+          price: String(data.price || '').trim(),
+          status: String(data.status || '').trim(),
+          beds: String(data.beds || '').trim(),
+          baths: String(data.baths || '').trim(),
+          sqft: String(data.sqft || '').trim(),
+          neighborhood: String(data.neighborhood || '').trim(),
+        };
+        // Optional PhotoPicker — stash the raw media descriptor; decrypt +
+        // upload happens at completion (off this endpoint's response budget).
+        if (Array.isArray(data.photo) && data.photo.length) entry.photo_media = data.photo;
+        list.push(entry);
+      }
+      if (flowToken) {
+        await patchSession(flowToken, { answersPatch: { listings_list: list } })
+          .catch((err) => logger.warn(`[FLOW] persist LISTING failed: ${err.message}`));
+      }
+      // "add" → loop for one more (only if they gave an address, and we're
+      // under the 3-listing cap the site layout + web form use); anything
+      // else (done / blank / cap reached) → proceed.
+      if (data.addmore === 'add' && address && list.length < 3) {
+        logger.info(`[FLOW] LISTING loop (${list.length} so far) token=${flowToken}`);
+        return listingScreen(lang, list);
       }
       return finishScreen(lang);
     }
@@ -266,4 +353,4 @@ async function handleFlow(req, ctx = {}) {
   return { data: { acknowledged: true } };
 }
 
-module.exports = { handleFlow, commonScreen, salonScreen, serviceScreen, detailsScreen, finishScreen };
+module.exports = { handleFlow, commonScreen, salonScreen, serviceScreen, listingScreen, detailsScreen, finishScreen };
