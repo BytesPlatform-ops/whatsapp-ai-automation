@@ -176,6 +176,7 @@ const LISTING_STATUS_OPTIONS = {
 const L = {
   en: {
     flow_offer: "Or, if it's easier than typing — tap below and I'll build your site from a few quick questions. Free to preview, ready in about 60 seconds 👇",
+    flow_cta: 'Build my website',
     common_title: 'About your business',
     l_name: 'Business name',
     l_email: 'Your email',
@@ -232,6 +233,7 @@ const L = {
   },
   pt: {
     flow_offer: 'Ou, se for mais fácil que digitar — toque abaixo e eu monto seu site com algumas perguntas rápidas. Grátis pra ver, fica pronto em uns 60 segundos 👇',
+    flow_cta: 'Criar meu site',
     common_title: 'Sobre seu negócio',
     l_name: 'Nome do negócio',
     l_email: 'Seu email',

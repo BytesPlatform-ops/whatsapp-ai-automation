@@ -112,7 +112,10 @@ async function sendWebsiteFlowOffer(user, message) {
   // above), so it follows the user's language. Fall back to EN if missing.
   const qb = require('./questionBank');
   const body = (qb.L[lang] && qb.L[lang].flow_offer) || qb.L.en.flow_offer;
-  const cta = (qb.L[lang] && qb.L[lang].next) || 'Get Started';
+  // The CTA is BOTH the button label AND the title WhatsApp echoes in the
+  // user's "Response sent" bubble — so it must read as an action, not "Next"
+  // (which is the form's internal screen-nav label). Dedicated flow_cta.
+  const cta = (qb.L[lang] && qb.L[lang].flow_cta) || qb.L.en.flow_cta;
 
   try {
     const whatsappSender = require('../messages/whatsappSender');
