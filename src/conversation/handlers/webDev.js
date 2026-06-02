@@ -5572,9 +5572,16 @@ async function generateWebsite(user) {
           : selectedDomain
             ? `*${fmt(activationTotal)}* — I'll point *${selectedDomain}* at your new site right after payment.`
             : `*${fmt(activationTotal)}*.`;
+        // Flow-form leads were never asked about a domain (the form skips that
+        // step), so they don't know it's an option — give them a heads-up here
+        // (only when they haven't already picked one). Chat leads ARE asked
+        // in-flow, so they don't need this nudge.
+        const domainPitch = (websiteData.flowSource && !selectedDomain)
+          ? `\n\n🌐 Want it on your own domain (e.g. ${domainExampleFor(websiteData.businessName)}) instead of the preview link? We can register & connect one for you too — just say the word.`
+          : '';
         await sendTextMessage(
           user.phone_number,
-          `🔒 *Preview mode.* ${priceLine}\n\nActivate to make it live and unlock the contact form:\n\n👉 ${chatPaymentUrl}\n\nSame checkout as the *Activate Now* button on your site.`
+          `🔒 *Preview mode.* ${priceLine}\n\nActivate to make it live and unlock the contact form:\n\n👉 ${chatPaymentUrl}\n\nSame checkout as the *Activate Now* button on your site.${domainPitch}`
         );
         await logMessage(
           user.id,
