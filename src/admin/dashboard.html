@@ -287,9 +287,21 @@ function renderWebsiteIntake(wd) {
   }
 
   parts.push(row('About', wd.aboutText || wd.about));
-  if (wd.bookingMode) parts.push(row('Booking', wd.bookingMode === 'native' ? 'Build into site' : (wd.bookingMode === 'embed_pending' ? 'Own tool' : wd.bookingMode)));
+  if (wd.bookingMode) {
+    var bk = wd.bookingMode === 'native' ? 'Build into site'
+      : (wd.bookingMode === 'embed' && wd.bookingUrl) ? ('Own tool — ' + wd.bookingUrl)
+      : (wd.bookingMode === 'embed' || wd.bookingMode === 'embed_pending') ? 'Own tool'
+      : wd.bookingMode;
+    parts.push(row('Booking', bk));
+  }
   parts.push(row('Listings (raw)', wd.listingsRaw));
   parts.push(row('Projects (raw)', wd.projectsRaw));
+  // Logo uploaded via the Flow PhotoPicker (or chat) — show a thumbnail.
+  if (wd.logoUrl) {
+    parts.push('<p><b>Logo:</b><br><img src="' + esc(wd.logoUrl) + '" alt="logo" style="max-height:48px;max-width:160px;margin-top:3px;background:#fff;border-radius:4px;padding:3px;border:1px solid #d1d5db"></p>');
+  } else if (wd.logoSkipped) {
+    parts.push(row('Logo', 'skipped'));
+  }
 
   var body = parts.filter(Boolean).join('');
   if (!body) return '';
@@ -1342,6 +1354,11 @@ function openConversation(userId, phone, name) {
       }
     }
 
+    // Flow leads get the intake panel inline at the "[Flow submitted]"
+    // bubble (where the admin actually looks); chat leads — who have no
+    // such message — get it here at the top. Avoids showing it twice.
+    var hasFlowSubmission = (msgs || []).some(function(m) { return m.message_text === '[Flow submitted]'; });
+
     var html = windowBanner +
     '<div class="bg-indigo-50 rounded-lg p-3 mb-4 text-xs space-y-1">' +
       '<p><b>State:</b> ' + esc(user.state) + (isTakenOver ? ' <span class="badge bg-red-100 text-red-700 ml-1">Human Control</span>' : '') + '</p>' +
@@ -1349,7 +1366,7 @@ function openConversation(userId, phone, name) {
       (user.metadata && user.metadata.leadBrief ? '<p><b>Lead Brief:</b> ' + esc(user.metadata.leadBrief).slice(0, 300) + '</p>' : '') +
       (user.metadata && user.metadata.adSource ? '<p><b>Ad Source:</b> ' + esc(user.metadata.adSource) + '</p>' : '') +
     '</div>' +
-    (user.metadata && user.metadata.websiteData ? renderWebsiteIntake(user.metadata.websiteData) : '') +
+    (user.metadata && user.metadata.websiteData && !hasFlowSubmission ? renderWebsiteIntake(user.metadata.websiteData) : '') +
     '<div id="conv-llm-cost" class="bg-amber-50 rounded-lg p-3 mb-4 text-xs">' +
       '<p class="text-gray-500">Calculating LLM cost...</p>' +
     '</div>';
@@ -1374,6 +1391,11 @@ function openConversation(userId, phone, name) {
         renderMessageContent(m, useTranslated) +
         '<p class="text-[10px] text-gray-400 mt-1">' + fmtDate(m.created_at) + '</p>' +
       '</div>';
+      // A Flow submission only logs the literal "[Flow submitted]" bubble —
+      // surface what they actually entered (from websiteData) right here.
+      if (m.message_text === '[Flow submitted]' && user.metadata && user.metadata.websiteData) {
+        html += renderWebsiteIntake(user.metadata.websiteData);
+      }
     });
 
     if (!msgs.length) html += '<p class="text-center text-gray-400 py-8">No messages yet</p>';
