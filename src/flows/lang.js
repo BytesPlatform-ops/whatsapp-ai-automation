@@ -40,14 +40,16 @@ function langFromPhone(phoneNumberId) {
   return map[String(phoneNumberId || '')] || DEFAULT_LANG;
 }
 
-// A message is "low-signal" if it's too short or has no real letters for
-// the detector to work with. We skip the LLM call and use the fallback.
+// A message is "low-signal" if it has no real letters for the detector to
+// work with. We skip the LLM call and use the fallback. Common greetings
+// ("oi", "olá", "hi", "hola") ARE detectable by the LLM, so the bar is
+// deliberately low — only genuinely signal-less input (a single letter,
+// a bare emoji, punctuation/digits only) falls back to the phone map.
 function isLowSignal(text) {
   const t = String(text || '').trim();
-  if (t.length < 4) return true;
-  // Strip emoji / punctuation / digits — need a few actual letters.
+  // Strip emoji / punctuation / digits — need at least two actual letters.
   const letters = t.replace(/[^\p{L}]/gu, '');
-  return letters.length < 3;
+  return letters.length < 2;
 }
 
 /**
