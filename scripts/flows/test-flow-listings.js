@@ -19,7 +19,8 @@ const { buildWebsiteDataFromFlow } = require('../../src/flows/intake');
   // the 3-cap, row 2 a blank price + fractional baths, row 3 a bad status.
   const answers = {
     business_name: 'Shazam RE', industry: 'realestate', currency: 'USD',
-    f1: 'Solo, 5 yrs, CCIM',
+    // structured agent profile (AGENT screen)
+    brokerage: 'Keller Williams', years: '8', designations: 'crs, abr ccim, crs',
     listings_list: [
       { address: '45 Elm St', price: '525000', status: 'For Sale', beds: '3', baths: '2', sqft: '1800', neighborhood: 'Westlake' },
       { address: '12 Oak Ave', price: '', status: 'Sold', beds: '4', baths: '2.5', sqft: '2400', neighborhood: '' },
@@ -56,10 +57,15 @@ const { buildWebsiteDataFromFlow } = require('../../src/flows/intake');
   assert.strictEqual(L[2].status, 'For Sale', 'unknown status → For Sale');
 
   assert.ok(!('listingsRaw' in wd), 'listings are structured now, not free-text listingsRaw');
-  assert.strictEqual(wd.agentProfileRaw, 'Solo, 5 yrs, CCIM');
+
+  // Structured agent profile → generator keys (not the old free-text raw).
+  assert.strictEqual(wd.brokerageName, 'Keller Williams');
+  assert.strictEqual(wd.yearsExperience, 8);
+  assert.deepStrictEqual(wd.designations, ['CRS', 'ABR', 'CCIM'], 'uppercased + deduped');
+  assert.ok(!('agentProfileRaw' in wd), 'agent profile is structured now, not free-text');
 
   console.log('  ✓ 4 rows → 3 listings (over-cap dropped); addressless row → none');
   console.log('  ✓ shape/types match generator (price/beds/sqft numbers, baths 2.5, status normalized, photoUrl null)');
-  console.log('  ✓ agent profile kept; no free-text listingsRaw');
-  console.log('\nlistings intake regression passed.');
+  console.log('  ✓ agent profile structured (brokerage/years/designations); no free-text raw fields');
+  console.log('\nlistings + agent intake regression passed.');
 })().catch((e) => { console.error('FAIL:', e.message); process.exit(1); });

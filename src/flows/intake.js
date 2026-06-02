@@ -191,8 +191,22 @@ async function buildWebsiteDataFromFlow(answers = {}, theme, userId) {
     } else if (theme === 'realestate') {
       // currency (dropdown id like "USD") — site-wide + per-listing default.
       if (!blank(answers.currency)) wd.currency = String(answers.currency).trim().slice(0, 8);
-      // f1 = agent profile (raw, refined in chat).
-      if (!blank(answers.f1)) wd.agentProfileRaw = String(answers.f1).trim();
+      // Structured agent profile (AGENT screen) → the exact keys the template
+      // renders. Brokerage blank = solo (left unset → generator treats as
+      // independent). Designations → uppercased, deduped array (template reads
+      // an array). Mirrors the chat handleCollectAgentProfile output.
+      if (!blank(answers.brokerage)) wd.brokerageName = String(answers.brokerage).trim().slice(0, 60);
+      const years = parseInt(answers.years, 10);
+      if (Number.isFinite(years) && years > 0 && years < 80) wd.yearsExperience = years;
+      if (!blank(answers.designations)) {
+        const out = [];
+        const seen = new Set();
+        for (const raw of String(answers.designations).split(/[,/;\s]+/)) {
+          const d = raw.trim().toUpperCase();
+          if (d && d.length <= 12 && !seen.has(d)) { seen.add(d); out.push(d); }
+        }
+        if (out.length) wd.designations = out.slice(0, 8);
+      }
       wd.agentProfileCollected = true;
       // Structured listings from the looped LISTING screen → the exact
       // wd.listings shape the generator + chat web-form produce, so the site

@@ -2,11 +2,12 @@
   "version": "7.0",
   "data_api_version": "3.0",
   "routing_model": {
-    "COMMON": ["SALON", "DETAILS"],
+    "COMMON": ["SALON", "DETAILS", "AGENT"],
     "SALON": ["SERVICE"],
     "SERVICE": ["FINISH"],
-    "DETAILS": ["FINISH", "LISTING"],
+    "AGENT": ["LISTING"],
     "LISTING": ["FINISH"],
+    "DETAILS": ["FINISH"],
     "FINISH": []
   },
   "screens": [
@@ -201,6 +202,49 @@
                 "on-click-action": {
                   "name": "data_exchange",
                   "payload": { "currency": "${form.currency}", "f1": "${form.f1}", "f2": "${form.f2}" }
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "AGENT",
+      "title": "${data.agent_title}",
+      "data": {
+        "agent_title": { "type": "string", "__example__": "Agent details" },
+        "l_currency": { "type": "string", "__example__": "Currency" },
+        "currency_options": {
+          "type": "array",
+          "items": { "type": "object", "properties": { "id": { "type": "string" }, "title": { "type": "string" } } },
+          "__example__": [{ "id": "USD", "title": "USD ($)" }, { "id": "EUR", "title": "EUR (€)" }]
+        },
+        "l_brokerage": { "type": "string", "__example__": "Brokerage" },
+        "brokerage_helper": { "type": "string", "__example__": "Your brokerage. Leave blank if you work solo." },
+        "l_years": { "type": "string", "__example__": "Years in real estate" },
+        "years_helper": { "type": "string", "__example__": "e.g. 8" },
+        "l_designations": { "type": "string", "__example__": "Designations" },
+        "designations_helper": { "type": "string", "__example__": "e.g. CRS, ABR, CCIM. Or leave blank." },
+        "l_next": { "type": "string", "__example__": "Next" }
+      },
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          {
+            "type": "Form",
+            "name": "f_agent",
+            "children": [
+              { "type": "Dropdown", "name": "currency", "label": "${data.l_currency}", "data-source": "${data.currency_options}", "required": true },
+              { "type": "TextInput", "name": "brokerage", "input-type": "text", "label": "${data.l_brokerage}", "helper-text": "${data.brokerage_helper}", "required": false },
+              { "type": "TextInput", "name": "years", "input-type": "number", "label": "${data.l_years}", "helper-text": "${data.years_helper}", "required": false },
+              { "type": "TextInput", "name": "designations", "input-type": "text", "label": "${data.l_designations}", "helper-text": "${data.designations_helper}", "required": false },
+              {
+                "type": "Footer",
+                "label": "${data.l_next}",
+                "on-click-action": {
+                  "name": "data_exchange",
+                  "payload": { "currency": "${form.currency}", "brokerage": "${form.brokerage}", "years": "${form.years}", "designations": "${form.designations}" }
                 }
               }
             ]

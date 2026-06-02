@@ -221,6 +221,14 @@ const L = {
     neighborhood_helper: 'e.g. Westlake. Or leave blank.',
     l_lphoto: 'Listing photo',
     l_lphoto_desc: 'Add a photo of this property, or skip for a stock image.',
+    // agent profile (real estate — structured)
+    agent_title: 'Agent details',
+    l_brokerage: 'Brokerage',
+    brokerage_helper: 'Your brokerage. Leave blank if you work solo.',
+    l_years: 'Years in real estate',
+    years_helper: 'e.g. 8',
+    l_designations: 'Designations',
+    designations_helper: 'e.g. CRS, ABR, CCIM. Or leave blank.',
     // details (non-salon)
     details_title: 'A few details',
     // finish
@@ -275,6 +283,13 @@ const L = {
     neighborhood_helper: 'Ex: Centro. Ou deixe vazio.',
     l_lphoto: 'Foto do imóvel',
     l_lphoto_desc: 'Adicione uma foto do imóvel, ou pule para uma imagem padrão.',
+    agent_title: 'Detalhes do corretor',
+    l_brokerage: 'Imobiliária',
+    brokerage_helper: 'Sua imobiliária. Deixe vazio se for autônomo.',
+    l_years: 'Anos no mercado imobiliário',
+    years_helper: 'Ex: 8',
+    l_designations: 'Certificações',
+    designations_helper: 'Ex: CRS, ABR, CCIM. Ou deixe vazio.',
     details_title: 'Alguns detalhes',
     finish_title: 'Contato',
     l_cemail: 'Email de contato',

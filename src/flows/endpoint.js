@@ -137,6 +137,27 @@ function listingScreen(lang, list) {
   };
 }
 
+// AGENT screen — structured real-estate agent profile (brokerage, years,
+// designations) + the site currency. Replaces the old free-text agent
+// TextArea so the values land on keys the generator actually renders.
+function agentScreen(lang) {
+  return {
+    screen: 'AGENT',
+    data: {
+      agent_title: L[lang].agent_title,
+      l_currency: L[lang].l_currency,
+      currency_options: CURRENCY_OPTIONS[lang] || CURRENCY_OPTIONS.en,
+      l_brokerage: L[lang].l_brokerage,
+      brokerage_helper: L[lang].brokerage_helper,
+      l_years: L[lang].l_years,
+      years_helper: L[lang].years_helper,
+      l_designations: L[lang].l_designations,
+      designations_helper: L[lang].designations_helper,
+      l_next: L[lang].next,
+    },
+  };
+}
+
 function detailsScreen(theme, lang) {
   const d = DETAILS[theme] || DETAILS.general;
   const f2 = pick(d.f2, lang);
@@ -227,7 +248,26 @@ async function handleFlow(req, ctx = {}) {
       }
       logger.info(`[FLOW] COMMON → theme=${theme} lang=${lang} token=${flowToken}`);
 
-      return theme === 'salon' ? salonScreen(lang) : detailsScreen(theme, lang);
+      if (theme === 'salon') return salonScreen(lang);
+      if (theme === 'realestate') return agentScreen(lang);
+      return detailsScreen(theme, lang);
+    }
+
+    // AGENT (real estate) → persist structured agent fields, init the
+    // listings accumulator → LISTING loop.
+    if (screen === 'AGENT') {
+      if (flowToken) {
+        await patchSession(flowToken, {
+          answersPatch: {
+            currency: data.currency || '',
+            brokerage: data.brokerage || '',
+            years: data.years || '',
+            designations: data.designations || '',
+            listings_list: [],
+          },
+        }).catch((err) => logger.warn(`[FLOW] persist AGENT failed: ${err.message}`));
+      }
+      return listingScreen(lang, []);
     }
 
     // SALON → persist currency/booking/hours → go to SERVICE (collect
@@ -276,18 +316,15 @@ async function handleFlow(req, ctx = {}) {
       return finishScreen(lang);
     }
 
-    // DETAILS → persist generic answers. Real estate then collects listings
-    // on the structured LISTING loop; every other niche goes straight to
-    // FINISH.
+    // DETAILS → persist the generic 2-field answers → FINISH. (Real estate
+    // no longer routes here — it uses AGENT → LISTING.)
     if (screen === 'DETAILS') {
-      const realestate = (session?.theme) === 'realestate';
       if (flowToken) {
-        const answersPatch = { currency: data.currency || '', f1: data.f1 || '', f2: data.f2 || '' };
-        if (realestate) answersPatch.listings_list = [];
-        await patchSession(flowToken, { answersPatch })
-          .catch((err) => logger.warn(`[FLOW] persist DETAILS failed: ${err.message}`));
+        await patchSession(flowToken, {
+          answersPatch: { currency: data.currency || '', f1: data.f1 || '', f2: data.f2 || '' },
+        }).catch((err) => logger.warn(`[FLOW] persist DETAILS failed: ${err.message}`));
       }
-      return realestate ? listingScreen(lang, []) : finishScreen(lang);
+      return finishScreen(lang);
     }
 
     // LISTING → append this listing (+ its optional photo descriptor), then
@@ -353,4 +390,4 @@ async function handleFlow(req, ctx = {}) {
   return { data: { acknowledged: true } };
 }
 
-module.exports = { handleFlow, commonScreen, salonScreen, serviceScreen, listingScreen, detailsScreen, finishScreen };
+module.exports = { handleFlow, commonScreen, salonScreen, serviceScreen, listingScreen, agentScreen, detailsScreen, finishScreen };
