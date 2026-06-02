@@ -76,6 +76,7 @@ function serviceScreen(lang, list) {
       added_summary: summary || '—',
       added_visible: !!summary,
       l_sname: L[lang].l_sname,
+      sname_helper: L[lang].sname_helper,
       l_sprice: L[lang].l_sprice,
       sprice_helper: L[lang].sprice_helper,
       l_sdur: L[lang].l_sdur,

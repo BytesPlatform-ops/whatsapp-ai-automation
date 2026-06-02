@@ -121,8 +121,9 @@
         "added_summary": { "type": "string", "__example__": "Added so far: Haircut" },
         "added_visible": { "type": "boolean", "__example__": false },
         "l_sname": { "type": "string", "__example__": "Service name" },
+        "sname_helper": { "type": "string", "__example__": "e.g. Haircut" },
         "l_sprice": { "type": "string", "__example__": "Price" },
-        "sprice_helper": { "type": "string", "__example__": "e.g. 25 or $25" },
+        "sprice_helper": { "type": "string", "__example__": "e.g. 25" },
         "l_sdur": { "type": "string", "__example__": "Duration" },
         "sdur_helper": { "type": "string", "__example__": "e.g. 30 min" },
         "l_addmore": { "type": "string", "__example__": "Add more?" },
@@ -147,8 +148,8 @@
             "name": "f_service",
             "init-values": "${data.service_init}",
             "children": [
-              { "type": "TextInput", "name": "sname", "input-type": "text", "label": "${data.l_sname}", "required": true },
-              { "type": "TextInput", "name": "sprice", "input-type": "text", "label": "${data.l_sprice}", "helper-text": "${data.sprice_helper}", "required": false },
+              { "type": "TextInput", "name": "sname", "input-type": "text", "label": "${data.l_sname}", "helper-text": "${data.sname_helper}", "required": true },
+              { "type": "TextInput", "name": "sprice", "input-type": "number", "label": "${data.l_sprice}", "helper-text": "${data.sprice_helper}", "required": false },
               { "type": "TextInput", "name": "sdur", "input-type": "text", "label": "${data.l_sdur}", "helper-text": "${data.sdur_helper}", "required": false },
               { "type": "RadioButtonsGroup", "name": "addmore", "label": "${data.l_addmore}", "data-source": "${data.addmore_options}", "required": false },
               {
