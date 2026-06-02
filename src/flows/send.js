@@ -13,8 +13,22 @@ const { logger } = require('../utils/logger');
 const { detectLanguage } = require('./lang');
 const { createSession } = require('./store');
 
-function flowEnabled() {
-  return !!process.env.PIXIE_FLOW_ID;
+// Resolve the Flow id for the number we're sending FROM. Flows are WABA-
+// scoped, so a number on a different WABA needs its OWN published Flow.
+// PIXIE_FLOW_ID_MAP maps "phoneNumberId:flowId,phoneNumberId:flowId";
+// PIXIE_FLOW_ID is the default for any number not in the map (the primary
+// number). Returns null when neither resolves → the offer is skipped.
+function flowIdForNumber(phoneNumberId) {
+  const id = String(phoneNumberId || '');
+  for (const pair of (process.env.PIXIE_FLOW_ID_MAP || '').split(',')) {
+    const [n, f] = pair.split(':').map((s) => (s || '').trim());
+    if (n && f && n === id) return f;
+  }
+  return process.env.PIXIE_FLOW_ID || null;
+}
+
+function flowEnabled(phoneNumberId) {
+  return !!flowIdForNumber(phoneNumberId);
 }
 
 // Unique-per-user flow token. The session row is keyed by this; the
@@ -34,7 +48,9 @@ function newFlowToken() {
  * @returns {boolean}
  */
 function shouldOfferWebsiteFlow(user, message) {
-  if (!flowEnabled()) return false;
+  // Flow is per-sending-number (WABA-scoped). Skip if the number we'd send
+  // from has no published Flow configured.
+  if (!flowEnabled(message.phoneNumberId || user.via_phone_number_id)) return false;
   if (user.channel && user.channel !== 'whatsapp') return false; // Flows are WhatsApp-only
 
   // CTWA-only gate: the user must have arrived via a Click-to-WhatsApp ad.
@@ -73,12 +89,13 @@ function shouldOfferWebsiteFlow(user, message) {
 async function sendWebsiteFlowOffer(user, message) {
   if (!shouldOfferWebsiteFlow(user, message)) return false;
 
+  const phoneNumberId = message.phoneNumberId || user.via_phone_number_id;
+  const flowId = flowIdForNumber(phoneNumberId);
+  if (!flowId) return false; // no Flow published for this number's WABA
+
   const ctwaClid = user.metadata?.adReferral?.ctwaClid || message.referral?.ctwaClid || null;
   const firstText = String(message.text || '').trim();
-  const lang = await detectLanguage(firstText, {
-    phoneNumberId: message.phoneNumberId || user.via_phone_number_id,
-    userId: user.id,
-  });
+  const lang = await detectLanguage(firstText, { phoneNumberId, userId: user.id });
 
   // Pre-warm the runtime translation so the /flow endpoint serves the form
   // in the user's language without paying translation latency mid-screen.
@@ -95,7 +112,7 @@ async function sendWebsiteFlowOffer(user, message) {
     await createSession({
       flowToken,
       waId: user.phone_number,
-      phoneNumberId: message.phoneNumberId || user.via_phone_number_id,
+      phoneNumberId,
       userId: user.id,
       lang,
       ctwaClid,
@@ -120,7 +137,7 @@ async function sendWebsiteFlowOffer(user, message) {
   try {
     const whatsappSender = require('../messages/whatsappSender');
     await whatsappSender.sendFlowMessage(user.phone_number, body, {
-      flowId: process.env.PIXIE_FLOW_ID,
+      flowId,
       flowToken,
       cta,
     });
@@ -145,5 +162,6 @@ module.exports = {
   sendWebsiteFlowOffer,
   maybeSendWebsiteFlow,
   flowEnabled,
+  flowIdForNumber,
   newFlowToken,
 };
