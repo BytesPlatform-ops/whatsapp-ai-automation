@@ -117,12 +117,12 @@ const CURRENCY_OPTIONS = {
 // ── Booking radio (salon Screen 2). ─────────────────────────────────────
 const BOOKING_OPTIONS = {
   en: [
-    { id: 'build', title: 'Build booking into my site' },
-    { id: 'own', title: 'I use my own tool (I\'ll add it later)' },
+    { id: 'build', title: 'Build online booking into my site' },
+    { id: 'own', title: 'I use my own tool (Fresha, Booksy…)' },
   ],
   pt: [
     { id: 'build', title: 'Criar agendamento no meu site' },
-    { id: 'own', title: 'Uso minha própria ferramenta (adiciono depois)' },
+    { id: 'own', title: 'Uso minha ferramenta (Fresha, Booksy…)' },
   ],
 };
 
@@ -156,7 +156,10 @@ const L = {
     // salon
     salon_title: 'Salon details',
     l_currency: 'Currency',
-    l_booking: 'Booking',
+    l_booking_heading: 'Online booking',
+    l_booking: 'How should clients book?',
+    l_booking_link: 'Your booking link',
+    booking_link_helper: 'Paste your Fresha, Booksy or Calendly link — or skip and add it later.',
     l_hours: 'Opening hours',
     hours_helper: 'e.g. Tue–Sat 9–7. Blank = standard hours.',
     // services (salon — structured, looped)
@@ -190,7 +193,10 @@ const L = {
     next: 'Próximo',
     salon_title: 'Detalhes do salão',
     l_currency: 'Moeda',
-    l_booking: 'Agendamento',
+    l_booking_heading: 'Agendamento online',
+    l_booking: 'Como os clientes agendam?',
+    l_booking_link: 'Seu link de agendamento',
+    booking_link_helper: 'Cole seu link do Fresha, Booksy ou Calendly — ou pule e adicione depois.',
     l_hours: 'Horário',
     hours_helper: 'Ex: Ter–Sáb 9–19. Vazio = horário padrão.',
     service_title: 'Seus serviços',

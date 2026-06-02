@@ -69,12 +69,15 @@
           "items": { "type": "object", "properties": { "id": { "type": "string" }, "title": { "type": "string" } } },
           "__example__": [{ "id": "USD", "title": "USD ($)" }, { "id": "EUR", "title": "EUR (€)" }]
         },
-        "l_booking": { "type": "string", "__example__": "Booking" },
+        "l_booking_heading": { "type": "string", "__example__": "Online booking" },
+        "l_booking": { "type": "string", "__example__": "How should clients book?" },
         "booking_options": {
           "type": "array",
           "items": { "type": "object", "properties": { "id": { "type": "string" }, "title": { "type": "string" } } },
-          "__example__": [{ "id": "build", "title": "Build booking into my site" }, { "id": "own", "title": "I use my own tool" }]
+          "__example__": [{ "id": "build", "title": "Build online booking into my site" }, { "id": "own", "title": "I use my own tool (Fresha, Booksy…)" }]
         },
+        "l_booking_link": { "type": "string", "__example__": "Your booking link" },
+        "booking_link_helper": { "type": "string", "__example__": "Paste your Fresha, Booksy or Calendly link — or skip and add it later." },
         "l_hours": { "type": "string", "__example__": "Opening hours" },
         "hours_helper": { "type": "string", "__example__": "e.g. Tue-Sat 9-7" },
         "l_next": { "type": "string", "__example__": "Next" }
@@ -87,14 +90,22 @@
             "name": "f_salon",
             "children": [
               { "type": "Dropdown", "name": "currency", "label": "${data.l_currency}", "data-source": "${data.currency_options}", "required": true },
+              { "type": "TextSubheading", "text": "${data.l_booking_heading}" },
               { "type": "RadioButtonsGroup", "name": "booking", "label": "${data.l_booking}", "data-source": "${data.booking_options}", "required": true },
+              {
+                "type": "If",
+                "condition": "${form.booking} == 'own'",
+                "then": [
+                  { "type": "TextInput", "name": "booking_link", "input-type": "text", "label": "${data.l_booking_link}", "helper-text": "${data.booking_link_helper}", "required": false }
+                ]
+              },
               { "type": "TextInput", "name": "hours", "input-type": "text", "label": "${data.l_hours}", "helper-text": "${data.hours_helper}", "required": false },
               {
                 "type": "Footer",
                 "label": "${data.l_next}",
                 "on-click-action": {
                   "name": "data_exchange",
-                  "payload": { "currency": "${form.currency}", "booking": "${form.booking}", "hours": "${form.hours}" }
+                  "payload": { "currency": "${form.currency}", "booking": "${form.booking}", "booking_link": "${form.booking_link}", "hours": "${form.hours}" }
                 }
               }
             ]

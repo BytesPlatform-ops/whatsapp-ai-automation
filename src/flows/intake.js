@@ -36,6 +36,17 @@ function normalizePrice(price, currency) {
   return (sym + p).slice(0, 40);
 }
 
+// A user-pasted booking link → a safe absolute URL, or '' if it doesn't
+// look like one. Mirrors the chat embed path (webDev): trim, strip trailing
+// punctuation, default the scheme to https://.
+function normalizeBookingUrl(text) {
+  let u = String(text || '').trim().replace(/[)\].,;:!?]+$/, '');
+  if (!u) return '';
+  if (!/^https?:\/\//i.test(u)) u = 'https://' + u.replace(/^\/+/, '');
+  if (!/^https?:\/\/[^\s/]+\.[^\s/]+/i.test(u)) return ''; // needs a real host
+  return u.slice(0, 300);
+}
+
 // Light, dependency-free contact splitter for the single contact_info
 // field. Pulls email + phone by shape; whatever's left (with a street/
 // place hint) becomes the address. Mirrors the spirit of webDev's
@@ -137,7 +148,17 @@ async function buildWebsiteDataFromFlow(answers = {}, theme, userId) {
       // currency (dropdown id like "USD"), booking ('build'|'own'),
       // hours (free text), services_list (structured [{name,price,duration}]).
       if (!blank(answers.currency)) wd.currency = String(answers.currency).trim().slice(0, 8);
-      wd.bookingMode = answers.booking === 'own' ? 'embed_pending' : 'native';
+      // booking: 'build' → native system; 'own' → embed their external tool.
+      // If they pasted a link in the form, embed it straight into v1 (same
+      // shape the chat path produces: bookingMode='embed' + bookingUrl).
+      // 'own' with no link stays 'embed_pending' — collected later in chat.
+      if (answers.booking === 'own') {
+        const link = normalizeBookingUrl(answers.booking_link);
+        if (link) { wd.bookingMode = 'embed'; wd.bookingUrl = link; }
+        else { wd.bookingMode = 'embed_pending'; }
+      } else {
+        wd.bookingMode = 'native';
+      }
       if (!blank(answers.hours)) {
         try {
           const { parseWeeklyHours } = require('../website-gen/hoursParser');
