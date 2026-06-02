@@ -107,6 +107,29 @@ async function buildWebsiteDataFromFlow(answers = {}, theme, userId) {
     flowSource: true, // marks this lead as built via the Flow intake
   };
 
+  // Logo uploaded via the COMMON PhotoPicker (optional). The endpoint stashed
+  // the raw media descriptor; download + decrypt + clean the background here
+  // (off the Flow endpoint's tight response budget) and reuse the SAME chat
+  // logo pipeline so the generator gets the identical wd.logoUrl shape —
+  // templates read c.logoUrl. A failure never blocks the build: we just fall
+  // back to a text logo, exactly like the chat "skip" path.
+  try {
+    const media = Array.isArray(answers.logo_media) ? answers.logo_media[0] : null;
+    if (media && media.cdn_url) {
+      const { decryptFlowMedia } = require('./media');
+      const { processLogo } = require('../website-gen/logoProcessor');
+      const { buffer, mimeType } = await decryptFlowMedia(media);
+      const result = await processLogo(buffer, mimeType);
+      if (result?.url) {
+        wd.logoUrl = result.url;
+        wd.logoSkipped = false;
+        logger.info(`[FLOW-INTAKE] logo processed (${result.source}) → ${result.url}`);
+      }
+    }
+  } catch (err) {
+    logger.warn(`[FLOW-INTAKE] logo process failed: ${err.message}`);
+  }
+
   const blank = (v) => !v || !String(v).trim();
 
   try {

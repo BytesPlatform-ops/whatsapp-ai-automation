@@ -22,6 +22,8 @@
           "items": { "type": "object", "properties": { "id": { "type": "string" }, "title": { "type": "string" } } },
           "__example__": [{ "id": "salon", "title": "Salon & Beauty" }, { "id": "general", "title": "Other" }]
         },
+        "l_logo": { "type": "string", "__example__": "Your logo" },
+        "l_logo_desc": { "type": "string", "__example__": "Upload it and I'll clean up the background. Skip if you don't have one." },
         "l_next": { "type": "string", "__example__": "Next" }
       },
       "layout": {
@@ -35,11 +37,20 @@
               { "type": "TextInput", "name": "email", "input-type": "email", "label": "${data.l_email}", "required": true },
               { "type": "Dropdown", "name": "industry", "label": "${data.l_industry}", "data-source": "${data.industry_options}", "required": true },
               {
+                "type": "PhotoPicker",
+                "name": "logo",
+                "label": "${data.l_logo}",
+                "description": "${data.l_logo_desc}",
+                "photo-source": "camera_gallery",
+                "min-uploaded-photos": 0,
+                "max-uploaded-photos": 1
+              },
+              {
                 "type": "Footer",
                 "label": "${data.l_next}",
                 "on-click-action": {
                   "name": "data_exchange",
-                  "payload": { "business_name": "${form.business_name}", "email": "${form.email}", "industry": "${form.industry}" }
+                  "payload": { "business_name": "${form.business_name}", "email": "${form.email}", "industry": "${form.industry}", "logo": "${form.logo}" }
                 }
               }
             ]

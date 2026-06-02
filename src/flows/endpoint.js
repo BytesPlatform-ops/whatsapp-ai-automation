@@ -29,6 +29,8 @@ function commonScreen(lang) {
       l_email: L[lang].l_email,
       l_industry: L[lang].l_industry,
       industry_options: INDUSTRY_OPTIONS[lang] || INDUSTRY_OPTIONS.en,
+      l_logo: L[lang].l_logo,
+      l_logo_desc: L[lang].l_logo_desc,
       l_next: L[lang].next,
     },
   };
@@ -163,10 +165,16 @@ async function handleFlow(req, ctx = {}) {
       const theme = VALID_THEMES.includes(industryId) ? industryId : classifyTheme(industryId);
 
       if (flowToken) {
-        await patchSession(flowToken, {
-          answersPatch: { business_name: businessName, email, industry: industryId },
-          theme, lang,
-        }).catch((err) => logger.warn(`[FLOW] persist COMMON failed: ${err.message}`));
+        const answersPatch = { business_name: businessName, email, industry: industryId };
+        // Optional logo PhotoPicker — stash the raw media descriptor(s) only.
+        // The CDN download + decrypt + bg-removal is deferred to the
+        // completion handler (off this endpoint's tight response budget).
+        if (Array.isArray(data.logo) && data.logo.length) {
+          answersPatch.logo_media = data.logo;
+          logger.info(`[FLOW] COMMON logo uploaded (${data.logo.length} file) token=${flowToken}`);
+        }
+        await patchSession(flowToken, { answersPatch, theme, lang })
+          .catch((err) => logger.warn(`[FLOW] persist COMMON failed: ${err.message}`));
       }
       logger.info(`[FLOW] COMMON → theme=${theme} lang=${lang} token=${flowToken}`);
 

@@ -150,6 +150,8 @@ const L = {
     l_name: 'Business name',
     l_email: 'Your email',
     l_industry: 'What kind of business?',
+    l_logo: 'Your logo',
+    l_logo_desc: "Upload it and I'll clean up the background. Skip if you don't have one.",
     next: 'Next',
     // salon
     salon_title: 'Salon details',
@@ -183,6 +185,8 @@ const L = {
     l_name: 'Nome do negócio',
     l_email: 'Seu email',
     l_industry: 'Que tipo de negócio?',
+    l_logo: 'Sua logo',
+    l_logo_desc: 'Envie e eu limpo o fundo. Pule se não tiver.',
     next: 'Próximo',
     salon_title: 'Detalhes do salão',
     l_currency: 'Moeda',
