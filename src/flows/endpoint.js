@@ -158,6 +158,33 @@ function agentScreen(lang) {
   };
 }
 
+// Format the "added so far" summary for a plain name list (HVAC services).
+function summarizeNames(list, lang) {
+  if (!Array.isArray(list) || list.length === 0) return '';
+  return (L[lang].added_prefix || 'Added so far: ') + list.filter(Boolean).join(' · ');
+}
+
+// HVAC_SERVICE screen — a single service name with an "add another" loop.
+// Simpler than the salon SERVICE screen (no price/duration); accumulates a
+// plain list of names. Reuses ADDMORE_OPTIONS ("Add another service").
+function hvacServiceScreen(lang, list) {
+  const summary = summarizeNames(list, lang);
+  return {
+    screen: 'HVAC_SERVICE',
+    data: {
+      hsvc_title: L[lang].hsvc_title,
+      added_summary: summary || '—',
+      added_visible: !!summary,
+      l_hsvc: L[lang].l_hsvc,
+      hsvc_helper: L[lang].hsvc_helper,
+      l_addmore: L[lang].l_addmore,
+      addmore_options: ADDMORE_OPTIONS[lang] || ADDMORE_OPTIONS.en,
+      l_continue: L[lang].continue,
+      hsvc_init: { sname: '' },
+    },
+  };
+}
+
 function detailsScreen(theme, lang) {
   const d = DETAILS[theme] || DETAILS.general;
   const f2 = pick(d.f2, lang);
@@ -316,13 +343,35 @@ async function handleFlow(req, ctx = {}) {
       return finishScreen(lang);
     }
 
-    // DETAILS → persist the generic 2-field answers → FINISH. (Real estate
-    // no longer routes here — it uses AGENT → LISTING.)
+    // DETAILS → persist the generic answers. HVAC then collects services on
+    // the structured HVAC_SERVICE loop; portfolio/general go to FINISH. (Real
+    // estate no longer routes here — it uses AGENT → LISTING.)
     if (screen === 'DETAILS') {
+      const hvac = (session?.theme) === 'hvac';
       if (flowToken) {
-        await patchSession(flowToken, {
-          answersPatch: { currency: data.currency || '', f1: data.f1 || '', f2: data.f2 || '' },
-        }).catch((err) => logger.warn(`[FLOW] persist DETAILS failed: ${err.message}`));
+        const answersPatch = { currency: data.currency || '', f1: data.f1 || '', f2: data.f2 || '' };
+        if (hvac) answersPatch.hvac_services = [];
+        await patchSession(flowToken, { answersPatch })
+          .catch((err) => logger.warn(`[FLOW] persist DETAILS failed: ${err.message}`));
+      }
+      return hvac ? hvacServiceScreen(lang, []) : finishScreen(lang);
+    }
+
+    // HVAC_SERVICE → append this service name, then loop ("add another" →
+    // refresh) or proceed to FINISH. The list lives in the session.
+    if (screen === 'HVAC_SERVICE') {
+      const list = Array.isArray(session?.answers?.hvac_services)
+        ? session.answers.hvac_services.slice()
+        : [];
+      const name = String(data.sname || '').trim();
+      if (name) list.push(name.slice(0, 60));
+      if (flowToken) {
+        await patchSession(flowToken, { answersPatch: { hvac_services: list } })
+          .catch((err) => logger.warn(`[FLOW] persist HVAC_SERVICE failed: ${err.message}`));
+      }
+      if (data.addmore === 'add' && name && list.length < 10) {
+        logger.info(`[FLOW] HVAC_SERVICE loop (${list.length} so far) token=${flowToken}`);
+        return hvacServiceScreen(lang, list);
       }
       return finishScreen(lang);
     }
@@ -390,4 +439,4 @@ async function handleFlow(req, ctx = {}) {
   return { data: { acknowledged: true } };
 }
 
-module.exports = { handleFlow, commonScreen, salonScreen, serviceScreen, listingScreen, agentScreen, detailsScreen, finishScreen };
+module.exports = { handleFlow, commonScreen, salonScreen, serviceScreen, listingScreen, agentScreen, hvacServiceScreen, detailsScreen, finishScreen };

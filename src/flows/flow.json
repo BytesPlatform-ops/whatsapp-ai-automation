@@ -7,7 +7,8 @@
     "SERVICE": ["FINISH"],
     "AGENT": ["LISTING"],
     "LISTING": ["FINISH"],
-    "DETAILS": ["FINISH"],
+    "DETAILS": ["FINISH", "HVAC_SERVICE"],
+    "HVAC_SERVICE": ["FINISH"],
     "FINISH": []
   },
   "screens": [
@@ -202,6 +203,52 @@
                 "on-click-action": {
                   "name": "data_exchange",
                   "payload": { "currency": "${form.currency}", "f1": "${form.f1}", "f2": "${form.f2}" }
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "HVAC_SERVICE",
+      "title": "${data.hsvc_title}",
+      "data": {
+        "hsvc_title": { "type": "string", "__example__": "Services you offer" },
+        "added_summary": { "type": "string", "__example__": "Added so far: AC repair" },
+        "added_visible": { "type": "boolean", "__example__": false },
+        "l_hsvc": { "type": "string", "__example__": "Service" },
+        "hsvc_helper": { "type": "string", "__example__": "e.g. AC repair" },
+        "l_addmore": { "type": "string", "__example__": "Add more?" },
+        "addmore_options": {
+          "type": "array",
+          "items": { "type": "object", "properties": { "id": { "type": "string" }, "title": { "type": "string" } } },
+          "__example__": [{ "id": "add", "title": "Add another service" }, { "id": "done", "title": "That's all" }]
+        },
+        "l_continue": { "type": "string", "__example__": "Continue" },
+        "hsvc_init": {
+          "type": "object",
+          "properties": { "sname": { "type": "string" } },
+          "__example__": { "sname": "" }
+        }
+      },
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          { "type": "TextBody", "text": "${data.added_summary}", "visible": "${data.added_visible}" },
+          {
+            "type": "Form",
+            "name": "f_hsvc",
+            "init-values": "${data.hsvc_init}",
+            "children": [
+              { "type": "TextInput", "name": "sname", "input-type": "text", "label": "${data.l_hsvc}", "helper-text": "${data.hsvc_helper}", "required": true },
+              { "type": "RadioButtonsGroup", "name": "addmore", "label": "${data.l_addmore}", "data-source": "${data.addmore_options}", "required": false },
+              {
+                "type": "Footer",
+                "label": "${data.l_continue}",
+                "on-click-action": {
+                  "name": "data_exchange",
+                  "payload": { "sname": "${form.sname}", "addmore": "${form.addmore}" }
                 }
               }
             ]

@@ -179,13 +179,19 @@ async function buildWebsiteDataFromFlow(answers = {}, theme, userId) {
         }));
       }
     } else if (theme === 'hvac') {
-      // f1 = "City: area, area"; f2 = services
+      // f1 = "City: area, area"
       if (!blank(answers.f1)) {
         const [city, areasPart] = String(answers.f1).split(':');
         if (city) wd.primaryCity = city.trim();
         if (areasPart) wd.serviceAreas = areasPart.split(/[,;]/).map((s) => s.trim()).filter(Boolean);
       }
-      if (!blank(answers.f2)) {
+      // Structured services from the looped HVAC_SERVICE screen (names only —
+      // no LLM needed). Fall back to the old free-text f2 for older sessions.
+      const hvacList = Array.isArray(answers.hvac_services) ? answers.hvac_services : [];
+      const cleanHvac = hvacList.map((s) => String(s || '').trim()).filter(Boolean);
+      if (cleanHvac.length) {
+        wd.services = cleanHvac.slice(0, 10);
+      } else if (!blank(answers.f2)) {
         wd.services = (await extractServices(answers.f2, { businessName, industry, userId })) || [];
       }
     } else if (theme === 'realestate') {

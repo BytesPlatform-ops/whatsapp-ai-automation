@@ -64,8 +64,17 @@ const { buildWebsiteDataFromFlow } = require('../../src/flows/intake');
   assert.deepStrictEqual(wd.designations, ['CRS', 'ABR', 'CCIM'], 'uppercased + deduped');
   assert.ok(!('agentProfileRaw' in wd), 'agent profile is structured now, not free-text');
 
+  // HVAC structured services (looped HVAC_SERVICE screen, names only).
+  const hv = await buildWebsiteDataFromFlow(
+    { industry: 'hvac', f1: 'Austin: Round Rock, Cedar Park', hvac_services: ['AC repair', ' Heating ', ''] },
+    'hvac', 'test');
+  assert.strictEqual(hv.primaryCity, 'Austin');
+  assert.deepStrictEqual(hv.serviceAreas, ['Round Rock', 'Cedar Park']);
+  assert.deepStrictEqual(hv.services, ['AC repair', 'Heating'], 'trimmed, blanks dropped, no LLM');
+
   console.log('  ✓ 4 rows → 3 listings (over-cap dropped); addressless row → none');
   console.log('  ✓ shape/types match generator (price/beds/sqft numbers, baths 2.5, status normalized, photoUrl null)');
   console.log('  ✓ agent profile structured (brokerage/years/designations); no free-text raw fields');
-  console.log('\nlistings + agent intake regression passed.');
+  console.log('  ✓ hvac services structured (city/areas parsed; service names trimmed, no LLM)');
+  console.log('\nflow intake regression passed (listings + agent + hvac).');
 })().catch((e) => { console.error('FAIL:', e.message); process.exit(1); });

@@ -229,6 +229,10 @@ const L = {
     years_helper: 'e.g. 8',
     l_designations: 'Designations',
     designations_helper: 'e.g. CRS, ABR, CCIM. Or leave blank.',
+    // hvac services (structured, looped — name only)
+    hsvc_title: 'Services you offer',
+    l_hsvc: 'Service',
+    hsvc_helper: 'e.g. AC repair',
     // details (non-salon)
     details_title: 'A few details',
     // finish
@@ -290,6 +294,9 @@ const L = {
     years_helper: 'Ex: 8',
     l_designations: 'Certificações',
     designations_helper: 'Ex: CRS, ABR, CCIM. Ou deixe vazio.',
+    hsvc_title: 'Serviços que você oferece',
+    l_hsvc: 'Serviço',
+    hsvc_helper: 'Ex: conserto de ar-condicionado',
     details_title: 'Alguns detalhes',
     finish_title: 'Contato',
     l_cemail: 'Email de contato',
@@ -304,14 +311,15 @@ const L = {
 // f2 omitted (empty) → hidden. Labels kept ≤ component limits.
 const DETAILS = {
   hvac: {
-    title: { en: 'Service details', pt: 'Detalhes do serviço' },
+    title: { en: 'Areas you serve', pt: 'Áreas atendidas' },
     f1: {
       en: 'City + areas you serve',
       pt: 'Cidade + regiões atendidas',
     },
     f1_helper: { en: 'e.g. Austin: Round Rock, Cedar Park', pt: 'Ex: São Paulo: Centro, Zona Sul' },
-    f2: { en: 'Services you offer', pt: 'Serviços que você oferece' },
-    f2_helper: { en: 'e.g. AC repair, heating, duct cleaning', pt: 'Ex: ar-condicionado, aquecimento' },
+    // Services are collected on the structured HVAC_SERVICE loop now (f2 hidden).
+    f2: { en: '', pt: '' },
+    f2_helper: { en: '', pt: '' },
   },
   realestate: {
     title: { en: 'Agent details', pt: 'Detalhes do corretor' },
