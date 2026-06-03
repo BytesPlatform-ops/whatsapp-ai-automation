@@ -158,6 +158,17 @@ async function sendWebsiteFlowOffer(user, message) {
     return false;
   }
 
+  // Record the form send in the conversation so the admin transcript shows
+  // that Pixie sent the intake form (not just the later "[Flow submitted]").
+  // sendFlowMessage goes through whatsappSender.sendRequest, which — unlike
+  // sendTextMessage — is NOT auto-logged, so we log it explicitly here.
+  try {
+    const { logMessage } = require('../db/conversations');
+    await logMessage(user.id, `${body}\n\n[📋 Website form sent]`, 'assistant');
+  } catch (err) {
+    logger.warn(`[FLOW-SEND] logMessage failed (non-fatal): ${err.message}`);
+  }
+
   const { updateUserMetadata } = require('../db/users');
   await updateUserMetadata(user.id, { flowSentAt: new Date().toISOString(), flowToken });
   user.metadata = { ...(user.metadata || {}), flowSentAt: new Date().toISOString(), flowToken };

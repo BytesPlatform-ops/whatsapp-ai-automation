@@ -113,6 +113,9 @@ app.get('/debug/flow', (_req, res) => {
   res.json({
     PIXIE_FLOW_ID: process.env.PIXIE_FLOW_ID || null,
     PIXIE_FLOW_ID_MAP: process.env.PIXIE_FLOW_ID_MAP || null,
+    // Deployed git commit (Render sets RENDER_GIT_COMMIT) so we can confirm a
+    // given fix is actually live before testing against it.
+    commit: process.env.RENDER_GIT_COMMIT || null,
     checkedAt: new Date().toISOString(),
   });
 });
