@@ -41,7 +41,16 @@ function newFlowToken() {
 
 /**
  * Pure gate: should we offer the website Flow to this user this turn?
- * No side effects. CTWA-only, WhatsApp-only, once per user (flowSentAt).
+ * No side effects. WhatsApp-only, once per user (flowSentAt).
+ *
+ * Audience is now EVERYONE (widened from CTWA-only) — ad leads and organic
+ * users alike. The guided form is Pixie's flagship website intake, so it's
+ * offered to any first-turn WhatsApp user; the chat builder is the fallback
+ * if they ignore it. This gate intentionally does NOT decide WHEN to fire —
+ * that's scoped by the caller (salesBot.js): explicit website intent triggers
+ * the demo-intercept, a neutral first message gets the after-greeting offer,
+ * and other product intents (chatbot/seo/logo) suppress it via
+ * skipLlmResponse so a website form never lands on a chatbot lead.
  *
  * @param {object} user      the resolved user row (has metadata, channel)
  * @param {object} message   parsed inbound (referral...)
@@ -53,36 +62,8 @@ function shouldOfferWebsiteFlow(user, message) {
   if (!flowEnabled(message.phoneNumberId || user.via_phone_number_id)) return false;
   if (user.channel && user.channel !== 'whatsapp') return false; // Flows are WhatsApp-only
 
-  // CTWA-only gate: the user must have arrived via a Click-to-WhatsApp ad.
-  // adReferral is set on user.metadata by the router before salesBot runs,
-  // so the metadata branch covers the case where message.referral isn't
-  // threaded through to the handler.
-  //
-  // Testers (TESTER_PHONES) bypass the CTWA gate so the Flow can be exercised
-  // without clicking a real ad. Combined with /reset clearing flowSentAt, a
-  // tester can re-trigger the offer on every reset (unlimited test runs).
-  const ctwaClid = user.metadata?.adReferral?.ctwaClid || message.referral?.ctwaClid || null;
-  // "Came from an ad" is the real signal, not the ctwa_clid specifically:
-  // some Click-to-WhatsApp ad setups deliver a referral WITHOUT a ctwa_clid,
-  // and those leads must still get the Flow form. router.js persists
-  // adReferral/adSource on metadata the moment an ad-referred message lands,
-  // so this also holds for later turns in the same conversation (the inbound
-  // `message.referral` only rides the very first webhook).
-  const fromAd = !!(
-    ctwaClid ||
-    user.metadata?.adReferral ||
-    user.metadata?.adSource ||
-    message.referral
-  );
-  let tester = false;
-  try {
-    const { isTester } = require('../feedback/feedback');
-    tester = isTester(user);
-  } catch { /* feedback module optional */ }
-  if (!fromAd && !tester) return false;
-
   // Send once. flowSentAt guards re-sends on subsequent messages (cleared by
-  // /reset, so testers get a fresh offer each reset).
+  // /reset, so testers get a fresh offer on every reset).
   if (user.metadata?.flowSentAt) return false;
 
   return true;
