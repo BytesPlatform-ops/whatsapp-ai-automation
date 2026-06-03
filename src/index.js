@@ -106,6 +106,17 @@ app.get('/debug/outbound-ip', async (_req, res) => {
   }
 });
 
+// Debug — which WhatsApp Flow id is this live instance configured to send?
+// Lets us confirm a Render env change (PIXIE_FLOW_ID) actually took effect,
+// instead of inferring from the cached form on a phone. Read-only.
+app.get('/debug/flow', (_req, res) => {
+  res.json({
+    PIXIE_FLOW_ID: process.env.PIXIE_FLOW_ID || null,
+    PIXIE_FLOW_ID_MAP: process.env.PIXIE_FLOW_ID_MAP || null,
+    checkedAt: new Date().toISOString(),
+  });
+});
+
 // Webhook routes
 app.use('/', webhookRoutes);
 app.use('/', calendlyRoutes);
