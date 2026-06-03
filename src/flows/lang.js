@@ -52,6 +52,29 @@ function isLowSignal(text) {
   return letters.length < 2;
 }
 
+// Common English openers that are NOT safe to hand to the LLM detector as-is.
+// The worst offender is "hi": it's the everyday English greeting AND the
+// ISO 639-1 code for Hindi, so the detector (asked to emit a 2-letter code)
+// echoes "hi" and the whole Flow flips to Hindi. These short, unambiguous
+// English messages short-circuit straight to 'en' (also saving an LLM call).
+const EN_GREETINGS = new Set([
+  'hi', 'hii', 'hiii', 'hiya', 'hey', 'heyy', 'heya', 'hello', 'helo', 'hullo',
+  'hallo', 'yo', 'sup', 'wassup', 'whatsup', "what's up", 'howdy', 'hi there',
+  'hey there', 'hello there', 'good morning', 'good afternoon', 'good evening',
+  'morning', 'gm', 'ok', 'okay', 'yes', 'yeah', 'yep', 'yup', 'no', 'nope',
+  'thanks', 'thank you', 'ty', 'start', 'hello pixie', 'hi pixie', 'hey pixie',
+]);
+
+// Normalize for greeting lookup: lowercase, collapse whitespace, strip
+// surrounding punctuation/emoji so "Hi!", "hi 👋", "  Hello.  " all match.
+function normalizeGreeting(text) {
+  return String(text || '')
+    .toLowerCase()
+    .replace(/[^\p{L}\s']/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 /**
  * Detect the language of the user's first message.
  *
@@ -72,13 +95,23 @@ async function detectLanguage(firstMessage, opts = {}) {
     return lang;
   }
 
+  // Unambiguous English opener → 'en' without asking the LLM. Critically this
+  // catches "hi", which the detector otherwise reads as Hindi (its ISO code).
+  if (EN_GREETINGS.has(normalizeGreeting(text))) {
+    logger.info(`[FLOW-LANG] English greeting "${text.slice(0, 30)}" → en (short-circuit)`);
+    return 'en';
+  }
+
   try {
     // Detect ANY language — the form is translated at runtime, so we're not
     // restricted to the hand-authored en/pt. Return the ISO 639-1 code.
     const systemPrompt =
       `You are a language detector. The user sent their first message to a website-builder bot. ` +
-      `Reply with ONLY the 2-letter lowercase ISO 639-1 code of the language they wrote in ` +
+      `Reply with ONLY the 2-letter lowercase ISO 639-1 code of the language the text is WRITTEN IN ` +
       `(e.g. en, pt, es, fr, ar, hi, ur, de, it, tr, id, ru, zh). ` +
+      `Detect the language of the WRITING, not what a short token coincidentally spells: ` +
+      `a lone "hi"/"hey"/"hello" is the English greeting → en (NOT Hindi), ` +
+      `and an English word that happens to match a language code is still English. ` +
       `Roman-script Urdu/Hindi count as ur/hi respectively. Output just the code, nothing else.`;
 
     const response = await generateResponse(
