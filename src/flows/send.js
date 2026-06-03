@@ -62,12 +62,24 @@ function shouldOfferWebsiteFlow(user, message) {
   // without clicking a real ad. Combined with /reset clearing flowSentAt, a
   // tester can re-trigger the offer on every reset (unlimited test runs).
   const ctwaClid = user.metadata?.adReferral?.ctwaClid || message.referral?.ctwaClid || null;
+  // "Came from an ad" is the real signal, not the ctwa_clid specifically:
+  // some Click-to-WhatsApp ad setups deliver a referral WITHOUT a ctwa_clid,
+  // and those leads must still get the Flow form. router.js persists
+  // adReferral/adSource on metadata the moment an ad-referred message lands,
+  // so this also holds for later turns in the same conversation (the inbound
+  // `message.referral` only rides the very first webhook).
+  const fromAd = !!(
+    ctwaClid ||
+    user.metadata?.adReferral ||
+    user.metadata?.adSource ||
+    message.referral
+  );
   let tester = false;
   try {
     const { isTester } = require('../feedback/feedback');
     tester = isTester(user);
-  } catch { /* feedback module optional — fall back to CTWA-only */ }
-  if (!ctwaClid && !tester) return false;
+  } catch { /* feedback module optional */ }
+  if (!fromAd && !tester) return false;
 
   // Send once. flowSentAt guards re-sends on subsequent messages (cleared by
   // /reset, so testers get a fresh offer each reset).

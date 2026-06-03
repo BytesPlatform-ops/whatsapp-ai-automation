@@ -1165,6 +1165,38 @@ async function handleSalesBot(user, message) {
   if (websiteDemoTrigger && !user.metadata?.websiteDemoTriggered) {
     logger.info(`[SALES] Triggering website demo for ${user.phone_number}`);
 
+    // Ad (CTWA) leads → serve the guided WhatsApp Flow form as the intake
+    // instead of the chat name-collection. The form is faster + foolproof for
+    // ad traffic, and is exactly what it was built for. Without this, the
+    // chat demo pre-empts the form whenever the opener states intent outright
+    // ("I want a website…") — the LLM fires TRIGGER_WEBSITE_DEMO, which
+    // suppresses the line-874 Flow offer. Only on the first turn; we DON'T set
+    // websiteDemoTriggered, so if the lead ignores the form and keeps typing,
+    // the chat builder can still kick in on a later turn. Falls through to the
+    // normal chat intake when the form can't be sent (non-ad lead, send error).
+    if (isFirstTurn) {
+      let flowSent = false;
+      try {
+        const { shouldOfferWebsiteFlow, sendWebsiteFlowOffer } = require('../../flows/send');
+        if (shouldOfferWebsiteFlow(user, message)) {
+          // Greeting first so the form's "Or, if it's easier…" body reads
+          // naturally — the LLM's own demo reply was suppressed upstream
+          // (skipLlmResponse), so nothing has been sent this turn yet.
+          await sendTextMessage(
+            user.phone_number,
+            await localize('Love it — I can build your site right here, no typing needed. 💚', user, text)
+          );
+          flowSent = await sendWebsiteFlowOffer(user, message);
+        }
+      } catch (err) {
+        logger.warn(`[FLOW-OFFER] CTWA intercept failed: ${err.message}`);
+      }
+      if (flowSent) {
+        logger.info(`[SALES] CTWA first turn — sent Flow form in place of chat website demo for ${user.phone_number}`);
+        return STATES.SALES_CHAT;
+      }
+    }
+
     // Rate-limit gate: cap how many demo previews a single non-tester /
     // non-paid user can spawn in a rolling window. We check BEFORE setting
     // websiteDemoTriggered so the trigger can fire again later (e.g. user
