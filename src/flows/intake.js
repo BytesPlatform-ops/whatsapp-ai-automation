@@ -77,10 +77,14 @@ function splitContact(text) {
  * reuses Pixie's LLM-backed extractors for services / hours / prices.
  *
  * New form shape:
- *   COMMON : business_name, email, industry (dropdown id = theme)
+ *   COMMON : business_name, industry (dropdown id = theme), logo
  *   SALON  : currency (id), booking (id 'build'|'own'), hours, services
  *   DETAILS: f1, f2  (meaning depends on theme)
  *   FINISH : c_email, c_phone, c_address (3 separate optional fields)
+ *
+ * Email is collected ONCE, on FINISH (c_email). `answers.email` is only the
+ * legacy COMMON field — kept as a harmless fallback so any session that was
+ * already in-flight when COMMON's email input was removed still resolves.
  *
  * @param {object} answers  flat submitted answers
  * @param {string} theme    salon|hvac|realestate|portfolio|general

@@ -27,7 +27,6 @@ function commonScreen(lang) {
     data: {
       common_title: L[lang].common_title,
       l_name: L[lang].l_name,
-      l_email: L[lang].l_email,
       l_industry: L[lang].l_industry,
       industry_options: INDUSTRY_OPTIONS[lang] || INDUSTRY_OPTIONS.en,
       l_logo: L[lang].l_logo,
@@ -257,12 +256,11 @@ async function handleFlow(req, ctx = {}) {
     // COMMON → classify (dropdown id = theme), route to the right screen.
     if (screen === 'COMMON') {
       const businessName = String(data.business_name || '').trim();
-      const email = String(data.email || '').trim();
       const industryId = String(data.industry || '').trim();
       const theme = VALID_THEMES.includes(industryId) ? industryId : classifyTheme(industryId);
 
       if (flowToken) {
-        const answersPatch = { business_name: businessName, email, industry: industryId };
+        const answersPatch = { business_name: businessName, industry: industryId };
         // Optional logo PhotoPicker — stash the raw media descriptor(s) only.
         // The CDN download + decrypt + bg-removal is deferred to the
         // completion handler (off this endpoint's tight response budget).
