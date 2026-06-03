@@ -117,4 +117,72 @@ const COUNTRY_CODES = [
   { id: '+263', title: '🇿🇼 Zimbabwe (+263)' },
 ];
 
-module.exports = { COUNTRY_CODES };
+// Acceptable national-number digit counts (the "national significant number"
+// — i.e. WITHOUT the country code and WITHOUT a leading trunk 0) per dial
+// code. Used to sanity-check the phone the user types on the FINISH screen
+// against the country code they picked, so e.g. a UAE (+971) number must be
+// the 8–9 digits a real UAE number has. Sets are deliberately GENEROUS
+// (mobile + landline lengths) to avoid rejecting valid numbers — the phone
+// field is optional, so a false reject would needlessly block a lead. Dial
+// codes absent from this map fall back to a generic E.164 length check.
+const NATIONAL_LENGTHS = {
+  '+1': [10], '+44': [9, 10], '+55': [10, 11], '+92': [10], '+91': [10],
+  '+971': [8, 9], '+353': [7, 8, 9], '+61': [9], '+33': [9],
+  '+49': [6, 7, 8, 9, 10, 11], '+34': [9], '+39': [9, 10, 11], '+351': [9],
+  '+31': [9], '+52': [10], '+966': [9], '+27': [9], '+234': [8, 10],
+  '+20': [9, 10], '+880': [10], '+93': [9], '+355': [9], '+213': [9],
+  '+54': [10, 11], '+374': [8], '+43': [7, 8, 9, 10, 11, 12, 13], '+994': [9],
+  '+973': [8], '+32': [8, 9], '+591': [8], '+359': [8, 9], '+855': [8, 9],
+  '+237': [9], '+56': [9], '+86': [11], '+57': [10], '+506': [8],
+  '+385': [8, 9], '+357': [8], '+420': [9], '+45': [8], '+593': [8, 9],
+  '+503': [8], '+372': [7, 8], '+251': [9], '+358': [9, 10], '+995': [9],
+  '+233': [9], '+30': [10], '+502': [8], '+504': [8], '+852': [8], '+36': [9],
+  '+62': [9, 10, 11, 12], '+98': [10], '+964': [10], '+972': [9], '+81': [10],
+  '+962': [9], '+7': [10], '+254': [9], '+965': [8], '+856': [8, 9, 10],
+  '+371': [8], '+961': [7, 8], '+370': [8], '+352': [6, 7, 8, 9], '+60': [9, 10],
+  '+960': [7], '+356': [8], '+212': [9], '+95': [8, 9, 10], '+977': [10],
+  '+64': [8, 9, 10], '+505': [8], '+47': [8], '+968': [8], '+507': [8],
+  '+595': [9], '+51': [9], '+63': [10], '+48': [9], '+974': [8], '+40': [9],
+  '+250': [9], '+221': [9], '+381': [8, 9], '+65': [8], '+421': [9], '+386': [8],
+  '+82': [9, 10], '+94': [9], '+46': [7, 8, 9], '+41': [9], '+886': [9],
+  '+255': [9], '+66': [9], '+216': [8], '+90': [10], '+256': [9], '+380': [9],
+  '+598': [8], '+998': [9], '+58': [10], '+84': [9, 10], '+967': [9], '+260': [9],
+  '+263': [9],
+};
+
+// Reduce a user-typed phone to its national significant digits, given the
+// dial code they picked: strips non-digits, drops a re-typed leading country
+// code, then drops a single trunk 0 — mirroring how intake.js composes the
+// stored number.
+function nationalDigits(dialCode, raw) {
+  let digits = String(raw || '').replace(/\D/g, '');
+  const cc = String(dialCode || '').replace(/\D/g, '');
+  if (cc && digits.length > cc.length && digits.startsWith(cc)) {
+    digits = digits.slice(cc.length);
+  }
+  return digits.replace(/^0+/, '');
+}
+
+/**
+ * Validate a typed phone number against the chosen country's dial code by
+ * digit count. Empty input is treated as valid (the field is optional — the
+ * caller decides whether to require it).
+ *
+ * @returns {{ valid: boolean, empty: boolean, expected: number[]|null, length: number }}
+ */
+function validatePhoneForCode(dialCode, raw) {
+  const nd = nationalDigits(dialCode, raw);
+  const cc = String(dialCode || '').replace(/\D/g, '');
+  const expected = NATIONAL_LENGTHS[`+${cc}`] || null;
+  if (!nd) return { valid: true, empty: true, expected, length: 0 };
+  const total = cc.length + nd.length;
+  // Hard E.164 sanity first (≤15 total digits; a real subscriber number is
+  // at least 4 nationally). Then the per-country length set when we have one.
+  if (nd.length < 4 || total > 15) return { valid: false, empty: false, expected, length: nd.length };
+  if (expected && !expected.includes(nd.length)) {
+    return { valid: false, empty: false, expected, length: nd.length };
+  }
+  return { valid: true, empty: false, expected, length: nd.length };
+}
+
+module.exports = { COUNTRY_CODES, NATIONAL_LENGTHS, nationalDigits, validatePhoneForCode };

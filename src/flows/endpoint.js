@@ -417,6 +417,27 @@ async function handleFlow(req, ctx = {}) {
     // FINISH → persist the 3 contact fields → terminal SUCCESS. The build
     // is triggered by the webhook nfm_reply handler.
     if (screen === 'FINISH') {
+      // Validate the phone (optional field) against the picked country code by
+      // digit count. On a mismatch, re-render FINISH with a snackbar error
+      // (error_message) — WhatsApp keeps the user on the screen WITH their
+      // typed input, so they can fix the number or clear it to skip.
+      const cCode = String(data.c_code || '').trim();
+      const cPhone = String(data.c_phone || '').trim();
+      if (cPhone && cCode) {
+        const { validatePhoneForCode } = require('./countryCodes');
+        const res = validatePhoneForCode(cCode, cPhone);
+        if (!res.valid) {
+          logger.info(`[FLOW] FINISH phone rejected (code=${cCode} len=${res.length}) token=${flowToken}`);
+          const screenData = finishScreen(lang).data;
+          const base = (L[lang] && L[lang].phone_error) || L.en.phone_error;
+          // Append the expected digit count (language-neutral) as a hint when
+          // we have one for this country.
+          screenData.error_message = res.expected && res.expected.length
+            ? `${base} (${res.expected.join('/')})`
+            : base;
+          return { screen: 'FINISH', data: screenData };
+        }
+      }
       if (flowToken) {
         await patchSession(flowToken, {
           answersPatch: {

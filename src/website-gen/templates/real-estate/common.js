@@ -903,13 +903,20 @@ function getRealEstateScript() {
 
 function getRealEstatePages(c) {
   const L = (c && c.labels) || {};
-  return [
+  // The Neighborhoods page is only generated when serviceAreas is non-empty
+  // (see generateRealEstatePages in index.js). Mirror that here so we never
+  // link the nav/footer to a page that wasn't built.
+  const hasNeighborhoods = !!(c && Array.isArray(c.serviceAreas) && c.serviceAreas.length > 0);
+  const pages = [
     { n: L.navHome || 'Home', h: '/' },
     { n: L.navListings || 'Listings', h: '/listings' },
-    { n: L.navNeighborhoods || 'Neighborhoods', h: '/neighborhoods' },
-    { n: L.navAbout || 'About', h: '/about' },
-    { n: L.navContact || 'Contact', h: '/contact' },
   ];
+  if (hasNeighborhoods) {
+    pages.push({ n: L.navNeighborhoods || 'Neighborhoods', h: '/neighborhoods' });
+  }
+  pages.push({ n: L.navAbout || 'About', h: '/about' });
+  pages.push({ n: L.navContact || 'Contact', h: '/contact' });
+  return pages;
 }
 
 function getNav(c, cur) {

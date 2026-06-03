@@ -242,6 +242,7 @@ const L = {
     l_cphone: 'Phone number',
     l_caddress: 'Address',
     build: 'Build my site',
+    phone_error: "That number doesn't look right for the country you picked — please check it, or clear the field to skip.",
   },
   pt: {
     flow_offer: 'Ou, se for mais fácil que digitar — toque abaixo e eu monto seu site com algumas perguntas rápidas. Grátis pra ver, fica pronto em uns 60 segundos 👇',
@@ -304,6 +305,7 @@ const L = {
     l_cphone: 'Número de telefone',
     l_caddress: 'Endereço',
     build: 'Criar meu site',
+    phone_error: 'Esse número não parece certo para o país escolhido — confira, ou deixe o campo em branco para pular.',
   },
 };
 
