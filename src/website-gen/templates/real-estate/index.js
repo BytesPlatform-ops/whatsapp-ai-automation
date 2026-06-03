@@ -6,6 +6,41 @@ const { generateAboutPage } = require('./about');
 const { generateContactPage, generateThankYouPage, generateThankYouCmaPage } = require('./contact');
 const { generatePrivacyBody } = require('../_privacy');
 
+// Resolve the service-area list a real-estate site will actually render.
+// Service areas drive the whole "Neighborhoods" surface (the dedicated page,
+// the home-page spotlight, and the nav/footer link). Precedence:
+//   1. an explicit serviceAreas list, if provided;
+//   2. otherwise derive from the primary city + the neighborhoods the agent
+//      tagged on their listings (falling back to the showcase DEFAULT_LISTINGS
+//      when no listings were supplied, so a bare demo still gets a page).
+// Returns [] when the agent left every listing's neighborhood blank and gave
+// no city — the signal to drop the neighborhood surface entirely.
+function deriveServiceAreas(config = {}) {
+  if (Array.isArray(config.serviceAreas) && config.serviceAreas.length) {
+    return config.serviceAreas;
+  }
+  const listings = (Array.isArray(config.featuredListings) && config.featuredListings.length)
+    ? config.featuredListings
+    : DEFAULT_LISTINGS;
+  const seen = new Set();
+  const derived = [];
+  const add = (raw) => {
+    const v = String(raw || '').trim();
+    const key = v.toLowerCase();
+    if (v && !seen.has(key)) { seen.add(key); derived.push(v); }
+  };
+  if (config.primaryCity) add(config.primaryCity);
+  for (const l of listings) add(l && l.neighborhood);
+  return derived;
+}
+
+// Whether this real-estate site should expose a Neighborhoods page/link.
+// Single source of truth shared by the generator, the nav, and the "your
+// site is ready" preview message so the page count never lies.
+function hasNeighborhoodData(config = {}) {
+  return deriveServiceAreas(config).length > 0;
+}
+
 function ensureRealEstateDefaults(config) {
   const c = { ...config };
   if (!Array.isArray(c.featuredListings) || c.featuredListings.length === 0) {
@@ -16,24 +51,8 @@ function ensureRealEstateDefaults(config) {
   }
   if (!c.googleRating) c.googleRating = '4.9';
   if (!c.reviewCount) c.reviewCount = '80+';
-  // Service areas drive the whole "Neighborhoods" surface (the dedicated
-  // page, the home-page spotlight, and the nav/footer link). When the agent
-  // never supplied an explicit serviceAreas list, derive it from the
-  // neighborhoods they tagged on their listings (plus the primary city).
-  // If they filled NO neighborhood on ANY listing — and there's no city —
-  // this stays empty, and every neighborhood surface drops out (no empty
-  // "coming soon" page). See generateRealEstatePages below.
   if (!c.serviceAreas || !c.serviceAreas.length) {
-    const seen = new Set();
-    const derived = [];
-    const add = (raw) => {
-      const v = String(raw || '').trim();
-      const key = v.toLowerCase();
-      if (v && !seen.has(key)) { seen.add(key); derived.push(v); }
-    };
-    if (c.primaryCity) add(c.primaryCity);
-    for (const l of c.featuredListings) add(l && l.neighborhood);
-    c.serviceAreas = derived;
+    c.serviceAreas = deriveServiceAreas(c);
   }
   if (!c.firstName && c.businessName) {
     c.firstName = String(c.businessName).split(' ')[0] || c.businessName;
@@ -62,4 +81,4 @@ function generateRealEstatePages(config /* , { watermark = false } = {} */) {
   return pages;
 }
 
-module.exports = { generateRealEstatePages };
+module.exports = { generateRealEstatePages, deriveServiceAreas, hasNeighborhoodData };

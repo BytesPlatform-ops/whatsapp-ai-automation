@@ -5301,12 +5301,26 @@ async function handleConfirm(user, message) {
 // the "your site is ready" message matches reality instead of guessing
 // "3-page site". Thank-you / thank-you-cma pages are excluded — they're
 // utility pages not in the nav.
-function describePages(industry, websiteData, templateId) {
+function describePages(industry, websiteData, templateId, siteConfig) {
   const { isHvac, isRealEstate } = require('../../website-gen/templates');
   const industryKey = websiteData?.industryKey;
   const hasServices = Array.isArray(websiteData?.services) && websiteData.services.length > 0;
   if (isHvac(industry, industryKey)) return ['Home', 'Services', 'Areas', 'About', 'Contact'];
-  if (isRealEstate(industry, industryKey)) return ['Home', 'Listings', 'Neighborhoods', 'About', 'Contact'];
+  if (isRealEstate(industry, industryKey)) {
+    // The Neighborhoods page is conditional — it's only built when the agent
+    // tagged a neighborhood on a listing (or gave a city). Decide from the
+    // final siteConfig using the SAME helper the generator gates the page on,
+    // so the announced page list matches what actually shipped.
+    const pages = ['Home', 'Listings'];
+    let showNeighborhoods = true;
+    try {
+      const { hasNeighborhoodData } = require('../../website-gen/templates/real-estate');
+      showNeighborhoods = hasNeighborhoodData(siteConfig || websiteData || {});
+    } catch (_) { /* if the helper can't load, fall back to listing it */ }
+    if (showNeighborhoods) pages.push('Neighborhoods');
+    pages.push('About', 'Contact');
+    return pages;
+  }
   if (templateId === 'salon') {
     const pages = ['Home', 'Booking'];
     if (hasServices) pages.push('Services');
@@ -5531,7 +5545,7 @@ async function generateWebsite(user) {
 
     // 4. Send preview link
     logger.info(`[WEBGEN] Step 5/5: Sending preview URL to user`);
-    const pages = describePages(websiteData.industry, websiteData, templateId);
+    const pages = describePages(websiteData.industry, websiteData, templateId, siteConfig);
     const pageSummary = `${pages.length}-page site with ${joinWithAnd(pages)} pages`;
     await sendTextMessage(
       user.phone_number,
