@@ -90,6 +90,39 @@ const EMAIL_FOLLOWUP_LADDER = [
   { step: 'email_day30', afterDays: 30, subject: (biz) => `${biz} site is still here if you want it` },
 ];
 
+// Intent email ladder. For ad/chat leads who STATED an intent (e.g. "I want a
+// website for my real estate business") and left an email, but never reached a
+// preview/payment — so the build-restore EMAIL_FOLLOWUP_LADDER (anchored on
+// paymentLinkSentAt) skips them. Personalized by the industry they mentioned,
+// every step's CTA points back to the WhatsApp number they came in on so a
+// reply re-opens the 24h window and hands the thread back to salesBot.
+//
+// Anchored to the lead's LAST inbound (went-quiet), in hours so the first
+// touch lands the same day. Reach is bounded by "has an email on file" — most
+// pure-chat ad leads won't, and that's correct (no address = no email).
+const INTENT_EMAIL_LADDER = [
+  { step: 'intent_1h',  afterHours: 1,   subject: (ind) => `A ${ind} website, ready in about 60 seconds` },
+  { step: 'intent_24h', afterHours: 24,  subject: (ind) => `Here's a ${ind} site we built — want yours?` },
+  { step: 'intent_3d',  afterHours: 72,  subject: (ind) => `Still want that ${ind} website?` },
+  { step: 'intent_7d',  afterHours: 168, subject: (ind) => `Last nudge on your ${ind} website` },
+];
+
+// Human-readable industry label for the intent email copy/subject. Keyed by the
+// industryKey resolveLeadIndustryKey() returns; unknown → neutral "business".
+const INDUSTRY_LABELS = {
+  realestate: 'real estate',
+  salon: 'salon',
+  hvac: 'home services',
+  restaurant: 'restaurant',
+  portfolio: 'portfolio',
+  ecommerce: 'online store',
+  general: 'business',
+  generic: 'business',
+};
+function industryLabel(industryKey) {
+  return INDUSTRY_LABELS[String(industryKey || '').toLowerCase()] || 'business';
+}
+
 // Discount follow-up copy per personality. One step only — no ladder, no
 // split payment offers. Amount placeholders (${newTotal}, ${originalTotal})
 // get filled in at send time once we compute the per-user discount.
@@ -382,6 +415,250 @@ async function processEmailFollowup(user) {
     );
   } else {
     logger.warn(`[FOLLOWUP-EMAIL] Send failed for ${email} (step ${nextStep.step}, user ${user.phone_number})`);
+  }
+}
+
+// Resolve the wa.me digits for the number a lead messaged (their
+// via_phone_number_id). Order: WA_DISPLAY_NUMBERS env map ("id:e164,id:e164")
+// → Graph API display_phone_number lookup. Cached in-process so we hit Graph at
+// most once per number. Returns digits only (no "+"/spaces) or null.
+const WA_NUMBER_CACHE = new Map();
+function envWaNumbers() {
+  const out = {};
+  for (const pair of (process.env.WA_DISPLAY_NUMBERS || '').split(',')) {
+    const [id, num] = pair.split(':').map((s) => (s || '').trim());
+    if (id && num) out[id] = num.replace(/\D/g, '');
+  }
+  return out;
+}
+async function resolveWaNumber(phoneNumberId) {
+  if (!phoneNumberId) return null;
+  const id = String(phoneNumberId);
+  if (WA_NUMBER_CACHE.has(id)) return WA_NUMBER_CACHE.get(id);
+
+  const fromEnv = envWaNumbers()[id];
+  if (fromEnv) { WA_NUMBER_CACHE.set(id, fromEnv); return fromEnv; }
+
+  const token =
+    process.env.META_FLOW_TOKEN || process.env.META_TOKEN || process.env.WHATSAPP_ACCESS_TOKEN;
+  if (!token) { WA_NUMBER_CACHE.set(id, null); return null; }
+  try {
+    const https = require('https');
+    const digits = await new Promise((resolve) => {
+      const url = `https://graph.facebook.com/v22.0/${id}?fields=display_phone_number&access_token=${token}`;
+      https.get(url, (res) => {
+        let d = '';
+        res.on('data', (c) => { d += c; });
+        res.on('end', () => {
+          try { resolve(String(JSON.parse(d).display_phone_number || '').replace(/\D/g, '') || null); }
+          catch { resolve(null); }
+        });
+      }).on('error', () => resolve(null));
+    });
+    WA_NUMBER_CACHE.set(id, digits);
+    return digits;
+  } catch {
+    WA_NUMBER_CACHE.set(id, null);
+    return null;
+  }
+}
+
+/**
+ * Build the HTML + plain-text body for one rung of the INTENT email ladder.
+ * Same dark, bulletproof shell as renderFollowupEmailContent, but the framing
+ * is "you were looking for an X site — here's one we built, come grab yours"
+ * with the primary CTA pointing back to WhatsApp (waLink) so a tap re-opens the
+ * chat. Falls back to a mailto CTA when we couldn't resolve the WA number.
+ */
+function renderIntentEmailContent(step, { industryLabelText, exampleUrl, waLink }) {
+  const ind = industryLabelText || 'business';
+  const copyByStep = {
+    intent_1h: {
+      headlineLine1: 'Your',
+      headlineAccent: `${ind} site`,
+      body: `Hey — Pixie here.\n\nYou mentioned you wanted a ${ind} website. I can build you a real, live preview in about 60 seconds — free to look at, no commitment. Want me to spin one up?`,
+      ctaLabel: 'Build mine on WhatsApp',
+    },
+    intent_24h: {
+      headlineLine1: 'Here\'s one',
+      headlineAccent: 'we built',
+      body: `Still thinking it over?\n\nHere's a ${ind} site we put together so you can picture your own: ${exampleUrl || 'a live example'}.\n\nWhenever you're ready, message me and I'll build yours — free preview first.`,
+      ctaLabel: 'Get my preview',
+    },
+    intent_3d: {
+      headlineLine1: 'Still want',
+      headlineAccent: `your ${ind} site?`,
+      body: `No rush — just checking in.\n\nThe offer stands: a free, live ${ind} website preview, ready in about a minute. If now's a better time, tap below and we'll pick up right where we left off.`,
+      ctaLabel: 'Pick it back up',
+    },
+    intent_7d: {
+      headlineLine1: 'Last nudge',
+      headlineAccent: 'from me',
+      body: `I'll stop here so I'm not crowding your inbox.\n\nIf you still want that ${ind} website, this is the easiest moment — one tap and I'll have a free preview ready for you. Otherwise, all good, and thanks for the look.`,
+      ctaLabel: 'Build it now',
+    },
+  };
+  const copy = copyByStep[step] || copyByStep.intent_1h;
+
+  const ctaHref = waLink
+    ? waLink
+    : `mailto:bytesuite@bytesplatform.com?subject=${encodeURIComponent(`My ${ind} website`)}` +
+      `&body=${encodeURIComponent(`Hi Pixie team,\n\nI'd like a ${ind} website preview.\n\nThanks.`)}`;
+
+  const html = `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${copy.headlineLine1} ${copy.headlineAccent}</title>
+</head>
+<body style="margin:0;padding:0;background:#06060A;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Inter',Helvetica,Arial,sans-serif;color:#F5F5F7;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;">
+  <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background:#06060A;">
+    <tr><td align="center" style="padding:48px 16px;">
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="600" style="max-width:600px;width:100%;">
+        <tr><td height="3" style="height:3px;line-height:1px;font-size:1px;background-color:#1FAE54;background-image:linear-gradient(90deg,#0F8A6F 0%,#25D366 100%);border-radius:16px 16px 0 0;">&nbsp;</td></tr>
+        <tr><td style="background-color:#0E0E14;border:1px solid rgba(255,255,255,0.06);border-top:0;border-radius:0 0 16px 16px;padding:48px 44px;">
+          <p style="margin:0 0 36px;font-family:'SF Mono',Menlo,Consolas,monospace;font-size:11px;letter-spacing:0.14em;color:#6E6E76;text-transform:uppercase;">
+            <span style="color:#34D399;">/</span>&nbsp;Pixie&nbsp;·&nbsp;Bytes&nbsp;Platform
+          </p>
+          <h1 style="margin:0 0 28px;font-size:36px;font-weight:600;letter-spacing:-0.035em;line-height:1.05;color:#F5F5F7;">
+            ${copy.headlineLine1}<br>
+            <span style="color:#25D366;">${copy.headlineAccent}</span>
+          </h1>
+          <p style="margin:0 0 32px;font-size:15px;line-height:1.7;color:#A6A6AE;white-space:pre-line;">${copy.body}</p>
+          <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0;">
+            <tr><td style="border-radius:10px;background-color:#25D366;background-image:linear-gradient(135deg,#25D366 0%,#17A64A 100%);">
+              <a href="${ctaHref}" style="display:inline-block;color:#0A1F12;text-decoration:none;padding:16px 30px;font-size:15px;font-weight:700;letter-spacing:-0.01em;line-height:1;">${copy.ctaLabel}&nbsp;&nbsp;→</a>
+            </td></tr>
+          </table>
+          <p style="margin:20px 0 0;font-size:13px;line-height:1.65;color:#6E6E76;">
+            Or just reply to this email — it reaches the team directly.
+          </p>
+          <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:56px 0 0;border-top:1px solid rgba(255,255,255,0.06);">
+            <tr><td style="padding:24px 0 0;">
+              <p style="margin:0 0 6px;font-family:'SF Mono',Menlo,Consolas,monospace;font-size:11px;letter-spacing:0.06em;color:#6E6E76;">Pixie&nbsp;·&nbsp;Bytes&nbsp;Platform&nbsp;·&nbsp;bytesplatform.com</p>
+              <p style="margin:0;font-size:11px;line-height:1.5;color:#4D4D54;">To stop these, reply "stop following up" — we'll hear you.</p>
+            </td></tr>
+          </table>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+
+  const text =
+    `${copy.headlineLine1} ${copy.headlineAccent}\n` +
+    `Pixie · Bytes Platform\n\n` +
+    `${copy.body}\n\n` +
+    `${copy.ctaLabel}: ${ctaHref}\n\n` +
+    `Or just reply to this email.\n\n` +
+    `— Pixie · Bytes Platform\n` +
+    `Reply "stop following up" to opt out.`;
+
+  return { html, text };
+}
+
+/**
+ * Run the INTENT email ladder for one user. For leads who stated an intent +
+ * left an email but never reached a preview/payment (so they're not candidates
+ * for the build-restore EMAIL_FOLLOWUP_LADDER). Self-gating + idempotent —
+ * fires at most one email per pass, no-ops when nothing's due. Anchored to the
+ * lead's last inbound (went-quiet), independent of the WhatsApp 24h window
+ * since email isn't subject to it.
+ */
+async function processIntentEmailFollowup(user) {
+  const metadata = user.metadata || {};
+
+  // Same exit gates as the other ladders.
+  if (metadata.leadClosed) return;
+  if (metadata.meetingBooked) return;
+  if (metadata.paymentConfirmed) return;
+  if (metadata.followupOptOut) return;
+  if (metadata.humanTakeover) return;
+
+  // Need an email on file. Most pure-chat ad leads won't have one — correct to
+  // skip (no address = no email).
+  const email =
+    metadata.email ||
+    (metadata.websiteData && metadata.websiteData.contactEmail) ||
+    null;
+  if (!email) return;
+
+  // Build-restore leads (a preview + Stripe link was delivered) belong to
+  // EMAIL_FOLLOWUP_LADDER, not this one — don't double up.
+  if (metadata.paymentLinkSentAt) return;
+
+  // Must have STATED an intent: came from an ad, fired the demo trigger, or
+  // started the build wizard. Without a signal we'd be cold-emailing randoms.
+  const wd = metadata.websiteData || {};
+  const statedIntent =
+    !!metadata.adReferral ||
+    !!metadata.websiteDemoTriggered ||
+    !!wd.businessName ||
+    (metadata.adIndustry && metadata.adIndustry !== 'generic');
+  if (!statedIntent) return;
+
+  // Anchor: last inbound (went-quiet). A reply resets it (and re-opens the WA
+  // window), which is the behavior we want.
+  const { data: lastIn } = await supabase
+    .from('conversations')
+    .select('created_at')
+    .eq('user_id', user.id)
+    .eq('role', 'user')
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (!lastIn) return;
+
+  const elapsedHours = (Date.now() - new Date(lastIn.created_at).getTime()) / (1000 * 60 * 60);
+  const completed = Array.isArray(metadata.intentEmailSteps) ? metadata.intentEmailSteps : [];
+
+  // Latest-due-first so a user picked up after a missed cycle still gets the
+  // most-current step.
+  let nextStep = null;
+  for (let i = INTENT_EMAIL_LADDER.length - 1; i >= 0; i--) {
+    const rung = INTENT_EMAIL_LADDER[i];
+    if (elapsedHours >= rung.afterHours && !completed.includes(rung.step)) { nextStep = rung; break; }
+  }
+  if (!nextStep) return;
+
+  // Industry → label + matched example + WhatsApp deep link back to the number
+  // the lead messaged (prefilled so the reply reads as intent).
+  const { industryKey, classified } = await resolveLeadIndustryKey(user);
+  const label = industryLabel(industryKey);
+  const exampleUrl = getAdPreviewUrl(industryKey);
+  const waDigits = await resolveWaNumber(user.via_phone_number_id);
+  const waLink = waDigits
+    ? `https://wa.me/${waDigits}?text=${encodeURIComponent(`Hi Pixie! I'd like my ${label} website`)}`
+    : null;
+
+  const { html, text } = renderIntentEmailContent(nextStep.step, {
+    industryLabelText: label,
+    exampleUrl,
+    waLink,
+  });
+
+  const ok = await sendEmail({ to: email, subject: nextStep.subject(label), html, text });
+
+  if (ok) {
+    // Mark this step + every earlier one complete (don't retro-send a skipped step).
+    const sentIdx = INTENT_EMAIL_LADDER.findIndex((r) => r.step === nextStep.step);
+    const newCompleted = Array.from(new Set([
+      ...completed,
+      ...INTENT_EMAIL_LADDER.slice(0, sentIdx + 1).map((r) => r.step),
+    ]));
+    await updateUserMetadata(user.id, {
+      intentEmailSteps: newCompleted,
+      lastIntentEmailAt: new Date().toISOString(),
+      ...(classified ? { followupIndustryKey: industryKey } : {}),
+    });
+    logger.info(
+      `[FOLLOWUP-INTENT-EMAIL] Sent ${nextStep.step} to ${email} (user ${user.phone_number}, ` +
+        `industry ${industryKey}, ${elapsedHours.toFixed(1)}h quiet)`
+    );
+  } else {
+    logger.warn(`[FOLLOWUP-INTENT-EMAIL] Send failed for ${email} (step ${nextStep.step}, user ${user.phone_number})`);
   }
 }
 
@@ -685,6 +962,16 @@ async function runFollowupCycle() {
 
     for (const user of users) {
       const channel = user.channel || 'whatsapp';
+
+      // Intent email ladder runs for EVERY lead, any channel, in or out of the
+      // WA window — email isn't subject to Meta's 24h rule. Self-gating +
+      // idempotent (needs email + stated intent + no payment link yet).
+      try {
+        await processIntentEmailFollowup(user);
+      } catch (err) {
+        logger.warn(`[FOLLOWUP-INTENT-EMAIL] failed for ${user.phone_number}: ${err.message}`);
+      }
+
       // Messenger / Instagram: Meta's 24h-interaction-window rule blocks
       // free-form outbound regardless of intent. Chat follow-up is out,
       // but email is fair game — try the email ladder for those users.
@@ -1236,4 +1523,10 @@ module.exports = {
   renderFollowupEmailContent,
   processEmailFollowup,
   resolveLeadIndustryKey,
+  // Intent email ladder (stated-intent, no-build leads)
+  INTENT_EMAIL_LADDER,
+  renderIntentEmailContent,
+  processIntentEmailFollowup,
+  industryLabel,
+  resolveWaNumber,
 };
