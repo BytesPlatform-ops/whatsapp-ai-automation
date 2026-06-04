@@ -23,6 +23,8 @@ const { sendEmail } = require('../notifications/email');
 const { logger } = require('../utils/logger');
 const { STATES } = require('../conversation/states');
 const { generateResponse } = require('../llm/provider');
+const { getAdPreviewUrl } = require('../llm/prompts');
+const { classifyIndustry } = require('../utils/industryClassifier');
 
 // WhatsApp's customer-service window: free-form messages may only be
 // sent within 24 hours of the user's last INBOUND message. Outside
@@ -412,6 +414,9 @@ const EXPLORATORY_STEP_SPEC = {
     lever: 'Loss aversion',
     intentEn:
       'It has been 2 hours since the user said hi to Pixie and never replied. Write ONE short, casual WhatsApp nudge that: (a) acknowledges you noticed they went quiet, without sounding clingy or naggy, (b) lowers the friction with a no-commitment ask — offer to send them a real example for their trade if they tell you what they do, (c) ends with one easy question (their trade / kind of business). No links, no preview pitch, no business-name ask. One sentence is fine.',
+    // Used when we ALREADY know the lead's trade — never re-ask what they do.
+    intentEnKnown:
+      'It has been 2 hours since the user said hi to Pixie and never replied. You ALREADY know roughly what kind of business they run, so DO NOT ask what they do again. Write ONE short, casual WhatsApp nudge that: (a) acknowledges you noticed they went quiet, without sounding clingy or naggy, (b) offers — no commitment — to send over a real example built for a business like theirs so they can picture their own site, (c) ends with one light, low-pressure question (e.g. "want me to?"). No links, no business-name ask, and NO "what do you do" question. One sentence is fine.',
   },
   expl_8h_value: {
     lever: 'Reciprocity',
@@ -426,6 +431,54 @@ const EXPLORATORY_STEP_SPEC = {
 };
 
 /**
+ * Resolve the lead's industry key for industry-matched follow-up copy +
+ * example URL. Order (most authoritative / cheapest first):
+ *   1. websiteData.industryKey — captured during the sales/webdev flow
+ *   2. metadata.adIndustry — set from ad targeting in the router
+ *   3. metadata.followupIndustryKey — cached from a previous follow-up cycle
+ *   4. classify the user's own inbound text (LLM) — last resort
+ * Returns { industryKey, classified }; `classified` is true only when step 4
+ * ran, so the caller can persist followupIndustryKey and skip it next cycle.
+ * Never throws — falls back to 'generic' (which getAdPreviewUrl maps to the
+ * generic example, never HVAC).
+ */
+async function resolveLeadIndustryKey(user) {
+  const metadata = user.metadata || {};
+  const wd = metadata.websiteData || {};
+
+  if (wd.industryKey && wd.industryKey !== 'generic') {
+    return { industryKey: wd.industryKey, classified: false };
+  }
+  if (metadata.adIndustry && metadata.adIndustry !== 'generic') {
+    return { industryKey: metadata.adIndustry, classified: false };
+  }
+  if (metadata.followupIndustryKey) {
+    return { industryKey: metadata.followupIndustryKey, classified: false };
+  }
+
+  try {
+    const { data: rows } = await supabase
+      .from('conversations')
+      .select('message_text')
+      .eq('user_id', user.id)
+      .eq('role', 'user')
+      .order('created_at', { ascending: true })
+      .limit(5);
+    const text = (rows || [])
+      .map((r) => r.message_text)
+      .filter(Boolean)
+      .join(' ')
+      .slice(0, 200);
+    if (!text.trim()) return { industryKey: 'generic', classified: false };
+    const key = await classifyIndustry(text);
+    return { industryKey: key, classified: true };
+  } catch (err) {
+    logger.warn(`[EXPL] industry resolve failed for ${user.phone_number}: ${err.message}`);
+    return { industryKey: 'generic', classified: false };
+  }
+}
+
+/**
  * Compose an exploratory-ladder follow-up via the LLM at send time. Returns
  * the fully-worded WhatsApp message (already in the user's language, with
  * URLs substituted, and pulling the lever specified by EXPLORATORY_STEP_SPEC).
@@ -435,14 +488,22 @@ const EXPLORATORY_STEP_SPEC = {
  *
  * Returns { text, lever } on success, null if the step is unknown.
  */
-async function composeExploratoryFollowup(stepKey, user, env, recentLevers = []) {
+async function composeExploratoryFollowup(stepKey, user, env, recentLevers = [], industryKey = 'generic') {
   const spec = EXPLORATORY_STEP_SPEC[stepKey];
   if (!spec) return null;
 
-  const portfolioUrl = 'https://austinclimate.pixiebot.co';
+  // Industry-matched example URL (real estate → sarahmitchell, salon →
+  // blushbar, etc). Falls back to the generic example for unknown trades —
+  // never the hardcoded HVAC site that every lead used to get.
+  const portfolioUrl = getAdPreviewUrl(industryKey);
   const calendlyUrl = (env && env.calendlyUrl) || 'https://calendly.com/bytes-platform';
 
-  const filledIntent = spec.intentEn
+  // When we already know the trade, use the variant that doesn't re-ask it.
+  const knownTrade = industryKey && industryKey !== 'generic';
+  const baseIntent =
+    knownTrade && spec.intentEnKnown ? spec.intentEnKnown : spec.intentEn;
+
+  const filledIntent = baseIntent
     .replace(/\$\{portfolioUrl\}/g, portfolioUrl)
     .replace(/\$\{calendlyUrl\}/g, calendlyUrl);
 
@@ -820,23 +881,31 @@ async function processUserFollowup(user) {
     // Compose via LLM, lever-tagged, with the user's recent levers banned
     // so the rotation rule holds. Falls back if compose returns null.
     const recentLevers = Array.isArray(metadata.recentLevers) ? metadata.recentLevers.slice(-2) : [];
-    const composed = await composeExploratoryFollowup(nextStep.step, user, envCfg, recentLevers);
+
+    // Resolve the lead's trade so the example URL + copy match it (real
+    // estate → sarahmitchell, not the old hardcoded HVAC site) and so the
+    // 2h nudge doesn't re-ask what they already told us.
+    const { industryKey, classified } = await resolveLeadIndustryKey(user);
+
+    const composed = await composeExploratoryFollowup(nextStep.step, user, envCfg, recentLevers, industryKey);
     if (!composed) return;
 
     logger.info(
       `[EXPL] Sending ${nextStep.step} to ${user.phone_number} ` +
-        `(lever: ${composed.lever}, temp: ${leadTemp}, lang: ${metadata.preferredLanguage || 'english'})`
+        `(lever: ${composed.lever}, temp: ${leadTemp}, industry: ${industryKey}, lang: ${metadata.preferredLanguage || 'english'})`
     );
 
     await sendTextMessage(user.phone_number, composed.text);
     await logMessage(user.id, composed.text, 'assistant');
 
     // Push the lever used into recentLevers so the next message (from the
-    // bot OR from a later follow-up step) doesn't repeat it.
+    // bot OR from a later follow-up step) doesn't repeat it. Cache a freshly
+    // classified industry key so later cycles skip the LLM call.
     const nextRecentLevers = [...recentLevers, composed.lever].slice(-2);
     await updateUserMetadata(user.id, {
       exploratorySteps: [...explCompleted, nextStep.step],
       recentLevers: nextRecentLevers,
+      ...(classified ? { followupIndustryKey: industryKey } : {}),
     });
     return;
   }
@@ -1166,4 +1235,5 @@ module.exports = {
   EMAIL_FOLLOWUP_LADDER,
   renderFollowupEmailContent,
   processEmailFollowup,
+  resolveLeadIndustryKey,
 };

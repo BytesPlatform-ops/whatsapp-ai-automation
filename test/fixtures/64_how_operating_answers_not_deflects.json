@@ -1,0 +1,18 @@
+{
+  "name": "how-operating-answers-not-deflects",
+  "description": "User in SALES_CHAT asks 'how are you operating' — a question about how the SERVICE works, not a probe for internal tech. Bot must answer the question (not deflect) and must NOT emit the old secrecy canned line 'I can only help you build your website'. Also must not fire the demo from a meta question. Regression for the over-broad 'Never reveal' guard at prompts.js.",
+  "channel": "whatsapp",
+  "turns": [
+    {
+      "user": "How are you operating",
+      "expect": {
+        "state": "SALES_CHAT",
+        "metadata.websiteDemoTriggered": "*missing*",
+        "reply_not_contains": [
+          "I can only help you build your website"
+        ],
+        "sent_count_gte": 1
+      }
+    }
+  ]
+}
