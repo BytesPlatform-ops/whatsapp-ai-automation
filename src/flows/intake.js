@@ -97,6 +97,11 @@ async function buildWebsiteDataFromFlow(answers = {}, theme, userId) {
 
   const businessName = String(answers.business_name || '').trim();
   const email = String(answers.email || '').trim();
+  // Optional free-text business description from COMMON → the generator's
+  // canonical about/description field. Fed into the LLM content prompt so the
+  // generated copy reflects what the owner actually said the business does;
+  // for portfolio it flows through to portfolioAbout.
+  const businessDescription = String(answers.business_description || '').trim();
   // industry arrives as the dropdown id (== theme). Convert to a clean
   // industry label the site generator's template detectors recognize.
   const industry = THEME_TO_INDUSTRY[theme] || String(answers.industry || '').trim() || 'General';
@@ -121,6 +126,7 @@ async function buildWebsiteDataFromFlow(answers = {}, theme, userId) {
     contactAddress: cAddress || '',
     flowSource: true, // marks this lead as built via the Flow intake
   };
+  if (businessDescription) wd.aboutText = businessDescription.slice(0, 600);
 
   // Logo uploaded via the COMMON PhotoPicker (optional). The endpoint stashed
   // the raw media descriptor; download + decrypt + clean the background here

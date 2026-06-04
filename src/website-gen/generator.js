@@ -382,6 +382,7 @@ Industry: ${tradeLabelUpper}
 Primary City: ${primaryCity || 'unspecified'}
 Service Areas: ${Array.isArray(serviceAreas) && serviceAreas.length ? serviceAreas.join(', ') : (primaryCity || 'not provided')}
 Services: ${effectiveHasServices ? effectiveServicesList.join(', ') : `general ${tradeLabelUpper.toLowerCase()} services`}
+${userAboutText ? `What the business does (owner's words): ${userAboutText}` : ''}
 Years in Business: ${yearsExperience || 'unspecified'}
 License: ${licenseNumber || 'not provided'}
 ${contactEmail ? `Email: ${contactEmail}` : ''}
@@ -402,6 +403,7 @@ Homes Sold: ${homesSold || 'not specified'}
 Volume Closed: ${volumeClosed || 'not specified'}
 Designations: ${Array.isArray(designations) && designations.length ? designations.join(', ') : 'not specified'}
 Specialty: ${specialty || 'not specified'}
+${userAboutText ? `About the agent (their words): ${userAboutText}` : ''}
 License: ${licenseNumber || 'not provided'}
 ${contactEmail ? `Email: ${contactEmail}` : ''}
 ${contactPhone ? `Phone: ${contactPhone}` : ''}
@@ -416,6 +418,7 @@ Generate real-estate-agent website copy. Return ONLY valid JSON matching the sch
 Business Name: ${businessName}
 Industry: ${industry}
 Services/Products: ${hasServices ? services.join(', ') : 'None provided — skip services page'}
+${userAboutText ? `What the business does (owner's words): ${userAboutText}` : ''}
 ${contactEmail ? `Email: ${contactEmail}` : ''}
 ${contactPhone ? `Phone: ${contactPhone}` : ''}
 ${contactAddress ? `Address: ${contactAddress}` : ''}
