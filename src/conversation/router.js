@@ -1,12 +1,13 @@
 const { findOrCreateUser, updateUserState, updateUserMetadata } = require('../db/users');
 const { logMessage } = require('../db/conversations');
-const { markAsRead, sendTextMessage, sendInteractiveButtons, sendWithMenuButton, setLastMessageId } = require('../messages/sender');
+const { markAsRead, sendTextMessage, sendInteractiveButtons, sendWithMenuButton, setLastMessageId, sendImage } = require('../messages/sender');
 const { runWithContext, setUserId, setTurnId } = require('../messages/channelContext');
 const { randomUUID } = require('crypto');
 const { STATES } = require('./states');
 const { logger } = require('../utils/logger');
 const { generateResponse } = require('../llm/provider');
-const { GENERAL_CHAT_PROMPT, WEB_REVISIONS_ASIDE_PROMPT } = require('../llm/prompts');
+const { GENERAL_CHAT_PROMPT, WEB_REVISIONS_ASIDE_PROMPT, getAdPreviewUrl } = require('../llm/prompts');
+const { classifyExamplesRequest, resolveShowcaseIndustry } = require('./sampleShowcase');
 const { transcribeAudio } = require('../llm/transcribe');
 const { maybeUpdateSummary } = require('./summaryManager');
 const {
@@ -104,7 +105,7 @@ const { handleAppDev } = require('./handlers/appDev');
 const { handleMarketing } = require('./handlers/marketing');
 const { handleGeneralChat } = require('./handlers/generalChat');
 const { handleScheduling } = require('./handlers/scheduling');
-const { handleSalesBot } = require('./handlers/salesBot');
+const { handleSalesBot, getSampleScreenshotUrl } = require('./handlers/salesBot');
 const { handleInformativeBot } = require('./handlers/informativeBot');
 const { handleChatbotService } = require('./handlers/chatbotService');
 const { handleCustomDomain } = require('./handlers/customDomain');
@@ -1873,6 +1874,58 @@ async function _routeMessage(message) {
       // lets us skip the separate "back to where we were" re-prompt.
       const scopedAside = user.state === STATES.WEB_REVISIONS;
       const asidePrompt = scopedAside ? WEB_REVISIONS_ASIDE_PROMPT : GENERAL_CHAT_PROMPT;
+
+      // "Show me your previous work / examples" deserves an actual screenshot
+      // + branded preview URL, not a text-only promise. The plain aside below
+      // can only send text, so a user who asked to see examples mid-flow
+      // (e.g. while we collect their business name) got "yeah I can show you a
+      // few" and nothing else. Reuse the salesBot screenshot infra here so it
+      // works in EVERY flow/state. Industry is known once the website demo
+      // fired; otherwise it falls back to the generic example.
+      try {
+        if (await classifyExamplesRequest(text, user.id)) {
+          const industryKey = await resolveShowcaseIndustry(user);
+          const previewUrl = getAdPreviewUrl(industryKey);
+          try {
+            await sendImage(user.phone_number, getSampleScreenshotUrl(industryKey));
+          } catch (imgErr) {
+            logger.warn(`[ROUTER] examples sendImage failed for ${from}: ${imgErr.message}`);
+          }
+          // Language-aware caption: share the live URL, note it's
+          // customizable, and fold the re-prompt into the same message.
+          const showcaseSystemPrompt =
+            `${asidePrompt}\n\n## YOU JUST SENT A SAMPLE\nYou just sent the user a screenshot of a REAL website we built, live at ${previewUrl}. In ONE short message: (a) share that exact URL inline (keep it verbatim), (b) say it can be fully customized for their business` +
+            (currentQuestion
+              ? `, (c) then gently bring them back to: "${currentQuestion}" — paraphrase it, do NOT copy verbatim, do NOT split into a second message.`
+              : `.`) +
+            ` No re-introduction, no emoji unless they used one.`;
+          let showcaseReply = null;
+          try {
+            showcaseReply = await generateResponse(
+              showcaseSystemPrompt,
+              [{ role: 'user', content: text }],
+              { userId: user.id, operation: 'examples_showcase' }
+            );
+          } catch (genErr) {
+            logger.warn(`[ROUTER] examples showcase text failed for ${from}: ${genErr.message}`);
+          }
+          // Guarantee the URL survives even if the LLM dropped it; clean
+          // static fallback if the call failed entirely.
+          if (showcaseReply && !showcaseReply.includes(previewUrl)) {
+            showcaseReply = `${showcaseReply}\n${previewUrl}`;
+          }
+          if (!showcaseReply) {
+            showcaseReply = currentQuestion
+              ? `Here's a recent one we built: ${previewUrl} — fully customizable for you. ${currentQuestion}`
+              : `Here's a recent one we built: ${previewUrl} — fully customizable for you.`;
+          }
+          await sendTextMessage(user.phone_number, showcaseReply);
+          return; // Stay in same state; example shown + re-anchored.
+        }
+      } catch (exErr) {
+        logger.warn(`[ROUTER] examples-request handling failed for ${from}: ${exErr.message} — falling through to generic aside`);
+      }
+
       let asideSent = false;
       try {
         // Inject the current-state question into the aside system prompt so

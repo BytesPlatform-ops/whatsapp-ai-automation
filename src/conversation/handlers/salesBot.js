@@ -1556,4 +1556,4 @@ async function handleSalesBot(user, message) {
   return STATES.SALES_CHAT;
 }
 
-module.exports = { handleSalesBot };
+module.exports = { handleSalesBot, getSampleScreenshotUrl };

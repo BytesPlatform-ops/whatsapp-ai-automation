@@ -1,0 +1,25 @@
+{
+  "name": "examples-request-midflow-sends-image",
+  "description": "User is mid-flow in the website builder (WEB_COLLECT_NAME, industry already known = real estate) and asks to see previous work. The router's off-topic aside used to answer text-only ('yeah I can show you a few') and never send the sample. Now it must send the matched screenshot IMAGE + the real-estate preview URL (sarahmitchell), and stay in WEB_COLLECT_NAME. Regression for: example shows in salesBot but not once the demo flow started.",
+  "channel": "whatsapp",
+  "seed": {
+    "state": "WEB_COLLECT_NAME",
+    "metadata": {
+      "websiteDemoTriggered": true,
+      "websiteData": {
+        "industry": "real estate",
+        "industryKey": "real_estate"
+      }
+    }
+  },
+  "turns": [
+    {
+      "user": "can you show me examples of websites you've built before?",
+      "expect": {
+        "state": "WEB_COLLECT_NAME",
+        "sent_kind_contains": "image",
+        "reply_contains": "sarahmitchell.pixiebot.co"
+      }
+    }
+  ]
+}
