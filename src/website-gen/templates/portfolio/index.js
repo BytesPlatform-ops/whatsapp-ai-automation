@@ -9,14 +9,60 @@
 //   designer      — brand/UX/UI/graphic/visual/art-direction designers
 //   general       — catch-all (writers, freelancers, illustrators, etc.)
 //
-// Detection mirrors the spec's selectTemplate() logic.
+// The user can also pick a NICHE explicitly (WhatsApp Flow dropdown or the
+// chat niche question). When present that wins — selectTemplate honors
+// config.portfolioTemplate / config.portfolioNiche before falling back to the
+// keyword heuristic (which still serves the preview script + legacy callers
+// that pass no niche).
 
 const general      = require('./general');
 const designer     = require('./designer');
 const photographer = require('./photographer');
 const developer    = require('./developer');
 
+const VALID_TEMPLATES = ['photographer', 'developer', 'designer', 'general'];
+
+// Niche id (from the Flow dropdown / chat classifier) → sub-template id.
+// Keys cover the canonical ids plus common synonyms so a slightly different
+// label still resolves deterministically.
+const NICHE_TO_TEMPLATE = {
+  photographer: 'photographer',
+  photography: 'photographer',
+  photo: 'photographer',
+  videographer: 'photographer',
+  filmmaker: 'photographer',
+  designer: 'designer',
+  design: 'designer',
+  creative: 'designer',
+  brand: 'designer',
+  developer: 'developer',
+  development: 'developer',
+  engineer: 'developer',
+  programmer: 'developer',
+  writer: 'general',
+  writing: 'general',
+  copywriter: 'general',
+  other: 'general',
+  general: 'general',
+};
+
+// Map a user-chosen niche to one of the four sub-template ids, or null when
+// it doesn't resolve (caller then falls back to keyword detection).
+function resolvePortfolioTemplate(niche) {
+  const key = String(niche || '').trim().toLowerCase();
+  if (!key) return null;
+  if (VALID_TEMPLATES.includes(key)) return key;
+  return NICHE_TO_TEMPLATE[key] || null;
+}
+
 function selectTemplate(config) {
+  // Explicit niche/template wins — set from the WhatsApp Flow dropdown or the
+  // chat niche question.
+  const explicit = (config.portfolioTemplate && VALID_TEMPLATES.includes(config.portfolioTemplate))
+    ? config.portfolioTemplate
+    : resolvePortfolioTemplate(config.portfolioNiche);
+  if (explicit) return explicit;
+
   const industry = String(config.industry || '');
   const services = Array.isArray(config.services)
     ? config.services.map((s) => (typeof s === 'string' ? s : (s && (s.title || s.name)) || '')).join(' ')
@@ -39,4 +85,4 @@ function generatePortfolioPages(config) {
   }
 }
 
-module.exports = { generatePortfolioPages, selectTemplate };
+module.exports = { generatePortfolioPages, selectTemplate, resolvePortfolioTemplate, NICHE_TO_TEMPLATE };

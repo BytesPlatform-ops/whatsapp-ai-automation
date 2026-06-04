@@ -5,6 +5,8 @@ const { getHeroImage } = require('./heroImage');
 const { attachServiceImages } = require('./serviceImages');
 const { attachHvacServiceImages } = require('./hvacServiceImages');
 const { attachRealEstateListingImages } = require('./realEstateListingImages');
+const { attachPortfolioImages, seedPlaceholderProjects } = require('./portfolioImages');
+const { selectTemplate: selectPortfolioTemplate } = require('./templates/portfolio');
 const { fetchNeighborhoodImages, fetchAgentPlaceholderImage } = require('./neighborhoodImages');
 const { inferTimezoneFromAddress } = require('./timezone');
 const { isHvac, isRealEstate, resolveTrade } = require('./templates');
@@ -330,6 +332,10 @@ async function generateWebsiteContent(businessData, extras = {}) {
     // come from the iterative WEB_COLLECT_PROJECTS_DETAILS flow.
     aboutText: userAboutText,
     projects: userProjects,
+    // Creative niche chosen explicitly (Flow dropdown / chat). Drives the
+    // sub-template (photographer/designer/developer/general) and the
+    // niche-appropriate hero + project image queries.
+    portfolioNiche,
     industryKey,
     // Caller-supplied hero image override. Skips the Unsplash API call
     // entirely — useful for demo fixtures and rate-limit recovery.
@@ -339,6 +345,14 @@ async function generateWebsiteContent(businessData, extras = {}) {
   const hasServices = Array.isArray(services) && services.length > 0;
   const hvacMode = isHvac(industry, industryKey);
   const realEstateMode = isRealEstate(industry, industryKey);
+  const portfolioMode = extras.templateId === 'portfolio';
+  // Resolve the exact sub-template the router will render (honors the explicit
+  // niche, else keyword heuristic) so hero query, seed projects, and per-card
+  // image queries all match what actually renders. Stamped onto siteConfig
+  // below so the template router reuses this decision verbatim.
+  const portfolioTpl = portfolioMode
+    ? selectPortfolioTemplate({ industry, services, portfolioNiche })
+    : null;
   // Plumbing shares the HVAC template; resolveTrade tells us which variant
   // the user lands on so LLM copy and seeded defaults match the trade.
   const trade = hvacMode ? resolveTrade(industry) : null;
@@ -533,6 +547,15 @@ Generate compelling website copy for this business. Return ONLY valid JSON.${lan
         imageQuery = HERO_QUERY[trade] || HERO_QUERY.hvac;
       } else if (realEstateMode) {
         imageQuery = primaryCity ? `${primaryCity} skyline` : 'luxury home interior';
+      } else if (portfolioMode) {
+        // Hero query tuned to the resolved creative sub-template.
+        const PORTFOLIO_HERO = {
+          photographer: 'editorial photography portrait',
+          designer: 'design studio workspace',
+          developer: 'developer workspace code',
+          general: 'creative studio workspace',
+        };
+        imageQuery = PORTFOLIO_HERO[portfolioTpl] || PORTFOLIO_HERO.general;
       } else {
         // Build a tighter query from the first service + industry. Strip the
         // same noise words heroImage.js would strip so we don't waste tokens
@@ -582,6 +605,7 @@ Generate compelling website copy for this business. Return ONLY valid JSON.${lan
   if (
     !hvacMode &&
     !realEstateMode &&
+    !portfolioMode &&
     extras.templateId !== 'salon' &&
     Array.isArray(generatedContent.services) &&
     generatedContent.services.length > 0
@@ -657,6 +681,23 @@ Generate compelling website copy for this business. Return ONLY valid JSON.${lan
       agentPlaceholderImage = agentRes.value;
     } else {
       logger.warn(`[WEBGEN] Agent placeholder image fetch failed: ${agentRes.reason?.message}`);
+    }
+  }
+
+  // Portfolio: fill the work grid with niche-appropriate photos. Use the
+  // user's projects when present, else seed real-looking placeholders so the
+  // grid isn't empty — either way attachPortfolioImages adds a Pexels photo to
+  // any card the user didn't supply one for. Runs against the FINAL projects
+  // array so the template renders images instead of typographic placeholders.
+  let portfolioProjects = null;
+  if (portfolioMode) {
+    portfolioProjects = Array.isArray(userProjects) && userProjects.length
+      ? userProjects
+      : seedPlaceholderProjects(portfolioTpl);
+    try {
+      portfolioProjects = await attachPortfolioImages(portfolioProjects, { template: portfolioTpl, industry });
+    } catch (err) {
+      logger.warn(`[WEBGEN] Portfolio image fetch failed: ${err.message}`);
     }
   }
 
@@ -764,11 +805,18 @@ Generate compelling website copy for this business. Return ONLY valid JSON.${lan
     calendlyUrl: calendlyUrl || null,
     neighborhoodImages,
     agentPlaceholderImage,
-    // Portfolio pass-through (harmless for non-portfolio templates). The
-    // template reads `projects` directly to render its work-grid; if absent
-    // the template generates LLM-hallucinated placeholders.
-    projects: Array.isArray(userProjects) && userProjects.length ? userProjects : null,
+    // Portfolio pass-through (harmless for non-portfolio templates). For
+    // portfolio sites this is the image-enriched array (user projects or
+    // seeded placeholders, each with a Pexels photo); otherwise null so the
+    // template uses its own defaults.
+    projects: portfolioMode
+      ? portfolioProjects
+      : (Array.isArray(userProjects) && userProjects.length ? userProjects : null),
     portfolioAbout: userAboutText || null,
+    // Niche + resolved sub-template. portfolioTemplate is stamped so the
+    // template router (selectTemplate) reuses this exact decision.
+    portfolioNiche: portfolioNiche || null,
+    portfolioTemplate: portfolioTpl || null,
     // Language metadata. htmlLang feeds <html lang="..."> in every template;
     // bcp47Locale powers Intl.DateTimeFormat for weekday names (salon hours).
     // labels is the static chrome dictionary — LLM-translated when the user

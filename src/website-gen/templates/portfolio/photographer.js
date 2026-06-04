@@ -391,45 +391,43 @@ body.fonts-loaded .hero-cta { opacity: 1; transform: translateY(0); }
 /* ─── mosaic grid ─────────────────────────────────────────────────────── */
 .work-grid {
   display: grid;
-  grid-template-columns: repeat(12, 1fr);
+  grid-template-columns: repeat(4, 1fr);
+  grid-auto-flow: row dense;
   gap: var(--space-4);
 }
+/* Square unit. Every tile — including the 2×2 feature — keeps aspect-ratio:1,
+   so a feature is exactly the height of two stacked base rows plus the gap:
+   rows align perfectly and dense flow backfills holes, so there are never
+   orphan gaps regardless of project count. */
 .work-item {
   position: relative;
   overflow: hidden;
-  aspect-ratio: 4 / 3;
+  aspect-ratio: 1 / 1;
   background: var(--accent-soft);
   cursor: pointer;
   isolation: isolate;
-  transition: transform 0.6s var(--ease-out);
-  will-change: transform;
+  transition: box-shadow 0.5s var(--ease-out), opacity 0.8s var(--ease-expo), transform 0.8s var(--ease-expo);
 }
-.work-item.size-large  { grid-column: span 8; }
-.work-item.size-small  { grid-column: span 4; }
-.work-item.size-third  { grid-column: span 4; }
-.work-item.size-tall   { grid-column: span 4; aspect-ratio: 3 / 4; }
-.work-item.tilt-1 { transform: rotate(-1.5deg); }
-.work-item.tilt-2 { transform: rotate(1.2deg); }
-.work-item.tilt-3 { transform: rotate(-0.8deg); }
-.work-item.tilt-4 { transform: rotate(2deg); }
-.work-item:hover { transform: rotate(0) scale(1.02) !important; z-index: 5; box-shadow: 0 24px 56px rgba(26,24,22,0.18); }
+.work-item.is-feature { grid-column: span 2; grid-row: span 2; }
+/* Scroll-reveal: each tile rises + fades as its row scrolls into view; the
+   JS staggers them per row via data-reveal-delay. */
+.work-item.is-reveal { opacity: 0; transform: translateY(28px); }
+.work-item.is-reveal.in { opacity: 1; transform: none; }
+.work-item:hover { z-index: 5; box-shadow: 0 24px 56px rgba(26,24,22,0.18); }
 @media (max-width: 1023px) {
-  .work-grid { grid-template-columns: repeat(6, 1fr); gap: var(--space-3); }
-  .work-item.size-large  { grid-column: span 6; }
-  .work-item.size-small  { grid-column: span 3; }
-  .work-item.size-third  { grid-column: span 3; }
-  .work-item.size-tall   { grid-column: span 3; }
+  .work-grid { grid-template-columns: repeat(2, 1fr); gap: var(--space-3); }
+  .work-item.is-feature { grid-column: span 2; grid-row: span 1; aspect-ratio: 16 / 10; }
 }
 @media (max-width: 640px) {
   .work-grid { grid-template-columns: 1fr; }
-  .work-item, .work-item.size-large, .work-item.size-small, .work-item.size-third, .work-item.size-tall { grid-column: span 1; aspect-ratio: 4 / 3; }
+  .work-item, .work-item.is-feature { grid-column: span 1; grid-row: span 1; aspect-ratio: 4 / 5; }
 }
 .work-item-img {
   position: absolute; inset: 0;
   background-size: cover; background-position: center;
   transition: transform 0.7s var(--ease-out), filter 0.5s var(--ease-out);
 }
-.work-item:hover .work-item-img { transform: scale(1.04); filter: brightness(0.88); }
+.work-item:hover .work-item-img { transform: scale(1.05); filter: brightness(0.9); }
 
 /* Image-less tiles — full-bleed typographic statement, alternating tones */
 .work-item-empty {
@@ -482,27 +480,110 @@ body.fonts-loaded .hero-cta { opacity: 1; transform: translateY(0); }
 .work-item-caption {
   position: absolute;
   left: 0; right: 0; bottom: 0;
-  padding: var(--space-4) var(--space-5);
+  display: flex; flex-direction: column; gap: 3px;
+  padding: var(--space-5) var(--space-4) var(--space-3);
   color: var(--ink-inverse);
-  background: linear-gradient(to top, rgba(26,24,22,0.78) 0%, rgba(26,24,22,0) 100%);
-  opacity: 0;
-  transform: translateY(8px);
-  transition: opacity 0.4s var(--ease-out), transform 0.4s var(--ease-out);
+  background: linear-gradient(to top, rgba(26,24,22,0.74) 0%, rgba(26,24,22,0.12) 58%, rgba(26,24,22,0) 100%);
+  transform: translateY(0);
+  transition: background 0.4s var(--ease-out);
   z-index: 3;
 }
-.work-item:hover .work-item-caption { opacity: 1; transform: translateY(0); }
+.work-item:hover .work-item-caption {
+  background: linear-gradient(to top, rgba(26,24,22,0.82) 0%, rgba(26,24,22,0.22) 62%, rgba(26,24,22,0) 100%);
+}
 .work-item-caption .ttl {
   font-family: var(--font-display);
   font-style: italic;
-  font-size: 22px;
+  font-size: 18px;
   font-weight: 400;
-  margin-bottom: 4px;
+  line-height: 1.1;
 }
+.work-item.is-feature .work-item-caption .ttl { font-size: 24px; }
 .work-item-caption .cat {
   font-family: var(--font-body);
-  font-size: 11px; font-weight: 500;
+  font-size: 10px; font-weight: 500;
   letter-spacing: 0.24em; text-transform: uppercase;
   color: rgba(248, 246, 242, 0.78);
+}
+
+/* ─── work-item expand cue ──────────────────────────────────────────── */
+.work-item-expand {
+  position: absolute; top: var(--space-3); right: var(--space-3);
+  width: 38px; height: 38px;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--ink-inverse);
+  background: rgba(26, 24, 22, 0.34);
+  -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px);
+  border-radius: 50%;
+  opacity: 0; transform: scale(0.85);
+  transition: opacity 0.4s var(--ease-out), transform 0.4s var(--ease-out);
+  z-index: 3; pointer-events: none;
+}
+.work-item-expand svg { width: 17px; height: 17px; }
+.work-item:hover .work-item-expand,
+.work-item:focus-visible .work-item-expand { opacity: 1; transform: scale(1); }
+
+/* ─── lightbox ──────────────────────────────────────────────────────── */
+.lightbox {
+  position: fixed; inset: 0; z-index: 200;
+  display: flex; align-items: center; justify-content: center;
+  padding: clamp(20px, 5vw, 64px);
+  background: rgba(20, 17, 15, 0.94);
+  -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
+  opacity: 0; visibility: hidden;
+  transition: opacity 0.45s var(--ease-out), visibility 0.45s var(--ease-out);
+}
+.lightbox.open { opacity: 1; visibility: visible; }
+.lightbox-figure {
+  margin: 0; max-width: 100%; max-height: 100%;
+  display: flex; flex-direction: column; align-items: center; gap: var(--space-4);
+  transform: scale(0.97); opacity: 0;
+  transition: transform 0.5s var(--ease-expo), opacity 0.5s var(--ease-expo);
+}
+.lightbox.open .lightbox-figure { transform: scale(1); opacity: 1; }
+.lightbox-img {
+  max-width: 100%; max-height: 78vh;
+  object-fit: contain;
+  border-radius: 2px;
+  box-shadow: 0 40px 90px rgba(0, 0, 0, 0.5);
+}
+.lightbox-caption {
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  text-align: center; color: var(--ink-inverse);
+}
+.lightbox-caption .lb-title { font-family: var(--font-display); font-style: italic; font-size: 24px; }
+.lightbox-caption .lb-meta { font-family: var(--font-body); font-size: 11px; letter-spacing: 0.24em; text-transform: uppercase; color: rgba(248, 246, 242, 0.6); }
+.lightbox-caption .lb-link {
+  margin-top: 6px; font-family: var(--font-body); font-size: 11px; font-weight: 500;
+  letter-spacing: 0.2em; text-transform: uppercase; color: var(--accent);
+  border-bottom: 1px solid currentColor; padding-bottom: 2px;
+}
+.lightbox-caption .lb-link[hidden] { display: none; }
+.lightbox-close, .lightbox-nav {
+  position: absolute; z-index: 2;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(248, 246, 242, 0.08);
+  color: var(--ink-inverse);
+  border: 1px solid rgba(248, 246, 242, 0.16);
+  border-radius: 50%; cursor: pointer;
+  transition: background 0.3s var(--ease-out), border-color 0.3s var(--ease-out), transform 0.3s var(--ease-out);
+}
+.lightbox-close:hover, .lightbox-nav:hover { background: rgba(248, 246, 242, 0.18); border-color: rgba(248, 246, 242, 0.4); }
+.lightbox-close { top: clamp(16px, 4vw, 36px); right: clamp(16px, 4vw, 36px); width: 48px; height: 48px; }
+.lightbox-nav { top: 50%; transform: translateY(-50%); width: 52px; height: 52px; }
+.lightbox-nav:hover { transform: translateY(-50%) scale(1.06); }
+.lightbox-prev { left: clamp(12px, 3vw, 32px); }
+.lightbox-next { right: clamp(12px, 3vw, 32px); }
+.lightbox-close svg, .lightbox-nav svg { width: 20px; height: 20px; }
+.lightbox-counter {
+  position: absolute; bottom: clamp(16px, 4vw, 36px); left: 50%; transform: translateX(-50%);
+  font-family: var(--font-body); font-size: 11px; letter-spacing: 0.24em;
+  color: rgba(248, 246, 242, 0.55);
+  font-feature-settings: "lnum" 1, "tnum" 1;
+}
+@media (max-width: 640px) {
+  .lightbox-nav { width: 44px; height: 44px; }
+  .lightbox-img { max-height: 70vh; }
 }
 
 /* ─── page-break dividers ──────────────────────────────────────────── */
@@ -593,13 +674,16 @@ body.fonts-loaded .hero-cta { opacity: 1; transform: translateY(0); }
   padding: var(--space-6);
   display: flex; flex-direction: column;
   position: relative;
-  transition: border-color var(--dur-base) var(--ease-out), transform var(--dur-base) var(--ease-out), box-shadow var(--dur-base) var(--ease-out);
+  transition: border-color var(--dur-base) var(--ease-out), transform 0.8s var(--ease-expo), box-shadow var(--dur-base) var(--ease-out), opacity 0.8s var(--ease-expo);
 }
 .package-card:hover {
   border-color: var(--accent);
   transform: translateY(-4px);
   box-shadow: 0 24px 48px rgba(26,24,22,0.06);
 }
+/* Scroll-reveal: cards stagger in (JS sets data-reveal-delay). */
+.package-card.is-reveal { opacity: 0; transform: translateY(28px); }
+.package-card.is-reveal.in { opacity: 1; transform: none; }
 .package-tag {
   position: absolute; top: -12px; left: 50%;
   transform: translateX(-50%);
@@ -709,7 +793,10 @@ body.fonts-loaded .hero-cta { opacity: 1; transform: translateY(0); }
 .contact-section {
   background: var(--bg-dark);
   color: var(--ink-inverse);
-  padding: var(--space-10) 0;
+  /* Less bottom padding: the contact section is dark and flows straight into
+     the dark footer image, so a full space-10 bottom reads as a dead black
+     band. Smaller bottom keeps the form close to the closing image. */
+  padding: var(--space-10) 0 var(--space-8);
 }
 .contact-grid {
   display: grid;
@@ -812,26 +899,15 @@ body.fonts-loaded .hero-cta { opacity: 1; transform: translateY(0); }
 .inquiry-status.err { color: #F0A8A8; }
 
 /* ─── footer ──────────────────────────────────────────────────────────── */
-.footer-image-wrap {
-  position: relative;
-  height: 60vh; min-height: 480px;
-  overflow: hidden;
+.footer {
   background: var(--bg-dark);
-}
-.footer-image {
-  position: absolute; inset: 0;
-  background-size: cover; background-position: center;
-}
-.footer-image-vignette {
-  position: absolute; inset: 0;
-  background: linear-gradient(to bottom, rgba(26,24,22,0.4) 0%, rgba(26,24,22,0.65) 100%);
-}
-.footer-image-overlay {
-  position: relative; z-index: 2;
-  height: 100%;
-  display: flex; flex-direction: column; align-items: center; justify-content: center;
-  text-align: center;
   color: var(--ink-inverse);
+  border-top: 1px solid rgba(248, 246, 242, 0.1);
+}
+.footer-inner {
+  padding: var(--space-8) var(--space-7);
+  display: flex; flex-direction: column; align-items: center;
+  text-align: center; gap: var(--space-4);
 }
 .footer-signature {
   font-family: var(--font-display);
@@ -839,8 +915,10 @@ body.fonts-loaded .hero-cta { opacity: 1; transform: translateY(0); }
   font-size: clamp(56px, 9vw, 96px);
   font-weight: 400;
   line-height: 1;
-  margin-bottom: var(--space-4);
 }
+/* Footer text rises + fades in on scroll so the page doesn't end static. */
+.footer-signature.is-reveal, .footer-meta.is-reveal { opacity: 0; transform: translateY(24px); transition: opacity 0.9s var(--ease-expo), transform 0.9s var(--ease-expo); }
+.footer-signature.is-reveal.in, .footer-meta.is-reveal.in { opacity: 1; transform: none; }
 .footer-meta {
   font-family: var(--font-body);
   font-size: 12px;
@@ -870,7 +948,7 @@ body.fonts-loaded .hero-cta { opacity: 1; transform: translateY(0); }
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
   body { opacity: 1 !important; }
   .hero-eyebrow, .hero-name, .hero-tagline, .hero-cta { opacity: 1 !important; transform: none !important; }
-  .reveal { opacity: 1 !important; transform: none !important; }
+  .reveal, .is-reveal { opacity: 1 !important; transform: none !important; }
 }
 @media print {
   .nav, .nav-overlay, .work-filter { display: none !important; }
@@ -923,25 +1001,17 @@ function getFooter(c) {
   const year = new Date().getFullYear();
   const place = c.contactAddress || (Array.isArray(c.serviceAreas) && c.serviceAreas[0]) || '';
   const firstName = firstNameOf(c.businessName);
-  const userProjects = Array.isArray(c.projects) && c.projects.length ? c.projects : null;
-  const lastImg = userProjects && userProjects.find((p) => p.photoUrl) || null;
-  const heroUrl = c.heroImage && c.heroImage.url;
-  const footerImageUrl = (lastImg && lastImg.photoUrl) || heroUrl || null;
   const socials = [];
   if (c.instagramHandle) socials.push({ label: 'Instagram', href: `https://instagram.com/${c.instagramHandle}` });
   if (c.contactEmail)    socials.push({ label: 'Email',     href: `mailto:${c.contactEmail}` });
   return `
 <footer class="footer">
-  <div class="footer-image-wrap">
-    ${footerImageUrl ? `<div class="footer-image" style="background-image: url('${attr(footerImageUrl)}')" aria-hidden="true"></div>` : ''}
-    <div class="footer-image-vignette" aria-hidden="true"></div>
-    <div class="footer-image-overlay">
-      <p class="footer-signature">${esc(firstName)}</p>
-      <div class="footer-meta">
-        <span>© ${year} ${esc(c.businessName)}</span>
-        ${place ? `<span class="sep">·</span><span>${esc(place)}</span>` : ''}
-        ${socials.map((s) => `<span class="sep">·</span><a href="${attr(s.href)}" target="_blank" rel="noopener">${esc(s.label)}</a>`).join('')}
-      </div>
+  <div class="footer-inner">
+    <p class="footer-signature is-reveal">${esc(firstName)}</p>
+    <div class="footer-meta is-reveal" data-reveal-delay="140">
+      <span>© ${year} ${esc(c.businessName)}</span>
+      ${place ? `<span class="sep">·</span><span>${esc(place)}</span>` : ''}
+      ${socials.map((s) => `<span class="sep">·</span><a href="${attr(s.href)}" target="_blank" rel="noopener">${esc(s.label)}</a>`).join('')}
     </div>
   </div>
 </footer>`;
@@ -1004,9 +1074,20 @@ window.addEventListener('DOMContentLoaded', function () {
 
   if ('IntersectionObserver' in window) {
     var io = new IntersectionObserver(function (entries) {
-      entries.forEach(function (e) { if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } });
+      entries.forEach(function (e) {
+        if (!e.isIntersecting) return;
+        var el = e.target;
+        var d = parseInt(el.getAttribute('data-reveal-delay') || '0', 10);
+        if (d) {
+          el.style.transitionDelay = d + 'ms';
+          // Clear the one-off stagger delay after it reveals so later hovers stay snappy.
+          setTimeout(function () { el.style.transitionDelay = ''; }, d + 1000);
+        }
+        el.classList.add('in');
+        io.unobserve(el);
+      });
     }, { threshold: 0.12, rootMargin: '0px 0px -40px 0px' });
-    document.querySelectorAll('.reveal').forEach(function (el) { io.observe(el); });
+    document.querySelectorAll('.reveal, .is-reveal').forEach(function (el) { io.observe(el); });
 
     // Year ticker — highlight the year of the most-visible work-item
     var ticker = document.querySelectorAll('.year-ticker-item');
@@ -1026,7 +1107,7 @@ window.addEventListener('DOMContentLoaded', function () {
       document.querySelectorAll('.work-item[data-year]').forEach(function (el) { yearObs.observe(el); });
     }
   } else {
-    document.querySelectorAll('.reveal').forEach(function (el) { el.classList.add('in'); });
+    document.querySelectorAll('.reveal, .is-reveal').forEach(function (el) { el.classList.add('in'); });
   }
 
   // Filter
@@ -1084,6 +1165,54 @@ window.addEventListener('DOMContentLoaded', function () {
       }).catch(function () { status.textContent = 'Network error — try emailing directly.'; status.className = 'inquiry-status err'; submitBtn.disabled = false; });
     });
   }
+
+  // Lightbox — click any work photo to view it full-size, uncropped.
+  var lb = document.getElementById('lightbox');
+  var lbTriggers = Array.prototype.slice.call(document.querySelectorAll('[data-lightbox]'));
+  if (lb && lbTriggers.length) {
+    var lbImg = lb.querySelector('.lightbox-img');
+    var lbTitle = lb.querySelector('.lb-title');
+    var lbMeta = lb.querySelector('.lb-meta');
+    var lbLink = lb.querySelector('.lb-link');
+    var lbCounter = lb.querySelector('.lightbox-counter');
+    var lbItems = lbTriggers.map(function (t) {
+      return { full: t.getAttribute('data-full'), title: t.getAttribute('data-title') || '', meta: t.getAttribute('data-meta') || '', link: t.getAttribute('data-link') || '' };
+    });
+    var lbIdx = 0, lbReturnFocus = null;
+    function lbRender() {
+      var it = lbItems[lbIdx];
+      lbImg.src = it.full; lbImg.alt = it.title;
+      lbTitle.textContent = it.title;
+      lbMeta.textContent = it.meta;
+      if (it.link) { lbLink.href = it.link; lbLink.hidden = false; } else { lbLink.hidden = true; }
+      lbCounter.textContent = (lbIdx + 1) + ' / ' + lbItems.length;
+    }
+    function lbOpen(i, el) {
+      lbIdx = i; lbReturnFocus = el || null; lbRender();
+      lb.classList.add('open'); lb.setAttribute('aria-hidden', 'false');
+      document.body.style.overflow = 'hidden';
+      if (lenis && lenis.stop) lenis.stop();
+      lb.querySelector('.lightbox-close').focus();
+    }
+    function lbClose() {
+      lb.classList.remove('open'); lb.setAttribute('aria-hidden', 'true');
+      document.body.style.overflow = '';
+      if (lenis && lenis.start) lenis.start();
+      if (lbReturnFocus && lbReturnFocus.focus) lbReturnFocus.focus();
+    }
+    function lbGo(d) { lbIdx = (lbIdx + d + lbItems.length) % lbItems.length; lbRender(); }
+    lbTriggers.forEach(function (t, i) { t.addEventListener('click', function (e) { e.preventDefault(); lbOpen(i, t); }); });
+    lb.querySelector('.lightbox-close').addEventListener('click', lbClose);
+    lb.querySelector('.lightbox-prev').addEventListener('click', function () { lbGo(-1); });
+    lb.querySelector('.lightbox-next').addEventListener('click', function () { lbGo(1); });
+    lb.addEventListener('click', function (e) { if (e.target === lb) lbClose(); });
+    document.addEventListener('keydown', function (e) {
+      if (!lb.classList.contains('open')) return;
+      if (e.key === 'Escape') lbClose();
+      else if (e.key === 'ArrowLeft') lbGo(-1);
+      else if (e.key === 'ArrowRight') lbGo(1);
+    });
+  }
 });
 </script>`;
 }
@@ -1119,20 +1248,19 @@ ${getNav(c, currentPath)}
 ${body}
 </main>
 ${getFooter(c)}
+${renderLightbox()}
 ${getScripts()}
 </body>
 </html>`;
 }
 
 // ─── home ───────────────────────────────────────────────────────────────────
-function pickGridSize(idx) {
-  const pattern = ['size-large', 'size-small', 'size-third', 'size-third', 'size-third', 'size-small', 'size-large', 'size-tall'];
-  return pattern[idx % pattern.length];
-}
-function pickTilt(idx) {
-  // Subtle polaroid rotation per item — only when an image is present;
-  // image-less tiles use full-bleed typography and don't tilt.
-  return ['tilt-1', 'tilt-2', 'tilt-3', 'tilt-4'][idx % 4];
+// Editorial mosaic: every tile is a 1×1 square unit, and every 5th is a 2×2
+// "feature" so the grid breathes — no polaroid tilt. grid-auto-flow:dense
+// backfills around the features so there are never orphan gaps, for any
+// project count.
+function isFeature(idx) {
+  return idx % 5 === 0;
 }
 function pickTone(idx) {
   return ['tone-cream', 'tone-sage', 'tone-charcoal', 'tone-taupe', 'tone-rose'][idx % 5];
@@ -1140,11 +1268,10 @@ function pickTone(idx) {
 const ROMAN = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX'];
 
 function renderWorkItem(p, idx) {
-  const size = pickGridSize(idx);
+  const feature = isFeature(idx) ? ' is-feature' : '';
   const cat = (p.role || (Array.isArray(p.tools) && p.tools[0]) || 'Project').toString();
   const year = p.year || '';
   const tone = pickTone(idx);
-  const tilt = p.photoUrl ? pickTilt(idx) : '';
   const cover = p.photoUrl
     ? `<div class="work-item-img" style="background-image: url('${attr(p.photoUrl)}')" role="img" aria-label="${attr(p.title)}"></div>`
     : `<div class="work-item-empty ${tone}">
@@ -1155,12 +1282,19 @@ function renderWorkItem(p, idx) {
           <span>${year ? esc(year) : ''}</span>
         </div>
       </div>`;
+  // Photo tiles open the lightbox (JS) — href points at the full image so it
+  // still works without JS. Caption stays visible (not hover-only) so titles
+  // read on touch devices too; it deepens on hover.
+  const lightboxAttrs = p.photoUrl
+    ? `href="${attr(p.photoUrl)}" data-lightbox data-full="${attr(p.photoUrl)}" data-title="${attr(p.title)}" data-meta="${attr(cat + (year ? ` · ${year}` : ''))}"${p.link ? ` data-link="${attr(p.link)}"` : ''}`
+    : 'href="javascript:void(0)" tabindex="-1"';
   return `
-<a class="work-item ${size}${tilt ? ' ' + tilt : ''}" data-categories="${attr(cat)}" data-year="${attr(year)}" ${p.link ? `href="${attr(p.link)}" target="_blank" rel="noopener"` : 'href="javascript:void(0)" tabindex="-1"'} aria-label="${attr(p.title)}">
+<a class="work-item is-reveal${feature}" data-reveal-delay="${(idx % 4) * 90}" data-categories="${attr(cat)}" data-year="${attr(year)}" ${lightboxAttrs} aria-label="${attr(p.title)}${p.photoUrl ? ' — view photo' : ''}">
   ${cover}
+  ${p.photoUrl ? `<span class="work-item-expand" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4H5a1 1 0 0 0-1 1v4M15 4h4a1 1 0 0 1 1 1v4M9 20H5a1 1 0 0 1-1-1v-4M15 20h4a1 1 0 0 0 1-1v-4"/></svg></span>` : ''}
   ${p.photoUrl ? `<div class="work-item-caption">
-    <div class="ttl">${esc(p.title)}</div>
-    <div class="cat">${esc(cat)}${year ? ` · ${esc(year)}` : ''}</div>
+    <span class="ttl">${esc(p.title)}</span>
+    <span class="cat">${esc(cat)}${year ? ` · ${esc(year)}` : ''}</span>
   </div>` : ''}
 </a>`;
 }
@@ -1184,12 +1318,33 @@ function pageBreak(rom, label) {
 </div>`;
 }
 
+// Single reusable lightbox shell (mounted once per page). The JS in
+// getScripts() wires every [data-lightbox] tile to it; inert when there are
+// none, so it's harmless on the about/contact pages.
+function renderLightbox() {
+  return `
+<div class="lightbox" id="lightbox" role="dialog" aria-modal="true" aria-label="Photo viewer" aria-hidden="true">
+  <button type="button" class="lightbox-close" aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+  <button type="button" class="lightbox-nav lightbox-prev" aria-label="Previous photo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button>
+  <button type="button" class="lightbox-nav lightbox-next" aria-label="Next photo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg></button>
+  <figure class="lightbox-figure">
+    <img class="lightbox-img" alt="">
+    <figcaption class="lightbox-caption">
+      <span class="lb-title"></span>
+      <span class="lb-meta"></span>
+      <a class="lb-link" target="_blank" rel="noopener" hidden>View project ↗</a>
+    </figcaption>
+  </figure>
+  <div class="lightbox-counter" aria-live="polite"></div>
+</div>`;
+}
+
 function renderPackages(c) {
   const packages = (c.packages && Array.isArray(c.packages) && c.packages.length)
     ? c.packages
     : defaultPackages();
-  return packages.map((pkg) => `
-<article class="package-card">
+  return packages.map((pkg, i) => `
+<article class="package-card is-reveal" data-reveal-delay="${i * 110}">
   ${pkg.label ? `<div class="package-tag">${esc(pkg.label)}</div>` : ''}
   ${pkg.eyebrow ? `<div class="package-eyebrow">${esc(pkg.eyebrow)}</div>` : ''}
   <h3 class="package-name">${esc(pkg.name)}</h3>
@@ -1297,7 +1452,7 @@ ${renderYearTicker(projects)}
       <span class="eyebrow">Packages &amp; Pricing</span>
       <h2>${italicAccent('What I offer')}</h2>
     </div>
-    <div class="packages-grid reveal">
+    <div class="packages-grid">
       ${renderPackages(c)}
     </div>
   </div>

@@ -5,7 +5,7 @@
 
 const { generateHvacPages } = require('./hvac');
 const { generateRealEstatePages } = require('./real-estate');
-const { generatePortfolioPages } = require('./portfolio');
+const { generatePortfolioPages, resolvePortfolioTemplate } = require('./portfolio');
 
 // ── Trade detection ────────────────────────────────────────────────────────
 // The HVAC template is used for ALL home-services businesses that share its
@@ -182,4 +182,4 @@ function pickTemplate(industry) {
   return null; // caller falls back to the existing generic generator
 }
 
-module.exports = { pickTemplate, isHvac, isRealEstate, isPortfolio, needsAreaCollection, resolveTrade };
+module.exports = { pickTemplate, isHvac, isRealEstate, isPortfolio, needsAreaCollection, resolveTrade, resolvePortfolioTemplate };
