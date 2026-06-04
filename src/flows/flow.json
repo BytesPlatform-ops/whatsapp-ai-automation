@@ -284,7 +284,7 @@
             "name": "f_agent",
             "children": [
               { "type": "Dropdown", "name": "currency", "label": "${data.l_currency}", "data-source": "${data.currency_options}", "required": true },
-              { "type": "TextInput", "name": "brokerage", "input-type": "text", "label": "${data.l_brokerage}", "helper-text": "${data.brokerage_helper}", "required": false },
+              { "type": "TextInput", "name": "brokerage", "input-type": "text", "label": "${data.l_brokerage}", "helper-text": "${data.brokerage_helper}", "required": true },
               { "type": "TextInput", "name": "years", "input-type": "number", "label": "${data.l_years}", "helper-text": "${data.years_helper}", "required": false },
               { "type": "TextInput", "name": "designations", "input-type": "text", "label": "${data.l_designations}", "helper-text": "${data.designations_helper}", "required": false },
               {
@@ -350,11 +350,11 @@
             "init-values": "${data.listing_init}",
             "children": [
               { "type": "TextInput", "name": "address", "input-type": "text", "label": "${data.l_address}", "helper-text": "${data.address_helper}", "required": true },
-              { "type": "TextInput", "name": "price", "input-type": "number", "label": "${data.l_lprice}", "helper-text": "${data.lprice_helper}", "required": false },
-              { "type": "Dropdown", "name": "status", "label": "${data.l_status}", "data-source": "${data.status_options}", "required": false },
+              { "type": "TextInput", "name": "price", "input-type": "number", "label": "${data.l_lprice}", "helper-text": "${data.lprice_helper}", "required": true },
+              { "type": "Dropdown", "name": "status", "label": "${data.l_status}", "data-source": "${data.status_options}", "required": true },
               { "type": "TextInput", "name": "beds", "input-type": "number", "label": "${data.l_beds}", "helper-text": "${data.beds_helper}", "required": false },
               { "type": "TextInput", "name": "baths", "input-type": "number", "label": "${data.l_baths}", "helper-text": "${data.baths_helper}", "required": false },
-              { "type": "TextInput", "name": "sqft", "input-type": "number", "label": "${data.l_sqft}", "helper-text": "${data.sqft_helper}", "required": false },
+              { "type": "TextInput", "name": "sqft", "input-type": "number", "label": "${data.l_sqft}", "helper-text": "${data.sqft_helper}", "required": true },
               { "type": "TextInput", "name": "neighborhood", "input-type": "text", "label": "${data.l_neighborhood}", "helper-text": "${data.neighborhood_helper}", "required": false },
               {
                 "type": "PhotoPicker",
@@ -403,9 +403,9 @@
             "type": "Form",
             "name": "f3",
             "children": [
-              { "type": "TextInput", "name": "c_email", "input-type": "email", "label": "${data.l_cemail}", "required": false },
-              { "type": "Dropdown", "name": "c_code", "label": "${data.l_ccode}", "data-source": "${data.country_options}", "required": false },
-              { "type": "TextInput", "name": "c_phone", "input-type": "phone", "label": "${data.l_cphone}", "required": false },
+              { "type": "TextInput", "name": "c_email", "input-type": "email", "label": "${data.l_cemail}", "required": true },
+              { "type": "Dropdown", "name": "c_code", "label": "${data.l_ccode}", "data-source": "${data.country_options}", "required": true },
+              { "type": "TextInput", "name": "c_phone", "input-type": "phone", "label": "${data.l_cphone}", "required": true },
               { "type": "TextArea", "name": "c_address", "label": "${data.l_caddress}", "required": false },
               {
                 "type": "Footer",

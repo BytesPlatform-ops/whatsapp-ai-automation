@@ -226,7 +226,7 @@ const L = {
     // agent profile (real estate — structured)
     agent_title: 'Agent details',
     l_brokerage: 'Brokerage',
-    brokerage_helper: 'Your brokerage. Leave blank if you work solo.',
+    brokerage_helper: 'Your brokerage — or your own name if you work solo.',
     l_years: 'Years in real estate',
     years_helper: 'e.g. 8',
     l_designations: 'Designations',
@@ -294,7 +294,7 @@ const L = {
     l_lphoto_desc: 'Adicione uma foto do imóvel, ou pule para uma imagem padrão.',
     agent_title: 'Detalhes do corretor',
     l_brokerage: 'Imobiliária',
-    brokerage_helper: 'Sua imobiliária. Deixe vazio se for autônomo.',
+    brokerage_helper: 'Sua imobiliária — ou seu nome se for autônomo.',
     l_years: 'Anos no mercado imobiliário',
     years_helper: 'Ex: 8',
     l_designations: 'Certificações',
