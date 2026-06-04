@@ -340,7 +340,7 @@ export const TOOLS: ToolDefinition[] = [
         a: 'The math is exact for the loan terms you enter. Real-world payments may differ slightly due to PMI, escrow shortages, rate adjustments on ARMs, and lender fees. Always confirm with your loan officer before signing.',
       },
     ],
-    relatedSlugs: ['share-incentive-plan-calculator', 'pool-salt-calculator'],
+    relatedSlugs: ['share-incentive-plan-calculator', 'trust-badge-generator', 'pool-salt-calculator'],
     ctaHook: 'Are you a realtor or mortgage broker? Pixie builds full lead-gen websites with mortgage calculators built in. Text us on WhatsApp.',
     aboutHeading: 'How mortgage interest really works',
     about:
@@ -596,7 +596,7 @@ export const TOOLS: ToolDefinition[] = [
         a: 'The calculator uses current HMRC SIP rules and tax bands for the 2025/26 tax year. It\'s an estimation tool, not financial advice — consult an accountant before making decisions, especially around CGT planning at withdrawal.',
       },
     ],
-    relatedSlugs: ['mortgage-calculator', 'pool-salt-calculator'],
+    relatedSlugs: ['mortgage-calculator', 'trust-badge-generator', 'pool-salt-calculator'],
     ctaHook: 'Run a UK accounting or fintech firm? Pixie builds compliance-ready lead-gen sites in 60 seconds. Text us on WhatsApp.',
     aboutHeading: 'Why SIPs are the UK\'s most tax-efficient share scheme',
     about:

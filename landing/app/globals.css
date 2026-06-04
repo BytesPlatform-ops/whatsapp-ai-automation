@@ -54,4 +54,25 @@
       linear-gradient(90deg, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
     background-size: 48px 48px;
   }
+
+  /* Slim, on-brand horizontal scrollbar for the tool rails */
+  .rail-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.22) rgba(255, 255, 255, 0.06);
+  }
+  .rail-scroll::-webkit-scrollbar {
+    height: 8px;
+  }
+  .rail-scroll::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.06);
+    border-radius: 999px;
+  }
+  .rail-scroll::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 999px;
+    transition: background 0.2s ease;
+  }
+  .rail-scroll::-webkit-scrollbar-thumb:hover {
+    background: rgba(37, 211, 102, 0.65);
+  }
 }

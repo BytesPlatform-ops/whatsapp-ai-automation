@@ -2,7 +2,9 @@ import Link from 'next/link';
 import { ChevronRight, Sparkles } from 'lucide-react';
 import { WhatsAppButton } from '@/components/WhatsAppButton';
 import { ToolJsonLd } from '@/components/tools/ToolJsonLd';
-import { type ToolDefinition } from '@/lib/tools';
+import { getRelatedTools, type ToolDefinition } from '@/lib/tools';
+import { ToolCard } from '@/components/tools/ToolCard';
+import { AllToolsExplorer } from '@/components/tools/AllToolsExplorer';
 import type { ReactNode } from 'react';
 
 interface ToolPageLayoutProps {
@@ -11,6 +13,8 @@ interface ToolPageLayoutProps {
 }
 
 export function ToolPageLayout({ tool, children }: ToolPageLayoutProps) {
+  const relatedTools = getRelatedTools(tool.slug);
+
   return (
     <>
       <ToolJsonLd tool={tool} />
@@ -104,6 +108,30 @@ export function ToolPageLayout({ tool, children }: ToolPageLayoutProps) {
           </div>
         </div>
       </section>
+
+      {/* Related tools — internal links for SEO + discovery */}
+      {relatedTools.length > 0 && (
+        <section className="bg-white py-20 sm:py-24">
+          <div className="container-page">
+            <div className="mx-auto max-w-3xl text-center mb-12">
+              <h2 className="font-display text-display-lg text-balance text-ink-900">
+                Related free tools
+              </h2>
+              <p className="mt-4 text-lg text-ink-500">
+                More no-signup tools you might find useful.
+              </p>
+            </div>
+            <div className="mx-auto grid max-w-5xl gap-6 sm:grid-cols-2 lg:grid-cols-3">
+              {relatedTools.map((related) => (
+                <ToolCard key={related.slug} tool={related} compact />
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* All tools — searchable, filterable explorer (full internal-link mesh) */}
+      <AllToolsExplorer currentSlug={tool.slug} />
 
       {/* Soft CTA to WhatsApp */}
       <section className="relative overflow-hidden bg-navy-900 py-20 text-white sm:py-24">
