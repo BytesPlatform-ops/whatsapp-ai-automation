@@ -254,7 +254,7 @@
             "type": "Form",
             "name": "f_pniche",
             "children": [
-              { "type": "Dropdown", "name": "portfolio_niche", "label": "${data.l_niche}", "data-source": "${data.niche_options}", "required": true },
+              { "type": "RadioButtonsGroup", "name": "portfolio_niche", "label": "${data.l_niche}", "data-source": "${data.niche_options}", "required": true },
               {
                 "type": "Footer",
                 "label": "${data.l_next}",
