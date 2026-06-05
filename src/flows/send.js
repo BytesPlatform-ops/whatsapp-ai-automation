@@ -70,6 +70,54 @@ function shouldOfferWebsiteFlow(user, message) {
 }
 
 /**
+ * Low-level send: create a fresh per-attempt session + token and send the Flow
+ * message, logging it to the transcript. Returns the flowToken on success or
+ * null on any failure (caller decides fallback). Shared by the first-turn offer
+ * AND the later reminders so both behave identically.
+ */
+async function _sendFlowForm(user, message, { lang, body, cta }) {
+  const phoneNumberId = message.phoneNumberId || user.via_phone_number_id;
+  const flowId = flowIdForNumber(phoneNumberId);
+  if (!flowId) return null; // no Flow published for this number's WABA
+
+  const ctwaClid = user.metadata?.adReferral?.ctwaClid || message.referral?.ctwaClid || null;
+  const flowToken = newFlowToken();
+  try {
+    await createSession({ flowToken, waId: user.phone_number, phoneNumberId, userId: user.id, lang, ctwaClid });
+  } catch (err) {
+    logger.warn(`[FLOW-SEND] createSession failed: ${err.message} — falling back to chat`);
+    return null;
+  }
+  try {
+    const whatsappSender = require('../messages/whatsappSender');
+    await whatsappSender.sendFlowMessage(user.phone_number, body, { flowId, flowToken, cta });
+  } catch (err) {
+    logger.warn(`[FLOW-SEND] sendFlowMessage failed: ${err.message} — falling back to chat`);
+    return null;
+  }
+  // sendFlowMessage goes through whatsappSender.sendRequest, which — unlike
+  // sendTextMessage — is NOT auto-logged, so log the form send explicitly so
+  // the admin transcript shows Pixie sent the intake form.
+  try {
+    const { logMessage } = require('../db/conversations');
+    await logMessage(user.id, `${body}\n\n[📋 Website form sent]`, 'assistant');
+  } catch (err) {
+    logger.warn(`[FLOW-SEND] logMessage failed (non-fatal): ${err.message}`);
+  }
+  return flowToken;
+}
+
+// Resolve the form body + CTA for the user's language (en/pt authored, others
+// fall back to en — same precedence the offer always used).
+function flowBodyFor(lang) {
+  const qb = require('./questionBank');
+  return {
+    body: (qb.L[lang] && qb.L[lang].flow_offer) || qb.L.en.flow_offer,
+    cta: (qb.L[lang] && qb.L[lang].flow_cta) || qb.L.en.flow_cta,
+  };
+}
+
+/**
  * Offer the website Flow as an alternative to chatting. Sends the Flow
  * message (after the chat greeting, from salesBot) so the user can pick:
  * type to keep chatting, or tap to fill the form. One-time per user.
@@ -83,16 +131,13 @@ async function sendWebsiteFlowOffer(user, message) {
   if (!shouldOfferWebsiteFlow(user, message)) return false;
 
   const phoneNumberId = message.phoneNumberId || user.via_phone_number_id;
-  const flowId = flowIdForNumber(phoneNumberId);
-  if (!flowId) return false; // no Flow published for this number's WABA
+  if (!flowIdForNumber(phoneNumberId)) return false;
 
-  const ctwaClid = user.metadata?.adReferral?.ctwaClid || message.referral?.ctwaClid || null;
   const firstText = String(message.text || '').trim();
   const lang = await detectLanguage(firstText, { phoneNumberId, userId: user.id });
 
   // Pre-warm the runtime translation so the /flow endpoint serves the form
   // in the user's language without paying translation latency mid-screen.
-  // Non-blocking for en/pt (already authored); ~one LLM call for new langs.
   try {
     const { ensureLanguage } = require('./translate');
     await ensureLanguage(lang);
@@ -100,62 +145,141 @@ async function sendWebsiteFlowOffer(user, message) {
     logger.warn(`[FLOW-SEND] ensureLanguage(${lang}) failed: ${err.message}`);
   }
 
-  const flowToken = newFlowToken();
-  try {
-    await createSession({
-      flowToken,
-      waId: user.phone_number,
-      phoneNumberId,
-      userId: user.id,
-      lang,
-      ctwaClid,
-    });
-  } catch (err) {
-    logger.warn(`[FLOW-SEND] createSession failed: ${err.message} — falling back to chat`);
-    return false;
-  }
+  const { body, cta } = flowBodyFor(lang);
+  const flowToken = await _sendFlowForm(user, message, { lang, body, cta });
+  if (!flowToken) return false;
 
-  // Framed as a secondary option: the chat greeting (sent just before this
-  // by salesBot) already invited the user to chat, so this offers the form
-  // as the "or, if it's easier" alternative rather than the only path.
-  // flow_offer is part of the translatable bundle (ensureLanguage ran
-  // above), so it follows the user's language. Fall back to EN if missing.
-  const qb = require('./questionBank');
-  const body = (qb.L[lang] && qb.L[lang].flow_offer) || qb.L.en.flow_offer;
-  // The CTA is BOTH the button label AND the title WhatsApp echoes in the
-  // user's "Response sent" bubble — so it must read as an action, not "Next"
-  // (which is the form's internal screen-nav label). Dedicated flow_cta.
-  const cta = (qb.L[lang] && qb.L[lang].flow_cta) || qb.L.en.flow_cta;
+  // Seed the reminder counters alongside flowSentAt so the later reminder
+  // logic has a clean baseline (0 reminders, 0 messages since send).
+  const { updateUserMetadata } = require('../db/users');
+  const patch = { flowSentAt: new Date().toISOString(), flowToken, flowMsgsSinceSend: 0, flowReminderCount: 0 };
+  await updateUserMetadata(user.id, patch);
+  user.metadata = { ...(user.metadata || {}), ...patch };
 
-  try {
-    const whatsappSender = require('../messages/whatsappSender');
-    await whatsappSender.sendFlowMessage(user.phone_number, body, {
-      flowId,
-      flowToken,
-      cta,
-    });
-  } catch (err) {
-    logger.warn(`[FLOW-SEND] sendFlowMessage failed: ${err.message} — falling back to chat`);
-    return false;
-  }
+  logger.info(`[FLOW-SEND] sent Flow (${lang}) to ${user.phone_number} token=${flowToken}`);
+  return true;
+}
 
-  // Record the form send in the conversation so the admin transcript shows
-  // that Pixie sent the intake form (not just the later "[Flow submitted]").
-  // sendFlowMessage goes through whatsappSender.sendRequest, which — unlike
-  // sendTextMessage — is NOT auto-logged, so we log it explicitly here.
-  try {
-    const { logMessage } = require('../db/conversations');
-    await logMessage(user.id, `${body}\n\n[📋 Website form sent]`, 'assistant');
-  } catch (err) {
-    logger.warn(`[FLOW-SEND] logMessage failed (non-fatal): ${err.message}`);
-  }
+// ── Reminders ───────────────────────────────────────────────────────────────
+// After the greeting offer, a user often asks a few chat questions and forgets
+// the form. So we re-send it as a gentle reminder once they've sent a few more
+// messages without submitting. To stay non-annoying: after reminder #1 we ASK
+// whether to keep reminding — reminder #2 only fires if they say yes. Hard cap
+// of 2 reminders (3 form sends total, incl. the offer).
+const REMINDER_AFTER_MSGS = 3; // user messages since last send before a reminder
+const MAX_REMINDERS = 2;       // reminder #1 (asks) + reminder #2 (opt-in only)
+
+const REMINDER_ASK = {
+  en: "No rush 🙂 Want me to give you one more nudge about the form later — or should I stop reminding?",
+  pt: 'Sem pressa 🙂 Quer que eu te lembre do formulário mais uma vez depois — ou paro de lembrar?',
+};
+
+// Pure gate: is this user eligible for ANOTHER Flow reminder right now (ignoring
+// the message-count threshold, which the caller checks)? No side effects.
+function shouldRemindAboutFlow(user) {
+  if (user.channel && user.channel !== 'whatsapp') return false;
+  if (!user.metadata?.flowSentAt) return false;        // greeting offer never went out
+  if (user.metadata?.flowSubmitted) return false;      // already built via the form
+  if (user.metadata?.flowRemindersOptOut) return false;
+  const count = Number(user.metadata?.flowReminderCount || 0);
+  if (count >= MAX_REMINDERS) return false;
+  if (count >= 1 && !user.metadata?.flowRemindersOptIn) return false; // #2 needs opt-in
+  return true;
+}
+
+/**
+ * Count a SALES_CHAT turn and, once REMINDER_AFTER_MSGS messages have passed
+ * since the last Flow send, re-send the form as a reminder. After reminder #1
+ * it also asks whether to keep reminding (sets awaitingReminderOptIn, which the
+ * caller resolves on the next turn via handleReminderOptInReply). Call once per
+ * SALES_CHAT turn, AFTER the bot's reply. No-op unless the gate + threshold
+ * pass. Returns true when a reminder was sent.
+ */
+async function maybeSendWebsiteFlowReminder(user, message) {
+  if (!flowEnabled(message.phoneNumberId || user.via_phone_number_id)) return false;
+  if (!user.metadata?.flowSentAt) return false;
+  // Don't stack a reminder while we're waiting for the opt-in answer.
+  if (user.metadata?.awaitingReminderOptIn) return false;
 
   const { updateUserMetadata } = require('../db/users');
-  await updateUserMetadata(user.id, { flowSentAt: new Date().toISOString(), flowToken });
-  user.metadata = { ...(user.metadata || {}), flowSentAt: new Date().toISOString(), flowToken };
+  const since = Number(user.metadata?.flowMsgsSinceSend || 0) + 1;
 
-  logger.info(`[FLOW-SEND] sent Flow (${lang}) to CTWA user ${user.phone_number} token=${flowToken}`);
+  // Not time yet, or not eligible → just advance the counter.
+  if (since < REMINDER_AFTER_MSGS || !shouldRemindAboutFlow(user)) {
+    await updateUserMetadata(user.id, { flowMsgsSinceSend: since });
+    user.metadata = { ...(user.metadata || {}), flowMsgsSinceSend: since };
+    return false;
+  }
+
+  const phoneNumberId = message.phoneNumberId || user.via_phone_number_id;
+  const lang = await detectLanguage(String(message.text || '').trim(), { phoneNumberId, userId: user.id });
+  const { body, cta } = flowBodyFor(lang);
+  const flowToken = await _sendFlowForm(user, message, { lang, body, cta });
+  if (!flowToken) {
+    // Send failed — keep the counter so we try again next threshold.
+    await updateUserMetadata(user.id, { flowMsgsSinceSend: since });
+    user.metadata = { ...(user.metadata || {}), flowMsgsSinceSend: since };
+    return false;
+  }
+
+  const count = Number(user.metadata?.flowReminderCount || 0) + 1;
+  const patch = { flowToken, flowReminderCount: count, flowMsgsSinceSend: 0 };
+
+  // After the FIRST reminder, ask whether to keep reminding — reminder #2 only
+  // fires if they opt in (handled next turn by handleReminderOptInReply).
+  if (count === 1) {
+    patch.awaitingReminderOptIn = true;
+    try {
+      const { sendTextMessage } = require('../messages/sender');
+      await sendTextMessage(user.phone_number, REMINDER_ASK[lang] || REMINDER_ASK.en);
+    } catch (err) {
+      logger.warn(`[FLOW-REMIND] opt-in ask failed: ${err.message}`);
+    }
+  }
+
+  await updateUserMetadata(user.id, patch);
+  user.metadata = { ...(user.metadata || {}), ...patch };
+  logger.info(`[FLOW-REMIND] reminder #${count} sent to ${user.phone_number} token=${flowToken}`);
   return true;
+}
+
+/**
+ * Resolve the user's reply to the "want more reminders?" question. Classifies
+ * yes / no / neither (LLM), records the decision, and ALWAYS clears the
+ * awaiting flag so we never re-ask. Returns a short ack string when they
+ * clearly answered (caller sends it + ends the turn), or null when they didn't
+ * answer (caller continues the normal sales turn).
+ */
+async function handleReminderOptInReply(user, text) {
+  const { updateUserMetadata } = require('../db/users');
+  let decision = 'neither';
+  try {
+    const { generateResponse } = require('../llm/provider');
+    const resp = await generateResponse(
+      `The user was just asked whether they'd like one more reminder later to fill out a website form. Classify their reply as EXACTLY one lowercase word: ` +
+      `"yes" (they want the reminder / sure / okay), "no" (they don't / stop / not interested), or "neither" (they ignored the question and said something unrelated). Output only the word.`,
+      [{ role: 'user', content: String(text || '').slice(0, 200) }],
+      { userId: user.id, operation: 'flow_reminder_optin', timeoutMs: 8000 }
+    );
+    const m = String(resp || '').toLowerCase().match(/yes|no|neither/);
+    if (m) decision = m[0];
+  } catch (err) {
+    logger.warn(`[FLOW-REMIND] opt-in classify failed: ${err.message}`);
+  }
+
+  const patch = { awaitingReminderOptIn: false };
+  let ack = null;
+  if (decision === 'yes') {
+    patch.flowRemindersOptIn = true;
+    patch.flowMsgsSinceSend = 0; // restart the count toward the final reminder
+    ack = "Got it — I'll give you one more nudge later. 👍";
+  } else if (decision === 'no') {
+    patch.flowRemindersOptOut = true;
+    ack = "No problem — I won't remind you again. Just say the word whenever you're ready to build it.";
+  }
+  await updateUserMetadata(user.id, patch);
+  user.metadata = { ...(user.metadata || {}), ...patch };
+  return ack;
 }
 
 // maybeSendWebsiteFlow kept as a back-compat alias for sendWebsiteFlowOffer.
@@ -165,6 +289,9 @@ module.exports = {
   shouldOfferWebsiteFlow,
   sendWebsiteFlowOffer,
   maybeSendWebsiteFlow,
+  maybeSendWebsiteFlowReminder,
+  handleReminderOptInReply,
+  shouldRemindAboutFlow,
   flowEnabled,
   flowIdForNumber,
   newFlowToken,

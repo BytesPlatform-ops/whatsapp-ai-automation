@@ -173,6 +173,26 @@ async function handleSalesBot(user, message) {
     text = text.slice(0, INBOUND_MAX);
   }
 
+  // Flow-reminder opt-in: if last turn we re-sent the form and asked "want one
+  // more nudge later?", this message is the answer. Classify + record it; when
+  // they clearly answered (yes/no) reply briefly and end the turn — otherwise
+  // fall through and handle their message as a normal sales turn.
+  if (user.metadata?.awaitingReminderOptIn) {
+    try {
+      const { handleReminderOptInReply } = require('../../flows/send');
+      const ack = await handleReminderOptInReply(user, text);
+      // Only short-circuit for a short, answer-only reply ("yes" / "no thanks").
+      // A longer message (e.g. "yes, but what's your pricing?") records the
+      // preference but still falls through to a full sales answer.
+      if (ack && text.length <= 20) {
+        await sendTextMessage(user.phone_number, await localize(ack, user, text));
+        return STATES.SALES_CHAT;
+      }
+    } catch (err) {
+      logger.warn(`[FLOW-REMIND] opt-in handling failed: ${err.message}`);
+    }
+  }
+
   // Security-flag accumulator for this turn. Sources, in order:
   //   1. Router-level secret redaction (user._secretRedaction is set when
   //      router.js scrubbed a key/token/JWT before this handler ran).
@@ -877,6 +897,16 @@ async function handleSalesBot(user, message) {
       await sendWebsiteFlowOffer(user, message);
     } catch (err) {
       logger.warn(`[FLOW-OFFER] failed for ${user.phone_number}: ${err.message}`);
+    }
+  } else if (!skipLlmResponse) {
+    // Subsequent turns: if the user got the form offer but kept chatting without
+    // filling it, re-send it as a gentle reminder once they've sent a few more
+    // messages. Capped + opt-in-gated inside (max 2 reminders); no-op otherwise.
+    try {
+      const { maybeSendWebsiteFlowReminder } = require('../../flows/send');
+      await maybeSendWebsiteFlowReminder(user, message);
+    } catch (err) {
+      logger.warn(`[FLOW-REMIND] failed for ${user.phone_number}: ${err.message}`);
     }
   }
 
