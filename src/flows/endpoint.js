@@ -243,10 +243,10 @@ function pnicheScreen(lang) {
   };
 }
 
-// PORTFOLIO screen — niche-tailored work details. Every optional field exists
-// in flow.json; the endpoint toggles each `*_visible` (and a couple of label
-// overrides) per niche from NICHE_FIELDS. bio + links show for all; visual
-// niches get the PhotoPicker, the others get the projects TextArea.
+// PORTFOLIO (page 1 of 2) — the "about you" half: bio + skills/tools + years +
+// focus. Split across two screens so no single page is a wall of fields. Every
+// optional field exists in flow.json; the endpoint toggles each `*_visible`
+// (and a couple of label overrides) per niche from NICHE_FIELDS.
 function portfolioScreen(lang, niche) {
   const f = NICHE_FIELDS[niche] || NICHE_FIELDS.developer;
   return {
@@ -255,23 +255,37 @@ function portfolioScreen(lang, niche) {
       portfolio_title: pick(f.title, lang) || L[lang].details_title,
       l_bio: L[lang].l_bio,
       bio_helper: L[lang].bio_helper,
-      l_photos: L[lang].l_photos,
-      photos_desc: pick(f.photos_desc, lang) || L[lang].photos_desc,
-      photos_visible: !!f.photos,
       l_skills: pick(f.skills_label, lang) || L[lang].l_skills,
       skills_helper: pick(f.skills_helper, lang) || L[lang].skills_helper,
       skills_visible: !!f.skills,
-      l_links: L[lang].l_links,
-      links_helper: L[lang].links_helper,
       l_pyears: L[lang].l_pyears,
       pyears_helper: L[lang].pyears_helper,
       years_visible: !!f.years,
       l_focus: L[lang].l_focus,
       focus_helper: L[lang].focus_helper,
       focus_visible: !!f.focus,
+      l_next: L[lang].next,
+    },
+  };
+}
+
+// PORTFOLIO_WORK (page 2 of 2) — the "your work" half: real work samples (visual
+// niches get the PhotoPicker) OR projects text (developer/writer), plus links
+// (shown for every niche). Niche-toggled the same way.
+function portfolio2Screen(lang, niche) {
+  const f = NICHE_FIELDS[niche] || NICHE_FIELDS.developer;
+  return {
+    screen: 'PORTFOLIO_WORK',
+    data: {
+      portfolio2_title: L[lang].portfolio2_title,
+      l_photos: L[lang].l_photos,
+      photos_desc: pick(f.photos_desc, lang) || L[lang].photos_desc,
+      photos_visible: !!f.photos,
       l_projects: L[lang].l_projects,
       projects_helper: L[lang].projects_helper,
       projects_visible: !!f.projects,
+      l_links: L[lang].l_links,
+      links_helper: L[lang].links_helper,
       l_next: L[lang].next,
     },
   };
@@ -363,25 +377,38 @@ async function handleFlow(req, ctx = {}) {
       return portfolioScreen(lang, niche);
     }
 
-    // PORTFOLIO → persist the niche-tailored work fields (+ any uploaded work
-    // photos, stashed as raw media descriptors like the COMMON logo / listing
-    // photos — decrypt + upload is deferred to the completion handler) → FINISH.
+    // PORTFOLIO (page 1) → persist the "about you" fields, then render page 2
+    // (niche read from the session, persisted at PNICHE).
     if (screen === 'PORTFOLIO') {
       if (flowToken) {
+        await patchSession(flowToken, {
+          answersPatch: {
+            f1: data.f1 || '',
+            p_skills: data.p_skills || '',
+            p_years: data.p_years || '',
+            p_focus: data.p_focus || '',
+          },
+        }).catch((err) => logger.warn(`[FLOW] persist PORTFOLIO failed: ${err.message}`));
+      }
+      const niche = String(session?.answers?.portfolio_niche || '').trim();
+      return portfolio2Screen(lang, niche);
+    }
+
+    // PORTFOLIO_WORK (page 2) → persist projects/links (+ any uploaded work
+    // photos, stashed as raw media descriptors like the COMMON logo / listing
+    // photos — decrypt + upload is deferred to the completion handler) → FINISH.
+    if (screen === 'PORTFOLIO_WORK') {
+      if (flowToken) {
         const answersPatch = {
-          f1: data.f1 || '',
-          p_skills: data.p_skills || '',
-          p_links: data.p_links || '',
-          p_years: data.p_years || '',
-          p_focus: data.p_focus || '',
           f2: data.f2 || '',
+          p_links: data.p_links || '',
         };
         if (Array.isArray(data.work_photos) && data.work_photos.length) {
           answersPatch.portfolio_photos_media = data.work_photos;
-          logger.info(`[FLOW] PORTFOLIO photos uploaded (${data.work_photos.length}) token=${flowToken}`);
+          logger.info(`[FLOW] PORTFOLIO_WORK photos uploaded (${data.work_photos.length}) token=${flowToken}`);
         }
         await patchSession(flowToken, { answersPatch })
-          .catch((err) => logger.warn(`[FLOW] persist PORTFOLIO failed: ${err.message}`));
+          .catch((err) => logger.warn(`[FLOW] persist PORTFOLIO_WORK failed: ${err.message}`));
       }
       return finishScreen(lang);
     }
@@ -568,4 +595,4 @@ async function handleFlow(req, ctx = {}) {
   return { data: { acknowledged: true } };
 }
 
-module.exports = { handleFlow, commonScreen, salonScreen, serviceScreen, listingScreen, agentScreen, hvacServiceScreen, detailsScreen, pnicheScreen, portfolioScreen, finishScreen };
+module.exports = { handleFlow, commonScreen, salonScreen, serviceScreen, listingScreen, agentScreen, hvacServiceScreen, detailsScreen, pnicheScreen, portfolioScreen, portfolio2Screen, finishScreen };

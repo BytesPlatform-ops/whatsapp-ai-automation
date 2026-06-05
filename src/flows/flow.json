@@ -10,7 +10,8 @@
     "DETAILS": ["FINISH", "HVAC_SERVICE"],
     "HVAC_SERVICE": ["FINISH"],
     "PNICHE": ["PORTFOLIO"],
-    "PORTFOLIO": ["FINISH"],
+    "PORTFOLIO": ["PORTFOLIO_WORK"],
+    "PORTFOLIO_WORK": ["FINISH"],
     "FINISH": []
   },
   "screens": [
@@ -275,23 +276,15 @@
         "portfolio_title": { "type": "string", "__example__": "Your work" },
         "l_bio": { "type": "string", "__example__": "Short bio" },
         "bio_helper": { "type": "string", "__example__": "A line about you. Or leave blank." },
-        "l_photos": { "type": "string", "__example__": "Your work" },
-        "photos_desc": { "type": "string", "__example__": "Upload a few of your best shots — up to 6. Or skip." },
-        "photos_visible": { "type": "boolean", "__example__": false },
         "l_skills": { "type": "string", "__example__": "Skills & tools" },
         "skills_helper": { "type": "string", "__example__": "" },
         "skills_visible": { "type": "boolean", "__example__": false },
-        "l_links": { "type": "string", "__example__": "Your links" },
-        "links_helper": { "type": "string", "__example__": "" },
         "l_pyears": { "type": "string", "__example__": "Years of experience" },
         "pyears_helper": { "type": "string", "__example__": "" },
         "years_visible": { "type": "boolean", "__example__": false },
         "l_focus": { "type": "string", "__example__": "Currently working on" },
         "focus_helper": { "type": "string", "__example__": "" },
         "focus_visible": { "type": "boolean", "__example__": false },
-        "l_projects": { "type": "string", "__example__": "Projects to feature" },
-        "projects_helper": { "type": "string", "__example__": "" },
-        "projects_visible": { "type": "boolean", "__example__": false },
         "l_next": { "type": "string", "__example__": "Next" }
       },
       "layout": {
@@ -302,6 +295,44 @@
             "name": "f_portfolio",
             "children": [
               { "type": "TextArea", "name": "f1", "label": "${data.l_bio}", "helper-text": "${data.bio_helper}", "required": false },
+              { "type": "TextInput", "name": "p_skills", "input-type": "text", "label": "${data.l_skills}", "helper-text": "${data.skills_helper}", "required": false, "visible": "${data.skills_visible}" },
+              { "type": "TextInput", "name": "p_years", "input-type": "number", "label": "${data.l_pyears}", "helper-text": "${data.pyears_helper}", "required": false, "visible": "${data.years_visible}" },
+              { "type": "TextInput", "name": "p_focus", "input-type": "text", "label": "${data.l_focus}", "helper-text": "${data.focus_helper}", "required": false, "visible": "${data.focus_visible}" },
+              {
+                "type": "Footer",
+                "label": "${data.l_next}",
+                "on-click-action": {
+                  "name": "data_exchange",
+                  "payload": { "f1": "${form.f1}", "p_skills": "${form.p_skills}", "p_years": "${form.p_years}", "p_focus": "${form.p_focus}" }
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "PORTFOLIO_WORK",
+      "title": "${data.portfolio2_title}",
+      "data": {
+        "portfolio2_title": { "type": "string", "__example__": "Your work & links" },
+        "l_photos": { "type": "string", "__example__": "Your work" },
+        "photos_desc": { "type": "string", "__example__": "Upload a few of your best shots — up to 6. Or skip." },
+        "photos_visible": { "type": "boolean", "__example__": false },
+        "l_projects": { "type": "string", "__example__": "Projects to feature" },
+        "projects_helper": { "type": "string", "__example__": "" },
+        "projects_visible": { "type": "boolean", "__example__": false },
+        "l_links": { "type": "string", "__example__": "Your links" },
+        "links_helper": { "type": "string", "__example__": "" },
+        "l_next": { "type": "string", "__example__": "Next" }
+      },
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          {
+            "type": "Form",
+            "name": "f_portfolio2",
+            "children": [
               {
                 "type": "PhotoPicker",
                 "name": "work_photos",
@@ -312,17 +343,14 @@
                 "max-uploaded-photos": 6,
                 "visible": "${data.photos_visible}"
               },
-              { "type": "TextInput", "name": "p_skills", "input-type": "text", "label": "${data.l_skills}", "helper-text": "${data.skills_helper}", "required": false, "visible": "${data.skills_visible}" },
-              { "type": "TextInput", "name": "p_links", "input-type": "text", "label": "${data.l_links}", "helper-text": "${data.links_helper}", "required": false },
-              { "type": "TextInput", "name": "p_years", "input-type": "number", "label": "${data.l_pyears}", "helper-text": "${data.pyears_helper}", "required": false, "visible": "${data.years_visible}" },
-              { "type": "TextInput", "name": "p_focus", "input-type": "text", "label": "${data.l_focus}", "helper-text": "${data.focus_helper}", "required": false, "visible": "${data.focus_visible}" },
               { "type": "TextArea", "name": "f2", "label": "${data.l_projects}", "helper-text": "${data.projects_helper}", "required": false, "visible": "${data.projects_visible}" },
+              { "type": "TextInput", "name": "p_links", "input-type": "text", "label": "${data.l_links}", "helper-text": "${data.links_helper}", "required": false },
               {
                 "type": "Footer",
                 "label": "${data.l_next}",
                 "on-click-action": {
                   "name": "data_exchange",
-                  "payload": { "f1": "${form.f1}", "work_photos": "${form.work_photos}", "p_skills": "${form.p_skills}", "p_links": "${form.p_links}", "p_years": "${form.p_years}", "p_focus": "${form.p_focus}", "f2": "${form.f2}" }
+                  "payload": { "work_photos": "${form.work_photos}", "f2": "${form.f2}", "p_links": "${form.p_links}" }
                 }
               }
             ]

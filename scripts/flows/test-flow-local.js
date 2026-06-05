@@ -193,19 +193,27 @@ async function roundtrip(reqObj) {
     action: 'data_exchange', screen: 'PNICHE', flow_token: tokDev,
     data: { portfolio_niche: 'developer' },
   });
-  ok('PNICHE → PORTFOLIO', d1.screen === 'PORTFOLIO');
+  ok('PNICHE → PORTFOLIO (page 1)', d1.screen === 'PORTFOLIO');
   ok('niche persisted in session', sessionMem[tokDev].answers.portfolio_niche === 'developer');
-  ok('developer: skills visible', d1.data.skills_visible === true);
-  ok('developer: photos hidden', d1.data.photos_visible === false);
-  ok('developer: projects visible', d1.data.projects_visible === true);
+  ok('p1 developer: skills visible', d1.data.skills_visible === true);
+  ok('p1 developer: years visible', d1.data.years_visible === true);
+  ok('p1 developer: focus visible', d1.data.focus_visible === true);
   const d2 = await roundtrip({
     action: 'data_exchange', screen: 'PORTFOLIO', flow_token: tokDev,
-    data: { f1: 'I build things', p_skills: 'React, Node', p_links: 'github.com/jane', p_years: '6', p_focus: 'an AI app', f2: 'Project A\nProject B' },
+    data: { f1: 'I build things', p_skills: 'React, Node', p_years: '6', p_focus: 'an AI app' },
   });
-  ok('developer PORTFOLIO → FINISH', d2.screen === 'FINISH');
-  ok('portfolio answers persisted', sessionMem[tokDev].answers.p_skills === 'React, Node' && sessionMem[tokDev].answers.f1 === 'I build things');
+  ok('PORTFOLIO → PORTFOLIO_WORK (page 2)', d2.screen === 'PORTFOLIO_WORK');
+  ok('p2 developer: projects visible', d2.data.projects_visible === true);
+  ok('p2 developer: photos hidden', d2.data.photos_visible === false);
+  ok('page-1 answers persisted', sessionMem[tokDev].answers.p_skills === 'React, Node' && sessionMem[tokDev].answers.f1 === 'I build things');
+  const d3 = await roundtrip({
+    action: 'data_exchange', screen: 'PORTFOLIO_WORK', flow_token: tokDev,
+    data: { f2: 'Project A\nProject B', p_links: 'github.com/jane' },
+  });
+  ok('developer PORTFOLIO_WORK → FINISH', d3.screen === 'FINISH');
+  ok('page-2 answers persisted', sessionMem[tokDev].answers.p_links === 'github.com/jane' && sessionMem[tokDev].answers.f2 === 'Project A\nProject B');
 
-  // photographer → photos visible, skills hidden; an uploaded photo descriptor persists.
+  // photographer → page 1 photos hidden/skills hidden; page 2 photos visible + descriptor persists.
   const tokPh = 'ft_photo';
   await storeStub.createSession({ flowToken: tokPh, lang: 'en' });
   await roundtrip({
@@ -216,14 +224,20 @@ async function roundtrip(reqObj) {
     action: 'data_exchange', screen: 'PNICHE', flow_token: tokPh,
     data: { portfolio_niche: 'photographer' },
   });
-  ok('photographer: photos visible', ph1.data.photos_visible === true);
-  ok('photographer: skills hidden', ph1.data.skills_visible === false);
-  ok('photographer: projects hidden', ph1.data.projects_visible === false);
+  ok('p1 photographer: skills hidden', ph1.data.skills_visible === false);
+  ok('p1 photographer: years visible', ph1.data.years_visible === true);
   const ph2 = await roundtrip({
     action: 'data_exchange', screen: 'PORTFOLIO', flow_token: tokPh,
-    data: { f1: 'I shoot weddings', work_photos: [{ cdn_url: 'https://x/y.jpg', file_name: 'y.jpg', encryption_metadata: {} }], p_links: 'instagram.com/lens', p_focus: 'a wedding' },
+    data: { f1: 'I shoot weddings', p_focus: 'a wedding' },
   });
-  ok('photographer PORTFOLIO → FINISH', ph2.screen === 'FINISH');
+  ok('photographer PORTFOLIO → PORTFOLIO_WORK', ph2.screen === 'PORTFOLIO_WORK');
+  ok('p2 photographer: photos visible', ph2.data.photos_visible === true);
+  ok('p2 photographer: projects hidden', ph2.data.projects_visible === false);
+  const ph3 = await roundtrip({
+    action: 'data_exchange', screen: 'PORTFOLIO_WORK', flow_token: tokPh,
+    data: { work_photos: [{ cdn_url: 'https://x/y.jpg', file_name: 'y.jpg', encryption_metadata: {} }], p_links: 'instagram.com/lens' },
+  });
+  ok('photographer PORTFOLIO_WORK → FINISH', ph3.screen === 'FINISH');
   ok('work photo media persisted', Array.isArray(sessionMem[tokPh].answers.portfolio_photos_media) && sessionMem[tokPh].answers.portfolio_photos_media.length === 1);
 
   console.log(`\n=== RESULT: ${pass} passed, ${fail} failed ===\n`);

@@ -218,6 +218,7 @@ const L = {
     pyears_helper: 'e.g. 6. Or leave blank.',
     l_focus: 'Currently working on',
     focus_helper: "What you're building right now. Or leave blank.",
+    portfolio2_title: 'Your work & links',
     l_projects: 'Projects to feature',
     projects_helper: "One per line. Or leave blank — I'll add visuals for you.",
     // salon
@@ -306,6 +307,7 @@ const L = {
     pyears_helper: 'Ex: 6. Ou deixe vazio.',
     l_focus: 'No que está trabalhando',
     focus_helper: 'O que você está construindo agora. Ou deixe vazio.',
+    portfolio2_title: 'Trabalho & links',
     l_projects: 'Projetos para destacar',
     projects_helper: 'Um por linha. Ou deixe vazio — eu adiciono os visuais.',
     salon_title: 'Detalhes do salão',

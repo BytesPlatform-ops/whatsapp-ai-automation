@@ -765,6 +765,17 @@ Generate compelling website copy for this business. Return ONLY valid JSON.${lan
     logoUrl: logoUrl || null,
     heroImage,
     ...generatedContent,
+    // Portfolio templates read `services` as the user's flat skills/tools list
+    // (→ skills grid, marquee tech ribbon, terminal stack). The LLM content
+    // pass does NOT reliably echo the user's skills into generatedContent.services
+    // (it returns business-services copy or omits them), so the user's real
+    // skills were getting dropped and the template fell back to its default
+    // placeholder stack. Forward the raw user-provided skills here instead; an
+    // empty list still lets the template seed a sensible default. Non-portfolio
+    // templates keep the LLM's services objects (used by the services page).
+    services: portfolioMode
+      ? (Array.isArray(services) ? services : [])
+      : generatedContent.services,
     // Template selector + salon pass-through (harmless for non-salon templates).
     templateId: extras.templateId || 'business-starter',
     siteId: extras.siteId || null,
