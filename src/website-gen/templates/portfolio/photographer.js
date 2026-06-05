@@ -1462,7 +1462,7 @@ function renderPackages(c) {
 }
 
 function generateHomePage(c) {
-  const userProjects = Array.isArray(c.projects) && c.projects.length ? c.projects.slice(0, 9) : null;
+  const userProjects = Array.isArray(c.projects) && c.projects.length ? c.projects.slice(0, 30) : null;
   const projects = userProjects || defaultPlaceholderProjects();
   const heroImageUrl = c.heroImage && c.heroImage.url;
   const place = c.contactAddress || (Array.isArray(c.serviceAreas) && c.serviceAreas[0]) || null;

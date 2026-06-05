@@ -1564,7 +1564,7 @@ function renderSocials(c) {
 }
 
 function generateHomePage(c, opts) {
-  const userProjects = Array.isArray(c.projects) && c.projects.length ? c.projects.slice(0, 6) : null;
+  const userProjects = Array.isArray(c.projects) && c.projects.length ? c.projects.slice(0, 30) : null;
   const projects = userProjects || defaultPlaceholderProjects();
   const explicitNoServices = Array.isArray(c.services) && normalizeSkillsList(c.services).length === 0;
   const services = explicitNoServices ? [] : defaultServices(c.industry);
