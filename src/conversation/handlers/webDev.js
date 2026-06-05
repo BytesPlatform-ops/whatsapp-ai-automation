@@ -835,6 +835,34 @@ async function handleCollectName(user, message) {
     return STATES.WEB_COLLECT_NAME;
   }
 
+  // A bare greeting / affirmation / filler as the WHOLE message is never a
+  // business name. The shape gates above miss these (single word, clean chars)
+  // and the `isSimple` fast-path below would capture "Hii" verbatim as the name
+  // — the LLM extractor never runs because its looksRich gate skips short
+  // inputs. Normalize (lowercase, strip accents + non-letters, collapse
+  // elongated letters) so "Hii", "Heyyy", "olá!!", "okk" all reduce to a known
+  // filler token, then re-ask. Multi-word names that merely START with a
+  // greeting ("Hi-Tech Labs") are unaffected — this only fires when the entire
+  // message reduces to one filler token.
+  const fillerNorm = text.toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z]/g, '')
+    .replace(/(.)\1+/g, '$1');
+  const BARE_FILLERS = new Set([
+    'hi', 'hey', 'helo', 'hiya', 'yo', 'sup', 'ola', 'hola', 'oi', 'hm', 'halo',
+    'namaste', 'salam', 'ciao', 'bonjour', 'salut',                 // greetings
+    'ok', 'okay', 'k', 'kk', 'ya', 'yah', 'yeah', 'yep', 'yes', 'sure',
+    'no', 'nope', 'nah',                                            // affirm/deny
+    'thanks', 'thanx', 'thankyou', 'ty', 'idk', 'lol', 'test', 'testing', 'asdf',
+  ]);
+  if (BARE_FILLERS.has(fillerNorm)) {
+    await sendTextMessage(
+      user.phone_number,
+      await dynamicPhrase("Haha hey! 👋 What's the *name* of your business?", user, message.text)
+    );
+    return STATES.WEB_COLLECT_NAME;
+  }
+
   // Create site record if not yet. Rate-limit gate: non-tester / non-paid
   // users are capped at WEBSITE_RATE_LIMIT_PER_DAY new sites per rolling
   // window — see src/db/siteRateLimit.js. Only checked on the first turn of

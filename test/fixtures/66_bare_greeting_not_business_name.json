@@ -1,0 +1,18 @@
+{
+  "name": "bare-greeting-not-captured-as-business-name",
+  "description": "Regression from a real transcript: a user mid-website-wizard who replied 'Hii' had it stored as their business NAME. A bare greeting/affirmation/filler as the WHOLE message must be re-asked, not captured — the isSimple fast-path used to take any short single-word input verbatim, bypassing the LLM extractor (whose looksRich gate already skips short inputs). State stays at WEB_COLLECT_NAME and no businessName is captured.",
+  "channel": "whatsapp",
+  "seed": {
+    "state": "WEB_COLLECT_NAME",
+    "metadata": { "websiteData": {} }
+  },
+  "turns": [
+    {
+      "user": "Hii",
+      "expect": {
+        "state": "WEB_COLLECT_NAME",
+        "metadata.websiteData.businessName": "*missing*"
+      }
+    }
+  ]
+}
