@@ -298,9 +298,23 @@ function renderWebsiteIntake(wd) {
   parts.push(row('Projects (raw)', wd.projectsRaw));
   // Logo uploaded via the Flow PhotoPicker (or chat) — show a thumbnail.
   if (wd.logoUrl) {
-    parts.push('<p><b>Logo:</b><br><img src="' + esc(wd.logoUrl) + '" alt="logo" style="max-height:48px;max-width:160px;margin-top:3px;background:#fff;border-radius:4px;padding:3px;border:1px solid #d1d5db"></p>');
+    parts.push('<p><b>Logo:</b><br><img src="' + esc(wd.logoUrl) + '" alt="logo" onclick="window.open(this.src)" style="max-height:48px;max-width:160px;margin-top:3px;background:#fff;border-radius:4px;padding:3px;border:1px solid #d1d5db;cursor:pointer"></p>');
   } else if (wd.logoSkipped) {
     parts.push(row('Logo', 'skipped'));
+  }
+  // Portfolio headshot ("A photo of you") — round thumbnail, click to enlarge.
+  if (wd.aboutPhotoUrl) {
+    parts.push('<p><b>Photo of them:</b><br><img src="' + esc(wd.aboutPhotoUrl) + '" alt="headshot" onclick="window.open(this.src)" style="height:96px;width:96px;object-fit:cover;border-radius:50%;margin-top:3px;border:1px solid #d1d5db;cursor:pointer"></p>');
+  }
+  // Work photos the client uploaded via the Flow — thumbnail strip, click any
+  // to open full size. These are the processed Supabase URLs (the raw flow
+  // answer only holds an encrypted, short-lived descriptor — not viewable).
+  var workPhotos = Array.isArray(wd.projects) ? wd.projects.map(function(p){ return p && p.photoUrl; }).filter(Boolean) : [];
+  if (workPhotos.length) {
+    var thumbs = workPhotos.map(function(u){
+      return '<img src="' + esc(u) + '" alt="work" onclick="window.open(this.src)" style="height:64px;width:64px;object-fit:cover;border-radius:4px;border:1px solid #d1d5db;cursor:pointer">';
+    }).join('');
+    parts.push('<p><b>Work photos (' + workPhotos.length + '):</b><br><span style="display:flex;flex-wrap:wrap;gap:4px;margin-top:3px">' + thumbs + '</span></p>');
   }
 
   var body = parts.filter(Boolean).join('');
@@ -354,6 +368,8 @@ function renderFlowSubmission(sub) {
   parts.push(row('Contact phone', phone));
   parts.push(row('Address', a.c_address));
   if (Array.isArray(a.logo_media) && a.logo_media.length) parts.push(row('Logo', 'uploaded ✓'));
+  if (Array.isArray(a.about_photo_media) && a.about_photo_media.length) parts.push(row('Photo of them', 'uploaded ✓'));
+  if (Array.isArray(a.portfolio_photos_media) && a.portfolio_photos_media.length) parts.push(row('Work photos', a.portfolio_photos_media.length + ' uploaded ✓'));
 
   var body = parts.filter(Boolean).join('');
   if (!body) return '';
