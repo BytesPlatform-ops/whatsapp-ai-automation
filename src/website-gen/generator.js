@@ -301,6 +301,14 @@ async function generateWebsiteContent(businessData, extras = {}) {
     bookingMode,
     bookingUrl,
     instagramHandle,
+    // Portfolio profile handles + work history — forwarded so the portfolio
+    // templates (which read c.githubHandle / c.linkedinHandle / c.experience…)
+    // actually render the user's links and real experience instead of defaults.
+    githubHandle,
+    linkedinHandle,
+    twitterHandle,
+    behanceHandle,
+    experience,
     weeklyHours,
     salonServices,
     timezone,
@@ -793,6 +801,14 @@ Generate compelling website copy for this business. Return ONLY valid JSON.${lan
     bookingMode: bookingMode || null,
     bookingUrl: bookingUrl || null,
     instagramHandle: instagramHandle || null,
+    // Portfolio profile handles → social CTAs / GitHub section / contact links.
+    githubHandle: githubHandle || null,
+    linkedinHandle: linkedinHandle || null,
+    twitterHandle: twitterHandle || null,
+    behanceHandle: behanceHandle || null,
+    // Real work history (resume intake) → experience timeline; null falls back
+    // to the template's placeholder entries.
+    experience: Array.isArray(experience) && experience.length ? experience : null,
     weeklyHours: weeklyHours || null,
     salonServices: enrichedSalonServices,
     timezone: resolvedTimezone,

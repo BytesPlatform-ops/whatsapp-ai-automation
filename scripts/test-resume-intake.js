@@ -67,6 +67,8 @@ const INVOICE = [
   ok('niche = developer', s && s.niche === 'developer');
   ok('has skills', s && Array.isArray(s.skills) && s.skills.length >= 3);
   ok('has projects', s && Array.isArray(s.projects) && s.projects.length >= 1);
+  ok('has experience', s && Array.isArray(s.experience) && s.experience.length >= 1);
+  ok('experience = the 1 real job (no padding)', s && Array.isArray(s.experience) && s.experience.length === 1 && /Acme/i.test(JSON.stringify(s.experience)));
   ok('links captured', s && /github/i.test(String(s.links || '')));
 
   console.log('\n=== 3. structure → websiteData ===');
@@ -78,6 +80,7 @@ const INVOICE = [
   ok('githubHandle parsed', wd.githubHandle === 'janedoe');
   ok('projects mapped w/ photoUrl null', Array.isArray(wd.projects) && wd.projects.length >= 1 && wd.projects[0].photoUrl === null);
   ok('yearsExperience parsed', wd.yearsExperience === 6);
+  ok('experience mapped (period/role/company)', Array.isArray(wd.experience) && wd.experience.length === 1 && !!wd.experience[0].role && !!wd.experience[0].company && !!wd.experience[0].period);
   ok('contactEmail parsed', /jane@doe\.dev/.test(wd.contactEmail || ''));
   ok('done-flags set', wd.portfolioSkillsDone === true && wd.projectsFlowDone === true);
 

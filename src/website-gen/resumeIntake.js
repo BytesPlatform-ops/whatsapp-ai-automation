@@ -53,6 +53,7 @@ Return ONLY a JSON object (no commentary, no markdown):
   "links": "<all profile URLs/handles found, space-separated: github, linkedin, behance, dribbble, instagram, twitter, personal site>",
   "yearsExperience": <integer total years, or null>,
   "currentFocus": "<their current role or what they're working on now, or empty string>",
+  "experience": [{"period":"","role":"","company":"","summary":""}],
   "projects": [{"title":"","description":"","role":"","year":"","link":"","tools":["",...]}],
   "email": "<email or empty string>",
   "phone": "<phone or empty string>"
@@ -61,7 +62,8 @@ Return ONLY a JSON object (no commentary, no markdown):
 Rules:
 - niche mapping: software engineer / developer / SWE / data → "developer"; UI/UX / graphic / brand / product designer → "designer"; photographer / videographer → "photographer"; writer / editor / content / copywriter / journalist → "writer". If mixed or unclear, "".
 - skills: clean tool/tech names only (max 16), no sentences, no prose.
-- projects: 2-6 entries from work/projects sections; short titles, one-line descriptions; empty array if none clearly present.
+- experience: ONE entry per job in the work-history/experience section, most-recent first, max 6. Use ONLY jobs actually listed — never invent or pad. period = dates as written (e.g. "Jun 2025 – Present", "2021 – 2024"); role = job title; company = employer/organisation; summary = a 1-2 sentence description of the work/impact (condense bullet points). Empty array if no work history is present.
+- projects: 2-6 entries from a projects section (distinct from jobs); short titles, one-line descriptions; empty array if none clearly present.
 - If isResume is false, leave the other fields empty/null.
 - Output strictly valid JSON.`;
   try {
@@ -108,6 +110,17 @@ function buildWebsiteDataFromResume(s) {
   if (Number.isFinite(yrs) && yrs > 0 && yrs < 80) wd.yearsExperience = yrs;
   // Current focus → hero meta + terminal "building" line.
   if (!blank(s.currentFocus)) wd.currentFocus = String(s.currentFocus).trim().slice(0, 120);
+  // Work history → the experience timeline (template shape: period/role/company/
+  // summary). Without this the developer template falls back to placeholder jobs.
+  if (Array.isArray(s.experience) && s.experience.length) {
+    const exp = s.experience.slice(0, 6).map((e) => ({
+      period: String(e?.period || '').trim().slice(0, 40),
+      role: String(e?.role || '').trim().slice(0, 80),
+      company: String(e?.company || '').trim().slice(0, 80),
+      summary: String(e?.summary || '').trim().slice(0, 300),
+    })).filter((e) => e.role || e.company);
+    if (exp.length) wd.experience = exp;
+  }
   // Projects → the exact shape the templates consume (photoUrl null → the
   // portfolio image fetcher fills a niche-appropriate Pexels photo).
   if (Array.isArray(s.projects) && s.projects.length) {
