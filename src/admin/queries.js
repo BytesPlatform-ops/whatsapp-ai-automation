@@ -134,6 +134,42 @@ async function fetchAllConversationRows(userIds, columns, extraFilters = (q) => 
   return results.flat();
 }
 
+// Chunked `.in(idCol, ids)` SELECT for ANY table, run concurrently and merged.
+// Same purpose as fetchAllConversationRows but generic — keeps a few-hundred-id
+// filter from overflowing PostgREST's ~16KB request URL. Each chunk is capped at
+// Supabase's 1000-row default (fine for low-per-user tables: meetings, payments,
+// sites, audits, users). For high-volume conversations use the paginating helper.
+async function chunkedIn(table, columns, idCol, ids, build = (q) => q) {
+  if (!ids || ids.length === 0) return [];
+  const ID_CHUNK = 100;
+  const chunks = [];
+  for (let i = 0; i < ids.length; i += ID_CHUNK) chunks.push(ids.slice(i, i + ID_CHUNK));
+  const results = await Promise.all(chunks.map(async (idsChunk) => {
+    const { data, error } = await build(supabase.from(table).select(columns).in(idCol, idsChunk));
+    if (error) throw error;
+    return data || [];
+  }));
+  return results.flat();
+}
+
+// Paginate an UNFILTERED select to exhaustion (no id list). A plain select
+// silently caps at 1000 rows; this walks 1000-row pages until the table is
+// drained, so bulk exports aren't truncated once a table passes 1000 rows.
+async function fetchAllRows(table, columns, build = (q) => q) {
+  const PAGE = 1000;
+  const MAX_ITERATIONS = 500; // up to 500k rows
+  const out = [];
+  let from = 0;
+  for (let i = 0; i < MAX_ITERATIONS; i++) {
+    const { data, error } = await build(supabase.from(table).select(columns)).range(from, from + PAGE - 1);
+    if (error) throw error;
+    out.push(...(data || []));
+    if (!data || data.length < PAGE) break;
+    from += PAGE;
+  }
+  return out;
+}
+
 async function getLeads() {
   const { data: users, error } = await supabase
     .from('users')
@@ -685,42 +721,45 @@ async function getSalesPrep() {
 
   const userIds = users.map(u => u.id);
 
-  // Fetch all related data in parallel
-  const [messagesRes, meetingsRes, paymentsRes, sitesRes, auditsRes] = await Promise.all([
-    supabase.from('conversations').select('user_id, message_text, role, created_at').in('user_id', userIds).order('created_at', { ascending: true }),
-    supabase.from('meetings').select('*').in('user_id', userIds).order('created_at', { ascending: false }),
-    supabase.from('payments').select('*').in('user_id', userIds).order('created_at', { ascending: false }),
-    supabase.from('generated_sites').select('id, user_id, preview_url, status, site_data, created_at').in('user_id', userIds).order('created_at', { ascending: false }),
-    supabase.from('website_audits').select('id, user_id, url, status, analysis_text, created_at').in('user_id', userIds).order('created_at', { ascending: false }),
+  // Fetch all related data in parallel. Every user-id filter is chunked so a
+  // few-hundred-user list can't overflow the PostgREST request URL (the same
+  // limit that 500'd /api/leads). Conversations go through fetchAllConversationRows
+  // (chunked AND paginated); the low-per-user tables use chunkedIn.
+  const [allMessages, allMeetings, allPayments, allSites, allAudits] = await Promise.all([
+    fetchAllConversationRows(userIds, 'user_id, message_text, role, created_at', (q) => q.order('created_at', { ascending: true })),
+    chunkedIn('meetings', '*', 'user_id', userIds, (q) => q.order('created_at', { ascending: false })),
+    chunkedIn('payments', '*', 'user_id', userIds, (q) => q.order('created_at', { ascending: false })),
+    chunkedIn('generated_sites', 'id, user_id, preview_url, status, site_data, created_at', 'user_id', userIds, (q) => q.order('created_at', { ascending: false })),
+    chunkedIn('website_audits', 'id, user_id, url, status, analysis_text, created_at', 'user_id', userIds, (q) => q.order('created_at', { ascending: false })),
   ]);
 
   // Build lookup maps
   const msgMap = {};
-  (messagesRes.data || []).forEach(m => {
+  allMessages.forEach(m => {
     if (!msgMap[m.user_id]) msgMap[m.user_id] = [];
     msgMap[m.user_id].push(m);
   });
 
   const meetingMap = {};
-  (meetingsRes.data || []).forEach(m => {
+  allMeetings.forEach(m => {
     if (!meetingMap[m.user_id]) meetingMap[m.user_id] = [];
     meetingMap[m.user_id].push(m);
   });
 
   const paymentMap = {};
-  (paymentsRes.data || []).forEach(p => {
+  allPayments.forEach(p => {
     if (!paymentMap[p.user_id]) paymentMap[p.user_id] = [];
     paymentMap[p.user_id].push(p);
   });
 
   const siteMap = {};
-  (sitesRes.data || []).forEach(s => {
+  allSites.forEach(s => {
     if (!siteMap[s.user_id]) siteMap[s.user_id] = [];
     siteMap[s.user_id].push(s);
   });
 
   const auditMap = {};
-  (auditsRes.data || []).forEach(a => {
+  allAudits.forEach(a => {
     if (!auditMap[a.user_id]) auditMap[a.user_id] = [];
     auditMap[a.user_id].push(a);
   });
@@ -1067,13 +1106,12 @@ async function getLeadSummaries() {
 }
 
 async function getAllConversationsBulk() {
-  const [usersResult, msgsResult] = await Promise.all([
-    supabase.from('users').select('id, phone_number, name, channel').order('created_at', { ascending: true }),
-    supabase.from('conversations').select('user_id, role, message_text, created_at, seq').order('seq', { ascending: true }).order('created_at', { ascending: true }),
+  // Paginate both tables — a single select silently caps at 1000 rows, which
+  // would truncate the export once there are >1000 users or messages.
+  const [users, msgs] = await Promise.all([
+    fetchAllRows('users', 'id, phone_number, name, channel', (q) => q.order('created_at', { ascending: true })),
+    fetchAllRows('conversations', 'user_id, role, message_text, created_at, seq', (q) => q.order('seq', { ascending: true }).order('created_at', { ascending: true })),
   ]);
-
-  const users = usersResult.data || [];
-  const msgs = msgsResult.data || [];
 
   // group messages by user_id
   const byUser = {};
@@ -1115,14 +1153,12 @@ async function getAllConversationsBulk() {
 
 async function getSelectedConversationsBulk(userIds) {
   if (!userIds || !userIds.length) return '';
-  const [usersResult, msgs] = await Promise.all([
-    supabase.from('users').select('id, phone_number, name, channel').in('id', userIds),
+  const [users, msgs] = await Promise.all([
+    chunkedIn('users', 'id, phone_number, name, channel', 'id', userIds),
     fetchAllConversationRows(userIds, 'user_id, role, message_text, created_at, seq', (q) =>
       q.order('seq', { ascending: true }).order('created_at', { ascending: true })
     ),
   ]);
-
-  const users = usersResult.data || [];
 
   const byUser = {};
   for (const m of msgs) {
