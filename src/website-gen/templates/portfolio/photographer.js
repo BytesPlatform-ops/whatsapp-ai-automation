@@ -1380,7 +1380,9 @@ function renderMomentCard(p, idx, isClone) {
 function renderMomentsMarquee(projects) {
   const list = Array.isArray(projects) ? projects.filter(Boolean) : [];
   if (!list.length) return '';
-  const twoRows = list.length >= 8;
+  // 10+ moments → two opposite-scrolling trains (row-a left, row-b right);
+  // fewer → a single row so a short set doesn't look sparse split in two.
+  const twoRows = list.length >= 10;
   // Only pad a row when it's too short to fill the viewport (avoids a visible
   // gap before the clone wraps); a healthy row is used as-is, no repeats.
   const fill = (items, min) => {
