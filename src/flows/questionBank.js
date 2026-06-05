@@ -404,6 +404,22 @@ const DETAILS = {
   },
 };
 
+// ── Discrete profile-link slots for the PORTFOLIO_WORK screen. ──────────
+// Instead of one "paste any" field, each niche shows up to 3 labelled link
+// inputs so the user knows exactly what to drop in. Only platforms the shared
+// parser (portfolioLinksParse.js) actually captures are offered — so nothing a
+// user types is silently dropped. The endpoint joins the filled slots back into
+// the single `p_links` blob, so parsing/intake/templates stay unchanged.
+// `key` is the parser keyword (portfolioLinksParse.js) the endpoint tags a bare
+// username/@handle with, so it resolves to the right network even without a URL.
+const LINK = {
+  github: { key: 'github', label: { en: 'GitHub', pt: 'GitHub' }, helper: { en: 'github.com/you — or just your username', pt: 'github.com/voce — ou só seu usuário' } },
+  linkedin: { key: 'linkedin', label: { en: 'LinkedIn', pt: 'LinkedIn' }, helper: { en: 'linkedin.com/in/you', pt: 'linkedin.com/in/voce' } },
+  twitter: { key: 'twitter', label: { en: 'X / Twitter', pt: 'X / Twitter' }, helper: { en: '@handle', pt: '@usuario' } },
+  instagram: { key: 'instagram', label: { en: 'Instagram', pt: 'Instagram' }, helper: { en: 'instagram.com/you — or @handle', pt: 'instagram.com/voce — ou @usuario' } },
+  behance: { key: 'behance', label: { en: 'Behance', pt: 'Behance' }, helper: { en: 'behance.net/you', pt: 'behance.net/voce' } },
+};
+
 // ── PORTFOLIO screen field config per creative niche. ───────────────────
 // The niche is picked FIRST (PNICHE screen) so the endpoint can tailor the
 // PORTFOLIO screen to it: it toggles each optional field's `*_visible` and
@@ -420,6 +436,7 @@ const NICHE_FIELDS = {
       en: "Upload a few of your best shots — up to 6. Or skip and I'll add visuals.",
       pt: 'Envie algumas das suas melhores fotos — até 6. Ou pule e eu adiciono os visuais.',
     },
+    links: [LINK.instagram, LINK.behance, LINK.linkedin],
   },
   designer: {
     title: { en: 'Your design work', pt: 'Seu trabalho de design' },
@@ -433,14 +450,17 @@ const NICHE_FIELDS = {
       en: "Upload a few work samples — up to 6. Or skip and I'll add visuals.",
       pt: 'Envie algumas amostras do seu trabalho — até 6. Ou pule e eu adiciono os visuais.',
     },
+    links: [LINK.behance, LINK.instagram, LINK.linkedin],
   },
   developer: {
     title: { en: 'Your dev work', pt: 'Seu trabalho dev' },
     photos: false, skills: true, years: true, focus: true, projects: true,
+    links: [LINK.github, LINK.linkedin, LINK.twitter],
   },
   writer: {
     title: { en: 'Your work', pt: 'Seu trabalho' },
     photos: false, skills: false, years: false, focus: true, projects: true,
+    links: [LINK.linkedin, LINK.twitter, LINK.instagram],
   },
 };
 

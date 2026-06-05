@@ -49,6 +49,7 @@ Module._load = function (request, parent, isMain) {
 const c = require('../../src/flows/crypto');
 const { handleFlow } = require('../../src/flows/endpoint');
 const { classifyTheme } = require('../../src/flows/questionBank');
+const { parseProfileLinks } = require('../../src/website-gen/portfolioLinksParse');
 
 let pass = 0;
 let fail = 0;
@@ -205,13 +206,23 @@ async function roundtrip(reqObj) {
   ok('PORTFOLIO → PORTFOLIO_WORK (page 2)', d2.screen === 'PORTFOLIO_WORK');
   ok('p2 developer: projects visible', d2.data.projects_visible === true);
   ok('p2 developer: photos hidden', d2.data.photos_visible === false);
+  ok('p2 developer: link1 = GitHub', d2.data.l_link1 === 'GitHub' && d2.data.link1_visible === true);
+  ok('p2 developer: link2 = LinkedIn', d2.data.l_link2 === 'LinkedIn' && d2.data.link2_visible === true);
+  ok('p2 developer: link3 = X / Twitter', d2.data.l_link3 === 'X / Twitter' && d2.data.link3_visible === true);
   ok('page-1 answers persisted', sessionMem[tokDev].answers.p_skills === 'React, Node' && sessionMem[tokDev].answers.f1 === 'I build things');
+  // URL in slots 1-2, a BARE @handle in the X/Twitter slot (no URL context).
   const d3 = await roundtrip({
     action: 'data_exchange', screen: 'PORTFOLIO_WORK', flow_token: tokDev,
-    data: { f2: 'Project A\nProject B', p_links: 'github.com/jane' },
+    data: { f2: 'Project A\nProject B', p_link1: 'github.com/jane', p_link2: 'linkedin.com/in/jane', p_link3: '@janedev' },
   });
   ok('developer PORTFOLIO_WORK → FINISH', d3.screen === 'FINISH');
-  ok('page-2 answers persisted', sessionMem[tokDev].answers.p_links === 'github.com/jane' && sessionMem[tokDev].answers.f2 === 'Project A\nProject B');
+  ok('URLs raw, bare handle tagged with platform', sessionMem[tokDev].answers.p_links === 'github.com/jane\nlinkedin.com/in/jane\ntwitter: @janedev');
+  ok('empty slots produce no blank lines', !/\n\n|^\n|\n$/.test(sessionMem[tokDev].answers.p_links));
+  ok('projects persisted', sessionMem[tokDev].answers.f2 === 'Project A\nProject B');
+  const devHandles = parseProfileLinks(sessionMem[tokDev].answers.p_links);
+  ok('blob → github handle', devHandles.githubHandle === 'jane');
+  ok('blob → linkedin handle', devHandles.linkedinHandle === 'jane');
+  ok('bare @handle in X slot → twitter handle', devHandles.twitterHandle === 'janedev');
 
   // photographer → page 1 photos hidden/skills hidden; page 2 photos visible + descriptor persists.
   const tokPh = 'ft_photo';
@@ -233,12 +244,15 @@ async function roundtrip(reqObj) {
   ok('photographer PORTFOLIO → PORTFOLIO_WORK', ph2.screen === 'PORTFOLIO_WORK');
   ok('p2 photographer: photos visible', ph2.data.photos_visible === true);
   ok('p2 photographer: projects hidden', ph2.data.projects_visible === false);
+  ok('p2 photographer: link1 = Instagram', ph2.data.l_link1 === 'Instagram' && ph2.data.link1_visible === true);
+  ok('p2 photographer: link2 = Behance', ph2.data.l_link2 === 'Behance');
   const ph3 = await roundtrip({
     action: 'data_exchange', screen: 'PORTFOLIO_WORK', flow_token: tokPh,
-    data: { work_photos: [{ cdn_url: 'https://x/y.jpg', file_name: 'y.jpg', encryption_metadata: {} }], p_links: 'instagram.com/lens' },
+    data: { work_photos: [{ cdn_url: 'https://x/y.jpg', file_name: 'y.jpg', encryption_metadata: {} }], p_link1: 'instagram.com/lens' },
   });
   ok('photographer PORTFOLIO_WORK → FINISH', ph3.screen === 'FINISH');
   ok('work photo media persisted', Array.isArray(sessionMem[tokPh].answers.portfolio_photos_media) && sessionMem[tokPh].answers.portfolio_photos_media.length === 1);
+  ok('photographer single link → p_links', sessionMem[tokPh].answers.p_links === 'instagram.com/lens');
 
   console.log(`\n=== RESULT: ${pass} passed, ${fail} failed ===\n`);
   process.exit(fail === 0 ? 0 : 1);

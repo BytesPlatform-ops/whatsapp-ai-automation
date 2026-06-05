@@ -274,6 +274,15 @@ function portfolioScreen(lang, niche) {
 // (shown for every niche). Niche-toggled the same way.
 function portfolio2Screen(lang, niche) {
   const f = NICHE_FIELDS[niche] || NICHE_FIELDS.developer;
+  // Discrete, niche-tailored link slots (up to 3). Unfilled slots are hidden.
+  const slots = Array.isArray(f.links) ? f.links : [];
+  const linkData = {};
+  for (let i = 0; i < 3; i++) {
+    const slot = slots[i];
+    linkData[`l_link${i + 1}`] = slot ? pick(slot.label, lang) : '';
+    linkData[`link${i + 1}_helper`] = slot ? pick(slot.helper, lang) : '';
+    linkData[`link${i + 1}_visible`] = !!slot;
+  }
   return {
     screen: 'PORTFOLIO_WORK',
     data: {
@@ -284,8 +293,7 @@ function portfolio2Screen(lang, niche) {
       l_projects: L[lang].l_projects,
       projects_helper: L[lang].projects_helper,
       projects_visible: !!f.projects,
-      l_links: L[lang].l_links,
-      links_helper: L[lang].links_helper,
+      ...linkData,
       l_next: L[lang].next,
     },
   };
@@ -399,9 +407,27 @@ async function handleFlow(req, ctx = {}) {
     // photos — decrypt + upload is deferred to the completion handler) → FINISH.
     if (screen === 'PORTFOLIO_WORK') {
       if (flowToken) {
+        // Re-join the discrete link slots into the single blob the shared parser
+        // (portfolioLinksParse.js) consumes — newline-separated so each link is
+        // independently matchable. We know each slot's platform (same niche the
+        // screen was built from), so a bare username/@handle gets tagged with
+        // its platform keyword; a pasted URL is left raw so a mis-filled URL
+        // can't be mis-tagged (the parser resolves it by its own domain).
+        const niche = String(session?.answers?.portfolio_niche || '').trim();
+        const slots = (NICHE_FIELDS[niche] || NICHE_FIELDS.developer).links || [];
+        const p_links = [data.p_link1, data.p_link2, data.p_link3]
+          .map((v, i) => {
+            const val = String(v || '').trim();
+            if (!val) return '';
+            const key = slots[i] && slots[i].key;
+            const isUrlish = /[/.]/.test(val);
+            return key && !isUrlish ? `${key}: ${val}` : val;
+          })
+          .filter(Boolean)
+          .join('\n');
         const answersPatch = {
           f2: data.f2 || '',
-          p_links: data.p_links || '',
+          p_links,
         };
         if (Array.isArray(data.work_photos) && data.work_photos.length) {
           answersPatch.portfolio_photos_media = data.work_photos;

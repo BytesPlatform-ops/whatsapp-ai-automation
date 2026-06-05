@@ -322,8 +322,15 @@
         "l_projects": { "type": "string", "__example__": "Projects to feature" },
         "projects_helper": { "type": "string", "__example__": "" },
         "projects_visible": { "type": "boolean", "__example__": false },
-        "l_links": { "type": "string", "__example__": "Your links" },
-        "links_helper": { "type": "string", "__example__": "" },
+        "l_link1": { "type": "string", "__example__": "GitHub" },
+        "link1_helper": { "type": "string", "__example__": "github.com/you — or just your username" },
+        "link1_visible": { "type": "boolean", "__example__": true },
+        "l_link2": { "type": "string", "__example__": "LinkedIn" },
+        "link2_helper": { "type": "string", "__example__": "linkedin.com/in/you" },
+        "link2_visible": { "type": "boolean", "__example__": true },
+        "l_link3": { "type": "string", "__example__": "X / Twitter" },
+        "link3_helper": { "type": "string", "__example__": "@handle" },
+        "link3_visible": { "type": "boolean", "__example__": true },
         "l_next": { "type": "string", "__example__": "Next" }
       },
       "layout": {
@@ -344,13 +351,15 @@
                 "visible": "${data.photos_visible}"
               },
               { "type": "TextArea", "name": "f2", "label": "${data.l_projects}", "helper-text": "${data.projects_helper}", "required": false, "visible": "${data.projects_visible}" },
-              { "type": "TextInput", "name": "p_links", "input-type": "text", "label": "${data.l_links}", "helper-text": "${data.links_helper}", "required": false },
+              { "type": "TextInput", "name": "p_link1", "input-type": "text", "label": "${data.l_link1}", "helper-text": "${data.link1_helper}", "required": false, "visible": "${data.link1_visible}" },
+              { "type": "TextInput", "name": "p_link2", "input-type": "text", "label": "${data.l_link2}", "helper-text": "${data.link2_helper}", "required": false, "visible": "${data.link2_visible}" },
+              { "type": "TextInput", "name": "p_link3", "input-type": "text", "label": "${data.l_link3}", "helper-text": "${data.link3_helper}", "required": false, "visible": "${data.link3_visible}" },
               {
                 "type": "Footer",
                 "label": "${data.l_next}",
                 "on-click-action": {
                   "name": "data_exchange",
-                  "payload": { "work_photos": "${form.work_photos}", "f2": "${form.f2}", "p_links": "${form.p_links}" }
+                  "payload": { "work_photos": "${form.work_photos}", "f2": "${form.f2}", "p_link1": "${form.p_link1}", "p_link2": "${form.p_link2}", "p_link3": "${form.p_link3}" }
                 }
               }
             ]
