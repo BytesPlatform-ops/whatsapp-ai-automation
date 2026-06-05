@@ -521,6 +521,10 @@ section { padding: var(--space-8) 0; position: relative; }
   display: inline-flex; align-items: baseline;
 }
 .nav-mark::before { content: '/'; color: var(--accent); margin-right: 4px; }
+/* Uploaded logo replaces the text mark: drop the leading slash, size to nav. */
+.nav-mark-has-logo { align-items: center; }
+.nav-mark-has-logo::before { display: none; }
+.nav-logo { height: 28px; width: auto; max-width: 160px; display: block; object-fit: contain; }
 .nav-links { display: flex; align-items: center; gap: var(--space-5); font-size: 14px; font-weight: 500; }
 .nav-links a {
   color: var(--ink-secondary);
@@ -1774,7 +1778,7 @@ function getNav(c, currentPath) {
   return `
 <header class="nav" id="nav">
   <div class="nav-inner">
-    <a class="nav-mark" href="/">${esc(firstName.toLowerCase())}</a>
+    <a class="nav-mark${c.logoUrl ? ' nav-mark-has-logo' : ''}" href="/">${c.logoUrl ? `<img class="nav-logo" src="${attr(c.logoUrl)}" alt="${attr(c.businessName || firstName)}">` : esc(firstName.toLowerCase())}</a>
     <nav class="nav-links" aria-label="Primary">
       ${link((c.labels?.navProjects || 'projects').toLowerCase(), 'projects')}
       ${link('experience', 'experience')}
@@ -1790,7 +1794,7 @@ function getNav(c, currentPath) {
 </header>
 <div class="nav-overlay" id="nav-overlay" aria-hidden="true">
   <div class="nav-overlay-top">
-    <span class="nav-mark">${esc(firstName.toLowerCase())}</span>
+    <span class="nav-mark${c.logoUrl ? ' nav-mark-has-logo' : ''}">${c.logoUrl ? `<img class="nav-logo" src="${attr(c.logoUrl)}" alt="${attr(c.businessName || firstName)}">` : esc(firstName.toLowerCase())}</span>
     <button class="nav-overlay-close" id="nav-overlay-close" aria-label="Close menu" type="button">close</button>
   </div>
   <nav class="nav-overlay-links" aria-label="Mobile">
@@ -2366,7 +2370,11 @@ function generateHomePage(c) {
     ...normalizeSkillsList(c.services),
     ...skillCategories.reduce((acc, cat) => acc.concat(cat.items), []),
   ])).filter(Boolean).slice(0, 14);
-  const ribbonItems = ribbonSource.length ? ribbonSource : ['TypeScript', 'React', 'Node.js', 'Python', 'Go', 'Postgres', 'Redis', 'Docker', 'Kubernetes', 'AWS'];
+  const ribbonBase = ribbonSource.length ? ribbonSource : ['TypeScript', 'React', 'Node.js', 'Python', 'Go', 'Postgres', 'Redis', 'Docker', 'Kubernetes', 'AWS'];
+  // Tile up to a minimum so a single marquee-list is wider than the viewport —
+  // otherwise, with only a few skills, the -50% loop leaves a visible gap.
+  const ribbonItems = [];
+  for (let i = 0; ribbonItems.length < Math.max(12, ribbonBase.length); i++) ribbonItems.push(ribbonBase[i % ribbonBase.length]);
   const ribbonList = ribbonItems
     .map((t) => `<span class="marquee-item">${esc(t)}</span><span class="marquee-dot" aria-hidden="true"></span>`)
     .join('');

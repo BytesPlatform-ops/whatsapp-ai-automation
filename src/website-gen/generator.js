@@ -309,6 +309,7 @@ async function generateWebsiteContent(businessData, extras = {}) {
     twitterHandle,
     behanceHandle,
     experience,
+    currentFocus,
     weeklyHours,
     salonServices,
     timezone,
@@ -812,6 +813,8 @@ Generate compelling website copy for this business. Return ONLY valid JSON.${lan
     // Real work history (resume intake) → experience timeline; null falls back
     // to the template's placeholder entries.
     experience: Array.isArray(experience) && experience.length ? experience : null,
+    // Current focus → portfolio hero meta ("currently") + terminal line.
+    currentFocus: currentFocus || null,
     weeklyHours: weeklyHours || null,
     salonServices: enrichedSalonServices,
     timezone: resolvedTimezone,
