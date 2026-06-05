@@ -1716,7 +1716,12 @@ async function _routeMessage(message) {
       _turnVerdict = await turnClassifierPromise;
     }
     const correction = _turnVerdict && _turnVerdict.primary === 'correction' ? _turnVerdict.correction : null;
-    if (correction) {
+    // In WEB_REVISIONS the site is already deployed, so a field correction must
+    // go through handleRevisions (apply + REDEPLOY + count), not the metadata-
+    // only applyFieldCorrection path used during pre-build collection — else the
+    // change silently never reaches the live site ("replace Shazam with Ghalib"
+    // updated the name but didn't redeploy). Let revisions fall through.
+    if (correction && user.state !== STATES.WEB_REVISIONS) {
         try {
           const webDev = require('./handlers/webDev');
           const ack = await webDev.applyFieldCorrection(user, correction.field, correction.value, correction.op || 'replace');
