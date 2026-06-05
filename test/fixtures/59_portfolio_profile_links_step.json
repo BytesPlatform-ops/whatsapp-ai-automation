@@ -1,0 +1,34 @@
+{
+  "name": "portfolio-profile-links-step-collects-handles-and-focus",
+  "description": "Developer-niche portfolio user at WEB_COLLECT_PORTFOLIO_PROFILE pastes 'github.com/alexrivera linkedin.com/in/alex-rivera, building a real-time payments API'. The shared links parser must pull username-only handles (githubHandle/linkedinHandle — unlock the GitHub section + social CTAs) and the leftover sentence becomes currentFocus. Marks portfolioProfileDone and advances into the projects step.",
+  "channel": "whatsapp",
+  "seed": {
+    "state": "WEB_COLLECT_PORTFOLIO_PROFILE",
+    "metadata": {
+      "websiteData": {
+        "businessName": "Alex Rivera",
+        "industry": "Software Engineer",
+        "industryKey": "portfolio",
+        "portfolioNiche": "developer",
+        "aboutText": "Full-stack engineer who ships fast, reliable web apps.",
+        "services": ["TypeScript", "React", "Node"],
+        "portfolioSkillsDone": true
+      },
+      "websiteDemoTriggered": true,
+      "emailSkipped": true
+    }
+  },
+  "turns": [
+    {
+      "user": "github.com/alexrivera linkedin.com/in/alex-rivera, building a real-time payments API",
+      "expect": {
+        "metadata.websiteData.githubHandle": "alexrivera",
+        "metadata.websiteData.linkedinHandle": "alex-rivera",
+        "metadata.websiteData.currentFocus": "*exists*",
+        "metadata.websiteData.portfolioProfileDone": true,
+        "state": "WEB_COLLECT_PROJECTS_ASK",
+        "sent_count_gte": 1
+      }
+    }
+  ]
+}

@@ -1,0 +1,27 @@
+{
+  "name": "portfolio-niche-photographer",
+  "description": "Portfolio user at the new WEB_COLLECT_PORTFOLIO_NICHE step says they shoot weddings/portraits. The bot must LLM-classify the niche as 'photographer', persist websiteData.portfolioNiche, and advance out of the niche state (to the about step). The niche drives the photographer sub-template + niche-appropriate hero/project auto-images. Replaces the old comma-separated services step for portfolio.",
+  "channel": "whatsapp",
+  "seed": {
+    "state": "WEB_COLLECT_PORTFOLIO_NICHE",
+    "metadata": {
+      "websiteData": {
+        "businessName": "Hana Lee",
+        "industry": "Portfolio",
+        "industryKey": "portfolio"
+      },
+      "websiteDemoTriggered": true,
+      "emailSkipped": true
+    }
+  },
+  "turns": [
+    {
+      "user": "I shoot weddings and portraits",
+      "expect": {
+        "metadata.websiteData.portfolioNiche": "photographer",
+        "state_not": "WEB_COLLECT_PORTFOLIO_NICHE",
+        "sent_count_gte": 1
+      }
+    }
+  ]
+}

@@ -330,10 +330,18 @@ function nextMissingWebDevState(websiteData, fullMetadata = {}) {
       return STATES.WEB_COLLECT_LISTINGS_PHOTOS;
     }
   } else if (isPortfolio(websiteData.industry, websiteData.industryKey)) {
-    // Portfolio sub-flow: skills (services list) → about → projects (3-phase).
-    // Skills come first so the LLM has context for any auto-generated bio.
-    if (websiteData.services == null) return STATES.WEB_COLLECT_SERVICES;
+    // Portfolio sub-flow: niche → about → projects (3-phase). Niche first so it
+    // picks the sub-template and gives the auto-bio + image queries context.
+    // No comma-separated "services" step — portfolio templates don't render a
+    // service list (services defaults to [] in the niche handler).
+    if (websiteData.portfolioNiche == null) return STATES.WEB_COLLECT_PORTFOLIO_NICHE;
     if (!websiteData.aboutText && !websiteData.aboutSkipped) return STATES.WEB_COLLECT_ABOUT;
+    // Skills/tools (→ tech ribbon + skills grid + stat) then profile links +
+    // years + current focus (→ social CTAs, GitHub section, hero meta). Both
+    // optional but explicitly asked so the personalized sections actually fill
+    // instead of falling back to placeholder content.
+    if (!websiteData.portfolioSkillsDone) return STATES.WEB_COLLECT_PORTFOLIO_SKILLS;
+    if (!websiteData.portfolioProfileDone) return STATES.WEB_COLLECT_PORTFOLIO_PROFILE;
     if (!websiteData.projectsFlowDone) {
       if (!websiteData.projectsAskAnswered) return STATES.WEB_COLLECT_PROJECTS_ASK;
       if (!websiteData.projectsDetailsDone) return STATES.WEB_COLLECT_PROJECTS_DETAILS;
@@ -545,11 +553,31 @@ function questionForState(state, websiteData) {
         "Or reply *skip* and I'll use professional stock photos."
       );
     }
+    case STATES.WEB_COLLECT_PORTFOLIO_NICHE:
+      return (
+        "What kind of work do you do? This sets your portfolio's style and visuals.\n\n" +
+        "• *Photography* — weddings, portraits, products, events\n" +
+        "• *Design* — brand, graphic, UX/UI, illustration\n" +
+        "• *Development* — software, web, apps, engineering\n" +
+        "• *Writing / Other* — editorial, copy, or anything else"
+      );
     case STATES.WEB_COLLECT_ABOUT:
       return (
         "Quick bio for your hero section — 1-2 sentences about you and what you do.\n\n" +
         "Example: *\"Designer working at the intersection of brand and product. 6+ years across startups and agencies.\"*\n\n" +
-        "Or reply *skip* and I'll generate one based on your name + skills."
+        "Or reply *skip* and I'll generate one based on your name + what you do."
+      );
+    case STATES.WEB_COLLECT_PORTFOLIO_SKILLS:
+      return (
+        "What are your main skills & tools — and how many years have you been at it?\n\n" +
+        "Example: *React, Node, Postgres, AWS — 6 years*\n\n" +
+        "Or reply *skip* and I'll feature a sensible default stack."
+      );
+    case STATES.WEB_COLLECT_PORTFOLIO_PROFILE:
+      return (
+        "Almost done — paste any profile links, and what you're working on right now.\n\n" +
+        "Example: *github.com/you · linkedin.com/in/you · building a payments API*\n\n" +
+        "GitHub, LinkedIn, Instagram, Behance — whatever you've got. Or reply *skip*."
       );
     case STATES.WEB_COLLECT_PROJECTS_ASK:
       return (
@@ -638,7 +666,10 @@ const SUMMARY_REQUEST_STATES = new Set([
   STATES.WEB_COLLECT_LISTINGS_ASK,
   STATES.WEB_COLLECT_LISTINGS_DETAILS,
   STATES.WEB_COLLECT_LISTINGS_PHOTOS,
+  STATES.WEB_COLLECT_PORTFOLIO_NICHE,
   STATES.WEB_COLLECT_ABOUT,
+  STATES.WEB_COLLECT_PORTFOLIO_SKILLS,
+  STATES.WEB_COLLECT_PORTFOLIO_PROFILE,
   STATES.WEB_COLLECT_PROJECTS_ASK,
   STATES.WEB_COLLECT_PROJECTS_DETAILS,
   STATES.WEB_COLLECT_PROJECTS_PHOTOS,
@@ -701,8 +732,14 @@ async function handleWebDev(user, message) {
       return handleCollectListingsDetails(user, message);
     case STATES.WEB_COLLECT_LISTINGS_PHOTOS:
       return handleCollectListingsPhotos(user, message);
+    case STATES.WEB_COLLECT_PORTFOLIO_NICHE:
+      return handleCollectPortfolioNiche(user, message);
     case STATES.WEB_COLLECT_ABOUT:
       return handleCollectAbout(user, message);
+    case STATES.WEB_COLLECT_PORTFOLIO_SKILLS:
+      return handleCollectPortfolioSkills(user, message);
+    case STATES.WEB_COLLECT_PORTFOLIO_PROFILE:
+      return handleCollectPortfolioProfile(user, message);
     case STATES.WEB_COLLECT_PROJECTS_ASK:
       return handleCollectProjectsAsk(user, message);
     case STATES.WEB_COLLECT_PROJECTS_DETAILS:
@@ -3527,7 +3564,11 @@ const MAX_PROJECTS = 6;
  */
 async function generatePortfolioBio(websiteData, userId) {
   const name = websiteData.businessName || 'this professional';
-  const industry = websiteData.industry || 'creative work';
+  // Prefer the explicit niche ("photographer") over the generic "Portfolio"
+  // industry label so the bio matches the audience.
+  const field = websiteData.portfolioNiche
+    ? `${websiteData.portfolioNiche}`
+    : (websiteData.industry || 'creative work');
   const skills = Array.isArray(websiteData.services) && websiteData.services.length
     ? websiteData.services.slice(0, 6).join(', ')
     : '';
@@ -3536,7 +3577,7 @@ async function generatePortfolioBio(websiteData, userId) {
       `Write a single 1-2 sentence professional bio for the hero section of a portfolio website. Match the audience.
 
 Name: ${name}
-Field: ${industry}
+Field: ${field}
 ${skills ? `Skills/tools: ${skills}` : ''}
 
 Style: confident, specific, modern. No corporate-speak. No "I am" prefix. No fluff like "passionate about" / "love what I do". Lead with what they do; one specific detail; one outcome. Keep under 200 chars.
@@ -3554,88 +3595,11 @@ Output ONLY the bio text — no quotes, no labels, no commentary.`,
   }
 }
 
-/**
- * Parse a free-text project description into an ARRAY of structured project
- * entries. Pure LLM — handles any natural phrasing in any language.
- *
- * Multi-project critical: a single message often carries MULTIPLE projects
- * ("pixiebot.co\nbytesplatform.com\nbytesplatform.info" = 3 separate projects,
- * not one). The LLM splits per URL / per title. Single-project messages still
- * come back as a 1-element array.
- *
- * Returns [] when the input clearly isn't project content (caller re-asks).
- * Each entry has at least a `title` — anything missing comes back empty
- * and the handler fills with sensible defaults.
- */
-async function parseProjectText(raw, userId) {
-  const text = String(raw || '').trim();
-  if (!text) return [];
-  const systemPrompt =
-    `Extract portfolio-project entries from a freelancer's free-text reply. The reply may contain ONE project OR MULTIPLE projects — split appropriately and return an ARRAY. Return ONLY JSON.\n\n` +
-    `Schema: {"projects": [{"title": <string, max 80 chars>, "description": <string 1-2 sentences, max 200 chars or null>, "role": <string max 60 chars or null>, "year": <string max 8 chars or null>, "link": <full https URL or null — accept bare domains and prepend https:// yourself>, "tools": [<string max 24 chars>, ...] or null}, ...]}\n\n` +
-    `Multi-project signals — split into separate entries when:\n` +
-    `- Multiple URLs / domains on separate lines or separated by commas / spaces ("pixiebot.co\\nbytesplatform.com\\nbytesplatform.info" → 3 projects, one per URL).\n` +
-    `- Multiple titles separated by " — " / commas / line breaks / "and" / "&" / numbered lists.\n` +
-    `- Multiple year-tagged items in one message.\n` +
-    `When splitting, each project gets its own title (derive from the URL hostname if no explicit title — "pixiebot.co" → "Pixiebot", "github.com/foo/bar" → "Bar"). Don't fabricate descriptions / roles / years if not stated — leave them null.\n\n` +
-    `Single-project signals — keep as one entry when the message describes ONE project even if long ("BrandX rebrand 2024 — Lead Designer — took the visual identity from corporate to bold. behance.net/brandx"). Multiple sentences about ONE project ≠ multiple projects.\n\n` +
-    `Per-project rules:\n` +
-    `- title: required. For URL-only projects, derive from hostname. If genuinely no title and no URL, drop the entry.\n` +
-    `- description: short blurb. Pull from user's prose. Null if not stated — don't invent.\n` +
-    `- role: user's role. Null if not stated.\n` +
-    `- year: 4-digit year if explicitly stated. Null otherwise.\n` +
-    `- link: ANY URL — bare-domain accepted, output WITH https:// prepended. Null if no URL.\n` +
-    `- tools: array of tools/tech mentioned. Null if not stated.\n` +
-    `- ANY language is OK; translate to English but keep proper nouns and links verbatim.\n` +
-    `- Never invent values.\n\n` +
-    `If no usable project content at all, return {"projects": []}.`;
-  try {
-    const response = await generateResponse(
-      systemPrompt,
-      [{ role: 'user', content: text.slice(0, 1200) }],
-      { userId, operation: 'portfolio_project_parse', timeoutMs: 15_000 }
-    );
-    const m = String(response || '').match(/\{[\s\S]*\}/);
-    if (!m) return [];
-    const parsed = JSON.parse(m[0]);
-    const arr = Array.isArray(parsed.projects) ? parsed.projects : [];
-    const out = [];
-    for (const entry of arr) {
-      if (!entry || typeof entry !== 'object') continue;
-      const item = {};
-      if (typeof entry.title === 'string' && entry.title.trim().length >= 2 && entry.title.trim().length <= 80) {
-        item.title = entry.title.trim();
-      } else {
-        continue; // drop entries without a usable title
-      }
-      if (typeof entry.description === 'string' && entry.description.trim().length >= 5 && entry.description.trim().length <= 220) {
-        item.description = entry.description.trim();
-      }
-      if (typeof entry.role === 'string' && entry.role.trim().length >= 2 && entry.role.trim().length <= 60) {
-        item.role = entry.role.trim();
-      }
-      if (typeof entry.year === 'string' && /^\d{4}$/.test(entry.year.trim())) {
-        item.year = entry.year.trim();
-      }
-      if (typeof entry.link === 'string') {
-        const linkRaw = entry.link.trim();
-        if (/^https?:\/\//i.test(linkRaw) && linkRaw.length <= 200) item.link = linkRaw;
-      }
-      if (Array.isArray(entry.tools)) {
-        const cleaned = entry.tools
-          .map((t) => (typeof t === 'string' ? t.trim() : ''))
-          .filter((t) => t && t.length <= 24)
-          .slice(0, 8);
-        if (cleaned.length) item.tools = cleaned;
-      }
-      out.push(item);
-    }
-    return out;
-  } catch (err) {
-    logger.warn(`[PORTFOLIO-PROJECT-PARSE] LLM threw: ${err.message}`);
-    return [];
-  }
-}
+// parseProjectText (parse free-text → structured project entries, multi-project
+// aware) lives in a shared module so the Meta Flow intake (src/flows/intake.js)
+// parses the projects textarea identically.
+const { parseProjectText } = require('../../website-gen/portfolioProjectParse');
+const { parseProfileLinks } = require('../../website-gen/portfolioLinksParse');
 
 /**
  * One LLM call covers the WEB_COLLECT_PROJECTS_ASK turn intents:
@@ -3705,6 +3669,79 @@ Reply with ONLY one word: done, skip, or project.`,
   }
 }
 
+/**
+ * Classify a portfolio user's free-text reply about the kind of work they do
+ * into exactly one niche id (photographer | designer | developer | writer).
+ * Pure LLM (project convention: intent over keywords). Returns null when the
+ * reply isn't a niche answer at all (caller re-asks).
+ */
+async function classifyPortfolioNiche(text, userId) {
+  const t = String(text || '').trim();
+  if (!t) return null;
+  const systemPrompt =
+    `Classify a freelancer's reply about the kind of creative work they do into EXACTLY one id. Return ONLY the id, lowercase.\n` +
+    `ids:\n` +
+    `- photographer — photography / videography / film (wedding, portrait, product, event photographer, videographer, filmmaker)\n` +
+    `- designer — graphic / brand / UX / UI / visual / product design, illustration, art direction\n` +
+    `- developer — software / web / app development, engineering, programming, data\n` +
+    `- writer — writing, copywriting, editorial, content, OR any other creative field not above\n` +
+    `If the reply clearly states a creative field, pick the closest id (use "writer" for anything creative that isn't photo/design/dev). If the reply is NOT about their kind of work at all (a question, a greeting, contact info, gibberish), return "none".\n` +
+    `Output one word: photographer | designer | developer | writer | none.`;
+  try {
+    const resp = await generateResponse(
+      systemPrompt,
+      [{ role: 'user', content: t.slice(0, 300) }],
+      { userId, operation: 'portfolio_niche_classify', timeoutMs: 10_000 }
+    );
+    const m = String(resp || '').toLowerCase().match(/photographer|designer|developer|writer|none/);
+    if (!m || m[0] === 'none') return null;
+    return m[0];
+  } catch (err) {
+    logger.warn(`[PORTFOLIO-NICHE] LLM threw: ${err.message}`);
+    return null;
+  }
+}
+
+async function handleCollectPortfolioNiche(user, message) {
+  const raw = (message.text || '').trim();
+  const wd = { ...(user.metadata?.websiteData || {}) };
+
+  const reaskNiche = 'Which fits best — *Photography*, *Design*, *Development*, or *Writing / Other*?';
+  // Same cross-field short-circuits as the other collection states (a
+  // volunteered email / contact correction mid-question).
+  if (raw) {
+    const fmt = await tryApplyContactFormat(user, raw);
+    if (fmt) {
+      await sendTextMessage(user.phone_number, await dynamicPhrase(`${fmt.ackPart} ${reaskNiche}`, user, raw));
+      await logMessage(user.id, 'Niche step: applied contact format short-circuit', 'assistant');
+      return STATES.WEB_COLLECT_PORTFOLIO_NICHE;
+    }
+  }
+  if (raw && raw.length >= 3) {
+    const sc = await tryApplySideChannel(user, 'portfolioNiche', raw);
+    if (sc) {
+      await sendTextMessage(user.phone_number, await dynamicPhrase(`${sc.ackPart} ${reaskNiche}`, user, raw));
+      await logMessage(user.id, `Niche step: applied side-channel ${sc.side.kind}`, 'assistant');
+      return STATES.WEB_COLLECT_PORTFOLIO_NICHE;
+    }
+  }
+
+  const niche = await classifyPortfolioNiche(raw, user.id);
+  if (!niche) {
+    await sendTextMessage(user.phone_number, await dynamicPhrase(reaskNiche, user, raw));
+    return STATES.WEB_COLLECT_PORTFOLIO_NICHE;
+  }
+
+  // services stays [] — portfolio templates don't render a service list.
+  const merged = { ...wd, portfolioNiche: niche, services: Array.isArray(wd.services) ? wd.services : [] };
+  await updateUserMetadata(user.id, { websiteData: merged });
+  user.metadata = { ...(user.metadata || {}), websiteData: merged };
+  await logMessage(user.id, `Portfolio niche: ${niche}`, 'assistant');
+
+  const NICHE_LABEL = { photographer: 'photography', designer: 'design', developer: 'development', writer: 'writing' };
+  return smartAdvance(user, message, `Nice — a ${NICHE_LABEL[niche] || niche} portfolio.`);
+}
+
 async function handleCollectAbout(user, message) {
   const raw = (message.text || '').trim();
   const wd = { ...(user.metadata?.websiteData || {}) };
@@ -3761,6 +3798,129 @@ async function handleCollectAbout(user, message) {
   const ack = isSkip
     ? `Got it — generated a starter bio for you. You can edit it from the summary later.`
     : `Got it — saved your bio.`;
+  return smartAdvance(user, message, ack);
+}
+
+// "<n> years / yrs / saal" → integer years, ignoring 4-digit years and numbers
+// that live inside a URL. Conservative: only matches when a year-word follows.
+function extractYearsLoose(text) {
+  const m = String(text || '').match(/(\d{1,2})\s*\+?\s*(?:years?|yrs?|yr|saal|ans|años|anos)\b/i);
+  if (m) {
+    const n = parseInt(m[1], 10);
+    if (n > 0 && n < 80) return n;
+  }
+  return null;
+}
+
+// Pull a "currently working on" phrase out of the profile-step message by
+// stripping the link/handle noise and leaving the human sentence behind.
+// Returns null when nothing meaningful remains (e.g. links only).
+function extractFocusLeftover(text) {
+  let r = String(text || '');
+  r = r.replace(/\bhttps?:\/\/\S+/gi, ' ');                                   // full URLs
+  r = r.replace(/\b(?:www\.)?[a-z0-9-]+\.(?:com|net|io|dev|me|co|org|am)\b\S*/gi, ' '); // bare domains
+  r = r.replace(/\b(?:github|linked\s?in|twitter|instagram|insta|ig|behance|x)\b\s*[:\-]?\s*@?[A-Za-z0-9._/-]+/gi, ' '); // "github: foo"
+  r = r.replace(/@[A-Za-z0-9._-]+/g, ' ');                                    // stray @handles
+  r = r.replace(/[·•|,/]+/g, ' ');                                            // separators
+  r = r.replace(/^\s*(?:and|also|plus|currently)\b/i, ' ');                   // lead filler
+  r = r.replace(/\s{2,}/g, ' ').trim();
+  const words = r.split(/\s+/).filter((w) => /[A-Za-z]{2,}/.test(w));
+  if (words.length >= 2 && r.length >= 4 && r.length <= 120) return r;
+  return null;
+}
+
+// Skills/tools → services list. Optional + skippable. Also opportunistically
+// catches a "<n> years" mention so the years stat is real.
+async function handleCollectPortfolioSkills(user, message) {
+  const raw = (message.text || '').trim();
+  const wd = { ...(user.metadata?.websiteData || {}) };
+
+  const reask = 'List your main skills & tools — comma-separated, like *React, Node, Figma, AWS*. Or reply *skip*.';
+  if (raw) {
+    const fmt = await tryApplyContactFormat(user, raw);
+    if (fmt) {
+      await sendTextMessage(user.phone_number, await dynamicPhrase(`${fmt.ackPart} ${reask}`, user, raw));
+      await logMessage(user.id, 'Skills step: applied contact format short-circuit', 'assistant');
+      return STATES.WEB_COLLECT_PORTFOLIO_SKILLS;
+    }
+  }
+
+  let isSkip = false;
+  if (raw && raw.length <= 50) {
+    try {
+      isSkip = await classifyDelegation(raw, 'List your skills & tools, or skip.');
+    } catch (err) {
+      logger.warn(`[PF-SKILLS] classifyDelegation threw: ${err.message}`);
+    }
+  }
+
+  let services = [];
+  if (!isSkip && raw) {
+    try {
+      services = (await extractServices(raw, { businessName: wd.businessName, industry: wd.industry, userId: user.id })) || [];
+    } catch (err) {
+      logger.warn(`[PF-SKILLS] extractServices threw: ${err.message}`);
+    }
+  }
+
+  const merged = { ...wd, portfolioSkillsDone: true };
+  if (services.length) merged.services = services.slice(0, 16);
+  if (wd.yearsExperience == null) {
+    const yrs = extractYearsLoose(raw);
+    if (yrs != null) merged.yearsExperience = yrs;
+  }
+  await updateUserMetadata(user.id, { websiteData: merged });
+  user.metadata = { ...(user.metadata || {}), websiteData: merged };
+  await logMessage(user.id, `Skills: ${services.length ? services.join(', ') : '(skipped)'}${merged.yearsExperience ? ` · ${merged.yearsExperience}y` : ''}`, 'assistant');
+
+  const ack = services.length
+    ? `Nice — saved your stack${merged.yearsExperience ? ` and ${merged.yearsExperience} years` : ''}.`
+    : "No problem — I'll feature a sensible default stack.";
+  return smartAdvance(user, message, ack);
+}
+
+// Profile links (→ social handles + GitHub section) plus a current-focus
+// phrase. Optional + skippable. Pasted URLs or "github: foo" both resolve.
+async function handleCollectPortfolioProfile(user, message) {
+  const raw = (message.text || '').trim();
+  const wd = { ...(user.metadata?.websiteData || {}) };
+
+  const reask = "Paste any profile links (GitHub, LinkedIn, Instagram, Behance) and what you're building now. Or reply *skip*.";
+  if (raw) {
+    const fmt = await tryApplyContactFormat(user, raw);
+    if (fmt) {
+      await sendTextMessage(user.phone_number, await dynamicPhrase(`${fmt.ackPart} ${reask}`, user, raw));
+      await logMessage(user.id, 'Profile step: applied contact format short-circuit', 'assistant');
+      return STATES.WEB_COLLECT_PORTFOLIO_PROFILE;
+    }
+  }
+
+  let isSkip = false;
+  if (raw && raw.length <= 40) {
+    try {
+      isSkip = await classifyDelegation(raw, 'Share your profile links and current focus, or skip.');
+    } catch (err) {
+      logger.warn(`[PF-PROFILE] classifyDelegation threw: ${err.message}`);
+    }
+  }
+
+  const merged = { ...wd, portfolioProfileDone: true };
+  const got = [];
+  if (!isSkip && raw) {
+    const links = parseProfileLinks(raw);
+    for (const [k, v] of Object.entries(links)) {
+      if (v && !merged[k]) { merged[k] = v; got.push(k.replace('Handle', '')); }
+    }
+    if (merged.currentFocus == null) {
+      const focus = extractFocusLeftover(raw);
+      if (focus) { merged.currentFocus = focus; got.push('focus'); }
+    }
+  }
+  await updateUserMetadata(user.id, { websiteData: merged });
+  user.metadata = { ...(user.metadata || {}), websiteData: merged };
+  await logMessage(user.id, `Profile: ${got.length ? got.join(', ') : '(skipped)'}`, 'assistant');
+
+  const ack = got.length ? `Got it — linked everything up.` : "All good — keeping it clean.";
   return smartAdvance(user, message, ack);
 }
 
@@ -4491,9 +4651,10 @@ async function showSummaryPeek(user, latestUserMessage = '') {
   if (wd.weeklyHours) lines.push(`*Hours:* set`);
   if (Array.isArray(wd.salonServices) && wd.salonServices.length) lines.push(`*Priced services:* ${wd.salonServices.length}`);
   if (wd.instagramHandle) lines.push(`*Instagram:* @${wd.instagramHandle}`);
-  // Portfolio extras — bio + project count so freelancers see what they've
-  // shared. Renders for any flow that populated these fields, regardless
-  // of detected industry — keeps the peek honest about stored data.
+  // Portfolio extras — niche + bio + project count so freelancers see what
+  // they've shared. Renders for any flow that populated these fields,
+  // regardless of detected industry — keeps the peek honest about stored data.
+  if (wd.portfolioNiche) lines.push(`*Niche:* ${wd.portfolioNiche}`);
   if (wd.aboutText) lines.push(`*Bio:* ${String(wd.aboutText).slice(0, 120)}${wd.aboutText.length > 120 ? '…' : ''}`);
   if (Array.isArray(wd.projects) && wd.projects.length) {
     const withCovers = wd.projects.filter((p) => p.photoUrl).length;
@@ -4583,9 +4744,10 @@ async function showConfirmSummary(user, prefix = '', latestUserMessage = '') {
   }
   if (wd.instagramHandle) lines.push(`*Instagram:* @${wd.instagramHandle}`);
 
-  // Portfolio extras — bio + projects with cover-count. Same fields as
+  // Portfolio extras — niche + bio + projects with cover-count. Same fields as
   // showSummaryPeek so the user sees consistent state across mid-flow
   // peek and final confirm.
+  if (wd.portfolioNiche) lines.push(`*Niche:* ${wd.portfolioNiche}`);
   if (wd.aboutText) lines.push(`*Bio:* ${String(wd.aboutText).slice(0, 120)}${wd.aboutText.length > 120 ? '…' : ''}`);
   if (Array.isArray(wd.projects) && wd.projects.length) {
     const withCovers = wd.projects.filter((p) => p.photoUrl).length;

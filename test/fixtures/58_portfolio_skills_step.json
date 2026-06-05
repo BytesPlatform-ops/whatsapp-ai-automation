@@ -1,0 +1,31 @@
+{
+  "name": "portfolio-skills-step-collects-stack-and-years",
+  "description": "Developer-niche portfolio user at WEB_COLLECT_PORTFOLIO_SKILLS sends 'TypeScript, React, Node, Postgres, AWS — 6 years'. Bot must extract the skills into websiteData.services (drives the tech ribbon + skills grid + technologies stat), pick up the '6 years' into yearsExperience, mark portfolioSkillsDone, and advance to the profile-links step.",
+  "channel": "whatsapp",
+  "seed": {
+    "state": "WEB_COLLECT_PORTFOLIO_SKILLS",
+    "metadata": {
+      "websiteData": {
+        "businessName": "Alex Rivera",
+        "industry": "Software Engineer",
+        "industryKey": "portfolio",
+        "portfolioNiche": "developer",
+        "aboutText": "Full-stack engineer who ships fast, reliable web apps."
+      },
+      "websiteDemoTriggered": true,
+      "emailSkipped": true
+    }
+  },
+  "turns": [
+    {
+      "user": "TypeScript, React, Node, Postgres, AWS — 6 years",
+      "expect": {
+        "metadata.websiteData.services": "*exists*",
+        "metadata.websiteData.yearsExperience": 6,
+        "metadata.websiteData.portfolioSkillsDone": true,
+        "state": "WEB_COLLECT_PORTFOLIO_PROFILE",
+        "sent_count_gte": 1
+      }
+    }
+  ]
+}

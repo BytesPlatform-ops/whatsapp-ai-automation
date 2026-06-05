@@ -65,6 +65,23 @@ const INDUSTRY_OPTIONS = {
   ],
 };
 
+// ── Niche dropdown (portfolio DETAILS screen). Option id maps to a
+//    sub-template via NICHE_TO_TEMPLATE in templates/portfolio/index.js. ──
+const NICHE_OPTIONS = {
+  en: [
+    { id: 'photographer', title: 'Photographer / Videographer' },
+    { id: 'designer', title: 'Designer / Creative' },
+    { id: 'developer', title: 'Developer / Engineer' },
+    { id: 'writer', title: 'Writer / Other' },
+  ],
+  pt: [
+    { id: 'photographer', title: 'Fotógrafo / Videomaker' },
+    { id: 'designer', title: 'Designer / Criativo' },
+    { id: 'developer', title: 'Desenvolvedor / Engenheiro' },
+    { id: 'writer', title: 'Escritor / Outro' },
+  ],
+};
+
 // ── Currency dropdown (salon Screen 2). ─────────────────────────────────
 const CURRENCY_LIST = [
   { id: 'USD', title: 'USD ($) — US Dollar' },
@@ -186,6 +203,16 @@ const L = {
     l_logo: 'Your logo',
     l_logo_desc: "Upload it and I'll clean up the background. Skip if you don't have one.",
     next: 'Next',
+    // portfolio
+    l_niche: 'What kind of work do you do?',
+    l_skills: 'Skills & tools',
+    skills_helper: 'e.g. React, Node, Figma, AWS. Comma-separated. Or leave blank.',
+    l_links: 'Your links',
+    links_helper: 'GitHub, LinkedIn, Instagram, Behance… paste any. Or leave blank.',
+    l_pyears: 'Years of experience',
+    pyears_helper: 'e.g. 6. Or leave blank.',
+    l_focus: 'Currently working on',
+    focus_helper: "What you're building right now. Or leave blank.",
     // salon
     salon_title: 'Salon details',
     l_currency: 'Currency',
@@ -258,6 +285,15 @@ const L = {
     l_logo: 'Sua logo',
     l_logo_desc: 'Envie e eu limpo o fundo. Pule se não tiver.',
     next: 'Próximo',
+    l_niche: 'Que tipo de trabalho você faz?',
+    l_skills: 'Habilidades & ferramentas',
+    skills_helper: 'Ex: React, Node, Figma, AWS. Separe por vírgulas. Ou deixe vazio.',
+    l_links: 'Seus links',
+    links_helper: 'GitHub, LinkedIn, Instagram, Behance… cole os que tiver. Ou deixe vazio.',
+    l_pyears: 'Anos de experiência',
+    pyears_helper: 'Ex: 6. Ou deixe vazio.',
+    l_focus: 'No que está trabalhando',
+    focus_helper: 'O que você está construindo agora. Ou deixe vazio.',
     salon_title: 'Detalhes do salão',
     l_currency: 'Moeda',
     l_booking_heading: 'Agendamento online',
@@ -339,9 +375,9 @@ const DETAILS = {
   portfolio: {
     title: { en: 'Your work', pt: 'Seu trabalho' },
     f1: { en: 'Short bio', pt: 'Bio curta' },
-    f1_helper: { en: '1–2 sentences about you. Or leave blank.', pt: '1–2 frases sobre você. Ou deixe vazio.' },
+    f1_helper: { en: 'A line about you and the kind of work you do. Or leave blank.', pt: 'Uma frase sobre você e o tipo de trabalho que faz. Ou deixe vazio.' },
     f2: { en: 'Projects to feature (optional)', pt: 'Projetos para destacar (opcional)' },
-    f2_helper: { en: 'One per line. Or leave blank for placeholders.', pt: 'Um por linha. Ou deixe vazio.' },
+    f2_helper: { en: "One per line. Or leave blank — I'll add visuals for you.", pt: 'Um por linha. Ou deixe vazio — eu adiciono os visuais.' },
   },
   general: {
     title: { en: 'Your services', pt: 'Seus serviços' },
@@ -363,6 +399,7 @@ module.exports = {
   VALID_THEMES,
   THEME_TO_INDUSTRY,
   INDUSTRY_OPTIONS,
+  NICHE_OPTIONS,
   CURRENCY_OPTIONS,
   BOOKING_OPTIONS,
   ADDMORE_OPTIONS,

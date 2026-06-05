@@ -14,7 +14,7 @@
 // full set even though each response payload stays small.
 
 const {
-  classifyTheme, VALID_THEMES, INDUSTRY_OPTIONS, CURRENCY_OPTIONS,
+  classifyTheme, VALID_THEMES, INDUSTRY_OPTIONS, NICHE_OPTIONS, CURRENCY_OPTIONS,
   BOOKING_OPTIONS, ADDMORE_OPTIONS, ADDMORE_LISTING_OPTIONS,
   LISTING_STATUS_OPTIONS, COUNTRY_CODES, DETAILS, L, pick,
 } = require('./questionBank');
@@ -192,6 +192,13 @@ function detailsScreen(theme, lang) {
   // Currency only shown for real estate (listing prices). The Dropdown is
   // hidden + non-required for every other niche via currency_visible.
   const currencyVisible = theme === 'realestate';
+  // Niche dropdown only shown for portfolio (picks the creative sub-template).
+  const nicheVisible = theme === 'portfolio';
+  // Portfolio-only personalization inputs (skills / links / years / focus).
+  // Hidden + non-required for every other theme that shares the DETAILS screen
+  // (hvac, general). All optional even for portfolio — sensible placeholders
+  // fill any blanks at generate time.
+  const portfolioExtraVisible = theme === 'portfolio';
   return {
     screen: 'DETAILS',
     data: {
@@ -199,6 +206,18 @@ function detailsScreen(theme, lang) {
       l_currency: L[lang].l_currency,
       currency_options: CURRENCY_OPTIONS[lang] || CURRENCY_OPTIONS.en,
       currency_visible: currencyVisible,
+      l_niche: L[lang].l_niche,
+      niche_options: NICHE_OPTIONS[lang] || NICHE_OPTIONS.en,
+      niche_visible: nicheVisible,
+      portfolio_extra_visible: portfolioExtraVisible,
+      l_skills: L[lang].l_skills,
+      skills_helper: L[lang].skills_helper,
+      l_links: L[lang].l_links,
+      links_helper: L[lang].links_helper,
+      l_pyears: L[lang].l_pyears,
+      pyears_helper: L[lang].pyears_helper,
+      l_focus: L[lang].l_focus,
+      focus_helper: L[lang].focus_helper,
       f1_label: pick(d.f1, lang),
       f1_helper: pick(d.f1_helper, lang),
       f2_label: f2 || '—',
@@ -351,6 +370,8 @@ async function handleFlow(req, ctx = {}) {
       const hvac = (session?.theme) === 'hvac';
       if (flowToken) {
         const answersPatch = { currency: data.currency || '', f1: data.f1 || '', f2: data.f2 || '' };
+        // Portfolio niche dropdown (hidden/blank for other themes).
+        if (data.portfolio_niche) answersPatch.portfolio_niche = String(data.portfolio_niche);
         if (hvac) answersPatch.hvac_services = [];
         await patchSession(flowToken, { answersPatch })
           .catch((err) => logger.warn(`[FLOW] persist DETAILS failed: ${err.message}`));

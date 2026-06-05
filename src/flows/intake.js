@@ -10,6 +10,8 @@
 // a v1 build is always coherent.
 
 const { logger } = require('../utils/logger');
+const { parseProjectText } = require('../website-gen/portfolioProjectParse');
+const { parseProfileLinks } = require('../website-gen/portfolioLinksParse');
 
 // "30 min" / "1 hr" / "45" → minutes (default 30). "1h"/"1 hour" → 60.
 function parseDurationMin(text) {
@@ -264,9 +266,44 @@ async function buildWebsiteDataFromFlow(answers = {}, theme, userId) {
       if (listings.length) wd.listings = listings;
       wd.services = Array.isArray(wd.services) ? wd.services : [];
     } else if (theme === 'portfolio') {
-      // f1 = bio; f2 = projects (raw)
-      if (!blank(answers.f1)) wd.about = String(answers.f1).trim();
-      if (!blank(answers.f2)) wd.projectsRaw = String(answers.f2).trim();
+      // f1 = bio, niche dropdown = creative niche, f2 = projects (free text,
+      // one per line / natural language). industryKey makes the portfolio
+      // template selection deterministic regardless of the industry label.
+      wd.industryKey = 'portfolio';
+      if (!blank(answers.f1)) wd.aboutText = String(answers.f1).trim().slice(0, 600);
+      if (!blank(answers.portfolio_niche)) wd.portfolioNiche = String(answers.portfolio_niche).trim();
+      // Skills / tools → services list (drives the tech ribbon, skills grid,
+      // terminal stack, and "technologies" stat). LLM-split like every other
+      // services field so "React, Node and a bit of Go" → clean tokens.
+      if (!blank(answers.p_skills)) {
+        wd.services = (await extractServices(answers.p_skills, { businessName, industry, userId })) || [];
+      }
+      // Profile links → username-only handles the templates render
+      // (github/linkedin/twitter/instagram/behance). Pasted URLs or
+      // "github: foo" both resolve via the shared parser.
+      if (!blank(answers.p_links)) {
+        Object.assign(wd, parseProfileLinks(answers.p_links));
+      }
+      // Years of experience → the "years building" stat (else it falls back to
+      // a placeholder count).
+      const pYears = parseInt(answers.p_years, 10);
+      if (Number.isFinite(pYears) && pYears > 0 && pYears < 80) wd.yearsExperience = pYears;
+      // Current focus → hero meta + the terminal "building" line.
+      if (!blank(answers.p_focus)) wd.currentFocus = String(answers.p_focus).trim().slice(0, 120);
+      if (!blank(answers.f2)) {
+        const parsed = await parseProjectText(String(answers.f2).trim(), userId);
+        if (Array.isArray(parsed) && parsed.length) {
+          wd.projects = parsed.slice(0, 6).map((p) => ({
+            title: p.title,
+            description: p.description || '',
+            role: p.role || '',
+            year: p.year || '',
+            link: p.link || '',
+            tools: Array.isArray(p.tools) ? p.tools : [],
+            photoUrl: null,
+          }));
+        }
+      }
       wd.services = Array.isArray(wd.services) ? wd.services : [];
     } else {
       // general — f1 = services list

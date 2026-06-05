@@ -181,6 +181,22 @@
           "__example__": [{ "id": "USD", "title": "USD ($)" }, { "id": "EUR", "title": "EUR (€)" }]
         },
         "currency_visible": { "type": "boolean", "__example__": false },
+        "l_niche": { "type": "string", "__example__": "What kind of work do you do?" },
+        "niche_options": {
+          "type": "array",
+          "items": { "type": "object", "properties": { "id": { "type": "string" }, "title": { "type": "string" } } },
+          "__example__": [{ "id": "photographer", "title": "Photographer / Videographer" }, { "id": "designer", "title": "Designer / Creative" }]
+        },
+        "niche_visible": { "type": "boolean", "__example__": false },
+        "portfolio_extra_visible": { "type": "boolean", "__example__": false },
+        "l_skills": { "type": "string", "__example__": "Skills & tools" },
+        "skills_helper": { "type": "string", "__example__": "" },
+        "l_links": { "type": "string", "__example__": "Your links" },
+        "links_helper": { "type": "string", "__example__": "" },
+        "l_pyears": { "type": "string", "__example__": "Years of experience" },
+        "pyears_helper": { "type": "string", "__example__": "" },
+        "l_focus": { "type": "string", "__example__": "Currently working on" },
+        "focus_helper": { "type": "string", "__example__": "" },
         "f1_label": { "type": "string", "__example__": "Tell us about your work" },
         "f1_helper": { "type": "string", "__example__": "" },
         "f2_label": { "type": "string", "__example__": "More" },
@@ -196,14 +212,19 @@
             "name": "f_details",
             "children": [
               { "type": "Dropdown", "name": "currency", "label": "${data.l_currency}", "data-source": "${data.currency_options}", "visible": "${data.currency_visible}", "required": "${data.currency_visible}" },
+              { "type": "Dropdown", "name": "portfolio_niche", "label": "${data.l_niche}", "data-source": "${data.niche_options}", "visible": "${data.niche_visible}", "required": "${data.niche_visible}" },
               { "type": "TextArea", "name": "f1", "label": "${data.f1_label}", "helper-text": "${data.f1_helper}", "required": false },
+              { "type": "TextInput", "name": "p_skills", "input-type": "text", "label": "${data.l_skills}", "helper-text": "${data.skills_helper}", "required": false, "visible": "${data.portfolio_extra_visible}" },
+              { "type": "TextInput", "name": "p_links", "input-type": "text", "label": "${data.l_links}", "helper-text": "${data.links_helper}", "required": false, "visible": "${data.portfolio_extra_visible}" },
+              { "type": "TextInput", "name": "p_years", "input-type": "number", "label": "${data.l_pyears}", "helper-text": "${data.pyears_helper}", "required": false, "visible": "${data.portfolio_extra_visible}" },
+              { "type": "TextInput", "name": "p_focus", "input-type": "text", "label": "${data.l_focus}", "helper-text": "${data.focus_helper}", "required": false, "visible": "${data.portfolio_extra_visible}" },
               { "type": "TextArea", "name": "f2", "label": "${data.f2_label}", "helper-text": "${data.f2_helper}", "required": false, "visible": "${data.f2_visible}" },
               {
                 "type": "Footer",
                 "label": "${data.l_next}",
                 "on-click-action": {
                   "name": "data_exchange",
-                  "payload": { "currency": "${form.currency}", "f1": "${form.f1}", "f2": "${form.f2}" }
+                  "payload": { "currency": "${form.currency}", "portfolio_niche": "${form.portfolio_niche}", "f1": "${form.f1}", "p_skills": "${form.p_skills}", "p_links": "${form.p_links}", "p_years": "${form.p_years}", "p_focus": "${form.p_focus}", "f2": "${form.f2}" }
                 }
               }
             ]

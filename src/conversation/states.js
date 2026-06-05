@@ -41,7 +41,15 @@ const STATES = {
   // Portfolio-specific collection (designer / developer / photographer / writer
   // / freelancer / artist — anyone showcasing work). About paragraph + 3-phase
   // iterative project collection (parallel to real-estate listings).
+  // Creative niche (photographer/designer/developer/writer) — asked first so it
+  // picks the sub-template + drives niche-appropriate hero/project images.
+  WEB_COLLECT_PORTFOLIO_NICHE: 'WEB_COLLECT_PORTFOLIO_NICHE',
   WEB_COLLECT_ABOUT: 'WEB_COLLECT_ABOUT',
+  // Skills/tools (→ tech ribbon + skills grid) and profile links + years +
+  // current focus (→ social CTAs, GitHub section, stats, hero meta). Both
+  // optional/skippable — sensible placeholders fill any blanks.
+  WEB_COLLECT_PORTFOLIO_SKILLS: 'WEB_COLLECT_PORTFOLIO_SKILLS',
+  WEB_COLLECT_PORTFOLIO_PROFILE: 'WEB_COLLECT_PORTFOLIO_PROFILE',
   WEB_COLLECT_PROJECTS_ASK: 'WEB_COLLECT_PROJECTS_ASK',
   WEB_COLLECT_PROJECTS_DETAILS: 'WEB_COLLECT_PROJECTS_DETAILS',
   WEB_COLLECT_PROJECTS_PHOTOS: 'WEB_COLLECT_PROJECTS_PHOTOS',
