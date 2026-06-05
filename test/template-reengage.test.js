@@ -55,6 +55,29 @@ eq('ladder days',                t.LADDER.map((r) => r.day).join(','), 'day1,day
 eq('name: intent day3',  `reengage_${t.STAGES.intent.family}_day3`, 'reengage_preview_day3');
 eq('name: golive day7',  `reengage_${t.STAGES.golive.family}_day7`, 'reengage_golive_day7');
 
+// ── metaLang mapping (preferredLanguage → Meta code) ──
+eq('metaLang: spanish → es',    t.metaLang('spanish'), 'es');
+eq('metaLang: Français → fr',   t.metaLang('Français'), 'fr');
+eq('metaLang: hi → hi',         t.metaLang('hi'), 'hi');
+eq('metaLang: pt-BR → pt_BR',   t.metaLang('pt-BR'), 'pt_BR');
+eq('metaLang: klingon → en',    t.metaLang('klingon'), 'en');
+
+// ── language pack drives var1/actionFor for non-en/pt langs ──
+t._setPacks({ es: { action: { intent: 'crearte una vista previa', halfbuilt: 'terminar tu sitio' },
+                    var1: { realestate: 'sitio inmobiliario', generic: 'sitio web' } } });
+eq('var1 es (pack hit)',        t.var1('realestate', 'es'), 'sitio inmobiliario');
+eq('var1 es (pack generic)',    t.var1('salon', 'es'), 'sitio web');
+eq('action es intent (pack)',   t.actionFor('intent', 'es'), 'crearte una vista previa');
+eq('action es halfbuilt (pack)',t.actionFor('halfbuilt', 'es'), 'terminar tu sitio');
+eq('golive actionFor → null',   t.actionFor('golive', 'es'), null);
+// fallback when no pack for the lang → en wording / en action
+eq('var1 fr (no pack) → en',    t.var1('realestate', 'fr'), 'real estate website');
+eq('action fr (no pack) → en',  t.actionFor('intent', 'fr'), 'build a free preview');
+t._setPacks({}); // reset
+// en/pt still hardcoded (independent of packs)
+eq('var1 en still works',       t.var1('realestate', 'en'), 'real estate website');
+eq('var1 pt still works',       t.var1('realestate', 'pt_BR'), 'site de imóveis');
+
 // ── inert when disabled: must resolve without throwing / sending ──
 (async () => {
   let threw = false;

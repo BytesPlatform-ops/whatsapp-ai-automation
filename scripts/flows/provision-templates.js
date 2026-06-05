@@ -18,6 +18,8 @@
 // needs whatsapp_business_management (same one provision-flow.js uses).
 
 const https = require('https');
+const fs = require('fs');
+const path = require('path');
 
 const API = 'https://graph.facebook.com/v22.0';
 // Template management needs whatsapp_business_management — WHATSAPP_ACCESS_TOKEN
@@ -160,9 +162,123 @@ async function status() {
   }
 }
 
+// ─── auto-provisioner: translate the canonical en copy to a new language,
+//     submit it on both WABAs, and write the send-time language pack ──────────
+const META_LANG_NAME = {
+  es: 'Spanish', fr: 'French', de: 'German', it: 'Italian', nl: 'Dutch',
+  ar: 'Arabic', hi: 'Hindi', id: 'Indonesian', tr: 'Turkish', ru: 'Russian',
+  pt_BR: 'Brazilian Portuguese',
+};
+const TRANSLATE_ALIASES = {
+  spanish: 'es', espanol: 'es', es: 'es', french: 'fr', francais: 'fr', fr: 'fr',
+  german: 'de', deutsch: 'de', de: 'de', italian: 'it', it: 'it', dutch: 'nl', nl: 'nl',
+  arabic: 'ar', ar: 'ar', hindi: 'hi', hi: 'hi', indonesian: 'id', id: 'id', bahasa: 'id',
+  turkish: 'tr', tr: 'tr', russian: 'ru', ru: 'ru',
+};
+// en source the LLM translates: template bodies/buttons + the {{2}} actions +
+// the {{1}} industry phrases (full phrases, so a translation needs no word-order
+// knowledge of "website").
+const EN_ACTION = { intent: 'build a free preview', halfbuilt: 'finish your site' };
+const EN_VAR1 = {
+  realestate: 'real estate website', salon: 'salon website', hvac: 'home services website',
+  restaurant: 'restaurant website', portfolio: 'portfolio website', ecommerce: 'online store', generic: 'website',
+};
+const stripEmoji = (s) => String(s)
+  .replace(/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{2190}-\u{21FF}\u{2B00}-\u{2BFF}\u{FE00}-\u{FE0F}\u{1F1E6}-\u{1F1FF}\u{200D}]/gu, '')
+  .replace(/\s+/g, ' ').trim();
+const phCount = (s, n) => (String(s).match(new RegExp(`\\{\\{${n}\\}\\}`, 'g')) || []).length;
+
+async function translate(input, dry) {
+  if (!TOKEN) { console.error('No WhatsApp token'); process.exit(1); }
+  const key = String(input || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+  const meta = TRANSLATE_ALIASES[key] || (META_LANG_NAME[input] ? input : null);
+  if (!meta || meta === 'pt_BR' || meta === 'en') {
+    console.error(`Unsupported / already-built language "${input}". Supported: ${Object.keys(META_LANG_NAME).filter((c) => c !== 'pt_BR').join(', ')}`);
+    process.exit(1);
+  }
+  const langName = META_LANG_NAME[meta];
+
+  const enTemplates = {};
+  for (const t of TEMPLATES) enTemplates[t.name] = { body: t.versions.en.body, buttons: t.versions.en.buttons.slice() };
+  const src = { templates: enTemplates, action: EN_ACTION, var1: EN_VAR1 };
+
+  const shape = {
+    templates: Object.fromEntries(Object.keys(enTemplates).map((n) => [n, { body: '…', buttons: ['…', '…'] }])),
+    action: { intent: '…', halfbuilt: '…' },
+    var1: { realestate: '…', salon: '…', hvac: '…', restaurant: '…', portfolio: '…', ecommerce: '…', generic: '…' },
+  };
+  const sys = `You are a professional localizer for WhatsApp Message Templates. Translate the English copy into ${langName} (Meta code ${meta}). Return STRICT JSON only — no markdown.
+
+HARD RULES:
+- Keep placeholders {{1}} and {{2}} EXACTLY, same count per body. {{1}} = the user's website (noun phrase). {{2}} = an action as an INFINITIVE that reads naturally right after the verb in the sentence.
+- A placeholder must NEVER be first or last in a body — keep words on both sides (the English already does; preserve that).
+- Buttons: translate each, keep SHORT (max 20 chars), NO emojis, NO numbers/variables, NO trailing punctuation.
+- Warm, human, concise texting tone. Keep any emoji already in the body text.
+- "action" = infinitive phrases. "var1" = the localized phrase for each kind of website.
+Output JSON with EXACTLY this shape, translating every value:
+${JSON.stringify(shape)}`;
+
+  console.log(`Translating 6 templates + variables → ${langName} (${meta})…`);
+  const { generateResponse } = require('../../src/llm/provider');
+  const raw = await generateResponse(sys, [{ role: 'user', content: `English source:\n${JSON.stringify(src, null, 2)}` }], { operation: 'template_translate', timeoutMs: 120000 });
+  let p;
+  try { p = JSON.parse((String(raw).match(/\{[\s\S]*\}/) || ['{}'])[0]); }
+  catch (e) { console.error('LLM did not return valid JSON:', e.message, '\n', String(raw).slice(0, 400)); process.exit(1); }
+
+  // validate
+  const issues = [];
+  for (const t of TEMPLATES) {
+    const tr = p.templates && p.templates[t.name];
+    if (!tr || !tr.body) { issues.push(`${t.name}: missing body`); continue; }
+    for (const n of [1, 2]) if (phCount(tr.body, n) !== phCount(t.versions.en.body, n)) issues.push(`${t.name}: {{${n}}} count off`);
+    const b = String(tr.body).trim();
+    if (b.startsWith('{{') || /\}\}[\s!?.,]*$/.test(b)) issues.push(`${t.name}: variable at start/end`);
+    tr.buttons = (tr.buttons || t.versions.en.buttons).map((x) => stripEmoji(x).slice(0, 25)).filter(Boolean);
+    if (tr.buttons.length !== t.versions.en.buttons.length) issues.push(`${t.name}: button count`);
+  }
+  for (const k of ['intent', 'halfbuilt']) if (!p.action || !p.action[k]) issues.push(`action.${k} missing`);
+  for (const k of Object.keys(EN_VAR1)) if (!p.var1 || !p.var1[k]) issues.push(`var1.${k} missing`);
+  if (issues.length) { console.error('❌ validation failed:\n  ' + issues.join('\n  ') + '\n\nNothing submitted — re-run to retry.'); process.exit(1); }
+
+  console.log('\n--- translated (review) ---');
+  for (const t of TEMPLATES) console.log(`\n${t.name}\n  ${p.templates[t.name].body}\n  [ ${p.templates[t.name].buttons.join(' | ')} ]`);
+  console.log('\naction:', JSON.stringify(p.action), '\nvar1:', JSON.stringify(p.var1), '\n');
+
+  if (dry) { console.log(`=== [dry] ${meta}: validated OK, nothing submitted, pack not written ===`); return; }
+
+  let ok = 0, exists = 0, failed = 0;
+  for (const waba of WABAS) {
+    for (const t of TEMPLATES) {
+      const tr = p.templates[t.name];
+      const has2 = phCount(t.versions.en.body, 2) > 0;
+      const example = has2 ? [p.var1.realestate, p.action.intent] : [p.var1.realestate];
+      const res = await req('POST', `/${waba}/message_templates`, {
+        name: t.name, language: meta, category: 'MARKETING', components: components({ body: tr.body, example, buttons: tr.buttons }),
+      });
+      const j = res.json || {};
+      if (j.id) { ok++; console.log(`  ✅ ${t.name} [${meta}] @${waba} → ${j.status || 'submitted'}`); }
+      else {
+        const msg = j.error?.error_user_msg || j.error?.message || JSON.stringify(j);
+        if (/already exists|already .*content/i.test(msg)) { exists++; console.log(`  ⚠️  ${t.name} [${meta}] @${waba} exists`); }
+        else { failed++; console.log(`  ❌ ${t.name} [${meta}] @${waba} → ${msg}`); }
+      }
+    }
+  }
+
+  const packPath = path.join(__dirname, '../../src/followup/templateLangPacks.json');
+  let packs = {};
+  try { packs = JSON.parse(fs.readFileSync(packPath, 'utf8')); } catch { /* fresh */ }
+  packs[meta] = { action: { intent: p.action.intent, halfbuilt: p.action.halfbuilt }, var1: p.var1 };
+  fs.writeFileSync(packPath, JSON.stringify(packs, null, 2) + '\n');
+
+  console.log(`\n=== translate ${meta}: ${ok} created, ${exists} existed, ${failed} failed. Pack written. ===`);
+  console.log('Next: review the copy above + the pack diff, commit + deploy, then `status` for approval.');
+}
+
 const cmd = process.argv[2];
 (async () => {
   if (cmd === 'submit') await submit();
   else if (cmd === 'status') await status();
-  else { console.log('usage: provision-templates.js [submit|status]'); process.exit(1); }
+  else if (cmd === 'translate') await translate(process.argv[3], process.argv[4] === 'dry');
+  else { console.log('usage: provision-templates.js [submit | status | translate <lang> [dry]]'); process.exit(1); }
 })();
