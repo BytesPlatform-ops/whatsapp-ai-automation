@@ -219,6 +219,8 @@ const L = {
     l_focus: 'Currently working on',
     focus_helper: "What you're building right now. Or leave blank.",
     portfolio2_title: 'Your work & links',
+    l_about_photo: 'A photo of you',
+    about_photo_desc: "A headshot for your About section — optional. Skip and I'll keep it text-only.",
     l_projects: 'Projects to feature',
     projects_helper: "One per line. Or leave blank — I'll add visuals for you.",
     // salon
@@ -308,6 +310,8 @@ const L = {
     l_focus: 'No que está trabalhando',
     focus_helper: 'O que você está construindo agora. Ou deixe vazio.',
     portfolio2_title: 'Trabalho & links',
+    l_about_photo: 'Uma foto sua',
+    about_photo_desc: 'Um retrato para a seção Sobre — opcional. Pule e deixo só texto.',
     l_projects: 'Projetos para destacar',
     projects_helper: 'Um por linha. Ou deixe vazio — eu adiciono os visuais.',
     salon_title: 'Detalhes do salão',
@@ -432,6 +436,7 @@ const NICHE_FIELDS = {
   photographer: {
     title: { en: 'Your photography', pt: 'Sua fotografia' },
     photos: true, skills: false, years: true, focus: true, projects: false,
+    aboutPhoto: true,
     photos_desc: {
       en: "Upload a few of your best shots — up to 6. Or skip and I'll add visuals.",
       pt: 'Envie algumas das suas melhores fotos — até 6. Ou pule e eu adiciono os visuais.',
@@ -460,6 +465,7 @@ const NICHE_FIELDS = {
   writer: {
     title: { en: 'Your work', pt: 'Seu trabalho' },
     photos: false, skills: false, years: false, focus: true, projects: true,
+    aboutPhoto: true,
     links: [LINK.linkedin, LINK.twitter, LINK.instagram],
   },
 };

@@ -339,6 +339,27 @@ async function buildWebsiteDataFromFlow(answers = {}, theme, userId) {
           logger.info(`[FLOW-INTAKE] portfolio photos uploaded (${urls.length}) → ${wd.projects.length} work cards`);
         }
       }
+      // Optional headshot from the "A photo of you" picker → about-section
+      // portrait (c.aboutPhotoUrl). Photographer/general templates render it;
+      // when absent they drop the circle and stay text-only. Same decrypt +
+      // upload path as work photos; a failure just leaves it text-only.
+      const aboutMedia = Array.isArray(answers.about_photo_media)
+        ? answers.about_photo_media.slice(0, 1)
+        : [];
+      if (aboutMedia.length) {
+        try {
+          const { decryptFlowMedia } = require('./media');
+          const { uploadListingPhoto } = require('../website-gen/listingPhotoUploader');
+          const { buffer, mimeType } = await decryptFlowMedia(aboutMedia[0]);
+          const url = await uploadListingPhoto(buffer, mimeType);
+          if (url) {
+            wd.aboutPhotoUrl = url;
+            logger.info('[FLOW-INTAKE] about photo uploaded → aboutPhotoUrl');
+          }
+        } catch (err) {
+          logger.warn(`[FLOW-INTAKE] about photo failed: ${err.message}`);
+        }
+      }
       wd.services = Array.isArray(wd.services) ? wd.services : [];
     } else {
       // general — f1 = services list

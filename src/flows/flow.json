@@ -316,6 +316,9 @@
       "title": "${data.portfolio2_title}",
       "data": {
         "portfolio2_title": { "type": "string", "__example__": "Your work & links" },
+        "l_about_photo": { "type": "string", "__example__": "A photo of you" },
+        "about_photo_desc": { "type": "string", "__example__": "A headshot for your About section — optional." },
+        "about_photo_visible": { "type": "boolean", "__example__": false },
         "l_photos": { "type": "string", "__example__": "Your work" },
         "photos_desc": { "type": "string", "__example__": "Upload a few of your best shots — up to 6. Or skip." },
         "photos_visible": { "type": "boolean", "__example__": false },
@@ -342,6 +345,16 @@
             "children": [
               {
                 "type": "PhotoPicker",
+                "name": "about_photo",
+                "label": "${data.l_about_photo}",
+                "description": "${data.about_photo_desc}",
+                "photo-source": "camera_gallery",
+                "min-uploaded-photos": 0,
+                "max-uploaded-photos": 1,
+                "visible": "${data.about_photo_visible}"
+              },
+              {
+                "type": "PhotoPicker",
                 "name": "work_photos",
                 "label": "${data.l_photos}",
                 "description": "${data.photos_desc}",
@@ -359,7 +372,7 @@
                 "label": "${data.l_next}",
                 "on-click-action": {
                   "name": "data_exchange",
-                  "payload": { "work_photos": "${form.work_photos}", "f2": "${form.f2}", "p_link1": "${form.p_link1}", "p_link2": "${form.p_link2}", "p_link3": "${form.p_link3}" }
+                  "payload": { "about_photo": "${form.about_photo}", "work_photos": "${form.work_photos}", "f2": "${form.f2}", "p_link1": "${form.p_link1}", "p_link2": "${form.p_link2}", "p_link3": "${form.p_link3}" }
                 }
               }
             ]

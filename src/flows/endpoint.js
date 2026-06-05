@@ -287,6 +287,9 @@ function portfolio2Screen(lang, niche) {
     screen: 'PORTFOLIO_WORK',
     data: {
       portfolio2_title: L[lang].portfolio2_title,
+      l_about_photo: L[lang].l_about_photo,
+      about_photo_desc: L[lang].about_photo_desc,
+      about_photo_visible: !!f.aboutPhoto,
       l_photos: L[lang].l_photos,
       photos_desc: pick(f.photos_desc, lang) || L[lang].photos_desc,
       photos_visible: !!f.photos,
@@ -432,6 +435,10 @@ async function handleFlow(req, ctx = {}) {
         if (Array.isArray(data.work_photos) && data.work_photos.length) {
           answersPatch.portfolio_photos_media = data.work_photos;
           logger.info(`[FLOW] PORTFOLIO_WORK photos uploaded (${data.work_photos.length}) token=${flowToken}`);
+        }
+        if (Array.isArray(data.about_photo) && data.about_photo.length) {
+          answersPatch.about_photo_media = data.about_photo;
+          logger.info(`[FLOW] PORTFOLIO_WORK about-photo uploaded token=${flowToken}`);
         }
         await patchSession(flowToken, { answersPatch })
           .catch((err) => logger.warn(`[FLOW] persist PORTFOLIO_WORK failed: ${err.message}`));

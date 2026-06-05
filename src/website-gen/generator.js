@@ -340,6 +340,9 @@ async function generateWebsiteContent(businessData, extras = {}) {
     // come from the iterative WEB_COLLECT_PROJECTS_DETAILS flow.
     aboutText: userAboutText,
     projects: userProjects,
+    // Optional headshot for the About section (Flow "A photo of you" picker).
+    // Photographer/general templates render c.aboutPhotoUrl; absent → no circle.
+    aboutPhotoUrl,
     // Creative niche chosen explicitly (Flow dropdown / chat). Drives the
     // sub-template (photographer/designer/developer/general) and the
     // niche-appropriate hero + project image queries.
@@ -840,6 +843,7 @@ Generate compelling website copy for this business. Return ONLY valid JSON.${lan
       ? portfolioProjects
       : (Array.isArray(userProjects) && userProjects.length ? userProjects : null),
     portfolioAbout: userAboutText || null,
+    aboutPhotoUrl: aboutPhotoUrl || null,
     // Niche + resolved sub-template. portfolioTemplate is stamped so the
     // template router (selectTemplate) reuses this exact decision.
     portfolioNiche: portfolioNiche || null,

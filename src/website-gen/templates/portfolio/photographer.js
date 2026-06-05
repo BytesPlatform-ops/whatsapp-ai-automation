@@ -523,6 +523,55 @@ body.fonts-loaded .hero-cta { opacity: 1; transform: translateY(0); }
 .work-item:hover .work-item-expand,
 .work-item:focus-visible .work-item-expand { opacity: 1; transform: scale(1); }
 
+/* ─── Recent moments — dual-row conveyor ("train") ──────────────────────── */
+.work-marquee { display: flex; flex-direction: column; gap: clamp(12px, 1.4vw, 20px); width: 100%; }
+.work-row {
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 5%, #000 95%, transparent);
+  mask-image: linear-gradient(to right, transparent, #000 5%, #000 95%, transparent);
+}
+.work-row-track { display: flex; width: max-content; will-change: transform; }
+.work-row-a .work-row-track { animation: moment-train-l 55s linear infinite; }
+.work-row-b .work-row-track { animation: moment-train-r 67s linear infinite; }
+/* Pause the whole conveyor on hover so a tile can be clicked into the lightbox. */
+.work-marquee:hover .work-row-track { animation-play-state: paused; }
+@keyframes moment-train-l { from { transform: translateX(0); }    to { transform: translateX(-50%); } }
+@keyframes moment-train-r { from { transform: translateX(-50%); } to { transform: translateX(0); } }
+
+.moment-card {
+  position: relative; flex: 0 0 auto;
+  width: clamp(220px, 26vw, 330px); aspect-ratio: 4 / 5;
+  margin-right: clamp(12px, 1.4vw, 20px);
+  border-radius: 10px; overflow: hidden;
+  background: #ECE7DD;
+  box-shadow: 0 10px 30px rgba(26, 24, 22, 0.10);
+  transition: transform 0.5s var(--ease-out), box-shadow 0.5s var(--ease-out);
+}
+.moment-card:hover { transform: translateY(-6px); box-shadow: 0 26px 60px rgba(26, 24, 22, 0.20); }
+.moment-img {
+  position: absolute; inset: 0;
+  background-size: cover; background-position: center;
+  transition: transform 0.7s var(--ease-out), filter 0.5s var(--ease-out);
+}
+.moment-card:hover .moment-img { transform: scale(1.06); filter: brightness(0.92); }
+.moment-caption {
+  position: absolute; left: 0; right: 0; bottom: 0;
+  display: flex; flex-direction: column; gap: 2px;
+  padding: 34px var(--space-3) var(--space-3);
+  color: var(--ink-inverse);
+  background: linear-gradient(to top, rgba(26, 24, 22, 0.68), rgba(26, 24, 22, 0));
+  opacity: 0; transform: translateY(8px);
+  transition: opacity 0.4s var(--ease-out), transform 0.4s var(--ease-out);
+}
+.moment-card:hover .moment-caption { opacity: 1; transform: none; }
+.moment-caption .ttl { font-size: 15px; font-weight: 500; letter-spacing: 0.01em; }
+.moment-caption .cat { font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase; opacity: 0.82; }
+@media (max-width: 767px) { .moment-card { width: clamp(180px, 64vw, 260px); } }
+@media (prefers-reduced-motion: reduce) {
+  .work-row-track { animation: none !important; transform: none !important; }
+  .work-row { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+}
+
 /* ─── lightbox ──────────────────────────────────────────────────────── */
 .lightbox {
   position: fixed; inset: 0; z-index: 200;
@@ -619,8 +668,6 @@ body.fonts-loaded .hero-cta { opacity: 1; transform: translateY(0); }
   background: var(--accent-soft);
 }
 .about-photo-wrap img { width: 100%; height: 100%; object-fit: cover; }
-.about-photo-wrap.no-photo { display: flex; align-items: center; justify-content: center; }
-.about-photo-wrap.no-photo svg { width: 64px; height: 64px; opacity: 0.4; }
 .about-eyebrow { margin-bottom: var(--space-3); }
 .about-title {
   font-size: clamp(36px, 5vw, 64px);
@@ -1299,6 +1346,62 @@ function renderWorkItem(p, idx) {
 </a>`;
 }
 
+// A single tile for the Recent-moments conveyor — same cover + caption +
+// lightbox wiring as the grid tile, but a fixed-width card. Clones (added to
+// make the loop seamless) stay mouse-clickable but are hidden from a11y/tab.
+function renderMomentCard(p, idx, isClone) {
+  const cat = (p.role || (Array.isArray(p.tools) && p.tools[0]) || 'Project').toString();
+  const year = p.year || '';
+  const tone = pickTone(idx);
+  const cover = p.photoUrl
+    ? `<div class="moment-img" style="background-image: url('${attr(p.photoUrl)}')" role="img" aria-label="${attr(p.title)}"></div>`
+    : `<div class="work-item-empty ${tone}">
+        <div class="corner-meta">${esc(cat)}${year ? ` · ${esc(year)}` : ''}</div>
+        <span class="display-title">${esc(p.title)}</span>
+        <div class="corner-bot"><span class="ord">№ ${esc(ROMAN[idx] || pad2(idx + 1))}</span><span>${year ? esc(year) : ''}</span></div>
+      </div>`;
+  const lightboxAttrs = p.photoUrl
+    ? `href="${attr(p.photoUrl)}" data-lightbox data-full="${attr(p.photoUrl)}" data-title="${attr(p.title)}" data-meta="${attr(cat + (year ? ` · ${year}` : ''))}"${p.link ? ` data-link="${attr(p.link)}"` : ''}`
+    : 'href="javascript:void(0)" tabindex="-1"';
+  // Clones exist only for a seamless wrap: hide them from screen readers + tab
+  // order, but keep data-lightbox so any visible tile opens on click.
+  const cloneAttrs = isClone ? ' aria-hidden="true" tabindex="-1"' : '';
+  return `<a class="moment-card" ${lightboxAttrs}${cloneAttrs} aria-label="${attr(p.title)}${p.photoUrl ? ' — view photo' : ''}">
+  ${cover}
+  ${p.photoUrl ? `<div class="moment-caption"><span class="ttl">${esc(p.title)}</span><span class="cat">${esc(cat)}${year ? ` · ${esc(year)}` : ''}</span></div>` : ''}
+</a>`;
+}
+
+// "Recent moments" as a dual-row conveyor: two rows glide in opposite
+// directions (pausing on hover); each tile still opens the lightbox. Rows are
+// tiled up to a minimum count so a single set is wider than the viewport (no
+// gap), then duplicated (the clone half) for a seamless wrap.
+function renderMomentsMarquee(projects) {
+  const list = Array.isArray(projects) ? projects.filter(Boolean) : [];
+  if (!list.length) return '';
+  const twoRows = list.length >= 5;
+  const rowA = twoRows ? list.filter((_, i) => i % 2 === 0) : list;
+  const rowB = twoRows ? list.filter((_, i) => i % 2 === 1) : [];
+  const fill = (items, min) => {
+    if (!items.length) return [];
+    const out = [];
+    for (let i = 0; out.length < Math.max(min, items.length); i++) out.push(items[i % items.length]);
+    return out;
+  };
+  const buildRow = (items, cls) => {
+    const filled = fill(items, 6);
+    if (!filled.length) return '';
+    const setA = filled.map((p, i) => renderMomentCard(p, i, false)).join('');
+    const setB = filled.map((p, i) => renderMomentCard(p, i, true)).join('');
+    return `<div class="work-row ${cls}"><div class="work-row-track">${setA}${setB}</div></div>`;
+  };
+  return `
+<div class="work-marquee reveal" aria-label="Recent moments gallery">
+  ${buildRow(rowA, 'work-row-a')}
+  ${rowB.length ? buildRow(rowB, 'work-row-b') : ''}
+</div>`;
+}
+
 function renderYearTicker(projects) {
   const years = Array.from(new Set(projects.map((p) => p.year).filter(Boolean))).sort();
   if (years.length < 2) return '';
@@ -1415,26 +1518,17 @@ ${renderYearTicker(projects)}
       <span class="eyebrow">Selected Work</span>
       <h2>${italicAccent('Recent moments')}</h2>
     </div>
-    ${categories.length > 1 ? `
-    <nav class="work-filter reveal" aria-label="Project filter">
-      <button data-filter="all" class="active">All</button>
-      ${categories.map((cat) => `<button data-filter="${attr(cat)}">${esc(cat)}</button>`).join('')}
-    </nav>` : ''}
-    <div class="work-grid">
-      ${projects.map((p, i) => renderWorkItem(p, i)).join('')}
-    </div>
   </div>
+  ${renderMomentsMarquee(projects)}
 </section>
 
 <div class="container">${pageBreak('II', 'The Photographer')}</div>
 
 <section class="about" id="about">
   <div class="container about-inner reveal">
-    <div class="about-photo-wrap${aboutPhotoUrl ? '' : ' no-photo'}">
-      ${aboutPhotoUrl
-        ? `<img src="${attr(aboutPhotoUrl)}" alt="${attr(firstName + ' — portrait')}" loading="lazy">`
-        : `<svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="1.2" aria-hidden="true" style="color: var(--ink-secondary)"><circle cx="32" cy="32" r="12"/><circle cx="32" cy="32" r="5"/><rect x="6" y="14" width="52" height="40" rx="4"/><circle cx="48" cy="22" r="2" fill="currentColor"/></svg>`}
-    </div>
+    ${aboutPhotoUrl
+      ? `<div class="about-photo-wrap"><img src="${attr(aboutPhotoUrl)}" alt="${attr(firstName + ' — portrait')}" loading="lazy"></div>`
+      : ''}
     <div class="about-eyebrow eyebrow">About the photographer</div>
     <h2 class="about-title">${italicAccent("Hi, I'm " + firstName)}</h2>
     <div class="about-body">
