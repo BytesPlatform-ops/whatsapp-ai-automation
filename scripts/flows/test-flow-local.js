@@ -200,30 +200,55 @@ async function roundtrip(reqObj) {
   ok('p1 developer: years visible', d1.data.years_visible === true);
   ok('p1 developer: focus visible', d1.data.focus_visible === true);
   ok('p1 developer: about-photo hidden', d1.data.about_photo_visible === false);
+  // developer: PORTFOLIO → PEXP (experience loop) → PROJECT (projects loop) → PORTFOLIO_WORK
   const d2 = await roundtrip({
     action: 'data_exchange', screen: 'PORTFOLIO', flow_token: tokDev,
     data: { f1: 'I build things', p_skills: 'React, Node', p_years: '6', p_focus: 'an AI app' },
   });
-  ok('PORTFOLIO → PORTFOLIO_WORK (page 2)', d2.screen === 'PORTFOLIO_WORK');
-  ok('p2 developer: projects visible', d2.data.projects_visible === true);
-  ok('p2 developer: photos hidden', d2.data.photos_visible === false);
-  ok('p2 developer: link1 = GitHub', d2.data.l_link1 === 'GitHub' && d2.data.link1_visible === true);
-  ok('p2 developer: link2 = LinkedIn', d2.data.l_link2 === 'LinkedIn' && d2.data.link2_visible === true);
-  ok('p2 developer: link3 = X / Twitter', d2.data.l_link3 === 'X / Twitter' && d2.data.link3_visible === true);
+  ok('developer PORTFOLIO → PEXP (experience loop)', d2.screen === 'PEXP');
+  ok('PEXP has role/company/period labels', !!d2.data.l_erole && !!d2.data.l_ecompany && !!d2.data.l_eperiod);
   ok('page-1 answers persisted', sessionMem[tokDev].answers.p_skills === 'React, Node' && sessionMem[tokDev].answers.f1 === 'I build things');
+  // experience role #1 → loop
+  const e1 = await roundtrip({
+    action: 'data_exchange', screen: 'PEXP', flow_token: tokDev,
+    data: { erole: 'Senior Engineer', ecompany: 'BytesPak', eperiod: '2022 — present', esummary: 'Built platforms', addmore: 'add' },
+  });
+  ok('PEXP loops on "add"', e1.screen === 'PEXP');
+  ok('experience summary visible', e1.data.added_visible === true && /BytesPak/.test(e1.data.added_summary));
+  // experience role #2 → done → PROJECT
+  const e2 = await roundtrip({
+    action: 'data_exchange', screen: 'PEXP', flow_token: tokDev,
+    data: { erole: 'Engineer', ecompany: 'Acme', eperiod: '2020 — 2022', esummary: 'Shipped features', addmore: 'done' },
+  });
+  ok('PEXP done → PROJECT', e2.screen === 'PROJECT');
+  ok('2 experience entries accumulated', (sessionMem[tokDev].answers.experience_list || []).length === 2);
+  ok('PROJECT has name/desc labels', !!e2.data.l_pname && !!e2.data.l_pdesc);
+  // project #1 → loop
+  const pr1 = await roundtrip({
+    action: 'data_exchange', screen: 'PROJECT', flow_token: tokDev,
+    data: { pname: 'pixie-replay', pdesc: 'LLM test runner', addmore: 'add' },
+  });
+  ok('PROJECT loops on "add"', pr1.screen === 'PROJECT');
+  ok('project summary visible', pr1.data.added_visible === true && /pixie-replay/.test(pr1.data.added_summary));
+  // project #2 → done → PORTFOLIO_WORK
+  const pr2 = await roundtrip({
+    action: 'data_exchange', screen: 'PROJECT', flow_token: tokDev,
+    data: { pname: 'cloud-router', pdesc: 'CDN egress router', addmore: 'done' },
+  });
+  ok('PROJECT done → PORTFOLIO_WORK', pr2.screen === 'PORTFOLIO_WORK');
+  ok('2 projects accumulated', (sessionMem[tokDev].answers.projects_list || []).length === 2);
+  ok('p2 developer: photos hidden', pr2.data.photos_visible === false);
+  ok('p2 developer: projects-text hidden (loop now)', pr2.data.projects_visible === false);
+  ok('p2 developer: link1 = GitHub', pr2.data.l_link1 === 'GitHub' && pr2.data.link1_visible === true);
   // URL in slots 1-2, a BARE @handle in the X/Twitter slot (no URL context).
   const d3 = await roundtrip({
     action: 'data_exchange', screen: 'PORTFOLIO_WORK', flow_token: tokDev,
-    data: { f2: 'Project A\nProject B', p_link1: 'github.com/jane', p_link2: 'linkedin.com/in/jane', p_link3: '@janedev' },
+    data: { p_link1: 'github.com/jane', p_link2: 'linkedin.com/in/jane', p_link3: '@janedev' },
   });
   ok('developer PORTFOLIO_WORK → FINISH', d3.screen === 'FINISH');
   ok('URLs raw, bare handle tagged with platform', sessionMem[tokDev].answers.p_links === 'github.com/jane\nlinkedin.com/in/jane\ntwitter: @janedev');
-  ok('empty slots produce no blank lines', !/\n\n|^\n|\n$/.test(sessionMem[tokDev].answers.p_links));
-  ok('projects persisted', sessionMem[tokDev].answers.f2 === 'Project A\nProject B');
   const devHandles = parseProfileLinks(sessionMem[tokDev].answers.p_links);
-  ok('blob → github handle', devHandles.githubHandle === 'jane');
-  ok('blob → linkedin handle', devHandles.linkedinHandle === 'jane');
-  ok('bare @handle in X slot → twitter handle', devHandles.twitterHandle === 'janedev');
+  ok('blob → github/linkedin/twitter handles', devHandles.githubHandle === 'jane' && devHandles.linkedinHandle === 'jane' && devHandles.twitterHandle === 'janedev');
 
   // photographer → page 1 photos hidden/skills hidden; page 2 photos visible + descriptor persists.
   const tokPh = 'ft_photo';

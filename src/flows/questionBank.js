@@ -168,6 +168,28 @@ const ADDMORE_LISTING_OPTIONS = {
   ],
 };
 
+// ── "Add another?" radios on the portfolio experience + project loops. ──
+const ADDMORE_EXP_OPTIONS = {
+  en: [
+    { id: 'add', title: '➕ Add another role' },
+    { id: 'done', title: '✓ That\'s my experience' },
+  ],
+  pt: [
+    { id: 'add', title: '➕ Adicionar outro cargo' },
+    { id: 'done', title: '✓ Essa é minha experiência' },
+  ],
+};
+const ADDMORE_PROJECT_OPTIONS = {
+  en: [
+    { id: 'add', title: '➕ Add another project' },
+    { id: 'done', title: '✓ That\'s all my projects' },
+  ],
+  pt: [
+    { id: 'add', title: '➕ Adicionar outro projeto' },
+    { id: 'done', title: '✓ Esses são todos' },
+  ],
+};
+
 // ── Listing status dropdown (LISTING screen). IDs stay English — the site
 //    generator matches on these exact strings (['For Sale','Just Listed',
 //    'Pending','Sold']); only the titles are localized. ──────────────────
@@ -223,6 +245,22 @@ const L = {
     about_photo_desc: "A headshot for your About section — optional. Skip and I'll keep it text-only.",
     l_projects: 'Projects to feature',
     projects_helper: "One per line. Or leave blank — I'll add visuals for you.",
+    // experience loop (developer)
+    pexp_title: 'Where you\'ve worked',
+    l_erole: 'Role / title',
+    erole_helper: 'e.g. Senior Software Engineer',
+    l_ecompany: 'Company',
+    ecompany_helper: 'e.g. BytesPak. Or leave blank if solo.',
+    l_eperiod: 'When',
+    eperiod_helper: 'e.g. 2022 — present',
+    l_esummary: 'What you did',
+    esummary_helper: 'A line or two — what you built or owned. Or leave blank.',
+    // projects loop (developer / writer)
+    proj_title: 'Your projects',
+    l_pname: 'Project name',
+    pname_helper: 'e.g. pixie-replay',
+    l_pdesc: 'What is it?',
+    pdesc_helper: 'A line about what it does. Or leave blank.',
     // salon
     salon_title: 'Salon details',
     l_currency: 'Currency',
@@ -314,6 +352,22 @@ const L = {
     about_photo_desc: 'Um retrato para a seção Sobre — opcional. Pule e deixo só texto.',
     l_projects: 'Projetos para destacar',
     projects_helper: 'Um por linha. Ou deixe vazio — eu adiciono os visuais.',
+    // experience loop (developer)
+    pexp_title: 'Onde você trabalhou',
+    l_erole: 'Cargo / título',
+    erole_helper: 'Ex: Engenheiro de Software Sênior',
+    l_ecompany: 'Empresa',
+    ecompany_helper: 'Ex: BytesPak. Ou deixe vazio se autônomo.',
+    l_eperiod: 'Quando',
+    eperiod_helper: 'Ex: 2022 — presente',
+    l_esummary: 'O que você fez',
+    esummary_helper: 'Uma ou duas frases — o que você construiu. Ou deixe vazio.',
+    // projects loop (developer / writer)
+    proj_title: 'Seus projetos',
+    l_pname: 'Nome do projeto',
+    pname_helper: 'Ex: pixie-replay',
+    l_pdesc: 'O que é?',
+    pdesc_helper: 'Uma linha sobre o que faz. Ou deixe vazio.',
     salon_title: 'Detalhes do salão',
     l_currency: 'Moeda',
     l_booking_heading: 'Agendamento online',
@@ -459,7 +513,7 @@ const NICHE_FIELDS = {
   },
   developer: {
     title: { en: 'Your dev work', pt: 'Seu trabalho dev' },
-    photos: false, skills: true, years: true, focus: true, projects: true,
+    photos: false, skills: true, years: true, focus: true, projects: true, experience: true,
     links: [LINK.github, LINK.linkedin, LINK.twitter],
   },
   writer: {
@@ -486,6 +540,8 @@ module.exports = {
   BOOKING_OPTIONS,
   ADDMORE_OPTIONS,
   ADDMORE_LISTING_OPTIONS,
+  ADDMORE_EXP_OPTIONS,
+  ADDMORE_PROJECT_OPTIONS,
   LISTING_STATUS_OPTIONS,
   COUNTRY_CODES,
   DETAILS,

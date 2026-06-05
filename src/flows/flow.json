@@ -10,7 +10,9 @@
     "DETAILS": ["FINISH", "HVAC_SERVICE"],
     "HVAC_SERVICE": ["FINISH"],
     "PNICHE": ["PORTFOLIO"],
-    "PORTFOLIO": ["PORTFOLIO_WORK"],
+    "PORTFOLIO": ["PEXP", "PROJECT", "PORTFOLIO_WORK"],
+    "PEXP": ["PEXP", "PROJECT", "PORTFOLIO_WORK"],
+    "PROJECT": ["PROJECT", "PORTFOLIO_WORK"],
     "PORTFOLIO_WORK": ["FINISH"],
     "FINISH": []
   },
@@ -360,10 +362,9 @@
                 "description": "${data.photos_desc}",
                 "photo-source": "camera_gallery",
                 "min-uploaded-photos": 0,
-                "max-uploaded-photos": 6,
+                "max-uploaded-photos": 30,
                 "visible": "${data.photos_visible}"
               },
-              { "type": "TextArea", "name": "f2", "label": "${data.l_projects}", "helper-text": "${data.projects_helper}", "required": false, "visible": "${data.projects_visible}" },
               { "type": "TextInput", "name": "p_link1", "input-type": "text", "label": "${data.l_link1}", "helper-text": "${data.link1_helper}", "required": false, "visible": "${data.link1_visible}" },
               { "type": "TextInput", "name": "p_link2", "input-type": "text", "label": "${data.l_link2}", "helper-text": "${data.link2_helper}", "required": false, "visible": "${data.link2_visible}" },
               { "type": "TextInput", "name": "p_link3", "input-type": "text", "label": "${data.l_link3}", "helper-text": "${data.link3_helper}", "required": false, "visible": "${data.link3_visible}" },
@@ -372,7 +373,111 @@
                 "label": "${data.l_next}",
                 "on-click-action": {
                   "name": "data_exchange",
-                  "payload": { "work_photos": "${form.work_photos}", "f2": "${form.f2}", "p_link1": "${form.p_link1}", "p_link2": "${form.p_link2}", "p_link3": "${form.p_link3}" }
+                  "payload": { "work_photos": "${form.work_photos}", "p_link1": "${form.p_link1}", "p_link2": "${form.p_link2}", "p_link3": "${form.p_link3}" }
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "PEXP",
+      "title": "${data.pexp_title}",
+      "data": {
+        "pexp_title": { "type": "string", "__example__": "Where you've worked" },
+        "added_summary": { "type": "string", "__example__": "Added so far: Senior Engineer @ BytesPak" },
+        "added_visible": { "type": "boolean", "__example__": false },
+        "l_erole": { "type": "string", "__example__": "Role / title" },
+        "erole_helper": { "type": "string", "__example__": "e.g. Senior Software Engineer" },
+        "l_ecompany": { "type": "string", "__example__": "Company" },
+        "ecompany_helper": { "type": "string", "__example__": "e.g. BytesPak" },
+        "l_eperiod": { "type": "string", "__example__": "When" },
+        "eperiod_helper": { "type": "string", "__example__": "e.g. 2022 — present" },
+        "l_esummary": { "type": "string", "__example__": "What you did" },
+        "esummary_helper": { "type": "string", "__example__": "A line or two." },
+        "l_addmore": { "type": "string", "__example__": "Add more?" },
+        "addmore_options": {
+          "type": "array",
+          "items": { "type": "object", "properties": { "id": { "type": "string" }, "title": { "type": "string" } } },
+          "__example__": [{ "id": "add", "title": "Add another role" }, { "id": "done", "title": "That's my experience" }]
+        },
+        "l_continue": { "type": "string", "__example__": "Continue" },
+        "exp_init": {
+          "type": "object",
+          "properties": { "erole": { "type": "string" }, "ecompany": { "type": "string" }, "eperiod": { "type": "string" }, "esummary": { "type": "string" } },
+          "__example__": { "erole": "", "ecompany": "", "eperiod": "", "esummary": "" }
+        }
+      },
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          { "type": "TextBody", "text": "${data.added_summary}", "visible": "${data.added_visible}" },
+          {
+            "type": "Form",
+            "name": "f_pexp",
+            "init-values": "${data.exp_init}",
+            "children": [
+              { "type": "TextInput", "name": "erole", "input-type": "text", "label": "${data.l_erole}", "helper-text": "${data.erole_helper}", "required": true },
+              { "type": "TextInput", "name": "ecompany", "input-type": "text", "label": "${data.l_ecompany}", "helper-text": "${data.ecompany_helper}", "required": false },
+              { "type": "TextInput", "name": "eperiod", "input-type": "text", "label": "${data.l_eperiod}", "helper-text": "${data.eperiod_helper}", "required": false },
+              { "type": "TextArea", "name": "esummary", "label": "${data.l_esummary}", "helper-text": "${data.esummary_helper}", "required": false },
+              { "type": "RadioButtonsGroup", "name": "addmore", "label": "${data.l_addmore}", "data-source": "${data.addmore_options}", "required": false },
+              {
+                "type": "Footer",
+                "label": "${data.l_continue}",
+                "on-click-action": {
+                  "name": "data_exchange",
+                  "payload": { "erole": "${form.erole}", "ecompany": "${form.ecompany}", "eperiod": "${form.eperiod}", "esummary": "${form.esummary}", "addmore": "${form.addmore}" }
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "PROJECT",
+      "title": "${data.proj_title}",
+      "data": {
+        "proj_title": { "type": "string", "__example__": "Your projects" },
+        "added_summary": { "type": "string", "__example__": "Added so far: pixie-replay" },
+        "added_visible": { "type": "boolean", "__example__": false },
+        "l_pname": { "type": "string", "__example__": "Project name" },
+        "pname_helper": { "type": "string", "__example__": "e.g. pixie-replay" },
+        "l_pdesc": { "type": "string", "__example__": "What is it?" },
+        "pdesc_helper": { "type": "string", "__example__": "A line about what it does." },
+        "l_addmore": { "type": "string", "__example__": "Add more?" },
+        "addmore_options": {
+          "type": "array",
+          "items": { "type": "object", "properties": { "id": { "type": "string" }, "title": { "type": "string" } } },
+          "__example__": [{ "id": "add", "title": "Add another project" }, { "id": "done", "title": "That's all" }]
+        },
+        "l_continue": { "type": "string", "__example__": "Continue" },
+        "proj_init": {
+          "type": "object",
+          "properties": { "pname": { "type": "string" }, "pdesc": { "type": "string" } },
+          "__example__": { "pname": "", "pdesc": "" }
+        }
+      },
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          { "type": "TextBody", "text": "${data.added_summary}", "visible": "${data.added_visible}" },
+          {
+            "type": "Form",
+            "name": "f_project",
+            "init-values": "${data.proj_init}",
+            "children": [
+              { "type": "TextInput", "name": "pname", "input-type": "text", "label": "${data.l_pname}", "helper-text": "${data.pname_helper}", "required": true },
+              { "type": "TextArea", "name": "pdesc", "label": "${data.l_pdesc}", "helper-text": "${data.pdesc_helper}", "required": false },
+              { "type": "RadioButtonsGroup", "name": "addmore", "label": "${data.l_addmore}", "data-source": "${data.addmore_options}", "required": false },
+              {
+                "type": "Footer",
+                "label": "${data.l_continue}",
+                "on-click-action": {
+                  "name": "data_exchange",
+                  "payload": { "pname": "${form.pname}", "pdesc": "${form.pdesc}", "addmore": "${form.addmore}" }
                 }
               }
             ]

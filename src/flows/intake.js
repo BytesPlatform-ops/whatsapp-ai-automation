@@ -290,7 +290,17 @@ async function buildWebsiteDataFromFlow(answers = {}, theme, userId) {
       if (Number.isFinite(pYears) && pYears > 0 && pYears < 80) wd.yearsExperience = pYears;
       // Current focus → hero meta + the terminal "building" line.
       if (!blank(answers.p_focus)) wd.currentFocus = String(answers.p_focus).trim().slice(0, 120);
-      if (!blank(answers.f2)) {
+      // Structured projects from the PROJECT loop (preferred). Fall back to the
+      // old free-text f2 for any in-flight session that predates the loop.
+      const projList = Array.isArray(answers.projects_list) ? answers.projects_list : [];
+      const cleanProjects = projList.filter((p) => p && String(p.title || '').trim());
+      if (cleanProjects.length) {
+        wd.projects = cleanProjects.slice(0, 6).map((p) => ({
+          title: String(p.title).trim().slice(0, 80),
+          description: String(p.description || '').trim().slice(0, 240),
+          role: '', year: '', link: '', tools: [], photoUrl: null,
+        }));
+      } else if (!blank(answers.f2)) {
         const parsed = await parseProjectText(String(answers.f2).trim(), userId);
         if (Array.isArray(parsed) && parsed.length) {
           wd.projects = parsed.slice(0, 6).map((p) => ({
@@ -304,6 +314,18 @@ async function buildWebsiteDataFromFlow(answers = {}, theme, userId) {
           }));
         }
       }
+      // Structured work history from the PEXP loop (developer) → the experience
+      // timeline (template shape: period / role / company / summary).
+      const expList = Array.isArray(answers.experience_list) ? answers.experience_list : [];
+      const cleanExp = expList.filter((e) => e && (String(e.role || '').trim() || String(e.company || '').trim()));
+      if (cleanExp.length) {
+        wd.experience = cleanExp.slice(0, 8).map((e) => ({
+          period: String(e.period || '').trim().slice(0, 40),
+          role: String(e.role || '').trim().slice(0, 80),
+          company: String(e.company || '').trim().slice(0, 80),
+          summary: String(e.summary || '').trim().slice(0, 300),
+        }));
+      }
       // Real work samples from the PORTFOLIO PhotoPicker (photographer/designer).
       // Decrypt + upload each (reusing the generic listing-photo Supabase
       // uploader) → project.photoUrl, so the work grid shows the user's own
@@ -311,7 +333,7 @@ async function buildWebsiteDataFromFlow(answers = {}, theme, userId) {
       // photos fill those cards' missing images first; extras become image-only
       // cards. A failure on any one photo just skips it — never blocks the build.
       const photoMedia = Array.isArray(answers.portfolio_photos_media)
-        ? answers.portfolio_photos_media.slice(0, 6)
+        ? answers.portfolio_photos_media.slice(0, 30)
         : [];
       if (photoMedia.length) {
         const { decryptFlowMedia } = require('./media');
@@ -332,7 +354,7 @@ async function buildWebsiteDataFromFlow(answers = {}, theme, userId) {
             let pi = 0;
             for (const p of wd.projects) { if (!p.photoUrl && pi < urls.length) p.photoUrl = urls[pi++]; }
             while (pi < urls.length) wd.projects.push(blankProject(urls[pi++]));
-            wd.projects = wd.projects.slice(0, 6);
+            wd.projects = wd.projects.slice(0, 30);
           } else {
             wd.projects = urls.map(blankProject);
           }

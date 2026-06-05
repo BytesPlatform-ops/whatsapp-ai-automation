@@ -16,6 +16,7 @@
 const {
   classifyTheme, VALID_THEMES, INDUSTRY_OPTIONS, NICHE_OPTIONS, CURRENCY_OPTIONS,
   BOOKING_OPTIONS, ADDMORE_OPTIONS, ADDMORE_LISTING_OPTIONS,
+  ADDMORE_EXP_OPTIONS, ADDMORE_PROJECT_OPTIONS,
   LISTING_STATUS_OPTIONS, COUNTRY_CODES, DETAILS, NICHE_FIELDS, L, pick,
 } = require('./questionBank');
 const { getSession, patchSession } = require('./store');
@@ -295,11 +296,85 @@ function portfolio2Screen(lang, niche) {
       photos_visible: !!f.photos,
       l_projects: L[lang].l_projects,
       projects_helper: L[lang].projects_helper,
-      projects_visible: !!f.projects,
+      // Projects are collected on the structured PROJECT loop now, so the
+      // free-text field on this page stays hidden.
+      projects_visible: false,
       ...linkData,
       l_next: L[lang].next,
     },
   };
+}
+
+// Format the running "added so far" summary for the experience loop.
+function summarizeExperience(list, lang) {
+  if (!Array.isArray(list) || list.length === 0) return '';
+  const parts = list
+    .map((e) => [e.role, e.company].filter(Boolean).join(' @ ') || e.role || e.company)
+    .filter(Boolean);
+  return (L[lang].added_prefix || 'Added so far: ') + parts.join(' · ');
+}
+
+// PEXP — portfolio experience loop (developer). role/company/period/summary
+// with an "add another" loop, mirroring the salon SERVICE screen.
+function pexpScreen(lang, list) {
+  const summary = summarizeExperience(list, lang);
+  return {
+    screen: 'PEXP',
+    data: {
+      pexp_title: L[lang].pexp_title,
+      added_summary: summary || '—',
+      added_visible: !!summary,
+      l_erole: L[lang].l_erole, erole_helper: L[lang].erole_helper,
+      l_ecompany: L[lang].l_ecompany, ecompany_helper: L[lang].ecompany_helper,
+      l_eperiod: L[lang].l_eperiod, eperiod_helper: L[lang].eperiod_helper,
+      l_esummary: L[lang].l_esummary, esummary_helper: L[lang].esummary_helper,
+      l_addmore: L[lang].l_addmore,
+      addmore_options: ADDMORE_EXP_OPTIONS[lang] || ADDMORE_EXP_OPTIONS.en,
+      l_continue: L[lang].continue,
+      exp_init: { erole: '', ecompany: '', eperiod: '', esummary: '' },
+    },
+  };
+}
+
+// Format the running "added so far" summary for the project loop.
+function summarizeProjectsList(list, lang) {
+  if (!Array.isArray(list) || list.length === 0) return '';
+  return (L[lang].added_prefix || 'Added so far: ') + list.map((p) => p.title).filter(Boolean).join(' · ');
+}
+
+// PROJECT — portfolio project loop (developer/writer). name + description with
+// an "add another" loop.
+function projectScreen(lang, list) {
+  const summary = summarizeProjectsList(list, lang);
+  return {
+    screen: 'PROJECT',
+    data: {
+      proj_title: L[lang].proj_title,
+      added_summary: summary || '—',
+      added_visible: !!summary,
+      l_pname: L[lang].l_pname, pname_helper: L[lang].pname_helper,
+      l_pdesc: L[lang].l_pdesc, pdesc_helper: L[lang].pdesc_helper,
+      l_addmore: L[lang].l_addmore,
+      addmore_options: ADDMORE_PROJECT_OPTIONS[lang] || ADDMORE_PROJECT_OPTIONS.en,
+      l_continue: L[lang].continue,
+      proj_init: { pname: '', pdesc: '' },
+    },
+  };
+}
+
+// After the "about you" page (or the experience loop), route a portfolio user
+// through the project loop if their niche features text projects, else to the
+// final "your work" page. Initialises the projects accumulator when entering.
+async function portfolioAfterAbout(lang, niche, flowToken) {
+  const f = NICHE_FIELDS[niche] || NICHE_FIELDS.developer;
+  if (f.projects) {
+    if (flowToken) {
+      await patchSession(flowToken, { answersPatch: { projects_list: [] } })
+        .catch((err) => logger.warn(`[FLOW] init projects_list failed: ${err.message}`));
+    }
+    return projectScreen(lang, []);
+  }
+  return portfolio2Screen(lang, niche);
 }
 
 function finishScreen(lang) {
@@ -408,6 +483,65 @@ async function handleFlow(req, ctx = {}) {
           .catch((err) => logger.warn(`[FLOW] persist PORTFOLIO failed: ${err.message}`));
       }
       const niche = String(session?.answers?.portfolio_niche || '').trim();
+      const f = NICHE_FIELDS[niche] || NICHE_FIELDS.developer;
+      // Developer → collect a real work history first (experience loop), then
+      // projects, then the work/links page. Other niches skip straight to
+      // projects (if any) or the work page.
+      if (f.experience) {
+        if (flowToken) {
+          await patchSession(flowToken, { answersPatch: { experience_list: [] } })
+            .catch((err) => logger.warn(`[FLOW] init experience_list failed: ${err.message}`));
+        }
+        return pexpScreen(lang, []);
+      }
+      return portfolioAfterAbout(lang, niche, flowToken);
+    }
+
+    // PEXP (developer) → append this role, then loop ("add another") or move on
+    // to the project loop / work page. The accumulated list lives in the
+    // session (experience_list); the nfm_reply only carries the last row.
+    if (screen === 'PEXP') {
+      const niche = String(session?.answers?.portfolio_niche || '').trim();
+      const list = Array.isArray(session?.answers?.experience_list)
+        ? session.answers.experience_list.slice()
+        : [];
+      const role = String(data.erole || '').trim();
+      if (role) {
+        list.push({
+          role,
+          company: String(data.ecompany || '').trim(),
+          period: String(data.eperiod || '').trim(),
+          summary: String(data.esummary || '').trim(),
+        });
+      }
+      if (flowToken) {
+        await patchSession(flowToken, { answersPatch: { experience_list: list } })
+          .catch((err) => logger.warn(`[FLOW] persist PEXP failed: ${err.message}`));
+      }
+      if (data.addmore === 'add' && role && list.length < 8) {
+        logger.info(`[FLOW] PEXP loop (${list.length} so far) token=${flowToken}`);
+        return pexpScreen(lang, list);
+      }
+      return portfolioAfterAbout(lang, niche, flowToken);
+    }
+
+    // PROJECT (developer/writer) → append this project, then loop or proceed to
+    // the work/links page. List lives in the session (projects_list).
+    if (screen === 'PROJECT') {
+      const niche = String(session?.answers?.portfolio_niche || '').trim();
+      const list = Array.isArray(session?.answers?.projects_list)
+        ? session.answers.projects_list.slice()
+        : [];
+      const title = String(data.pname || '').trim();
+      if (title) list.push({ title, description: String(data.pdesc || '').trim() });
+      if (flowToken) {
+        await patchSession(flowToken, { answersPatch: { projects_list: list } })
+          .catch((err) => logger.warn(`[FLOW] persist PROJECT failed: ${err.message}`));
+      }
+      if (data.addmore === 'add' && title && list.length < 6) {
+        logger.info(`[FLOW] PROJECT loop (${list.length} so far) token=${flowToken}`);
+        return projectScreen(lang, list);
+      }
       return portfolio2Screen(lang, niche);
     }
 
@@ -434,10 +568,7 @@ async function handleFlow(req, ctx = {}) {
           })
           .filter(Boolean)
           .join('\n');
-        const answersPatch = {
-          f2: data.f2 || '',
-          p_links,
-        };
+        const answersPatch = { p_links };
         if (Array.isArray(data.work_photos) && data.work_photos.length) {
           answersPatch.portfolio_photos_media = data.work_photos;
           logger.info(`[FLOW] PORTFOLIO_WORK photos uploaded (${data.work_photos.length}) token=${flowToken}`);
@@ -630,4 +761,4 @@ async function handleFlow(req, ctx = {}) {
   return { data: { acknowledged: true } };
 }
 
-module.exports = { handleFlow, commonScreen, salonScreen, serviceScreen, listingScreen, agentScreen, hvacServiceScreen, detailsScreen, pnicheScreen, portfolioScreen, portfolio2Screen, finishScreen };
+module.exports = { handleFlow, commonScreen, salonScreen, serviceScreen, listingScreen, agentScreen, hvacServiceScreen, detailsScreen, pnicheScreen, portfolioScreen, portfolio2Screen, pexpScreen, projectScreen, finishScreen };
