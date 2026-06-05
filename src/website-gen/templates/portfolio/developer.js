@@ -17,9 +17,14 @@ const {
   PUBLIC_API_BASE, renderActivationBanner, consentField, generatePrivacyBody,
   esc, attr, pad2, normalizeSkillsList,
   firstNameOf,
-  quarterLabel, bioParagraphs,
+  bioParagraphs,
   getJsonLd, getFavicon,
 } = require('./_shared');
+
+// Availability shown in the hero badge, the ~/about.ts snippet, and the contact
+// status — single source so all three stay consistent. (Was an auto-computed
+// quarterLabel() like "Q3 2026"; now a plain open-to-work status.)
+const AVAILABILITY = 'Open to work';
 
 // ─── content fallbacks ──────────────────────────────────────────────────────
 function defaultPlaceholderProjects() {
@@ -114,7 +119,7 @@ function buildHeroSnippet(c) {
   const focus = c.currentFocus || null;
   const role  = c.industry || 'Software Engineer';
   const place = c.contactAddress || (Array.isArray(c.serviceAreas) && c.serviceAreas[0]) || null;
-  const q     = quarterLabel();
+  const q     = AVAILABILITY;
 
   const lines = [
     { kw: 'const', vr: 'engineer', op: ' = {' },
@@ -2298,16 +2303,6 @@ function renderProject(p, idx) {
 </article>`;
 }
 
-function pickRepoLanguage(idx) {
-  const langs = [
-    { name: 'TypeScript', color: '#3178C6' },
-    { name: 'Python',     color: '#3776AB' },
-    { name: 'Go',         color: '#00ADD8' },
-    { name: 'Rust',       color: '#DEA584' },
-  ];
-  return langs[idx % langs.length];
-}
-
 function renderFilterTabs(activeCategories) {
   const tabs = [
     { key: 'all', label: 'All' },
@@ -2351,17 +2346,6 @@ function generateHomePage(c) {
 
   const activeCategories = new Set(projects.map(inferCategory));
 
-  // Pinned repos: derive from projects that have repoUrl/codeUrl.
-  const pinned = projects.slice(0, 4).map((p, i) => ({
-    name: p.title.toLowerCase().replace(/\s+/g, '-'),
-    description: p.description || 'A small library / tool — see code for details.',
-    language: pickRepoLanguage(i),
-    stars: p.stars || '—',
-    forks: p.forks || '—',
-    updated: p.year || `${new Date().getFullYear()}`,
-    url: p.codeUrl || p.repoUrl || p.link || (githubUrl || '#'),
-  }));
-
   const heroSnippet = renderHeroSnippet(c);
 
   // Marquee tech ribbon — flatten user services + skill categories, dedupe.
@@ -2397,7 +2381,7 @@ function generateHomePage(c) {
   <div class="container">
     <div class="hero-grid">
       <div class="hero-copy">
-        <span class="status-pill"><span class="live-dot" aria-hidden="true"></span>Available · ${esc(quarterLabel())}</span>
+        <span class="status-pill"><span class="live-dot" aria-hidden="true"></span>Available · ${esc(AVAILABILITY)}</span>
         <div class="hero-eyebrow">// ${esc(role.toLowerCase())}</div>
         <h1 class="hero-name">${nameHtml}</h1>
         <p class="hero-bio">${esc(bio1)}</p>
@@ -2473,34 +2457,6 @@ function generateHomePage(c) {
   </div>
 </section>
 
-${githubHandle ? `
-<section class="github" id="github">
-  <div class="container">
-    <div class="section-head reveal">
-      <div>
-        <span class="section-eyebrow">open source</span>
-        <h2>Things I work on in public</h2>
-      </div>
-    </div>
-    <div class="pinned-repos reveal">
-      ${pinned.map((r) => `
-        <a class="repo-card" href="${attr(r.url)}" target="_blank" rel="noopener">
-          <header>
-            <span class="repo-name">${esc(r.name)}</span>
-            <span class="repo-language"><span class="lang-dot" style="color:${r.language.color}">●</span>${esc(r.language.name)}</span>
-          </header>
-          <p class="repo-description">${esc(r.description)}</p>
-          <footer class="repo-meta">
-            <span>★ ${esc(r.stars)}</span>
-            <span>⑂ ${esc(r.forks)}</span>
-            <span>${esc(r.updated)}</span>
-          </footer>
-        </a>`).join('')}
-    </div>
-    <a class="link-primary" href="${attr(githubUrl)}" target="_blank" rel="noopener">View full GitHub profile →</a>
-  </div>
-</section>` : ''}
-
 <section class="experience" id="experience">
   <div class="container">
     <div class="section-head reveal">
@@ -2551,7 +2507,7 @@ ${githubHandle ? `
       <div class="contact-meta">
         <div class="contact-meta-item">
           <span class="contact-meta-label">// status</span>
-          <span class="status-indicator"><span class="live-dot" aria-hidden="true"></span>Available · ${esc(quarterLabel())}</span>
+          <span class="status-indicator"><span class="live-dot" aria-hidden="true"></span>Available · ${esc(AVAILABILITY)}</span>
         </div>
         ${c.timezone ? `<div class="contact-meta-item"><span class="contact-meta-label">// timezone</span><span class="status-indicator">${esc(c.timezone)}</span></div>` : ''}
       </div>
