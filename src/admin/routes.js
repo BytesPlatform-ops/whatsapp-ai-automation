@@ -162,6 +162,18 @@ router.post('/api/conversations/bulk-export-selected', async (req, res) => {
 router.get('/api/conversations/:userId', async (req, res) => {
   try {
     const data = await queries.getConversation(req.params.userId);
+    // Private document attachments are stored as "sbdoc:<path>" sentinels.
+    // Mint a short-lived signed URL for each here (this endpoint is admin-only)
+    // so the file is viewable without ever being publicly accessible. A sign
+    // failure → null, and the bubble falls back to showing just the filename.
+    if (Array.isArray(data?.messages)) {
+      const { isDocumentSentinel, signDocumentUrl } = require('../messages/documentStore');
+      await Promise.all(data.messages.map(async (m) => {
+        if (m && isDocumentSentinel(m.media_data)) {
+          m.media_data = await signDocumentUrl(m.media_data);
+        }
+      }));
+    }
     res.json(data);
   } catch (err) {
     logger.error('[ADMIN] Conversation error:', err.message);

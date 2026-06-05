@@ -565,6 +565,26 @@ async function _routeMessage(message) {
     }
   }
 
+  // Documents (PDF/DOCX/…) — download and stash in storage so the admin
+  // conversation view can open the file. Images/audio above are stored inline
+  // as base64; documents can be large, so they get a storage URL instead.
+  if (message.type === 'document' && message.mediaId) {
+    try {
+      const { downloadMedia } = require('../messages/sender');
+      const media = await downloadMedia(message.mediaId);
+      if (media?.buffer) {
+        const { uploadInboundDocument } = require('../messages/documentStore');
+        const url = await uploadInboundDocument(media.buffer, media.mimeType || message.mimeType, message.filename);
+        if (url) {
+          mediaData = url;
+          mediaMime = media.mimeType || message.mimeType || 'application/octet-stream';
+        }
+      }
+    } catch (err) {
+      logger.warn(`[MEDIA] document store failed: ${err.message}`);
+    }
+  }
+
   // Transcribe audio messages to text
   if (message.type === 'audio' && (message.mediaId || message.mediaUrl)) {
     try {

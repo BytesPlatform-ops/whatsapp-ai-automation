@@ -237,14 +237,10 @@ async function handleDocument(user, message) {
   const msg = `Thanks — got ${label}. I'll pass this to the team for review and come back to you soon.`;
   await sendTextMessage(user.phone_number, msg);
 
-  // Log the inbound (with the document filename in message_text so
-  // the admin conversation page shows it). The outbound ack is
-  // auto-logged by sendTextMessage above — don't double-log it.
-  await logMessage(
-    user.id,
-    `[Document uploaded: ${doc.filename || doc.mediaId} (${doc.mimeType || 'unknown type'})${doc.caption ? ` — caption: "${doc.caption}"` : ''}]`,
-    'user'
-  ).catch(() => {});
+  // The inbound document itself is logged centrally (router, before dispatch)
+  // with its filename + a storage link, so the admin can open it — no need to
+  // log a separate "[Document uploaded: …]" marker here. The outbound ack above
+  // is auto-logged by sendTextMessage.
   logger.info(`[DOC] Received ${doc.filename || doc.mediaId} (${doc.mimeType}) from ${user.phone_number}`);
 
   return { handled: true };

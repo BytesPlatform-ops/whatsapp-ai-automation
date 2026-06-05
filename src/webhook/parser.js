@@ -134,7 +134,9 @@ function parseWebhookPayload(body) {
         parsed.mimeType = message.document?.mime_type;
         parsed.filename = message.document?.filename;
         parsed.caption = message.document?.caption || '';
-        parsed.text = message.document?.caption || '[Document]';
+        // Prefer the caption, else the filename, so the admin transcript shows
+        // *what* was sent (e.g. "resume.pdf") instead of a bare "[Document]".
+        parsed.text = message.document?.caption || message.document?.filename || '[Document]';
         break;
 
       case 'audio':

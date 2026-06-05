@@ -1299,6 +1299,7 @@ function renderMessageContent(m, useTranslated) {
     html += '<span class="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-red-50 text-red-400 text-xs italic mb-1.5">🗑 This message was deleted by the user</span>';
     return html;
   }
+  var docLinkRendered = false;
   if (m.media_data && m.media_mime) {
     if (m.media_mime.indexOf('image') === 0) {
       var isSticker = m.media_mime === 'image/webp' && m.message_type === 'sticker';
@@ -1310,6 +1311,13 @@ function renderMessageContent(m, useTranslated) {
       html += '<audio controls class="w-full mb-1.5"><source src="' + m.media_data + '" type="' + m.media_mime + '"></audio>';
     } else if (m.media_mime.indexOf('video') === 0) {
       html += '<video controls class="rounded-lg max-w-full max-h-64 mb-1.5"><source src="' + m.media_data + '" type="' + m.media_mime + '"></video>';
+    } else {
+      // Document / other file (PDF, DOCX…) → open-in-new-tab link. The filename
+      // lives in message_text, so use it as the label and skip the duplicate
+      // text line below.
+      var docLabel = (m.message_text && m.message_text !== '[Document]') ? m.message_text : 'Document';
+      html += '<a href="' + m.media_data + '" target="_blank" rel="noopener" class="inline-flex items-center gap-1.5 px-3 py-2 mb-1.5 rounded-lg bg-indigo-50 text-indigo-700 text-sm font-medium hover:bg-indigo-100 border border-indigo-200 transition">📄 <span>' + esc(docLabel) + '</span><span class="text-xs text-indigo-400 ml-1">open &#8599;</span></a>';
+      docLinkRendered = true;
     }
   } else if (m.message_type === 'image' && !m.media_data) {
     // Legacy outbound image rows logged before the URL-storage fix
@@ -1328,7 +1336,7 @@ function renderMessageContent(m, useTranslated) {
       bodyText = cache.byId[m.id];
     }
   }
-  if (bodyText) {
+  if (bodyText && !docLinkRendered) {
     html += '<p class="whitespace-pre-wrap">' + esc(bodyText) + '</p>';
   }
   return html;
