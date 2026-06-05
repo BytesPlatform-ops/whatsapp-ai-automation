@@ -22,11 +22,17 @@ const VALID_NICHES = ['photographer', 'designer', 'developer', 'writer'];
 // PDF buffer → plain text (text-based PDFs). Strips pdf-parse's "-- N of M --"
 // page markers. Returns '' on failure / no extractable text (e.g. scanned
 // PDFs) so the caller can fall back to the generic document path.
+//
+// `parseHyperlinks: true` inlines link ANNOTATIONS as Markdown — so a resume
+// where "GitHub" / "Portfolio" is clickable text (URL hidden behind it) yields
+// `[GitHub](https://github.com/user)` in the text, instead of a bare "GitHub"
+// with the URL lost. The LLM extractor + parseProfileLinks then pick up the
+// real github/linkedin/behance/project URLs.
 async function extractResumeText(buffer) {
   try {
     const { PDFParse } = require('pdf-parse');
     const parser = new PDFParse({ data: buffer });
-    const result = await parser.getText();
+    const result = await parser.getText({ parseHyperlinks: true });
     return String(result?.text || '')
       .replace(/^-{2,}\s*\d+\s+of\s+\d+\s*-{2,}$/gim, '')
       .replace(/\n{3,}/g, '\n\n')
