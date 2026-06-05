@@ -85,6 +85,16 @@ function parseWebhookPayload(body) {
         parsed.text = message.text?.body || '';
         break;
 
+      case 'button':
+        // Quick-reply tap on a Message Template (re-engagement templates).
+        // Distinct from interactive button_reply — arrives as type:'button'
+        // with button.text/button.payload. Surfacing the text lets it flow
+        // through the normal pipeline (salesBot picks up intent; "Stop these"
+        // classifies as notInterested → followupOptOut).
+        parsed.text = message.button?.text || '';
+        parsed.buttonPayload = message.button?.payload || '';
+        break;
+
       case 'interactive':
         // Button replies or list replies
         if (message.interactive?.type === 'button_reply') {

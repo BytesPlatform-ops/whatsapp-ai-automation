@@ -972,6 +972,15 @@ async function runFollowupCycle() {
         logger.warn(`[FOLLOWUP-INTENT-EMAIL] failed for ${user.phone_number}: ${err.message}`);
       }
 
+      // Template re-engagement ladder — WhatsApp Message Templates for leads
+      // PAST the 24h window. Self-gating + idempotent; INERT until
+      // TEMPLATE_REENGAGE_ENABLED=true.
+      try {
+        await require('./templateReengage').processTemplateReengage(user);
+      } catch (err) {
+        logger.warn(`[TPL-REENGAGE] failed for ${user.phone_number}: ${err.message}`);
+      }
+
       // Messenger / Instagram: Meta's 24h-interaction-window rule blocks
       // free-form outbound regardless of intent. Chat follow-up is out,
       // but email is fair game — try the email ladder for those users.
