@@ -1372,33 +1372,36 @@ function renderMomentCard(p, idx, isClone) {
 </a>`;
 }
 
-// "Recent moments" as a dual-row conveyor: two rows glide in opposite
-// directions (pausing on hover); each tile still opens the lightbox. Rows are
-// tiled up to a minimum count so a single set is wider than the viewport (no
-// gap), then duplicated (the clone half) for a seamless wrap.
+// "Recent moments" as a conveyor. With our typical ≤6 uploads ONE row reads
+// cleanest — each photo glides past once (only a single clone is added for the
+// seamless wrap). Two opposing rows (top scrolls left, bottom right) only kick
+// in with a fuller set (8+), where there's enough variety that neither row is
+// just repeating a few photos. Every tile still opens the lightbox.
 function renderMomentsMarquee(projects) {
   const list = Array.isArray(projects) ? projects.filter(Boolean) : [];
   if (!list.length) return '';
-  const twoRows = list.length >= 5;
-  const rowA = twoRows ? list.filter((_, i) => i % 2 === 0) : list;
-  const rowB = twoRows ? list.filter((_, i) => i % 2 === 1) : [];
+  const twoRows = list.length >= 8;
+  // Only pad a row when it's too short to fill the viewport (avoids a visible
+  // gap before the clone wraps); a healthy row is used as-is, no repeats.
   const fill = (items, min) => {
-    if (!items.length) return [];
+    if (items.length >= min) return items.slice();
     const out = [];
-    for (let i = 0; out.length < Math.max(min, items.length); i++) out.push(items[i % items.length]);
+    for (let i = 0; out.length < min; i++) out.push(items[i % items.length]);
     return out;
   };
   const buildRow = (items, cls) => {
-    const filled = fill(items, 6);
+    const filled = fill(items, 5);
     if (!filled.length) return '';
     const setA = filled.map((p, i) => renderMomentCard(p, i, false)).join('');
     const setB = filled.map((p, i) => renderMomentCard(p, i, true)).join('');
     return `<div class="work-row ${cls}"><div class="work-row-track">${setA}${setB}</div></div>`;
   };
+  const rows = twoRows
+    ? buildRow(list.filter((_, i) => i % 2 === 0), 'work-row-a') + buildRow(list.filter((_, i) => i % 2 === 1), 'work-row-b')
+    : buildRow(list, 'work-row-a');
   return `
 <div class="work-marquee reveal" aria-label="Recent moments gallery">
-  ${buildRow(rowA, 'work-row-a')}
-  ${rowB.length ? buildRow(rowB, 'work-row-b') : ''}
+  ${rows}
 </div>`;
 }
 
