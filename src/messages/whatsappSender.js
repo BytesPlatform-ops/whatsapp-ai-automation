@@ -113,6 +113,35 @@ async function sendTextMessage(to, text) {
 }
 
 /**
+ * Send an approved WhatsApp Message Template — the ONLY Meta-compliant way to
+ * message a user OUTSIDE the 24h customer-service window. `templateName` +
+ * `languageCode` must match a template APPROVED on the WABA the sending number
+ * (resolved from context inside sendRequest) belongs to. `bodyParams` fills the
+ * body {{1}}, {{2}}… in order (pass [] when the template has no variables).
+ * `extraComponents` lets a caller append header/button components verbatim.
+ */
+async function sendTemplateMessage(to, templateName, languageCode = 'en', bodyParams = [], extraComponents = []) {
+  const components = [];
+  if (Array.isArray(bodyParams) && bodyParams.length) {
+    components.push({
+      type: 'body',
+      parameters: bodyParams.map((v) => ({ type: 'text', text: String(v) })),
+    });
+  }
+  if (Array.isArray(extraComponents) && extraComponents.length) components.push(...extraComponents);
+  return sendRequest({
+    messaging_product: 'whatsapp',
+    to,
+    type: 'template',
+    template: {
+      name: templateName,
+      language: { code: languageCode },
+      ...(components.length ? { components } : {}),
+    },
+  });
+}
+
+/**
  * Send an interactive message with reply buttons (max 3 buttons).
  */
 async function sendInteractiveButtons(to, bodyText, buttons, headerText = null) {
@@ -433,6 +462,7 @@ async function downloadMedia(mediaId) {
 
 module.exports = {
   sendTextMessage,
+  sendTemplateMessage,
   sendInteractiveButtons,
   sendInteractiveList,
   sendWithMenuButton,
