@@ -48,6 +48,34 @@ function defaultSkillCategories() {
   ];
 }
 
+// Bucket a flat, user-supplied skills list (from the intake "skills & tools"
+// field → c.services) into the same 4 named categories the default set uses,
+// so the skills grid reflects the real stack instead of placeholders. Anything
+// we can't classify lands in a "Tools" catch-all. Empty categories are dropped.
+// Falls back to the defaults when the user gave us nothing.
+const SKILL_BUCKETS = [
+  { title: 'Languages', re: /^(java\s?script|js|type\s?script|ts|python|py|golang|go|rust|java|c\+\+|c#|c\b|ruby|php|swift|kotlin|scala|sql|html|css|dart|elixir|r|perl|haskell|lua|bash|shell)$/i },
+  { title: 'Frameworks', re: /(react|next|vue|nuxt|angular|svelte|solid|node|express|nest|django|flask|fastapi|rails|sinatra|spring|laravel|symfony|\.net|dotnet|tailwind|bootstrap|redux|graphql|apollo|jquery|remix|astro|qwik|flutter|react native)/i },
+  { title: 'Infrastructure', re: /(aws|gcp|azure|docker|kubernetes|k8s|terraform|ansible|nginx|apache|jenkins|github actions|gitlab ci|circleci|cloudflare|vercel|netlify|heroku|serverless|lambda|linux|ubuntu|nix|pulumi|helm|istio)/i },
+  { title: 'Databases', re: /(postgres|postgresql|mysql|mariadb|mongo|mongodb|redis|sqlite|dynamo|dynamodb|clickhouse|elastic|elasticsearch|cassandra|supabase|firebase|firestore|snowflake|bigquery|neo4j|cockroach|prisma)/i },
+];
+function categorizeSkills(services) {
+  const items = normalizeSkillsList(services).filter(Boolean).slice(0, 24);
+  if (!items.length) return defaultSkillCategories();
+  const buckets = { Languages: [], Frameworks: [], Infrastructure: [], Databases: [], Tools: [] };
+  for (const s of items) {
+    const hit = SKILL_BUCKETS.find((b) => b.re.test(String(s).trim()));
+    buckets[hit ? hit.title : 'Tools'].push(s);
+  }
+  const out = ['Languages', 'Frameworks', 'Infrastructure', 'Databases', 'Tools']
+    .filter((t) => buckets[t].length)
+    .map((t) => ({ title: t, items: buckets[t] }));
+  // A single bucket reads as a flat dump — relabel it to a neutral "Stack" so
+  // it doesn't look like a mis-categorization.
+  if (out.length === 1) out[0].title = 'Stack';
+  return out.length ? out : defaultSkillCategories();
+}
+
 // ─── project categorization for filter tabs ─────────────────────────────────
 // Pixie projects rarely carry an explicit category field; infer from title
 // + description + tools so the filter tabs work for tester data and the
@@ -1535,14 +1563,6 @@ section { padding: var(--space-8) 0; position: relative; }
   z-index: -1;
 }
 @keyframes ctaSpin { to { transform: rotate(360deg); } }
-.contact-cta::before {
-  content: '';
-  position: absolute; inset: 0;
-  background:
-    radial-gradient(ellipse 60% 60% at 50% 0%, var(--accent-glow), transparent 70%),
-    radial-gradient(ellipse 40% 40% at 100% 100%, var(--secondary-soft), transparent 70%);
-  pointer-events: none;
-}
 .contact-cta > * { position: relative; z-index: 1; }
 .contact-cta .section-eyebrow { margin-bottom: var(--space-3); }
 .contact-cta h2 {
@@ -1701,7 +1721,31 @@ section { padding: var(--space-8) 0; position: relative; }
   .reveal { opacity: 1 !important; transform: none !important; }
   .hero-terminal { transform: none !important; }
 }
+/* ─── flashy v3: constellation · magnetic · live tilt ─────────────────── */
+.hero-particles {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
+  z-index: 1;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 1000ms var(--ease-out) 250ms;
+}
+.hero-particles.lit { opacity: 1; }
+/* snappy transform while live-tilting, smooth for every other property */
+.project-card.tilting {
+  transition: transform 90ms ease-out,
+              border-color var(--dur-base) var(--ease-out),
+              box-shadow var(--dur-base) var(--ease-out),
+              background var(--dur-base) var(--ease-out);
+  will-change: transform;
+}
+[data-magnetic] { will-change: transform; }
+@media (prefers-reduced-motion: reduce) {
+  .hero-particles { display: none !important; }
+}
+
 @media print {
+  .hero-particles { display: none !important; }
   .nav, .nav-overlay, .copy-toast, .theme-toggle, .filter-tabs { display: none !important; }
   body { background: white !important; color: black !important; }
   section { page-break-inside: avoid; padding: 24px 0 !important; }
@@ -2027,6 +2071,160 @@ window.addEventListener('DOMContentLoaded', function () {
       });
     });
   }
+
+  // ─── flashy v3: constellation · scramble · magnetic · live tilt ────────
+
+  // (1) Hero particle constellation — drifting nodes that link to neighbours
+  //     and reach toward the cursor. Pauses when the hero scrolls off-screen.
+  (function () {
+    var canvas = document.querySelector('.hero-particles');
+    var hero = document.getElementById('hero');
+    if (!canvas || !hero || reduceMotion || isCoarse) return;
+    var ctx = canvas.getContext('2d');
+    var dpr = Math.min(window.devicePixelRatio || 1, 2);
+    var W = 0, H = 0, pts = [], cmx = -9999, cmy = -9999, running = true;
+    var LINK2 = 124 * 124, CUR2 = 168 * 168;
+    function build() {
+      var r = hero.getBoundingClientRect();
+      W = r.width; H = r.height;
+      canvas.width = W * dpr; canvas.height = H * dpr;
+      canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      var n = Math.max(28, Math.min(92, Math.floor(W / 16)));
+      pts = [];
+      for (var i = 0; i < n; i++) {
+        pts.push({ x: Math.random() * W, y: Math.random() * H, vx: (Math.random() - 0.5) * 0.32, vy: (Math.random() - 0.5) * 0.32 });
+      }
+    }
+    function palette() {
+      return document.documentElement.getAttribute('data-theme') === 'dark'
+        ? { dot: '167,139,250', line: '129,140,248' }
+        : { dot: '99,102,241', line: '124,58,237' };
+    }
+    function frame() {
+      if (!running) return;
+      ctx.clearRect(0, 0, W, H);
+      var c = palette(), i, p;
+      for (i = 0; i < pts.length; i++) {
+        p = pts[i];
+        p.x += p.vx; p.y += p.vy;
+        if (p.x < 0) { p.x = 0; p.vx *= -1; } else if (p.x > W) { p.x = W; p.vx *= -1; }
+        if (p.y < 0) { p.y = 0; p.vy *= -1; } else if (p.y > H) { p.y = H; p.vy *= -1; }
+        var dxm = cmx - p.x, dym = cmy - p.y, dm = dxm * dxm + dym * dym;
+        if (dm < CUR2 && dm > 1) { var dd = Math.sqrt(dm), f = (1 - dm / CUR2) * 0.9; p.x += dxm / dd * f; p.y += dym / dd * f; }
+        ctx.beginPath(); ctx.arc(p.x, p.y, 1.5, 0, 6.2832);
+        ctx.fillStyle = 'rgba(' + c.dot + ',0.6)'; ctx.fill();
+      }
+      for (i = 0; i < pts.length; i++) {
+        var pa = pts[i];
+        for (var b = i + 1; b < pts.length; b++) {
+          var pb = pts[b], dx = pa.x - pb.x, dy = pa.y - pb.y, d2 = dx * dx + dy * dy;
+          if (d2 < LINK2) {
+            ctx.strokeStyle = 'rgba(' + c.line + ',' + ((1 - d2 / LINK2) * 0.22).toFixed(3) + ')';
+            ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(pa.x, pa.y); ctx.lineTo(pb.x, pb.y); ctx.stroke();
+          }
+        }
+        var mdx = pa.x - cmx, mdy = pa.y - cmy, md2 = mdx * mdx + mdy * mdy;
+        if (md2 < CUR2) {
+          ctx.strokeStyle = 'rgba(' + c.line + ',' + ((1 - md2 / CUR2) * 0.33).toFixed(3) + ')';
+          ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(pa.x, pa.y); ctx.lineTo(cmx, cmy); ctx.stroke();
+        }
+      }
+      requestAnimationFrame(frame);
+    }
+    document.addEventListener('mousemove', function (e) {
+      var r = hero.getBoundingClientRect();
+      cmx = e.clientX - r.left; cmy = e.clientY - r.top;
+    }, { passive: true });
+    document.addEventListener('mouseleave', function () { cmx = -9999; cmy = -9999; });
+    window.addEventListener('resize', build);
+    build();
+    requestAnimationFrame(function () { canvas.classList.add('lit'); });
+    if ('IntersectionObserver' in window) {
+      new IntersectionObserver(function (ents) {
+        var vis = ents[0].isIntersecting;
+        if (vis && !running) { running = true; requestAnimationFrame(frame); }
+        else if (!vis) { running = false; }
+      }, { threshold: 0 }).observe(hero);
+    }
+    requestAnimationFrame(frame);
+  })();
+
+  // (2) Decode/scramble text — hero name only, on load.
+  (function () {
+    if (reduceMotion) return;
+    var GLYPH = '!<>-_\\/[]{}=+*^?#01';
+    function scramble(el) {
+      if (el.dataset.scrambled) return;
+      el.dataset.scrambled = '1';
+      var finalText = el.dataset.text || el.textContent;
+      el.dataset.text = finalText;
+      var len = finalText.length, dur = Math.min(1400, 420 + len * 40), t0 = performance.now();
+      (function step(now) {
+        var p = Math.min(1, (now - t0) / dur), out = '', i, ch, cp;
+        for (i = 0; i < len; i++) {
+          ch = finalText[i];
+          if (ch === ' ') { out += ' '; continue; }
+          cp = (p - (i / len) * 0.55) / 0.45;
+          if (cp >= 1) out += ch;
+          else if (cp <= 0) out += GLYPH[(Math.random() * GLYPH.length) | 0];
+          else out += Math.random() < 0.6 ? GLYPH[(Math.random() * GLYPH.length) | 0] : ch;
+        }
+        el.textContent = out;
+        if (p < 1) requestAnimationFrame(step); else el.textContent = finalText;
+      })(t0);
+    }
+    var heroNameEls = document.querySelectorAll('.hero-name [data-scramble]');
+    setTimeout(function () { heroNameEls.forEach(scramble); }, 360);
+  })();
+
+  // (3) Magnetic pull on key CTAs — element drifts toward cursor, springs back.
+  if (!reduceMotion && !isCoarse) {
+    document.querySelectorAll('[data-magnetic]').forEach(function (el) {
+      var s = parseFloat(el.getAttribute('data-magnetic')) || 0.35;
+      el.addEventListener('mousemove', function (e) {
+        var r = el.getBoundingClientRect();
+        var dx = e.clientX - (r.left + r.width / 2);
+        var dy = e.clientY - (r.top + r.height / 2);
+        el.style.transform = 'translate(' + (dx * s).toFixed(1) + 'px,' + (dy * s).toFixed(1) + 'px)';
+      });
+      el.addEventListener('mouseleave', function () { el.style.transform = ''; });
+    });
+  }
+
+  // (4) Hero terminal — live 3D tilt that tracks the cursor.
+  (function () {
+    var term = document.querySelector('.hero-terminal');
+    if (!term || reduceMotion || isCoarse) return;
+    term.addEventListener('mousemove', function (e) {
+      var r = term.getBoundingClientRect();
+      var px = (e.clientX - r.left) / r.width - 0.5;
+      var py = (e.clientY - r.top) / r.height - 0.5;
+      term.style.transition = 'transform 100ms ease-out';
+      term.style.transform = 'perspective(1400px) rotateY(' + (px * 7).toFixed(2) + 'deg) rotateX(' + (-py * 7).toFixed(2) + 'deg)';
+    });
+    term.addEventListener('mouseleave', function () { term.style.transition = ''; term.style.transform = ''; });
+  })();
+
+  // (5) Project cards — live cursor-tracked 3D tilt (keeps the hover lift).
+  if (!reduceMotion && !isCoarse) {
+    document.querySelectorAll('.project-card').forEach(function (card) {
+      var raf = false, lx = 0, ly = 0;
+      function apply() {
+        var r = card.getBoundingClientRect();
+        var px = (lx - r.left) / r.width - 0.5;
+        var py = (ly - r.top) / r.height - 0.5;
+        card.style.transform = 'translateY(-14px) scale(1.022) rotateX(' + (-py * 9).toFixed(2) + 'deg) rotateY(' + (px * 11).toFixed(2) + 'deg)';
+        raf = false;
+      }
+      card.addEventListener('mouseenter', function () { card.classList.add('tilting'); });
+      card.addEventListener('mousemove', function (e) {
+        lx = e.clientX; ly = e.clientY;
+        if (!raf) { requestAnimationFrame(apply); raf = true; }
+      }, { passive: true });
+      card.addEventListener('mouseleave', function () { card.classList.remove('tilting'); card.style.transform = ''; });
+    });
+  }
 });
 </script>`;
 }
@@ -2134,7 +2332,9 @@ function generateHomePage(c) {
   const bio1 = bioLines[0] || tagline;
   const bio2 = bioLines[1] || (place ? `Based in ${place}.` : '');
 
-  const skillCategories = defaultSkillCategories();
+  const skillCategories = (Array.isArray(c.services) && c.services.length)
+    ? categorizeSkills(c.services)
+    : defaultSkillCategories();
   const experience = (Array.isArray(c.experience) && c.experience.length ? c.experience : defaultExperience());
 
   const githubHandle   = c.githubHandle   || null;
@@ -2174,8 +2374,8 @@ function generateHomePage(c) {
   // Split name: first word in default ink, last word in accent gradient.
   const nameParts = String(c.businessName || '').trim().split(/\s+/);
   const nameHtml = nameParts.length > 1
-    ? `${esc(nameParts.slice(0, -1).join(' '))} <span class="hero-name-accent">${esc(nameParts[nameParts.length - 1])}</span>`
-    : `<span class="hero-name-accent">${esc(c.businessName || firstName)}</span>`;
+    ? `<span class="hero-name-lead" data-scramble>${esc(nameParts.slice(0, -1).join(' '))}</span> <span class="hero-name-accent" data-scramble>${esc(nameParts[nameParts.length - 1])}</span>`
+    : `<span class="hero-name-accent" data-scramble>${esc(c.businessName || firstName)}</span>`;
 
   const body = `
 <section class="hero" id="hero">
@@ -2185,6 +2385,7 @@ function generateHomePage(c) {
     <span class="hero-orb hero-orb--pink"></span>
     <span class="hero-orb hero-orb--cyan"></span>
   </div>
+  <canvas class="hero-particles" aria-hidden="true"></canvas>
   <div class="container">
     <div class="hero-grid">
       <div class="hero-copy">
@@ -2199,9 +2400,9 @@ function generateHomePage(c) {
           ${c.timezone ? `<div class="hero-meta-item"><span class="hero-meta-label">timezone</span><span class="hero-meta-value">${esc(c.timezone)}</span></div>` : ''}
         </div>
         <div class="hero-cta">
-          ${c.contactEmail ? `<a class="btn btn-primary" href="mailto:${attr(c.contactEmail)}">${esc(c.contactEmail)}</a>` : ''}
-          ${githubUrl ? `<a class="btn btn-secondary" href="${attr(githubUrl)}" target="_blank" rel="noopener">GitHub ↗</a>` : ''}
-          ${linkedinUrl ? `<a class="btn btn-secondary" href="${attr(linkedinUrl)}" target="_blank" rel="noopener">LinkedIn ↗</a>` : ''}
+          ${c.contactEmail ? `<a class="btn btn-primary" data-magnetic="0.4" href="mailto:${attr(c.contactEmail)}">${esc(c.contactEmail)}</a>` : ''}
+          ${githubUrl ? `<a class="btn btn-secondary" data-magnetic="0.4" href="${attr(githubUrl)}" target="_blank" rel="noopener">GitHub ↗</a>` : ''}
+          ${linkedinUrl ? `<a class="btn btn-secondary" data-magnetic="0.4" href="${attr(linkedinUrl)}" target="_blank" rel="noopener">LinkedIn ↗</a>` : ''}
         </div>
       </div>
       <div class="hero-terminal reveal" aria-hidden="true">
