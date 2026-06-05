@@ -97,24 +97,41 @@ async function getOverviewMetrics() {
 async function fetchAllConversationRows(userIds, columns, extraFilters = (q) => q) {
   if (!userIds || userIds.length === 0) return [];
   const PAGE = 1000;
-  const out = [];
-  let from = 0;
-  // Hard upper bound on iterations so a runaway query can't loop forever
-  // if Supabase ever changes pagination semantics.
-  const MAX_ITERATIONS = 200; // up to 200k rows
-  for (let i = 0; i < MAX_ITERATIONS; i++) {
-    let q = supabase
-      .from('conversations')
-      .select(columns)
-      .in('user_id', userIds);
-    q = extraFilters(q);
-    const { data, error } = await q.range(from, from + PAGE - 1);
-    if (error) throw error;
-    out.push(...(data || []));
-    if (!data || data.length < PAGE) break;
-    from += PAGE;
-  }
-  return out;
+  // Chunk the `.in('user_id', …)` list. PostgREST encodes the filter into the
+  // request URL/headers, which it caps at ~16KB; once there are a few hundred
+  // users the full id list overflows and the whole query fails with
+  // UND_ERR_HEADERS_OVERFLOW — surfacing as a 500 on /api/leads. 100 UUIDs per
+  // request keeps the URL ~4KB. Rows from every chunk are merged; callers key
+  // results by user_id, so chunk boundaries don't matter.
+  const ID_CHUNK = 100;
+  // Hard upper bound on pagination iterations per chunk so a runaway query
+  // can't loop forever if Supabase ever changes pagination semantics.
+  const MAX_ITERATIONS = 200; // up to 200k rows per chunk
+
+  // Paginate one id-chunk to exhaustion.
+  const fetchChunk = async (idsChunk) => {
+    const rows = [];
+    let from = 0;
+    for (let i = 0; i < MAX_ITERATIONS; i++) {
+      let q = supabase
+        .from('conversations')
+        .select(columns)
+        .in('user_id', idsChunk);
+      q = extraFilters(q);
+      const { data, error } = await q.range(from, from + PAGE - 1);
+      if (error) throw error;
+      rows.push(...(data || []));
+      if (!data || data.length < PAGE) break;
+      from += PAGE;
+    }
+    return rows;
+  };
+
+  const chunks = [];
+  for (let c = 0; c < userIds.length; c += ID_CHUNK) chunks.push(userIds.slice(c, c + ID_CHUNK));
+  // Chunks are independent → run them concurrently, then flatten.
+  const results = await Promise.all(chunks.map(fetchChunk));
+  return results.flat();
 }
 
 async function getLeads() {
