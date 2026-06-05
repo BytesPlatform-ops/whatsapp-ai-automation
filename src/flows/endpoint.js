@@ -253,6 +253,9 @@ function portfolioScreen(lang, niche) {
     screen: 'PORTFOLIO',
     data: {
       portfolio_title: pick(f.title, lang) || L[lang].details_title,
+      l_about_photo: L[lang].l_about_photo,
+      about_photo_desc: L[lang].about_photo_desc,
+      about_photo_visible: !!f.aboutPhoto,
       l_bio: L[lang].l_bio,
       bio_helper: L[lang].bio_helper,
       l_skills: pick(f.skills_label, lang) || L[lang].l_skills,
@@ -287,9 +290,6 @@ function portfolio2Screen(lang, niche) {
     screen: 'PORTFOLIO_WORK',
     data: {
       portfolio2_title: L[lang].portfolio2_title,
-      l_about_photo: L[lang].l_about_photo,
-      about_photo_desc: L[lang].about_photo_desc,
-      about_photo_visible: !!f.aboutPhoto,
       l_photos: L[lang].l_photos,
       photos_desc: pick(f.photos_desc, lang) || L[lang].photos_desc,
       photos_visible: !!f.photos,
@@ -392,14 +392,20 @@ async function handleFlow(req, ctx = {}) {
     // (niche read from the session, persisted at PNICHE).
     if (screen === 'PORTFOLIO') {
       if (flowToken) {
-        await patchSession(flowToken, {
-          answersPatch: {
-            f1: data.f1 || '',
-            p_skills: data.p_skills || '',
-            p_years: data.p_years || '',
-            p_focus: data.p_focus || '',
-          },
-        }).catch((err) => logger.warn(`[FLOW] persist PORTFOLIO failed: ${err.message}`));
+        const answersPatch = {
+          f1: data.f1 || '',
+          p_skills: data.p_skills || '',
+          p_years: data.p_years || '',
+          p_focus: data.p_focus || '',
+        };
+        // Optional headshot ("A photo of you") → about-section portrait. Stashed
+        // as raw media; decrypt + upload deferred to the completion handler.
+        if (Array.isArray(data.about_photo) && data.about_photo.length) {
+          answersPatch.about_photo_media = data.about_photo;
+          logger.info(`[FLOW] PORTFOLIO about-photo uploaded token=${flowToken}`);
+        }
+        await patchSession(flowToken, { answersPatch })
+          .catch((err) => logger.warn(`[FLOW] persist PORTFOLIO failed: ${err.message}`));
       }
       const niche = String(session?.answers?.portfolio_niche || '').trim();
       return portfolio2Screen(lang, niche);
@@ -435,10 +441,6 @@ async function handleFlow(req, ctx = {}) {
         if (Array.isArray(data.work_photos) && data.work_photos.length) {
           answersPatch.portfolio_photos_media = data.work_photos;
           logger.info(`[FLOW] PORTFOLIO_WORK photos uploaded (${data.work_photos.length}) token=${flowToken}`);
-        }
-        if (Array.isArray(data.about_photo) && data.about_photo.length) {
-          answersPatch.about_photo_media = data.about_photo;
-          logger.info(`[FLOW] PORTFOLIO_WORK about-photo uploaded token=${flowToken}`);
         }
         await patchSession(flowToken, { answersPatch })
           .catch((err) => logger.warn(`[FLOW] persist PORTFOLIO_WORK failed: ${err.message}`));

@@ -199,6 +199,7 @@ async function roundtrip(reqObj) {
   ok('p1 developer: skills visible', d1.data.skills_visible === true);
   ok('p1 developer: years visible', d1.data.years_visible === true);
   ok('p1 developer: focus visible', d1.data.focus_visible === true);
+  ok('p1 developer: about-photo hidden', d1.data.about_photo_visible === false);
   const d2 = await roundtrip({
     action: 'data_exchange', screen: 'PORTFOLIO', flow_token: tokDev,
     data: { f1: 'I build things', p_skills: 'React, Node', p_years: '6', p_focus: 'an AI app' },
@@ -206,7 +207,6 @@ async function roundtrip(reqObj) {
   ok('PORTFOLIO → PORTFOLIO_WORK (page 2)', d2.screen === 'PORTFOLIO_WORK');
   ok('p2 developer: projects visible', d2.data.projects_visible === true);
   ok('p2 developer: photos hidden', d2.data.photos_visible === false);
-  ok('p2 developer: about-photo hidden', d2.data.about_photo_visible === false);
   ok('p2 developer: link1 = GitHub', d2.data.l_link1 === 'GitHub' && d2.data.link1_visible === true);
   ok('p2 developer: link2 = LinkedIn', d2.data.l_link2 === 'LinkedIn' && d2.data.link2_visible === true);
   ok('p2 developer: link3 = X / Twitter', d2.data.l_link3 === 'X / Twitter' && d2.data.link3_visible === true);
@@ -238,28 +238,31 @@ async function roundtrip(reqObj) {
   });
   ok('p1 photographer: skills hidden', ph1.data.skills_visible === false);
   ok('p1 photographer: years visible', ph1.data.years_visible === true);
+  ok('p1 photographer: about-photo visible', ph1.data.about_photo_visible === true);
+  ok('p1 photographer: about-photo has label', typeof ph1.data.l_about_photo === 'string' && ph1.data.l_about_photo.length > 0);
   const ph2 = await roundtrip({
     action: 'data_exchange', screen: 'PORTFOLIO', flow_token: tokPh,
-    data: { f1: 'I shoot weddings', p_focus: 'a wedding' },
+    data: {
+      f1: 'I shoot weddings',
+      p_focus: 'a wedding',
+      about_photo: [{ cdn_url: 'https://x/me.jpg', file_name: 'me.jpg', encryption_metadata: {} }],
+    },
   });
   ok('photographer PORTFOLIO → PORTFOLIO_WORK', ph2.screen === 'PORTFOLIO_WORK');
   ok('p2 photographer: photos visible', ph2.data.photos_visible === true);
   ok('p2 photographer: projects hidden', ph2.data.projects_visible === false);
-  ok('p2 photographer: about-photo visible', ph2.data.about_photo_visible === true);
-  ok('p2 photographer: about-photo has label', typeof ph2.data.l_about_photo === 'string' && ph2.data.l_about_photo.length > 0);
+  ok('about photo media persisted (page 1)', Array.isArray(sessionMem[tokPh].answers.about_photo_media) && sessionMem[tokPh].answers.about_photo_media.length === 1);
   ok('p2 photographer: link1 = Instagram', ph2.data.l_link1 === 'Instagram' && ph2.data.link1_visible === true);
   ok('p2 photographer: link2 = Behance', ph2.data.l_link2 === 'Behance');
   const ph3 = await roundtrip({
     action: 'data_exchange', screen: 'PORTFOLIO_WORK', flow_token: tokPh,
     data: {
-      about_photo: [{ cdn_url: 'https://x/me.jpg', file_name: 'me.jpg', encryption_metadata: {} }],
       work_photos: [{ cdn_url: 'https://x/y.jpg', file_name: 'y.jpg', encryption_metadata: {} }],
       p_link1: 'instagram.com/lens',
     },
   });
   ok('photographer PORTFOLIO_WORK → FINISH', ph3.screen === 'FINISH');
   ok('work photo media persisted', Array.isArray(sessionMem[tokPh].answers.portfolio_photos_media) && sessionMem[tokPh].answers.portfolio_photos_media.length === 1);
-  ok('about photo media persisted', Array.isArray(sessionMem[tokPh].answers.about_photo_media) && sessionMem[tokPh].answers.about_photo_media.length === 1);
   ok('photographer single link → p_links', sessionMem[tokPh].answers.p_links === 'instagram.com/lens');
 
   console.log(`\n=== RESULT: ${pass} passed, ${fail} failed ===\n`);
