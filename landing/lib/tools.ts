@@ -1158,12 +1158,12 @@ export const TOOLS: ToolDefinition[] = [
   },
   {
     slug: 'fancy-text-generator',
-    title: 'Fancy Text Generator — Cool Fonts to Copy & Paste',
+    title: 'Fancy Text Generator — Cool Fonts to Copy',
     h1: 'Fancy Text Generator',
     shortName: 'Fancy Text Generator',
     tagline: 'Turn plain text into dozens of cool fonts you can copy and paste anywhere.',
     metaDescription:
-      'Free fancy text generator. Type once and copy cool fonts — bold, italic, script, cursive, gothic and more — for Instagram, TikTok, Discord and bios.',
+      'Turn plain text into cool styled fonts with this free fancy text generator. Copy and paste fancy text into Instagram, TikTok, or anywhere.',
     keywords: ['fancy text generator', 'cool text generator', 'text fonts', 'font generator', 'cool fonts copy and paste', 'stylish text'],
     category: 'Generator',
     emoji: '✨',
@@ -1207,12 +1207,12 @@ export const TOOLS: ToolDefinition[] = [
   },
   {
     slug: 'glitch-text-generator',
-    title: 'Glitch Text Generator — Zalgo & Cursed Text',
+    title: 'Glitch Text Generator — Make Zalgo Text Free',
     h1: 'Glitch Text Generator',
     shortName: 'Glitch Text Generator',
     tagline: 'Create creepy zalgo and cursed glitch text with an adjustable intensity.',
     metaDescription:
-      'Free glitch text generator. Make zalgo, cursed and corrupted text with an intensity slider, then copy and paste it into Discord, Instagram and more.',
+      'Create creepy distorted text with this free glitch text generator. Copy and paste Zalgo glitch text into chats, videos, or social posts.',
     keywords: ['glitch text generator', 'zalgo text generator', 'cursed text generator', 'zalgo text', 'glitch text', 'creepy text'],
     category: 'Generator',
     emoji: '👾',
@@ -1256,12 +1256,12 @@ export const TOOLS: ToolDefinition[] = [
   },
   {
     slug: 'heart-symbol-generator',
-    title: 'Heart Symbol & Text Symbols — Copy and Paste',
+    title: 'Heart Symbol Generator — Copy Heart Symbols',
     h1: 'Heart Symbol Generator',
     shortName: 'Heart Symbol Generator',
     tagline: 'Tap to copy hearts, stars, and aesthetic text symbols for any platform.',
     metaDescription:
-      'Free heart symbol generator. Copy and paste heart text symbols ♥ ♡ ❤, stars, flowers and aesthetic symbols, or wrap your name in hearts in one tap.',
+      'Find every heart you need with this free heart symbol generator. Click any heart symbol to copy and paste it into messages or social posts.',
     keywords: ['heart symbol text', 'heart text symbol', 'text symbols', 'heart symbol copy and paste', 'text emojis', 'aesthetic symbols'],
     category: 'Generator',
     emoji: '💕',
@@ -1305,12 +1305,12 @@ export const TOOLS: ToolDefinition[] = [
   },
   {
     slug: 'tiny-text-generator',
-    title: 'Tiny Text Generator — Small Text Copy & Paste',
+    title: 'Tiny Text Generator — Small Caps & Superscript',
     h1: 'Tiny Text Generator',
     shortName: 'Tiny Text Generator',
     tagline: 'Shrink your words into tiny superscript, subscript, and small-caps text.',
     metaDescription:
-      'Free tiny text generator. Convert your words into small Unicode text — superscript, subscript and small caps — to copy and paste into bios and captions.',
+      'Turn any text into tiny letters with this free tiny text generator. Copy small caps, superscript, and subscript styles for bios and chats.',
     keywords: ['tiny text generator', 'small text', 'small text generator', 'tiny text copy and paste', 'small caps generator', 'mini text'],
     category: 'Generator',
     emoji: '🔡',
@@ -1354,12 +1354,12 @@ export const TOOLS: ToolDefinition[] = [
   },
   {
     slug: 'upside-down-text-generator',
-    title: 'Upside Down Text Generator — Flip Your Text',
+    title: 'Upside Down Text Generator — Flip Text Free',
     h1: 'Upside Down Text Generator',
     shortName: 'Upside Down Text Generator',
     tagline: 'Flip your text upside down to copy and paste anywhere.',
     metaDescription:
-      'Free upside down text generator. Flip and reverse your text into ʇxǝʇ uʍop ǝpᴉsdn, then copy and paste it into Instagram, TikTok and messages.',
+      'Flip any sentence with this free upside down text generator. Copy and paste backwards, mirrored text into chats, bios, and social posts.',
     keywords: ['upside down text', 'upside down text generator', 'flip text', 'reverse text', 'flip text generator', 'text flipper'],
     category: 'Generator',
     emoji: '🙃',
@@ -1403,12 +1403,12 @@ export const TOOLS: ToolDefinition[] = [
   },
   {
     slug: 'invisible-text-generator',
-    title: 'Invisible Text Generator — Blank Character Copy & Paste',
+    title: 'Invisible Text Generator — Blank Spaces Free',
     h1: 'Invisible Text Generator',
     shortName: 'Invisible Text Generator',
     tagline: 'Copy invisible blank characters for empty messages, names, and bios.',
     metaDescription:
-      'Free invisible text generator. Copy blank Unicode characters to send empty messages, set a blank username or bio, and paste invisible space anywhere.',
+      'Create blank usernames and empty messages with this free invisible text generator. Copy and paste invisible characters anywhere online.',
     keywords: ['invisible text', 'blank text copy paste', 'invisible character', 'empty character', 'blank space copy paste', 'invisible text generator'],
     category: 'Generator',
     emoji: '👻',
@@ -1452,12 +1452,12 @@ export const TOOLS: ToolDefinition[] = [
   },
   {
     slug: 'bold-text-generator',
-    title: 'Bold Text Generator — Copy & Paste Bold Font',
+    title: 'Bold Text Generator — Copy Bold Unicode Text',
     h1: 'Bold Text Generator',
     shortName: 'Bold Text Generator',
     tagline: 'Make real bold text that stays bold when you copy and paste it.',
     metaDescription:
-      'Free bold text generator. Convert text into Unicode bold fonts — serif, sans, italic and script bold — that stay bold on Instagram, LinkedIn and Facebook.',
+      'Turn plain text into bold Unicode with this free bold text generator. Copy and paste bold characters into Instagram, LinkedIn, or anywhere.',
     keywords: ['bold text', 'bold text generator', 'bold font copy and paste', 'bold text for instagram', 'bold letters', 'bold unicode'],
     category: 'Generator',
     emoji: '🅱️',
@@ -1501,12 +1501,12 @@ export const TOOLS: ToolDefinition[] = [
   },
   {
     slug: 'strikethrough-text-generator',
-    title: 'Strikethrough Text Generator — Cross Out Text',
+    title: 'Strikethrough Text Generator — Cross Text Out',
     h1: 'Strikethrough Text Generator',
     shortName: 'Strikethrough Text Generator',
     tagline: 'Cross out your text with strikethrough, slash, and underline styles.',
     metaDescription:
-      'Free strikethrough text generator. Cross out text with Unicode strikethrough, slash and underline styles, then copy and paste into chats and posts.',
+      'Cross out any text with this free strikethrough text generator. Copy and paste struck-through text into chats, bios, and social media posts.',
     keywords: ['strikethrough text', 'strikethrough text generator', 'cross out text', 'strikethrough copy and paste', 'crossed out text', 'underline text'],
     category: 'Generator',
     emoji: '🚫',
@@ -1550,12 +1550,12 @@ export const TOOLS: ToolDefinition[] = [
   },
   {
     slug: 'text-summarizer',
-    title: 'Free Text Summarizer — Summarize Any Text with AI',
+    title: 'Free Text Summarizer — Summarize Any Text',
     h1: 'AI Text Summarizer',
     shortName: 'Text Summarizer',
     tagline: 'Paste any text and get a clear AI summary with key points.',
     metaDescription:
-      'Free AI text summarizer. Paste an article, essay, email or notes and get a concise summary plus key points in seconds — no signup, choose short to long.',
+      'Shrink long articles, emails, or notes with this free text summarizer. Paste any text and get a clear short summary in just a few seconds.',
     keywords: ['text summarizer', 'summarize text', 'ai summarizer', 'article summarizer', 'summary generator', 'free text summarizer'],
     category: 'Generator',
     emoji: '📝',
@@ -1599,12 +1599,12 @@ export const TOOLS: ToolDefinition[] = [
   },
   {
     slug: 'ai-text-humanizer',
-    title: 'AI Text Humanizer — Make AI Text Sound Human',
+    title: 'AI Text Humanizer — Rewrite AI Text Free',
     h1: 'AI Text Humanizer',
     shortName: 'AI Text Humanizer',
     tagline: 'Rewrite stiff or AI-sounding text so it reads naturally human.',
     metaDescription:
-      'Free AI text humanizer. Rewrite robotic or AI-generated text to sound natural and human, with a tone you choose. Paste, humanize, and copy in seconds.',
+      'Make AI writing sound natural with this free AI text humanizer. Paste any AI text and get a rewritten version that reads like a real person.',
     keywords: ['ai text humanizer', 'humanize ai text', 'text humanizer', 'humanize ai text free', 'ai to human text', 'make ai text sound human'],
     category: 'Generator',
     emoji: '🧑‍💻',

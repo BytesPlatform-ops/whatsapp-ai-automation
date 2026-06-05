@@ -32,10 +32,27 @@ const faqs = [
   },
 ];
 
+const faqJsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'FAQPage',
+  mainEntity: faqs.map((f) => ({
+    '@type': 'Question',
+    name: f.q,
+    acceptedAnswer: {
+      '@type': 'Answer',
+      text: f.a,
+    },
+  })),
+};
+
 export function FAQ() {
   const [open, setOpen] = useState<number | null>(0);
   return (
     <Section id="faq" soft>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd) }}
+      />
       <SectionHeading
         eyebrow="Common questions"
         title="Still have doubts? Totally fair."
