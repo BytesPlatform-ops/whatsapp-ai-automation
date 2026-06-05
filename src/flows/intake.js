@@ -304,6 +304,41 @@ async function buildWebsiteDataFromFlow(answers = {}, theme, userId) {
           }));
         }
       }
+      // Real work samples from the PORTFOLIO PhotoPicker (photographer/designer).
+      // Decrypt + upload each (reusing the generic listing-photo Supabase
+      // uploader) → project.photoUrl, so the work grid shows the user's own
+      // photos instead of Pexels fallbacks. If project text was also given, the
+      // photos fill those cards' missing images first; extras become image-only
+      // cards. A failure on any one photo just skips it — never blocks the build.
+      const photoMedia = Array.isArray(answers.portfolio_photos_media)
+        ? answers.portfolio_photos_media.slice(0, 6)
+        : [];
+      if (photoMedia.length) {
+        const { decryptFlowMedia } = require('./media');
+        const { uploadListingPhoto } = require('../website-gen/listingPhotoUploader');
+        const urls = [];
+        for (const m of photoMedia) {
+          try {
+            const { buffer, mimeType } = await decryptFlowMedia(m);
+            const url = await uploadListingPhoto(buffer, mimeType);
+            if (url) urls.push(url);
+          } catch (err) {
+            logger.warn(`[FLOW-INTAKE] portfolio photo failed: ${err.message}`);
+          }
+        }
+        if (urls.length) {
+          const blankProject = (photoUrl) => ({ title: '', description: '', role: '', year: '', link: '', tools: [], photoUrl });
+          if (Array.isArray(wd.projects) && wd.projects.length) {
+            let pi = 0;
+            for (const p of wd.projects) { if (!p.photoUrl && pi < urls.length) p.photoUrl = urls[pi++]; }
+            while (pi < urls.length) wd.projects.push(blankProject(urls[pi++]));
+            wd.projects = wd.projects.slice(0, 6);
+          } else {
+            wd.projects = urls.map(blankProject);
+          }
+          logger.info(`[FLOW-INTAKE] portfolio photos uploaded (${urls.length}) → ${wd.projects.length} work cards`);
+        }
+      }
       wd.services = Array.isArray(wd.services) ? wd.services : [];
     } else {
       // general — f1 = services list

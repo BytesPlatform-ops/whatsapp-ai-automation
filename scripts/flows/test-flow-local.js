@@ -158,7 +158,8 @@ async function roundtrip(reqObj) {
   });
   ok('hvac → DETAILS', h1.screen === 'DETAILS');
   ok('DETAILS f1 label present', typeof h1.data.f1_label === 'string' && h1.data.f1_label.length > 0);
-  ok('hvac f2 visible (services)', h1.data.f2_visible === true);
+  // Services moved to the structured HVAC_SERVICE loop — DETAILS f2 is hidden.
+  ok('hvac f2 hidden (services on loop)', h1.data.f2_visible === false);
 
   console.log('\n=== 6. General → DETAILS with f2 hidden ===');
   const tok4 = 'ft_general';
@@ -176,6 +177,54 @@ async function roundtrip(reqObj) {
   const p1 = await roundtrip({ action: 'INIT', flow_token: tok3, version: '3.0' });
   ok('PT INIT label is Portuguese', /negócio|nome/i.test(p1.data.l_name));
   ok('PT industry options Portuguese', /Salão|Imóveis/i.test(JSON.stringify(p1.data.industry_options)));
+
+  console.log('\n=== 8. Portfolio: niche-first, per-niche PORTFOLIO fields ===');
+  // developer → skills/years/focus/projects visible, photos hidden.
+  const tokDev = 'ft_dev';
+  await storeStub.createSession({ flowToken: tokDev, lang: 'en' });
+  const d0 = await roundtrip({
+    action: 'data_exchange', screen: 'COMMON', flow_token: tokDev,
+    data: { business_name: 'Jane Dev', industry: 'portfolio' },
+  });
+  ok('portfolio COMMON → PNICHE', d0.screen === 'PNICHE');
+  ok('theme persisted portfolio', sessionMem[tokDev].theme === 'portfolio');
+  ok('PNICHE has 4 niche options', Array.isArray(d0.data.niche_options) && d0.data.niche_options.length === 4);
+  const d1 = await roundtrip({
+    action: 'data_exchange', screen: 'PNICHE', flow_token: tokDev,
+    data: { portfolio_niche: 'developer' },
+  });
+  ok('PNICHE → PORTFOLIO', d1.screen === 'PORTFOLIO');
+  ok('niche persisted in session', sessionMem[tokDev].answers.portfolio_niche === 'developer');
+  ok('developer: skills visible', d1.data.skills_visible === true);
+  ok('developer: photos hidden', d1.data.photos_visible === false);
+  ok('developer: projects visible', d1.data.projects_visible === true);
+  const d2 = await roundtrip({
+    action: 'data_exchange', screen: 'PORTFOLIO', flow_token: tokDev,
+    data: { f1: 'I build things', p_skills: 'React, Node', p_links: 'github.com/jane', p_years: '6', p_focus: 'an AI app', f2: 'Project A\nProject B' },
+  });
+  ok('developer PORTFOLIO → FINISH', d2.screen === 'FINISH');
+  ok('portfolio answers persisted', sessionMem[tokDev].answers.p_skills === 'React, Node' && sessionMem[tokDev].answers.f1 === 'I build things');
+
+  // photographer → photos visible, skills hidden; an uploaded photo descriptor persists.
+  const tokPh = 'ft_photo';
+  await storeStub.createSession({ flowToken: tokPh, lang: 'en' });
+  await roundtrip({
+    action: 'data_exchange', screen: 'COMMON', flow_token: tokPh,
+    data: { business_name: 'Lens Co', industry: 'portfolio' },
+  });
+  const ph1 = await roundtrip({
+    action: 'data_exchange', screen: 'PNICHE', flow_token: tokPh,
+    data: { portfolio_niche: 'photographer' },
+  });
+  ok('photographer: photos visible', ph1.data.photos_visible === true);
+  ok('photographer: skills hidden', ph1.data.skills_visible === false);
+  ok('photographer: projects hidden', ph1.data.projects_visible === false);
+  const ph2 = await roundtrip({
+    action: 'data_exchange', screen: 'PORTFOLIO', flow_token: tokPh,
+    data: { f1: 'I shoot weddings', work_photos: [{ cdn_url: 'https://x/y.jpg', file_name: 'y.jpg', encryption_metadata: {} }], p_links: 'instagram.com/lens', p_focus: 'a wedding' },
+  });
+  ok('photographer PORTFOLIO → FINISH', ph2.screen === 'FINISH');
+  ok('work photo media persisted', Array.isArray(sessionMem[tokPh].answers.portfolio_photos_media) && sessionMem[tokPh].answers.portfolio_photos_media.length === 1);
 
   console.log(`\n=== RESULT: ${pass} passed, ${fail} failed ===\n`);
   process.exit(fail === 0 ? 0 : 1);

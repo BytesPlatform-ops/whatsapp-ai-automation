@@ -16,7 +16,7 @@
 const {
   classifyTheme, VALID_THEMES, INDUSTRY_OPTIONS, NICHE_OPTIONS, CURRENCY_OPTIONS,
   BOOKING_OPTIONS, ADDMORE_OPTIONS, ADDMORE_LISTING_OPTIONS,
-  LISTING_STATUS_OPTIONS, COUNTRY_CODES, DETAILS, L, pick,
+  LISTING_STATUS_OPTIONS, COUNTRY_CODES, DETAILS, NICHE_FIELDS, L, pick,
 } = require('./questionBank');
 const { getSession, patchSession } = require('./store');
 const { logger } = require('../utils/logger');
@@ -228,6 +228,55 @@ function detailsScreen(theme, lang) {
   };
 }
 
+// PNICHE screen — portfolio users pick their creative niche FIRST, on its own
+// screen, so the next screen (PORTFOLIO) can be tailored to it. Mirrors how the
+// industry dropdown on COMMON drives the salon/realestate branch.
+function pnicheScreen(lang) {
+  return {
+    screen: 'PNICHE',
+    data: {
+      pniche_title: L[lang].pniche_title,
+      l_niche: L[lang].l_niche,
+      niche_options: NICHE_OPTIONS[lang] || NICHE_OPTIONS.en,
+      l_next: L[lang].next,
+    },
+  };
+}
+
+// PORTFOLIO screen — niche-tailored work details. Every optional field exists
+// in flow.json; the endpoint toggles each `*_visible` (and a couple of label
+// overrides) per niche from NICHE_FIELDS. bio + links show for all; visual
+// niches get the PhotoPicker, the others get the projects TextArea.
+function portfolioScreen(lang, niche) {
+  const f = NICHE_FIELDS[niche] || NICHE_FIELDS.developer;
+  return {
+    screen: 'PORTFOLIO',
+    data: {
+      portfolio_title: pick(f.title, lang) || L[lang].details_title,
+      l_bio: L[lang].l_bio,
+      bio_helper: L[lang].bio_helper,
+      l_photos: L[lang].l_photos,
+      photos_desc: pick(f.photos_desc, lang) || L[lang].photos_desc,
+      photos_visible: !!f.photos,
+      l_skills: pick(f.skills_label, lang) || L[lang].l_skills,
+      skills_helper: pick(f.skills_helper, lang) || L[lang].skills_helper,
+      skills_visible: !!f.skills,
+      l_links: L[lang].l_links,
+      links_helper: L[lang].links_helper,
+      l_pyears: L[lang].l_pyears,
+      pyears_helper: L[lang].pyears_helper,
+      years_visible: !!f.years,
+      l_focus: L[lang].l_focus,
+      focus_helper: L[lang].focus_helper,
+      focus_visible: !!f.focus,
+      l_projects: L[lang].l_projects,
+      projects_helper: L[lang].projects_helper,
+      projects_visible: !!f.projects,
+      l_next: L[lang].next,
+    },
+  };
+}
+
 function finishScreen(lang) {
   return {
     screen: 'FINISH',
@@ -297,7 +346,44 @@ async function handleFlow(req, ctx = {}) {
 
       if (theme === 'salon') return salonScreen(lang);
       if (theme === 'realestate') return agentScreen(lang);
+      if (theme === 'portfolio') return pnicheScreen(lang);
       return detailsScreen(theme, lang);
+    }
+
+    // PNICHE (portfolio) → persist the creative niche, then render the
+    // niche-tailored PORTFOLIO screen. The niche lives in the session so the
+    // build (intake) reads it even though only PORTFOLIO's payload follows.
+    if (screen === 'PNICHE') {
+      const niche = String(data.portfolio_niche || '').trim();
+      if (flowToken) {
+        await patchSession(flowToken, { answersPatch: { portfolio_niche: niche } })
+          .catch((err) => logger.warn(`[FLOW] persist PNICHE failed: ${err.message}`));
+      }
+      logger.info(`[FLOW] PNICHE → niche=${niche} lang=${lang} token=${flowToken}`);
+      return portfolioScreen(lang, niche);
+    }
+
+    // PORTFOLIO → persist the niche-tailored work fields (+ any uploaded work
+    // photos, stashed as raw media descriptors like the COMMON logo / listing
+    // photos — decrypt + upload is deferred to the completion handler) → FINISH.
+    if (screen === 'PORTFOLIO') {
+      if (flowToken) {
+        const answersPatch = {
+          f1: data.f1 || '',
+          p_skills: data.p_skills || '',
+          p_links: data.p_links || '',
+          p_years: data.p_years || '',
+          p_focus: data.p_focus || '',
+          f2: data.f2 || '',
+        };
+        if (Array.isArray(data.work_photos) && data.work_photos.length) {
+          answersPatch.portfolio_photos_media = data.work_photos;
+          logger.info(`[FLOW] PORTFOLIO photos uploaded (${data.work_photos.length}) token=${flowToken}`);
+        }
+        await patchSession(flowToken, { answersPatch })
+          .catch((err) => logger.warn(`[FLOW] persist PORTFOLIO failed: ${err.message}`));
+      }
+      return finishScreen(lang);
     }
 
     // AGENT (real estate) → persist structured agent fields, init the
@@ -482,4 +568,4 @@ async function handleFlow(req, ctx = {}) {
   return { data: { acknowledged: true } };
 }
 
-module.exports = { handleFlow, commonScreen, salonScreen, serviceScreen, listingScreen, agentScreen, hvacServiceScreen, detailsScreen, finishScreen };
+module.exports = { handleFlow, commonScreen, salonScreen, serviceScreen, listingScreen, agentScreen, hvacServiceScreen, detailsScreen, pnicheScreen, portfolioScreen, finishScreen };

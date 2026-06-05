@@ -204,7 +204,12 @@ const L = {
     l_logo_desc: "Upload it and I'll clean up the background. Skip if you don't have one.",
     next: 'Next',
     // portfolio
+    pniche_title: 'What do you do?',
     l_niche: 'What kind of work do you do?',
+    l_bio: 'Short bio',
+    bio_helper: 'A line about you and the kind of work you do. Or leave blank.',
+    l_photos: 'Your work',
+    photos_desc: "Upload a few of your best pieces — up to 6. Or skip and I'll add visuals.",
     l_skills: 'Skills & tools',
     skills_helper: 'e.g. React, Node, Figma, AWS. Comma-separated. Or leave blank.',
     l_links: 'Your links',
@@ -213,6 +218,8 @@ const L = {
     pyears_helper: 'e.g. 6. Or leave blank.',
     l_focus: 'Currently working on',
     focus_helper: "What you're building right now. Or leave blank.",
+    l_projects: 'Projects to feature',
+    projects_helper: "One per line. Or leave blank — I'll add visuals for you.",
     // salon
     salon_title: 'Salon details',
     l_currency: 'Currency',
@@ -285,7 +292,12 @@ const L = {
     l_logo: 'Sua logo',
     l_logo_desc: 'Envie e eu limpo o fundo. Pule se não tiver.',
     next: 'Próximo',
+    pniche_title: 'O que você faz?',
     l_niche: 'Que tipo de trabalho você faz?',
+    l_bio: 'Bio curta',
+    bio_helper: 'Uma frase sobre você e o tipo de trabalho que faz. Ou deixe vazio.',
+    l_photos: 'Seu trabalho',
+    photos_desc: 'Envie alguns dos seus melhores trabalhos — até 6. Ou pule e eu adiciono os visuais.',
     l_skills: 'Habilidades & ferramentas',
     skills_helper: 'Ex: React, Node, Figma, AWS. Separe por vírgulas. Ou deixe vazio.',
     l_links: 'Seus links',
@@ -294,6 +306,8 @@ const L = {
     pyears_helper: 'Ex: 6. Ou deixe vazio.',
     l_focus: 'No que está trabalhando',
     focus_helper: 'O que você está construindo agora. Ou deixe vazio.',
+    l_projects: 'Projetos para destacar',
+    projects_helper: 'Um por linha. Ou deixe vazio — eu adiciono os visuais.',
     salon_title: 'Detalhes do salão',
     l_currency: 'Moeda',
     l_booking_heading: 'Agendamento online',
@@ -388,6 +402,46 @@ const DETAILS = {
   },
 };
 
+// ── PORTFOLIO screen field config per creative niche. ───────────────────
+// The niche is picked FIRST (PNICHE screen) so the endpoint can tailor the
+// PORTFOLIO screen to it: it toggles each optional field's `*_visible` and
+// applies a couple of label overrides. bio + links show for every niche.
+// Visual niches (photographer/designer) get a PhotoPicker for real work
+// samples (→ project.photoUrl); the others give project text instead.
+// `skills_label` / `skills_helper` / `photos_desc` override the shared L
+// defaults when present (e.g. a designer's "Tools" vs a developer's "Skills").
+const NICHE_FIELDS = {
+  photographer: {
+    title: { en: 'Your photography', pt: 'Sua fotografia' },
+    photos: true, skills: false, years: true, focus: true, projects: false,
+    photos_desc: {
+      en: "Upload a few of your best shots — up to 6. Or skip and I'll add visuals.",
+      pt: 'Envie algumas das suas melhores fotos — até 6. Ou pule e eu adiciono os visuais.',
+    },
+  },
+  designer: {
+    title: { en: 'Your design work', pt: 'Seu trabalho de design' },
+    photos: true, skills: true, years: true, focus: true, projects: false,
+    skills_label: { en: 'Tools', pt: 'Ferramentas' },
+    skills_helper: {
+      en: 'e.g. Figma, Photoshop, Illustrator. Comma-separated. Or leave blank.',
+      pt: 'Ex: Figma, Photoshop, Illustrator. Separe por vírgulas. Ou deixe vazio.',
+    },
+    photos_desc: {
+      en: "Upload a few work samples — up to 6. Or skip and I'll add visuals.",
+      pt: 'Envie algumas amostras do seu trabalho — até 6. Ou pule e eu adiciono os visuais.',
+    },
+  },
+  developer: {
+    title: { en: 'Your dev work', pt: 'Seu trabalho dev' },
+    photos: false, skills: true, years: true, focus: true, projects: true,
+  },
+  writer: {
+    title: { en: 'Your work', pt: 'Seu trabalho' },
+    photos: false, skills: false, years: false, focus: true, projects: true,
+  },
+};
+
 function pick(obj, lang) {
   if (!obj) return '';
   return obj[lang] || obj.en || '';
@@ -407,6 +461,7 @@ module.exports = {
   LISTING_STATUS_OPTIONS,
   COUNTRY_CODES,
   DETAILS,
+  NICHE_FIELDS,
   L,
   pick,
 };
