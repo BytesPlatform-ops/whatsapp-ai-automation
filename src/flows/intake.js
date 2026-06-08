@@ -464,6 +464,12 @@ async function handleFlowCompletion(user, message) {
     websiteDemoTriggered: true,
     currentSiteId,
     email: patch.contactEmail || user.metadata?.email || null,
+    // The form has no domain step (a domain is offered AFTER the preview via the
+    // late-domain flow), so clear any stale domain selection carried over from a
+    // prior build — otherwise its price inflates this build's activation total.
+    selectedDomain: null,
+    domainPrice: 0,
+    domainChoice: null,
   });
   user.metadata = { ...(user.metadata || {}), websiteData: mergedWd, websiteDemoTriggered: true, currentSiteId };
 
