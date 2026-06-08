@@ -43,8 +43,12 @@ const SAMPLE_SCREENSHOT_URLS = {
   real_estate: 'https://pixiebot.co/Real-Estate.png',
   generic: 'https://pixiebot.co/generic.png',
 };
+// `portfolio` / `portfolio_<subtype>` screenshots come from the portfolio-demo
+// registry (developer is live; designer/photographer/writer ship later).
+const { resolvePortfolioDemo, isPortfolioToken, liveSubtypes } = require('../portfolioDemos');
 function getSampleScreenshotUrl(industry) {
   const key = String(industry || '').toLowerCase().replace(/[-\s]+/g, '_');
+  if (isPortfolioToken(key)) return resolvePortfolioDemo(key).screenshotUrl;
   return SAMPLE_SCREENSHOT_URLS[key] || SAMPLE_SCREENSHOT_URLS.generic;
 }
 
@@ -526,6 +530,11 @@ async function handleSalesBot(user, message) {
     'sarahmitchell.pixiebot.co': 'real_estate',
     'bytecoffee.pixiebot.co': 'generic',
   };
+  // Live portfolio sub-type demos map their host → `portfolio_<subtype>` so a
+  // forgotten tag still attaches the right screenshot (registry-driven).
+  for (const s of liveSubtypes()) {
+    DEMO_URL_INDUSTRY[s.previewUrl.replace(/^https?:\/\//, '')] = `portfolio_${s.key}`;
+  }
   for (const [host, ind] of Object.entries(DEMO_URL_INDUSTRY)) {
     if (cleanText.includes(host) && !sampleImageIndustries.includes(ind)) {
       sampleImageIndustries.push(ind);
