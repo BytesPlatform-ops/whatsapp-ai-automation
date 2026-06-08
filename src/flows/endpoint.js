@@ -77,6 +77,10 @@ function serviceScreen(lang, list) {
     screen: 'SERVICE',
     data: {
       service_title: L[lang].service_title,
+      // The first field is required only on the first render (empty list) so the
+      // user enters at least one; on loop renders it's optional so picking
+      // "That's all" finishes without forcing another entry.
+      service_required: list.length === 0,
       added_summary: summary || '—',
       added_visible: !!summary,
       l_sname: L[lang].l_sname,
@@ -91,7 +95,10 @@ function serviceScreen(lang, list) {
       // Always-empty initial values bound to the Form's init-values, so
       // the inputs reset to blank every time the screen (re)loads — they
       // no longer retain the previous service's values on "add another".
-      service_init: { sname: '', sprice: '', sdur: '' },
+      // addmore reset to '' so the "Add another?" radio starts deselected on
+      // every (re)load — without it the previous "add" selection stays sticky
+      // when the loop refreshes the screen.
+      service_init: { sname: '', sprice: '', sdur: '', addmore: '' },
     },
   };
 }
@@ -113,6 +120,8 @@ function listingScreen(lang, list) {
     screen: 'LISTING',
     data: {
       listing_title: L[lang].listing_title,
+      // Required only on the first render so a loop "That's all" can finish.
+      listing_required: list.length === 0,
       added_summary: summary || '—',
       added_visible: !!summary,
       l_address: L[lang].l_address,
@@ -135,7 +144,7 @@ function listingScreen(lang, list) {
       addmore_options: ADDMORE_LISTING_OPTIONS[lang] || ADDMORE_LISTING_OPTIONS.en,
       l_continue: L[lang].continue,
       // Reset the text inputs to blank every time the screen (re)loads.
-      listing_init: { address: '', price: '', beds: '', baths: '', sqft: '', neighborhood: '' },
+      listing_init: { address: '', price: '', beds: '', baths: '', sqft: '', neighborhood: '', addmore: '' },
     },
   };
 }
@@ -176,6 +185,8 @@ function hvacServiceScreen(lang, list) {
     screen: 'HVAC_SERVICE',
     data: {
       hsvc_title: L[lang].hsvc_title,
+      // Required only on the first render so a loop "That's all" can finish.
+      hsvc_required: list.length === 0,
       added_summary: summary || '—',
       added_visible: !!summary,
       l_hsvc: L[lang].l_hsvc,
@@ -183,7 +194,7 @@ function hvacServiceScreen(lang, list) {
       l_addmore: L[lang].l_addmore,
       addmore_options: ADDMORE_OPTIONS[lang] || ADDMORE_OPTIONS.en,
       l_continue: L[lang].continue,
-      hsvc_init: { sname: '' },
+      hsvc_init: { sname: '', addmore: '' },
     },
   };
 }
@@ -323,6 +334,8 @@ function pexpScreen(lang, list) {
     screen: 'PEXP',
     data: {
       pexp_title: L[lang].pexp_title,
+      // Required only on the first render so a loop "That's my experience" finishes.
+      pexp_required: list.length === 0,
       added_summary: summary || '—',
       added_visible: !!summary,
       l_erole: L[lang].l_erole, erole_helper: L[lang].erole_helper,
@@ -332,7 +345,7 @@ function pexpScreen(lang, list) {
       l_addmore: L[lang].l_addmore,
       addmore_options: ADDMORE_EXP_OPTIONS[lang] || ADDMORE_EXP_OPTIONS.en,
       l_continue: L[lang].continue,
-      exp_init: { erole: '', ecompany: '', eperiod: '', esummary: '' },
+      exp_init: { erole: '', ecompany: '', eperiod: '', esummary: '', addmore: '' },
     },
   };
 }
@@ -351,6 +364,8 @@ function projectScreen(lang, list) {
     screen: 'PROJECT',
     data: {
       proj_title: L[lang].proj_title,
+      // Required only on the first render so a loop "That's all my projects" finishes.
+      proj_required: list.length === 0,
       added_summary: summary || '—',
       added_visible: !!summary,
       l_pname: L[lang].l_pname, pname_helper: L[lang].pname_helper,
@@ -358,7 +373,7 @@ function projectScreen(lang, list) {
       l_addmore: L[lang].l_addmore,
       addmore_options: ADDMORE_PROJECT_OPTIONS[lang] || ADDMORE_PROJECT_OPTIONS.en,
       l_continue: L[lang].continue,
-      proj_init: { pname: '', pdesc: '' },
+      proj_init: { pname: '', pdesc: '', addmore: '' },
     },
   };
 }

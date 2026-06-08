@@ -137,6 +137,7 @@
       "title": "${data.service_title}",
       "data": {
         "service_title": { "type": "string", "__example__": "Your services" },
+        "service_required": { "type": "boolean", "__example__": true },
         "added_summary": { "type": "string", "__example__": "Added so far: Haircut" },
         "added_visible": { "type": "boolean", "__example__": false },
         "l_sname": { "type": "string", "__example__": "Service name" },
@@ -154,8 +155,8 @@
         "l_continue": { "type": "string", "__example__": "Continue" },
         "service_init": {
           "type": "object",
-          "properties": { "sname": { "type": "string" }, "sprice": { "type": "string" }, "sdur": { "type": "string" } },
-          "__example__": { "sname": "", "sprice": "", "sdur": "" }
+          "properties": { "sname": { "type": "string" }, "sprice": { "type": "string" }, "sdur": { "type": "string" }, "addmore": { "type": "string" } },
+          "__example__": { "sname": "", "sprice": "", "sdur": "", "addmore": "" }
         }
       },
       "layout": {
@@ -167,7 +168,7 @@
             "name": "f_service",
             "init-values": "${data.service_init}",
             "children": [
-              { "type": "TextInput", "name": "sname", "input-type": "text", "label": "${data.l_sname}", "helper-text": "${data.sname_helper}", "required": true },
+              { "type": "TextInput", "name": "sname", "input-type": "text", "label": "${data.l_sname}", "helper-text": "${data.sname_helper}", "required": "${data.service_required}" },
               { "type": "TextInput", "name": "sprice", "input-type": "number", "label": "${data.l_sprice}", "helper-text": "${data.sprice_helper}", "required": false },
               { "type": "TextInput", "name": "sdur", "input-type": "text", "label": "${data.l_sdur}", "helper-text": "${data.sdur_helper}", "required": false },
               { "type": "RadioButtonsGroup", "name": "addmore", "label": "${data.l_addmore}", "data-source": "${data.addmore_options}", "required": false },
@@ -396,12 +397,13 @@
       "title": "${data.pexp_title}",
       "data": {
         "pexp_title": { "type": "string", "__example__": "Where you've worked" },
-        "added_summary": { "type": "string", "__example__": "Added so far: Senior Engineer @ BytesPak" },
+        "pexp_required": { "type": "boolean", "__example__": true },
+        "added_summary": { "type": "string", "__example__": "Added so far: Senior Engineer @ Bytes Platform" },
         "added_visible": { "type": "boolean", "__example__": false },
         "l_erole": { "type": "string", "__example__": "Role / title" },
         "erole_helper": { "type": "string", "__example__": "e.g. Senior Software Engineer" },
         "l_ecompany": { "type": "string", "__example__": "Company" },
-        "ecompany_helper": { "type": "string", "__example__": "e.g. BytesPak" },
+        "ecompany_helper": { "type": "string", "__example__": "e.g. Bytes Platform" },
         "l_eperiod": { "type": "string", "__example__": "When" },
         "eperiod_helper": { "type": "string", "__example__": "e.g. 2022 — present" },
         "l_esummary": { "type": "string", "__example__": "What you did" },
@@ -415,8 +417,8 @@
         "l_continue": { "type": "string", "__example__": "Continue" },
         "exp_init": {
           "type": "object",
-          "properties": { "erole": { "type": "string" }, "ecompany": { "type": "string" }, "eperiod": { "type": "string" }, "esummary": { "type": "string" } },
-          "__example__": { "erole": "", "ecompany": "", "eperiod": "", "esummary": "" }
+          "properties": { "erole": { "type": "string" }, "ecompany": { "type": "string" }, "eperiod": { "type": "string" }, "esummary": { "type": "string" }, "addmore": { "type": "string" } },
+          "__example__": { "erole": "", "ecompany": "", "eperiod": "", "esummary": "", "addmore": "" }
         }
       },
       "layout": {
@@ -428,7 +430,7 @@
             "name": "f_pexp",
             "init-values": "${data.exp_init}",
             "children": [
-              { "type": "TextInput", "name": "erole", "input-type": "text", "label": "${data.l_erole}", "helper-text": "${data.erole_helper}", "required": true },
+              { "type": "TextInput", "name": "erole", "input-type": "text", "label": "${data.l_erole}", "helper-text": "${data.erole_helper}", "required": "${data.pexp_required}" },
               { "type": "TextInput", "name": "ecompany", "input-type": "text", "label": "${data.l_ecompany}", "helper-text": "${data.ecompany_helper}", "required": false },
               { "type": "TextInput", "name": "eperiod", "input-type": "text", "label": "${data.l_eperiod}", "helper-text": "${data.eperiod_helper}", "required": false },
               { "type": "TextArea", "name": "esummary", "label": "${data.l_esummary}", "helper-text": "${data.esummary_helper}", "required": false },
@@ -451,6 +453,7 @@
       "title": "${data.proj_title}",
       "data": {
         "proj_title": { "type": "string", "__example__": "Your projects" },
+        "proj_required": { "type": "boolean", "__example__": true },
         "added_summary": { "type": "string", "__example__": "Added so far: pixie-replay" },
         "added_visible": { "type": "boolean", "__example__": false },
         "l_pname": { "type": "string", "__example__": "Project name" },
@@ -466,8 +469,8 @@
         "l_continue": { "type": "string", "__example__": "Continue" },
         "proj_init": {
           "type": "object",
-          "properties": { "pname": { "type": "string" }, "pdesc": { "type": "string" } },
-          "__example__": { "pname": "", "pdesc": "" }
+          "properties": { "pname": { "type": "string" }, "pdesc": { "type": "string" }, "addmore": { "type": "string" } },
+          "__example__": { "pname": "", "pdesc": "", "addmore": "" }
         }
       },
       "layout": {
@@ -479,7 +482,7 @@
             "name": "f_project",
             "init-values": "${data.proj_init}",
             "children": [
-              { "type": "TextInput", "name": "pname", "input-type": "text", "label": "${data.l_pname}", "helper-text": "${data.pname_helper}", "required": true },
+              { "type": "TextInput", "name": "pname", "input-type": "text", "label": "${data.l_pname}", "helper-text": "${data.pname_helper}", "required": "${data.proj_required}" },
               { "type": "TextArea", "name": "pdesc", "label": "${data.l_pdesc}", "helper-text": "${data.pdesc_helper}", "required": false },
               { "type": "RadioButtonsGroup", "name": "addmore", "label": "${data.l_addmore}", "data-source": "${data.addmore_options}", "required": false },
               {
@@ -500,6 +503,7 @@
       "title": "${data.hsvc_title}",
       "data": {
         "hsvc_title": { "type": "string", "__example__": "Services you offer" },
+        "hsvc_required": { "type": "boolean", "__example__": true },
         "added_summary": { "type": "string", "__example__": "Added so far: AC repair" },
         "added_visible": { "type": "boolean", "__example__": false },
         "l_hsvc": { "type": "string", "__example__": "Service" },
@@ -513,8 +517,8 @@
         "l_continue": { "type": "string", "__example__": "Continue" },
         "hsvc_init": {
           "type": "object",
-          "properties": { "sname": { "type": "string" } },
-          "__example__": { "sname": "" }
+          "properties": { "sname": { "type": "string" }, "addmore": { "type": "string" } },
+          "__example__": { "sname": "", "addmore": "" }
         }
       },
       "layout": {
@@ -526,7 +530,7 @@
             "name": "f_hsvc",
             "init-values": "${data.hsvc_init}",
             "children": [
-              { "type": "TextInput", "name": "sname", "input-type": "text", "label": "${data.l_hsvc}", "helper-text": "${data.hsvc_helper}", "required": true },
+              { "type": "TextInput", "name": "sname", "input-type": "text", "label": "${data.l_hsvc}", "helper-text": "${data.hsvc_helper}", "required": "${data.hsvc_required}" },
               { "type": "RadioButtonsGroup", "name": "addmore", "label": "${data.l_addmore}", "data-source": "${data.addmore_options}", "required": false },
               {
                 "type": "Footer",
@@ -589,6 +593,7 @@
       "title": "${data.listing_title}",
       "data": {
         "listing_title": { "type": "string", "__example__": "Your listings" },
+        "listing_required": { "type": "boolean", "__example__": true },
         "added_summary": { "type": "string", "__example__": "Added so far: 45 Elm St" },
         "added_visible": { "type": "boolean", "__example__": false },
         "l_address": { "type": "string", "__example__": "Address" },
@@ -620,8 +625,8 @@
         "l_continue": { "type": "string", "__example__": "Continue" },
         "listing_init": {
           "type": "object",
-          "properties": { "address": { "type": "string" }, "price": { "type": "string" }, "beds": { "type": "string" }, "baths": { "type": "string" }, "sqft": { "type": "string" }, "neighborhood": { "type": "string" } },
-          "__example__": { "address": "", "price": "", "beds": "", "baths": "", "sqft": "", "neighborhood": "" }
+          "properties": { "address": { "type": "string" }, "price": { "type": "string" }, "beds": { "type": "string" }, "baths": { "type": "string" }, "sqft": { "type": "string" }, "neighborhood": { "type": "string" }, "addmore": { "type": "string" } },
+          "__example__": { "address": "", "price": "", "beds": "", "baths": "", "sqft": "", "neighborhood": "", "addmore": "" }
         }
       },
       "layout": {
@@ -633,12 +638,12 @@
             "name": "f_listing",
             "init-values": "${data.listing_init}",
             "children": [
-              { "type": "TextInput", "name": "address", "input-type": "text", "label": "${data.l_address}", "helper-text": "${data.address_helper}", "required": true },
-              { "type": "TextInput", "name": "price", "input-type": "number", "label": "${data.l_lprice}", "helper-text": "${data.lprice_helper}", "required": true },
-              { "type": "Dropdown", "name": "status", "label": "${data.l_status}", "data-source": "${data.status_options}", "required": true },
+              { "type": "TextInput", "name": "address", "input-type": "text", "label": "${data.l_address}", "helper-text": "${data.address_helper}", "required": "${data.listing_required}" },
+              { "type": "TextInput", "name": "price", "input-type": "number", "label": "${data.l_lprice}", "helper-text": "${data.lprice_helper}", "required": "${data.listing_required}" },
+              { "type": "Dropdown", "name": "status", "label": "${data.l_status}", "data-source": "${data.status_options}", "required": "${data.listing_required}" },
               { "type": "TextInput", "name": "beds", "input-type": "number", "label": "${data.l_beds}", "helper-text": "${data.beds_helper}", "required": false },
               { "type": "TextInput", "name": "baths", "input-type": "number", "label": "${data.l_baths}", "helper-text": "${data.baths_helper}", "required": false },
-              { "type": "TextInput", "name": "sqft", "input-type": "number", "label": "${data.l_sqft}", "helper-text": "${data.sqft_helper}", "required": true },
+              { "type": "TextInput", "name": "sqft", "input-type": "number", "label": "${data.l_sqft}", "helper-text": "${data.sqft_helper}", "required": "${data.listing_required}" },
               { "type": "TextInput", "name": "neighborhood", "input-type": "text", "label": "${data.l_neighborhood}", "helper-text": "${data.neighborhood_helper}", "required": false },
               {
                 "type": "PhotoPicker",
