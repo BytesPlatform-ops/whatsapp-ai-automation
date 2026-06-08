@@ -51,10 +51,10 @@
                   { "type": "TextInput", "name": "your_name", "label": "${data.l_your_name}", "input-type": "text", "required": true }
                 ],
                 "else": [
-                  { "type": "TextInput", "name": "business_name", "label": "${data.l_name}", "input-type": "text", "required": true }
+                  { "type": "TextInput", "name": "business_name", "label": "${data.l_name}", "input-type": "text", "required": true },
+                  { "type": "TextArea", "name": "business_description", "label": "${data.l_business_desc}", "helper-text": "${data.business_desc_helper}", "required": false }
                 ]
               },
-              { "type": "TextArea", "name": "business_description", "label": "${data.l_business_desc}", "helper-text": "${data.business_desc_helper}", "required": false },
               {
                 "type": "PhotoPicker",
                 "name": "logo",
