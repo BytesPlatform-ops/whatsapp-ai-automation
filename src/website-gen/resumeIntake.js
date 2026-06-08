@@ -359,15 +359,20 @@ async function handleResumeUpload(user, message) {
 
   await sendTextMessage(
     user.phone_number,
-    `Read your resume${niceName} ✅ — pulling your skills, experience and projects into a *${patch.portfolioNiche}* portfolio now. Takes a few seconds; I'll send the preview link. ✨`
+    `Read your resume${niceName} ✅ — got your skills, experience and projects ready for a *${patch.portfolioNiche}* portfolio.`
   );
 
+  // Ask the domain (new/own/skip) BEFORE building — same as the chat flow's
+  // confirm→domain→build path. askDomainChoice's branch handlers
+  // (proceedSkip/Own/SearchNewDomain) call generateWebsite once the domain is
+  // settled, so the combined activation price locks in the domain cost. Going
+  // straight to generateWebsite here would skip the domain step entirely.
   try {
-    const { generateWebsite } = require('../conversation/handlers/webDev');
-    await generateWebsite(user);
+    const { askDomainChoice } = require('../conversation/handlers/webDev');
+    await askDomainChoice(user);
   } catch (err) {
-    logger.error(`[RESUME] generateWebsite failed: ${err.message}`);
-    await sendTextMessage(user.phone_number, "Hmm — something tripped while building. Give me a moment, or say *try again*.");
+    logger.error(`[RESUME] askDomainChoice failed: ${err.message}`);
+    await sendTextMessage(user.phone_number, "Hmm — something tripped. Give me a moment, or say *try again*.");
   }
   return true;
 }

@@ -5599,10 +5599,14 @@ async function generateWebsite(user) {
     const { getNumberSetting } = require('../../db/settings');
     const envDefaultWebsitePrice = parseFloat(process.env.DEFAULT_ACTIVATION_PRICE || '199');
     const websitePrice = await getNumberSetting('website_price', envDefaultWebsitePrice);
-    // Exact NameSilo price — preserve cents. parseFloat keeps $17.29 as 17.29
-    // instead of truncating to 17.
-    const domainPrice = parseFloat(freshUser.metadata?.domainPrice || 0);
     const selectedDomain = freshUser.metadata?.selectedDomain || null;
+    // Exact NameSilo price — preserve cents. parseFloat keeps $17.29 as 17.29
+    // instead of truncating to 17. Only count a domain price when a domain was
+    // actually selected for THIS build: a build that skips the domain step
+    // (form / resume) or a stale domainPrice left in metadata from an earlier
+    // interaction would otherwise silently inflate the total (e.g. $39 website
+    // + a stale $15.95 = $54.95 shown on a preview with no domain).
+    const domainPrice = selectedDomain ? parseFloat(freshUser.metadata?.domainPrice || 0) : 0;
     const activationTotal = +(websitePrice + domainPrice).toFixed(2);
 
     // Both the banner on the preview site and the chat message point to
@@ -6030,7 +6034,9 @@ async function acknowledgeApprovalAfterDomainChoice(user) {
   const { getNumberSetting } = require('../../db/settings');
   const envDefaultWebsitePrice = parseInt(process.env.DEFAULT_ACTIVATION_PRICE || '199', 10);
   const websitePrice = await getNumberSetting('website_price', envDefaultWebsitePrice);
-  const domainPrice = parseInt(user.metadata?.domainPrice || 0, 10);
+  // Never add a domain price without a domain actually selected this build —
+  // guards against a stale domainPrice surviving in metadata.
+  const domainPrice = selectedDomain ? parseInt(user.metadata?.domainPrice || 0, 10) : 0;
   const total = websitePrice + domainPrice;
 
   // The same Stripe URL the user saw on the preview banner / activation
@@ -8177,12 +8183,40 @@ async function selectLateOwnDomainInline(user, domain, registrar) {
 }
 
 /**
- * Entry point — kicks off the domain search using the user's businessName
- * as the search base (same as pre-build flow). State changes to
+ * Pull an explicitly-typed domain (with a TLD, e.g. "pixiebtes.com" or
+ * "mybiz.co.uk") out of a free-text request like "can you look for
+ * pixiebtes.com?". Returns the lowercased domain, or null when the user didn't
+ * name one. Mirrors the inline match handleLateDomainSearch uses, so the
+ * late-domain ENTRY honours a specific ask the same way the in-flow handler
+ * does — instead of silently re-searching the business name.
+ */
+function extractRequestedDomain(text) {
+  const m = String(text || '').match(/([a-z0-9-]+\.[a-z]{2,}(?:\.[a-z]{2,})?)/i);
+  return m ? m[1].toLowerCase() : null;
+}
+
+/**
+ * Entry point — kicks off the domain search. If the user named a specific
+ * domain in their request we look THAT up; otherwise we fall back to the
+ * business name as the search base (same as pre-build flow). State changes to
  * WEB_DOMAIN_LATE_SEARCH so the picker handler knows to take the
  * post-selection late-add path instead of generateWebsite.
  */
 async function handleLateDomainStart(user, originalText) {
+  // Honour an explicitly-named domain ("get me pixiebtes.com") — otherwise an
+  // explicit ask gets ignored and we'd re-search the business name (the bug
+  // where asking for "pixiebtes.com" still checked "asd").
+  const requested = extractRequestedDomain(originalText);
+  if (requested) {
+    await logMessage(user.id, `Late-domain start: specific domain "${requested}"`, 'assistant');
+    await runSpecificDomainLookup(user, requested);
+    // runSpecificDomainLookup lands the user in WEB_DOMAIN_SEARCH; force the
+    // late state so the next reply continues the late-add flow.
+    const { updateUserState } = require('../../db/users');
+    await updateUserState(user.id, STATES.WEB_DOMAIN_LATE_SEARCH);
+    return STATES.WEB_DOMAIN_LATE_SEARCH;
+  }
+
   const businessName = user.metadata?.websiteData?.businessName || '';
   const cleanedBase = businessName
     .toLowerCase()
@@ -8792,9 +8826,16 @@ module.exports = {
   // the build directly once the Flow is submitted, reusing the exact same
   // generate → deploy → send-preview → CAPI path the chat flow uses.
   generateWebsite,
+  // Exposed so the resume→portfolio path (src/website-gen/resumeIntake.js) can
+  // ask the domain question (new/own/skip) before building, instead of calling
+  // generateWebsite directly and skipping the domain step.
+  askDomainChoice,
   // Exposed so the router can re-check a WEB_REVISIONS message the turn
   // classifier labelled 'question': an "add a domain" request is actionable
   // and must reach handleRevisions' late-domain flow, NOT the off-topic aside
   // (which is scoped to exclude domains).
   classifyLateDomainIntent,
+  // Exposed for the offline domain-extraction regression — pulls a typed
+  // domain out of a late-domain request so an explicit ask isn't ignored.
+  extractRequestedDomain,
 };
