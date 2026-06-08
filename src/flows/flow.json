@@ -23,6 +23,7 @@
       "data": {
         "common_title": { "type": "string", "__example__": "About your business" },
         "l_name": { "type": "string", "__example__": "Business name" },
+        "l_your_name": { "type": "string", "__example__": "Your name" },
         "l_business_desc": { "type": "string", "__example__": "What does your business do?" },
         "business_desc_helper": { "type": "string", "__example__": "A sentence or two — what you offer and who for." },
         "l_industry": { "type": "string", "__example__": "What kind of business?" },
@@ -42,9 +43,18 @@
             "type": "Form",
             "name": "f1",
             "children": [
-              { "type": "TextInput", "name": "business_name", "label": "${data.l_name}", "input-type": "text", "required": true },
+              { "type": "RadioButtonsGroup", "name": "industry", "label": "${data.l_industry}", "data-source": "${data.industry_options}", "required": true },
+              {
+                "type": "If",
+                "condition": "${form.industry} == 'portfolio'",
+                "then": [
+                  { "type": "TextInput", "name": "your_name", "label": "${data.l_your_name}", "input-type": "text", "required": true }
+                ],
+                "else": [
+                  { "type": "TextInput", "name": "business_name", "label": "${data.l_name}", "input-type": "text", "required": true }
+                ]
+              },
               { "type": "TextArea", "name": "business_description", "label": "${data.l_business_desc}", "helper-text": "${data.business_desc_helper}", "required": false },
-              { "type": "Dropdown", "name": "industry", "label": "${data.l_industry}", "data-source": "${data.industry_options}", "required": true },
               {
                 "type": "PhotoPicker",
                 "name": "logo",
@@ -59,7 +69,7 @@
                 "label": "${data.l_next}",
                 "on-click-action": {
                   "name": "data_exchange",
-                  "payload": { "business_name": "${form.business_name}", "business_description": "${form.business_description}", "industry": "${form.industry}", "logo": "${form.logo}" }
+                  "payload": { "business_name": "${form.business_name}", "your_name": "${form.your_name}", "business_description": "${form.business_description}", "industry": "${form.industry}", "logo": "${form.logo}" }
                 }
               }
             ]

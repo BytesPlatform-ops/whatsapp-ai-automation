@@ -28,6 +28,7 @@ function commonScreen(lang) {
     data: {
       common_title: L[lang].common_title,
       l_name: L[lang].l_name,
+      l_your_name: L[lang].l_your_name,
       l_business_desc: L[lang].l_business_desc,
       business_desc_helper: L[lang].business_desc_helper,
       l_industry: L[lang].l_industry,
@@ -425,7 +426,11 @@ async function handleFlow(req, ctx = {}) {
   if (action === 'data_exchange') {
     // COMMON → classify (dropdown id = theme), route to the right screen.
     if (screen === 'COMMON') {
-      const businessName = String(data.business_name || '').trim();
+      // Portfolio renders a "Your name" field (your_name) instead of
+      // "Business name" — the label is wrong for a personal portfolio, but the
+      // site still needs the name (it's the hero title). Merge either into the
+      // single business_name the rest of the pipeline (intake + templates) reads.
+      const businessName = String(data.business_name || data.your_name || '').trim();
       const businessDescription = String(data.business_description || '').trim();
       const industryId = String(data.industry || '').trim();
       const theme = VALID_THEMES.includes(industryId) ? industryId : classifyTheme(industryId);
