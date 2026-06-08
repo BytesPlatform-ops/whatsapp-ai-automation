@@ -147,6 +147,7 @@ Return ONLY a JSON object (no commentary, no markdown):
 Rules:
 - niche mapping: software engineer / developer / SWE / data → "developer"; UI/UX / graphic / brand / product designer → "designer"; photographer / videographer → "photographer"; writer / editor / content / copywriter / journalist → "writer". If mixed or unclear, "".
 - skills: clean tool/tech names only (max 16), no sentences, no prose.
+- yearsExperience: total years of professional experience. If not stated as an explicit number, estimate it from the earliest job start year to the present. null only when the document carries no dates at all.
 - experience: ONE entry per job in the work-history/experience section, most-recent first, max 6. Use ONLY jobs actually listed — never invent or pad. period = dates as written (e.g. "Jun 2025 – Present", "2021 – 2024"); role = job title; company = employer/organisation; summary = a 1-2 sentence description of the work/impact (condense bullet points). Empty array if no work history is present.
 - projects: 2-6 entries from a projects section (distinct from jobs); short titles, one-line descriptions; empty array if none clearly present.
 - If isResume is false, leave the other fields empty/null.
@@ -165,6 +166,36 @@ Rules:
     logger.warn(`[RESUME] structure extract failed: ${err.message}`);
     return null;
   }
+}
+
+// Derive total years of experience from the parsed work-history periods.
+// Resumes rarely state a single "N years" figure, so the LLM's yearsExperience
+// is unreliable (commonly lowballed to 1). The job date ranges, however, are
+// factual — so compute the career span: earliest start year → the latest end
+// (or the current year if any role is ongoing). Reads the raw, uncapped
+// experience so jobs older than the 6 we display still count toward the span.
+// Returns null when no period carries a usable year.
+function deriveYearsFromExperience(experience) {
+  if (!Array.isArray(experience) || !experience.length) return null;
+  const nowYear = new Date().getFullYear();
+  let earliest = Infinity;
+  let latest = -Infinity;
+  let hasPresent = false;
+  for (const e of experience) {
+    const period = String(e?.period || '');
+    if (/present|current|now|ongoing|till\s*date|to\s*date|presente|atual/i.test(period)) hasPresent = true;
+    const years = (period.match(/\b(?:19|20)\d{2}\b/g) || [])
+      .map((y) => parseInt(y, 10))
+      .filter((y) => y >= 1970 && y <= nowYear + 1);
+    for (const y of years) {
+      if (y < earliest) earliest = y;
+      if (y > latest) latest = y;
+    }
+  }
+  if (!Number.isFinite(earliest)) return null;
+  const end = hasPresent ? nowYear : Math.max(latest, earliest);
+  const span = end - earliest;
+  return span > 0 ? span : 1; // any dated role ⇒ at least 1 year
 }
 
 // Structured profile → websiteData patch. Mirrors buildWebsiteDataFromFlow's
@@ -190,9 +221,18 @@ function buildWebsiteDataFromResume(s) {
   // Profile links → the flat handle keys the templates render
   // (githubHandle / linkedinHandle / twitterHandle / instagramHandle / behanceHandle).
   if (!blank(s.links)) Object.assign(wd, parseProfileLinks(String(s.links)));
-  // Years of experience → the "years" stat.
-  const yrs = parseInt(s.yearsExperience, 10);
-  if (Number.isFinite(yrs) && yrs > 0 && yrs < 80) wd.yearsExperience = yrs;
+  // Years of experience → the "years building" stat. The LLM's number is
+  // unreliable (often lowballed to 1), so compute the career span from the
+  // factual job periods and take the larger of the two — fixing the resume path
+  // showing "1 years building" for someone with a multi-year history. Falls back
+  // to whichever source is present when the other is missing.
+  const llmYrs = parseInt(s.yearsExperience, 10);
+  const derivedYrs = deriveYearsFromExperience(s.experience);
+  const yrs = Math.max(
+    Number.isFinite(llmYrs) ? llmYrs : 0,
+    Number.isFinite(derivedYrs) ? derivedYrs : 0
+  );
+  if (yrs > 0 && yrs < 80) wd.yearsExperience = yrs;
   // Current focus → hero meta + terminal "building" line.
   if (!blank(s.currentFocus)) wd.currentFocus = String(s.currentFocus).trim().slice(0, 120);
   // Work history → the experience timeline (template shape: period/role/company/

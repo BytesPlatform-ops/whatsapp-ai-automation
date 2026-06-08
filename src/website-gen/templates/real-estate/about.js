@@ -35,8 +35,8 @@ function generateAboutPage(c) {
             <span class="eyebrow">My Story</span>
             <h2 class="h2" style="margin-top:14px">${esc(c.aboutTitle || `Real estate that respects your time and your money.`)}</h2>
             <span class="bar-accent bar-accent-l"></span>
-            <p class="body" style="margin-top:24px">${esc(c.aboutText || `I started in real estate in ${foundedYear} for a simple reason: my own first home purchase was unnecessarily painful. Since then I&apos;ve closed ${homesSold} homes for ${city || 'local'} families — and not one of those clients has felt the way I did at my own closing.`)}</p>
-            <p class="body">${esc(c.aboutText2 || `I work the way I&apos;d want my own family worked with: zero pressure, complete transparency, and the kind of preparation that turns surprise inspections into non-events.`)}</p>
+            <p class="body" style="margin-top:24px">${esc(c.aboutText || `I started in real estate in ${foundedYear} for a simple reason: my own first home purchase was unnecessarily painful. Since then I've closed ${homesSold} homes for ${city || 'local'} families — and not one of those clients has felt the way I did at my own closing.`)}</p>
+            <p class="body">${esc(c.aboutText2 || `I work the way I'd want my own family worked with: zero pressure, complete transparency, and the kind of preparation that turns surprise inspections into non-events.`)}</p>
           </div>
         </div>
       </div>
@@ -118,7 +118,7 @@ function generateAboutPage(c) {
       <div class="ctn">
         <div class="rv">
           <span class="eyebrow">Let&apos;s Talk</span>
-          <h2 class="h2">${esc(c.ctaTitle || 'Whether you&apos;re a year out or ready this weekend — I&apos;m here.')}</h2>
+          <h2 class="h2">${esc(c.ctaTitle || "Whether you're a year out or ready this weekend — I'm here.")}</h2>
           <p class="body-lg">A 20-minute call. No pressure. We figure out if I&apos;m the right fit, and if I&apos;m not, I&apos;ll point you to someone who is.</p>
           <div style="margin-top:30px;display:flex;flex-wrap:wrap;gap:14px">
             <a href="/contact" class="btn btn-gold">Schedule a Call</a>

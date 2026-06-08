@@ -40,7 +40,7 @@ function generateHomePage(c) {
         <div class="hero-content rv">
           <span class="eyebrow" style="color:${TOKENS.gold}">${esc(c.brokerageName || 'Real Estate Expert')}${city ? ` &middot; ${esc(city)}` : ''}</span>
           <h1>${esc(c.heroHeadline || `Finding the ${city || 'Right'} Home, One Family at a Time.`)}</h1>
-          <p class="hero-sub">${esc(c.heroSubtitle || `${years}+ years helping ${city ? `${city}-area` : 'local'} families buy and sell with confidence. Let&apos;s find your next chapter together.`)}</p>
+          <p class="hero-sub">${esc(c.heroSubtitle || `${years}+ years helping ${city ? `${city}-area` : 'local'} families buy and sell with confidence. Let's find your next chapter together.`)}</p>
           <div class="hero-cta-row">
             <a href="/listings" class="btn btn-gold btn-lg">Browse Listings</a>
             <a href="/contact" class="btn btn-outline-white btn-lg">Schedule a Call</a>
@@ -75,9 +75,9 @@ function generateHomePage(c) {
           <div class="rv">${agentHeadshot(c.businessName, { placeholderImage: c.agentPlaceholderImage })}</div>
           <div class="agent-intro-body rv">
             <span class="eyebrow">Meet ${esc(c.firstName || (c.businessName || '').split(' ')[0] || 'Your Agent')}</span>
-            <h2 class="h2" style="margin-top:14px">${esc(c.aboutTitle || `A trusted partner for life&apos;s biggest move.`)}</h2>
+            <h2 class="h2" style="margin-top:14px">${esc(c.aboutTitle || `A trusted partner for life's biggest move.`)}</h2>
             <span class="bar-accent bar-accent-l"></span>
-            <p class="body">${esc(c.aboutText || `For ${years}+ years I&apos;ve helped families across ${city || 'the area'} buy and sell with clarity, candor, and care. I treat every transaction as if I were the one signing — because the right move is rarely the fastest one.`)}</p>
+            <p class="body">${esc(c.aboutText || `For ${years}+ years I've helped families across ${city || 'the area'} buy and sell with clarity, candor, and care. I treat every transaction as if I were the one signing — because the right move is rarely the fastest one.`)}</p>
             ${c.aboutText2 ? `<p class="body">${esc(c.aboutText2)}</p>` : `<p class="body">When I&apos;m not at a closing table or open house, you&apos;ll find me hiking the trails my clients now call home.</p>`}
             <div class="designations-line">
               ${designations.map((d, i) => `${i > 0 ? '<span class="des-sep"></span>' : ''}<span class="des-item">${esc(d)}</span>`).join('')}

@@ -465,12 +465,6 @@ a:hover{color:${t.gold}}
 .listing-meta span{display:inline-flex;align-items:center;gap:6px}
 .listing-meta svg{flex-shrink:0;color:${t.gold}}
 
-/* MLS coming-soon banner */
-.mls-banner{background:${t.cream};border:1px solid ${t.beige};border-left:4px solid ${t.gold};padding:24px 28px;display:flex;flex-wrap:wrap;align-items:center;gap:24px;margin-bottom:48px;border-radius:2px}
-.mls-banner .mls-text{flex:1;min-width:240px}
-.mls-banner h3{font-family:'Cormorant Garamond',serif;font-size:22px;font-weight:600;color:${t.navy};margin-bottom:6px;line-height:1.2}
-.mls-banner p{font-size:14.5px;color:${t.body}}
-
 /* Listings filter bar (cosmetic for MVP) */
 .filter-bar{display:flex;flex-wrap:wrap;gap:12px;padding:18px 0;margin-bottom:36px;border-top:1px solid ${t.beige};border-bottom:1px solid ${t.beige}}
 .filter-bar select{font-family:'Inter',sans-serif;font-size:13px;color:${t.body};background:transparent;border:1px solid ${t.beige};padding:9px 14px;border-radius:2px;letter-spacing:.02em;cursor:pointer;outline:none;transition:border-color .2s}
@@ -748,7 +742,6 @@ a:hover{color:${t.gold}}
   .page-hero{padding:120px 0 48px}
   .foot{padding:56px 0 24px}
   .form-input,.form-select,.form-textarea{font-size:16px}
-  .mls-banner{padding:20px 22px;flex-direction:column;align-items:flex-start;gap:14px}
 }
 @media(max-width:420px){
   .nav-cta{display:none}

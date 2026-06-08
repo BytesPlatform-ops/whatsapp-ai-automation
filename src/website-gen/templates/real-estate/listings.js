@@ -57,16 +57,7 @@ function generateListingsPage(c) {
       </div>
     </section>`;
 
-  const mlsBanner = `
-    <div class="mls-banner rv">
-      <div class="mls-text">
-        <h3>🏠 Live MLS listings coming soon</h3>
-        <p>This page shows a curated selection. Reach out directly to see <em>everything</em> currently available — including off-market opportunities I&apos;m sharing with my clients first.</p>
-      </div>
-      <div>
-        <a href="/contact" class="btn btn-navy">See Live Inventory</a>
-      </div>
-    </div>
+  const sampleNote = `
     <p class="sample-note" style="text-align:center;margin-bottom:12px">Photos shown are samples — replace with your own listing photography.</p>`;
 
   const filterChips = `
@@ -271,7 +262,7 @@ function generateListingsPage(c) {
   const body = hero + `
     <section class="sect" style="padding-top:48px">
       <div class="ctn">
-        ${mlsBanner}
+        ${sampleNote}
         ${filterChips}
         ${sortBar}
         ${curationProcess}
