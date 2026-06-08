@@ -201,14 +201,13 @@ async function handleLocation(user, message) {
 async function handleDocument(user, message) {
   if (!message?.mediaId) return { handled: false };
 
-  // Resume → portfolio: a PDF that reads as a CV kicks off the portfolio
-  // builder (download → text → LLM extract → build). Non-resume PDFs and
-  // scanned/unreadable files return false and fall through to the generic
+  // Resume → portfolio: a PDF / DOCX / DOC that reads as a CV kicks off the
+  // portfolio builder (download → text → LLM extract → build). Non-resume docs
+  // and scanned/unreadable files return false and fall through to the generic
   // capture below.
   try {
-    const mime = String(message.mimeType || '').toLowerCase();
-    if (mime.includes('pdf')) {
-      const { handleResumeUpload } = require('../../website-gen/resumeIntake');
+    const { handleResumeUpload, isResumeDoc } = require('../../website-gen/resumeIntake');
+    if (isResumeDoc(message.mimeType, message.filename)) {
       if (await handleResumeUpload(user, message)) return { handled: true };
     }
   } catch (err) {

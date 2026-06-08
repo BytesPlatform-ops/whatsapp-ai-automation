@@ -2,22 +2,42 @@
 
 // Resume → portfolio website.
 //
-// A user sends their CV/resume as a PDF over chat. We download it, extract the
-// text, LLM-extract a structured profile, map it to the SAME websiteData shape
-// the Flow / chat portfolio paths produce, and kick off the proven
-// generateWebsite() build. Anything the resume doesn't yield is either asked
-// (the niche, which picks the sub-template) or filled later via the normal
-// post-preview revision flow.
+// A user sends their CV/resume as a PDF, Word .docx, or legacy .doc over chat.
+// We download it, extract the text, LLM-extract a structured profile, map it to
+// the SAME websiteData shape the Flow / chat portfolio paths produce, and kick
+// off the proven generateWebsite() build. Anything the resume doesn't yield is
+// either asked (the niche, which picks the sub-template) or filled later via the
+// normal post-preview revision flow.
 //
 // Entry point: handleResumeUpload(user, message) — called from
-// locationHandler.handleDocument for PDF uploads. Returns true if it took over
-// (built / asked the niche), false to fall back to the generic document ack
-// (non-resume PDFs, scanned/unreadable files).
+// locationHandler.handleDocument for PDF / DOCX / DOC uploads. Returns true if
+// it took over (built / asked the niche), false to fall back to the generic
+// document ack (non-resume docs, scanned/unreadable files).
 
 const { logger } = require('../utils/logger');
 const { parseProfileLinks } = require('./portfolioLinksParse');
 
 const VALID_NICHES = ['photographer', 'designer', 'developer', 'writer'];
+
+// Which uploaded documents the resume builder will attempt to read. We support
+// text-based PDFs (pdf-parse), modern Word .docx (mammoth), and the old binary
+// .doc format (word-extractor). Both mime and filename are checked because
+// WhatsApp occasionally sends a generic `application/octet-stream` mime with the
+// real type only in the filename. `.doc` and `.docx` are kept distinct: the
+// .doc filename regex is anchored so it never matches a .docx name.
+function isPdfDoc(mime, filename) {
+  return /pdf/.test(mime) || /\.pdf$/i.test(filename || '');
+}
+function isDocxDoc(mime, filename) {
+  return /wordprocessingml/.test(mime) || /\.docx$/i.test(filename || '');
+}
+function isDocDoc(mime, filename) {
+  return /msword/.test(mime) || /\.doc$/i.test(filename || '');
+}
+function isResumeDoc(mime, filename) {
+  const m = String(mime || '').toLowerCase();
+  return isPdfDoc(m, filename) || isDocxDoc(m, filename) || isDocDoc(m, filename);
+}
 
 // PDF buffer → plain text (text-based PDFs). Strips pdf-parse's "-- N of M --"
 // page markers. Returns '' on failure / no extractable text (e.g. scanned
@@ -28,7 +48,7 @@ const VALID_NICHES = ['photographer', 'designer', 'developer', 'writer'];
 // `[GitHub](https://github.com/user)` in the text, instead of a bare "GitHub"
 // with the URL lost. The LLM extractor + parseProfileLinks then pick up the
 // real github/linkedin/behance/project URLs.
-async function extractResumeText(buffer) {
+async function extractPdfText(buffer) {
   try {
     const { PDFParse } = require('pdf-parse');
     const parser = new PDFParse({ data: buffer });
@@ -41,6 +61,65 @@ async function extractResumeText(buffer) {
     logger.warn(`[RESUME] PDF text extract failed: ${err.message}`);
     return '';
   }
+}
+
+// DOCX buffer → plain text. We go via mammoth's HTML conversion (not raw text)
+// so hyperlinks behind display text survive: `<a href="URL">GitHub</a>` becomes
+// `[GitHub](URL)`, mirroring the PDF path's `parseHyperlinks`. Block tags are
+// turned into newlines, the rest stripped, and the few entities mammoth emits
+// decoded. Returns '' on failure so the caller falls back to the generic path.
+async function extractDocxText(buffer) {
+  try {
+    const mammoth = require('mammoth');
+    const { value: html } = await mammoth.convertToHtml({ buffer });
+    return String(html || '')
+      .replace(/<a\b[^>]*\bhref="([^"]*)"[^>]*>([\s\S]*?)<\/a>/gi, (_, url, text) => `[${text}](${url})`)
+      .replace(/<\/(p|div|li|h[1-6]|tr|table)>/gi, '\n')
+      .replace(/<br\s*\/?>/gi, '\n')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>').replace(/&#39;/g, "'").replace(/&quot;/g, '"')
+      .replace(/[ \t]+/g, ' ')
+      .replace(/ *\n */g, '\n')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+  } catch (err) {
+    logger.warn(`[RESUME] DOCX text extract failed: ${err.message}`);
+    return '';
+  }
+}
+
+// Old binary Word .doc (OLE/CFB) → plain text via word-extractor (mammoth only
+// reads .docx). The binary format doesn't expose hyperlink targets behind
+// display text the way .docx/PDF do, so URLs only survive if the resume wrote
+// them out as literal text — which most do. Returns '' on failure so the caller
+// falls back to the generic document path.
+async function extractDocText(buffer) {
+  try {
+    const WordExtractor = require('word-extractor');
+    const doc = await new WordExtractor().extract(buffer);
+    return String(doc?.getBody() || '')
+      .replace(/\r\n?/g, '\n')
+      .replace(/[ \t]+/g, ' ')
+      .replace(/ *\n */g, '\n')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+  } catch (err) {
+    logger.warn(`[RESUME] DOC text extract failed: ${err.message}`);
+    return '';
+  }
+}
+
+// Dispatch on document type. Returns '' for anything unsupported, so
+// handleResumeUpload bails to the generic document ack. .docx is checked before
+// .doc because the .doc filename regex must not win on a .docx name (the mime
+// checks are already mutually exclusive).
+async function extractResumeText(buffer, mime, filename) {
+  const m = String(mime || '').toLowerCase();
+  if (isDocxDoc(m, filename)) return extractDocxText(buffer);
+  if (isDocDoc(m, filename)) return extractDocText(buffer);
+  if (isPdfDoc(m, filename)) return extractPdfText(buffer);
+  return '';
 }
 
 // Resume text → structured profile via the LLM. `isResume` gates non-resume
@@ -164,10 +243,10 @@ function buildWebsiteDataFromResume(s) {
  */
 async function handleResumeUpload(user, message) {
   const mime = String(message?.mimeType || '').toLowerCase();
-  if (!message?.mediaId || !mime.includes('pdf')) return false;
+  if (!message?.mediaId || !isResumeDoc(mime, message?.filename)) return false;
 
-  // Download the raw PDF bytes (image-safety checks in downloadMedia only
-  // apply to image/* MIME, so a PDF passes through untouched).
+  // Download the raw document bytes (image-safety checks in downloadMedia only
+  // apply to image/* MIME, so a PDF / DOCX passes through untouched).
   let buffer;
   try {
     const { downloadMedia } = require('../messages/sender');
@@ -179,7 +258,7 @@ async function handleResumeUpload(user, message) {
   }
   if (!buffer || !buffer.length) return false;
 
-  const text = await extractResumeText(buffer);
+  const text = await extractResumeText(buffer, mime, message?.filename);
   if (!text || text.length < 80) {
     logger.info(`[RESUME] no usable text (len=${text.length}) — falling back to generic doc path`);
     return false; // scanned / empty → not handled here
@@ -258,4 +337,5 @@ module.exports = {
   extractResumeStructure,
   buildWebsiteDataFromResume,
   handleResumeUpload,
+  isResumeDoc,
 };
