@@ -57,5 +57,14 @@ export const DEMO_SITES: DemoSite[] = [
     "industry": "Developer portfolio",
     "city": "Berlin",
     "url": "https://alexrivera.pixiebot.co"
+  },
+  {
+    "id": "photographer",
+    "label": "Photographer",
+    "prompt": "I'm a wedding & portrait photographer in San Francisco. I want a portfolio site for my galleries, my story, and a way for couples to enquire about dates.",
+    "businessName": "Hana Lee",
+    "industry": "Photography portfolio",
+    "city": "San Francisco",
+    "url": "https://hana.pixiebot.co"
   }
 ];

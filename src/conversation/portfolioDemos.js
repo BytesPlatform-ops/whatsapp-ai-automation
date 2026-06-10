@@ -46,8 +46,8 @@ const PORTFOLIO_SUBTYPES = [
     key: 'photographer',
     label: 'photographer / videographer',
     matches: 'photographer, photography, photo, videographer, filmmaker',
-    // scratch/photographer-portfolio-preview — Mara Lindqvist
-    previewUrl: 'https://maralindqvist.pixiebot.co',
+    // scratch/photographer-preview — Hana Lee, Wedding & Portrait Photographer
+    previewUrl: 'https://hana.pixiebot.co',
     screenshotUrl: 'https://pixiebot.co/portfolio-photographer.png',
     live: false,
   },

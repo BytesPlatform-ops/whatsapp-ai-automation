@@ -31,6 +31,7 @@ const DEMOS = [
   require('./demos/salonDemo'),
   require('./demos/genericDemo'),
   require('./demos/developerDemo'), // static — curated, not rebuilt
+  require('./demos/photographerDemo'), // static — curated, not rebuilt
 ];
 
 async function buildOne(demo) {
