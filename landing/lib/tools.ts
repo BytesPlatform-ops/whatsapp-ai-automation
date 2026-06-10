@@ -1591,7 +1591,7 @@ export const TOOLS: ToolDefinition[] = [
         a: 'Yes — the summary is a short paragraph, while the key points break out the main ideas as quick, scannable bullets. Use whichever fits how you want to share or save the gist.',
       },
     ],
-    relatedSlugs: ['ai-text-humanizer', 'fancy-text-generator', 'bold-text-generator'],
+    relatedSlugs: ['ai-text-humanizer', 'da-pa-checker', 'fancy-text-generator'],
     ctaHook: 'Run a tutoring, research, or content business? Pixie builds your full site in 60 seconds — text us on WhatsApp.',
     aboutHeading: 'What an AI text summarizer does well — and where to double-check it',
     about:
@@ -1640,11 +1640,80 @@ export const TOOLS: ToolDefinition[] = [
         a: 'Follow your school or employer\'s rules on AI assistance and disclosure. Use this to improve your own writing\'s clarity, not to misrepresent authorship where that is against the rules.',
       },
     ],
-    relatedSlugs: ['text-summarizer', 'fancy-text-generator', 'bold-text-generator'],
+    relatedSlugs: ['text-summarizer', 'da-pa-checker', 'fancy-text-generator'],
     ctaHook: 'Run a content, marketing, or tutoring business? Pixie builds your full site in 60 seconds — text us on WhatsApp.',
     aboutHeading: 'How AI text humanizers work, honestly',
     about:
       'An "AI text humanizer" is, under the hood, an AI editor. You give it a passage that sounds stiff, generic, or obviously machine-written, and a language model rewrites it to read more like natural human prose: it varies sentence length and rhythm, prefers plain words over jargon, trims filler and hedging, and strips out the tell-tale phrases that flag machine writing — the "in today\'s fast-paced world" openings, the relentless "moreover" and "it is important to note", the over-balanced both-sides sentences. The goal is clarity and flow, while keeping your meaning and your language intact. That is genuinely useful: first drafts, translated text, and quick AI outputs are often correct but lifeless, and a humanizing pass can make them readable and engaging without you rewriting from scratch. It is worth being clear-eyed about what these tools cannot do. Many are marketed as a way to "bypass AI detectors", but detection itself is unreliable — detectors produce false positives on human writing and false negatives on machine writing, and they shift constantly — so no rewrite can honestly promise to beat them, and this tool makes no such claim. What it can do is improve how the writing reads. Two cautions matter. First, any rewrite can subtly change emphasis or introduce a small inaccuracy, so always read the output and confirm it still says exactly what you meant before you publish or send it. Second, authorship rules apply: schools and many employers have policies on AI assistance and disclosure, and using a humanizer to misrepresent who or what wrote something can violate them. Used the right way — as an editing aid that makes your own ideas clearer and more natural, with a tone you choose to fit the context — an AI humanizer is a fast, practical writing assistant. This tool keeps your input under a sensible length per request, offers a few common tones, and returns a clean rewrite you can copy in a single tap.',
+  },
+  {
+    slug: 'da-pa-checker',
+    title: 'Free DA PA Checker — Check Domain Authority Instantly',
+    h1: 'Pixie DA / PA Checker',
+    shortName: 'DA / PA Checker',
+    tagline: "Check any website's authority score in seconds — free, no signup.",
+    metaDescription:
+      'Free DA PA checker: enter any domain to see its authority score and global rank. Instant results, no signup. Powered by the free Open PageRank dataset.',
+    keywords: [
+      'da pa checker',
+      'domain authority checker',
+      'page authority checker',
+      'check domain authority',
+      'website authority score',
+      'free da checker',
+    ],
+    category: 'Calculator',
+    emoji: '📊',
+    image: '/tools/da-pa-checker.jpg',
+    imageAlt: 'SEO analytics dashboard showing website authority and ranking metrics',
+    primaryKeyword: 'da pa checker',
+    intro:
+      "Type any domain and instantly see its authority score (0–100) and where it ranks among the world's websites. This checker is powered by Open PageRank — a free, link-based authority dataset that works just like the metric Moz calls Domain Authority. Use it to size up competitors, vet a backlink prospect, or track how your own site is trending, with no account and no credit card.",
+    howItWorks: [
+      {
+        title: 'Enter a domain or URL',
+        description: 'Paste a website like example.com or a full link — we strip it down to the domain automatically.',
+      },
+      {
+        title: 'Get the authority score',
+        description: 'We look up the domain in the Open PageRank dataset and show its authority (0–100) plus its global rank.',
+      },
+      {
+        title: 'Compare and act',
+        description: 'Check competitors and link targets side by side, then text Pixie to actually move the number with real SEO.',
+      },
+    ],
+    faqs: [
+      {
+        q: 'What is DA / PA?',
+        a: 'Domain Authority (DA) and Page Authority (PA) are scores from 0 to 100 that estimate how likely a website (DA) or a single page (PA) is to rank in search results. They are based mostly on the quantity and quality of links pointing at the site or page. Higher is stronger.',
+      },
+      {
+        q: 'Where do these numbers come from?',
+        a: 'This tool uses Open PageRank, a free authority dataset built from a large web-link graph. It produces a 0–100 authority score that behaves like Domain Authority. It is a genuine, independent metric — not a Moz API call — so it will not match Moz\'s DA exactly, but it tracks the same idea: stronger link profile, higher score.',
+      },
+      {
+        q: 'Can it check Page Authority for a specific URL?',
+        a: 'True page-level PA is a Moz-proprietary metric and is not available for free. This checker reports authority at the domain level. If you need page-by-page PA, backlink lists, and a full audit, Pixie can run that for you — tap the WhatsApp button after you check a domain.',
+      },
+      {
+        q: 'Why is a site showing 0 or "not found"?',
+        a: 'Open PageRank only has data for domains it has crawled in its link graph. Brand-new sites, very small sites, or unusual TLDs may not appear yet and will show as 0 or unranked. That usually means the site has few known backlinks — not that the tool is broken.',
+      },
+      {
+        q: 'Is the DA PA checker free?',
+        a: 'Yes — free with no signup. A light rate limit applies to rapid repeated lookups so the tool stays fast for everyone.',
+      },
+      {
+        q: 'How do I actually raise my authority?',
+        a: 'Authority grows when other reputable sites link to yours, which comes from genuinely useful content, a fast technical site, and real outreach. There is no instant trick. Pixie builds SEO-ready sites and runs ongoing audits to help you earn it — message us to start.',
+      },
+    ],
+    relatedSlugs: ['text-summarizer', 'ai-text-humanizer', 'trust-badge-generator'],
+    ctaHook: 'Want to actually raise your authority? Pixie builds SEO-ready websites and runs full audits — text us on WhatsApp.',
+    aboutHeading: 'What Domain Authority really measures',
+    about:
+      'Domain Authority (DA) and Page Authority (PA) started as Moz metrics: a single 0–100 score that predicts how well a site or page is likely to rank in search, derived largely from its backlink profile — how many other sites link to it, and how trustworthy those sites are themselves. The scores are logarithmic, so climbing from 20 to 30 is far easier than climbing from 70 to 80, and they are relative, not absolute: a 40 is strong in a quiet niche and weak in a competitive one. Crucially, DA and PA are third-party estimates, not numbers Google publishes or uses — Google has repeatedly said it has no single "authority score." They are still useful precisely because they are comparable: line up five competitors or five link prospects and the scores tell you, at a glance, who carries weight. This tool is powered by Open PageRank, a free dataset that models the same web-link graph and outputs a comparable 0–100 authority score, so you get the practical signal without a paid subscription. Treat the number as a compass, not a verdict. A high score does not guarantee a page will rank for your keyword, and a low score does not mean you cannot win — relevance, content quality, search intent, page speed, and user experience all matter alongside links. The honest way to use an authority checker is for triage: spotting which competitors dominate a space, deciding whether a backlink is worth pursuing, and tracking whether your own trend line is moving up over months. Moving that line is the slow part — it comes from publishing things worth linking to, fixing the technical foundations of your site, and earning mentions from real, relevant sources. That is exactly the work Pixie is built to support: a fast, SEO-ready site to stand on, and ongoing audits to keep the trend pointing up.',
   },
 ];
 

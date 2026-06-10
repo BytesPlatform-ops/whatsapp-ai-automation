@@ -262,6 +262,14 @@ export function buildToolPrefill(slug: string, data: PrefillData): ToolPrefillRe
           'Hi! Just used your AI Text Humanizer. I run a content/marketing business — interested in a website.',
       };
 
+    case 'da-pa-checker':
+      return {
+        headline: 'Want to actually raise your authority?',
+        subhead: 'Pixie builds SEO-ready sites and runs full audits — text us on WhatsApp.',
+        whatsappPrefill:
+          "Hi! Just used your DA/PA Checker. I want to improve my website's SEO — interested in a website and SEO audit.",
+      };
+
     default:
       return {
         headline: 'Want a site like this?',
