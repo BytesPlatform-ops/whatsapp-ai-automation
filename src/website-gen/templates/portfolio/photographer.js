@@ -1187,24 +1187,41 @@ window.addEventListener('DOMContentLoaded', function () {
   if (form) {
     var status = document.getElementById('inquiry-status');
     var submitBtn = document.getElementById('inquiry-submit');
+    var pkgSelect = document.getElementById('iq-package');
+    // Clicking a package's "Inquire about this" pre-selects that tier in the form.
+    var pkgCtas = document.querySelectorAll('.package-cta[data-package]');
+    for (var pi = 0; pi < pkgCtas.length; pi++) {
+      pkgCtas[pi].addEventListener('click', function () {
+        if (!pkgSelect) return;
+        var want = this.getAttribute('data-package');
+        for (var oi = 0; oi < pkgSelect.options.length; oi++) {
+          if (pkgSelect.options[oi].value === want) { pkgSelect.selectedIndex = oi; break; }
+        }
+      });
+    }
     form.addEventListener('submit', function (e) {
       e.preventDefault();
       var data = new FormData(form);
-      if (!data.get('consent')) { status.textContent = 'Please confirm consent first.'; status.className = 'inquiry-status err'; return; }
+      if (!data.get('consent_given')) { status.textContent = 'Please confirm consent first.'; status.className = 'inquiry-status err'; return; }
+      var siteId = form.getAttribute('data-site-id') || '';
+      if (!siteId) { status.textContent = 'This is a preview — the form activates once the site is published.'; status.className = 'inquiry-status err'; return; }
       submitBtn.disabled = true; status.textContent = 'Sending…'; status.className = 'inquiry-status';
       var msgParts = [];
+      if (data.get('package'))    msgParts.push('Package: ' + data.get('package'));
       if (data.get('event_date')) msgParts.push('Event date: ' + data.get('event_date'));
       if (data.get('event_type')) msgParts.push('Event type: ' + data.get('event_type'));
       if (data.get('message'))    msgParts.push(data.get('message'));
-      fetch('${attr(PUBLIC_API_BASE)}/api/leads/submit', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          siteId: form.getAttribute('data-site-id') || '',
-          name: data.get('name'),
-          email: data.get('email'),
-          message: msgParts.join('\\n'),
-          consent: !!data.get('consent'),
-        }),
+      var payload = new URLSearchParams({
+        name: data.get('name') || '',
+        email: data.get('email') || '',
+        message: msgParts.join('\\n'),
+        consent_given: data.get('consent_given') || 'yes',
+        form_name: 'photography-inquiry',
+      });
+      fetch('${attr(PUBLIC_API_BASE)}/public/leads/' + encodeURIComponent(siteId), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Accept': 'application/json' },
+        body: payload.toString(),
       }).then(function (r) { return r.json(); }).then(function (j) {
         if (j && j.ok) {
           form.innerHTML = '<p style="font-family: var(--font-display); font-style: italic; font-size: 26px; color: var(--ink-inverse); padding: 32px 0;">Thank you. I read every inquiry and will reply within 24 hours.</p>';
@@ -1459,7 +1476,7 @@ function renderPackages(c) {
   <div class="package-price">${esc(pkg.price || 'Inquire')}</div>
   ${pkg.duration ? `<div class="package-duration">${esc(pkg.duration)}</div>` : ''}
   ${Array.isArray(pkg.includes) && pkg.includes.length ? `<ul class="package-includes">${pkg.includes.map((i) => `<li><span>${esc(i)}</span></li>`).join('')}</ul>` : ''}
-  <a href="#contact" class="package-cta">Inquire about this</a>
+  <a href="#contact" class="package-cta" data-package="${attr(pkg.name)}">Inquire about this</a>
 </article>`).join('');
 }
 
@@ -1488,6 +1505,9 @@ function generateHomePage(c) {
     : `<div class="hero-image-fallback"><svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="1.2" aria-hidden="true" style="color: rgba(248, 246, 242, 0.6)"><circle cx="32" cy="32" r="14"/><circle cx="32" cy="32" r="6"/><rect x="6" y="14" width="52" height="40" rx="4"/><circle cx="48" cy="22" r="2" fill="currentColor"/></svg></div>`;
 
   const eventTypes = ['Wedding', 'Portrait Session', 'Engagement', 'Family / Maternity', 'Event', 'Commercial / Brand', 'Other'];
+  // Package names mirror the packages section so the inquiry form can capture
+  // which tier a visitor clicked "Inquire about this" on.
+  const packageNames = ((c.packages && Array.isArray(c.packages) && c.packages.length) ? c.packages : defaultPackages()).map((p) => p.name).filter(Boolean);
 
   const yr = new Date().getFullYear();
 
@@ -1606,6 +1626,14 @@ ${c.testimonialQuote ? `
               ${eventTypes.map((t) => `<option value="${attr(t)}">${esc(t)}</option>`).join('')}
             </select>
           </div>
+        </div>
+        <div>
+          <label for="iq-package">Package of interest</label>
+          <select id="iq-package" name="package">
+            <option value="">Select a package (optional)</option>
+            ${packageNames.map((n) => `<option value="${attr(n)}">${esc(n)}</option>`).join('')}
+            <option value="Not sure yet / custom">Not sure yet / custom</option>
+          </select>
         </div>
         <div>
           <label for="iq-msg">Tell me more</label>
