@@ -48,5 +48,14 @@ export const DEMO_SITES: DemoSite[] = [
     "industry": "Specialty coffee shop",
     "city": "Portland, OR",
     "url": "https://bytecoffee.pixiebot.co"
+  },
+  {
+    "id": "developer",
+    "label": "Developer",
+    "prompt": "I'm a full-stack engineer in Berlin. I want a portfolio site to show my projects, my stack, and an easy way for companies to reach me.",
+    "businessName": "Alex Rivera",
+    "industry": "Developer portfolio",
+    "city": "Berlin",
+    "url": "https://alexrivera.pixiebot.co"
   }
 ];

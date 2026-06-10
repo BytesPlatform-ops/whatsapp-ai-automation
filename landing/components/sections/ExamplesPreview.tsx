@@ -6,7 +6,7 @@ import { DEMO_SITES } from '@/lib/demoSites';
 
 // "Proof strip" — lands right after HowItWorks so users seeing the
 // "3-minute on WhatsApp" pitch immediately get tangible evidence it
-// actually works. 4 real Netlify sites, clickable thumbnails via the
+// actually works. Real live sites, clickable thumbnails via the
 // same Microlink screenshot pipeline as the /examples page.
 
 // Microlink CDN caches by full query string for ~24h. The 3 hosts below
@@ -42,6 +42,7 @@ const INDUSTRY_ACCENT: Record<string, string> = {
   'real-estate': 'from-[#1A2B45] to-[#C9A96E]',
   salon: 'from-[#1F2937] to-[#EC4899]',
   generic: 'from-[#1C1917] to-[#D97706]',
+  developer: 'from-[#1E1B4B] to-[#A78BFA]',
 };
 
 function MiniSiteCard({ site, index }: { site: (typeof DEMO_SITES)[number]; index: number }) {

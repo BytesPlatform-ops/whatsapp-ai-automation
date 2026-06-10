@@ -1,6 +1,9 @@
 #!/usr/bin/env node
 /**
- * Generate + deploy all 4 demo sites used by pixiebot.co/examples.
+ * Generate + deploy the demo sites used by pixiebot.co/examples.
+ * Most are built from scratch through the real generator + deployer; demos
+ * flagged `static: true` (e.g. the developer portfolio) are curated and pass
+ * straight through to demoSites.ts without being rebuilt.
  *
  * Run from repo root:
  *   node scripts/generateDemoSites.js
@@ -27,10 +30,29 @@ const DEMOS = [
   require('./demos/realEstateDemo'),
   require('./demos/salonDemo'),
   require('./demos/genericDemo'),
+  require('./demos/developerDemo'), // static — curated, not rebuilt
 ];
 
 async function buildOne(demo) {
   const { id, label, prompt, templateId, businessData } = demo;
+
+  // Static (curated) demos — e.g. the hand-built developer portfolio — are not
+  // regenerated. Their fields pass straight through to demoSites.ts so a
+  // regen run can't replace a bespoke preview with a generic template render.
+  if (demo.static) {
+    console.log(`\n━━━ Static ${label} (${id}) — curated, not rebuilt ━━━`);
+    console.log(`  [url]     ${demo.url}`);
+    return {
+      id,
+      label,
+      prompt,
+      businessName: demo.businessName,
+      industry: demo.industry,
+      city: demo.city,
+      url: demo.url,
+    };
+  }
+
   console.log(`\n━━━ Building ${label} (${id}) ━━━`);
 
   const extras = {};

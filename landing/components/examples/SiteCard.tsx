@@ -37,6 +37,7 @@ const INDUSTRY_ACCENT: Record<string, string> = {
   'real-estate': 'from-[#1A2B45] to-[#C9A96E]',
   salon: 'from-[#1F2937] to-[#EC4899]',
   generic: 'from-[#1C1917] to-[#D97706]',
+  developer: 'from-[#1E1B4B] to-[#A78BFA]',
 };
 
 interface SiteCardProps {
