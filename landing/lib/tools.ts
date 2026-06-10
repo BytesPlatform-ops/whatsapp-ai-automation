@@ -2296,6 +2296,556 @@ export const TOOLS: ToolDefinition[] = [
     about:
       'Automatic transcription used to be a punchline — the kind of feature that turned "recognize speech" into "wreck a nice beach" — but the technology crossed a real threshold with large speech models trained on enormous, diverse audio. OpenAI\'s Whisper, which powers this tool, was trained on hundreds of thousands of hours of multilingual speech, and the result is a transcriber that copes gracefully with accents, casual speech, technical vocabulary, and a fair amount of background noise. It also detects the spoken language automatically and can transcribe dozens of them, which is why a single tool can handle an English podcast, a Spanish interview, and a Hindi voice memo without you changing any settings. Under the hood the model listens to the audio in short overlapping windows and predicts the most likely sequence of words, using its language understanding to disambiguate similar-sounding phrases from context — the same principle that lets a human catch a mumbled word because they know what the sentence is about. The practical limits are honest ones: extremely noisy recordings, several people talking over each other, and very long files are still hard, and like any model it can occasionally invent a plausible-sounding word in a silent or garbled stretch, so a quick read-through is wise before you rely on a transcript. Used well, though, it collapses one of the most tedious knowledge-work tasks there is — turning hours of spoken audio into searchable, editable, shareable text — from an afternoon into a couple of minutes, freeing interviews, meetings, lectures, and podcasts to be summarized, quoted, captioned, and translated.',
   },
+  {
+    slug: 'random-food-generator',
+    title: 'Random Food Generator — What Should I Eat?',
+    h1: 'Pixie Random Food Generator',
+    shortName: 'Random Food Generator',
+    tagline: 'Can\'t decide what to eat? Let the generator pick.',
+    metaDescription:
+      'Stuck on what to eat? This free random food generator picks a meal or snack for you. Filter by breakfast, lunch, dinner, or dessert. No signup.',
+    keywords: [
+      'random food generator',
+      'what should i eat',
+      'random meal generator',
+      'food picker',
+      'what to eat generator',
+    ],
+    category: 'Generator',
+    emoji: '🍽️',
+    image: '/tools/random-food-generator.jpg',
+    imageAlt: 'A spread of different dishes on a table',
+    primaryKeyword: 'random food generator',
+    intro:
+      'Can\'t decide what to eat? Pick a meal type — or leave it on Any — and let the generator choose for you. Keep tapping until something sounds good. Perfect for beating decision fatigue at breakfast, lunch, dinner, or dessert.',
+    howItWorks: [
+      { title: 'Pick a meal', description: 'Choose breakfast, lunch, dinner, dessert, snack — or Any for a full surprise.' },
+      { title: 'Tap generate', description: 'The tool randomly picks a dish from that category.' },
+      { title: 'Keep or re-roll', description: 'Like it? Go cook or order it. Not feeling it? Tap again for another idea.' },
+    ],
+    faqs: [
+      {
+        q: 'What does the random food generator do?',
+        a: 'It removes the "what should I eat?" paralysis by picking a meal or snack for you at random. You can narrow it to a specific meal type or let it choose from everything.',
+      },
+      {
+        q: 'Can I filter by meal type?',
+        a: 'Yes. Choose Breakfast, Lunch, Dinner, Dessert, or Snack to get an idea that fits the moment, or pick Any to draw from the whole list.',
+      },
+      {
+        q: 'Is it good for couples or groups who can\'t decide?',
+        a: 'Absolutely — agree to accept whatever it lands on, or take turns re-rolling until everyone is happy. It is a quick, neutral tiebreaker for "you pick / no, you pick".',
+      },
+      {
+        q: 'Are these recipes or just ideas?',
+        a: 'They are dish ideas, not full recipes. Once you have one you like, search it up or order it. The point is to make the decision, fast.',
+      },
+      {
+        q: 'Is it free?',
+        a: 'Completely free, no signup, and it runs in your browser. Tap as many times as you like.',
+      },
+    ],
+    relatedSlugs: ['random-emoji-generator', 'viking-name-generator', 'superhero-name-generator'],
+    ctaHook: 'Run a restaurant, café, or food truck? Pixie builds full ordering sites with menus and checkout in 60 seconds — text us on WhatsApp.',
+    aboutHeading: 'Why a random picker beats endless scrolling',
+    about:
+      'The struggle to decide what to eat has a name — decision fatigue — and it is very real. Every choice you make in a day draws down a limited reserve of mental energy, and by the time you are hungry and tired, even a small decision like "what is for dinner?" can feel disproportionately hard. That is why couples can spend twenty minutes bouncing "I don\'t mind, you choose" back and forth, and why food-delivery apps deliberately show endless scrolling carousels: more options often makes choosing harder, not easier, a phenomenon psychologists call choice overload. A random food generator sidesteps all of that by doing the one thing your tired brain does not want to do — commit. By narrowing the field to a single concrete suggestion, it converts an open-ended, anxiety-inducing question into a simple yes-or-no, which is far easier to answer. If the first pick does not appeal, the act of rejecting it usually clarifies what you actually want, and a couple of re-rolls lands on something. It is a small trick, but it reliably turns "I can\'t decide" into a plan — and for households or groups, agreeing in advance to accept the result removes the social friction of who gets to choose.',
+  },
+  {
+    slug: 'random-emoji-generator',
+    title: 'Random Emoji Generator — Pick Random Emojis',
+    h1: 'Pixie Random Emoji Generator',
+    shortName: 'Random Emoji Generator',
+    tagline: 'Generate random emojis to copy and paste anywhere.',
+    metaDescription:
+      'Generate random emojis with this free random emoji generator. Pick a category and count, then copy and paste anywhere. No signup needed.',
+    keywords: [
+      'random emoji generator',
+      'random emoji',
+      'emoji picker',
+      'emoji generator',
+      'copy paste emoji',
+    ],
+    category: 'Generator',
+    emoji: '🎲',
+    image: '/tools/random-emoji-generator.jpg',
+    imageAlt: 'Colorful emoji icons scattered on a bright background',
+    primaryKeyword: 'random emoji generator',
+    intro:
+      'Spin up random emojis by category and count, then copy and paste them anywhere — captions, bios, messages, usernames. Great for beating writer\'s block on social posts, picking a daily mood, or running emoji games with friends.',
+    howItWorks: [
+      { title: 'Pick a category', description: 'All, Smileys, Animals, Food, Hearts, Hands, Travel, or Symbols.' },
+      { title: 'Choose how many', description: 'Get 1, 3, 5, or 10 random emojis at once.' },
+      { title: 'Copy and paste', description: 'Tap copy and drop them into any app — they are real Unicode emojis.' },
+    ],
+    faqs: [
+      {
+        q: 'What does the random emoji generator do?',
+        a: 'It picks random emojis for you from the category you choose, so you do not have to scroll the whole keyboard. Copy the set and paste it anywhere that supports emojis.',
+      },
+      {
+        q: 'Will the emojis work everywhere?',
+        a: 'Yes — these are standard Unicode emojis, so they render and copy into Instagram, TikTok, WhatsApp, Discord, X, and virtually any modern app or document. Exact artwork varies slightly by device, which is normal.',
+      },
+      {
+        q: 'What can I use it for?',
+        a: 'Spicing up captions and bios, picking a random "mood of the day", emoji guessing games (describe a movie in emojis), icebreakers, and decorating usernames or headings.',
+      },
+      {
+        q: 'Can I get just one emoji or a whole set?',
+        a: 'Both. Set the count to 1 for a single pick or up to 10 for a string of them. Hit shuffle for a fresh set anytime.',
+      },
+      {
+        q: 'Is it free and private?',
+        a: 'Yes. No signup, and it runs entirely in your browser — nothing is sent anywhere.',
+      },
+    ],
+    relatedSlugs: ['fancy-text-generator', 'heart-symbol-generator', 'random-food-generator'],
+    ctaHook: 'Run a social media or content brand? Pixie builds full websites in 60 seconds — text us on WhatsApp.',
+    aboutHeading: 'A short history of emoji',
+    about:
+      'Emoji began in late-1990s Japan, where designer Shigetaka Kurita created a set of 176 tiny 12×12-pixel icons for a mobile internet platform, giving texters a way to add tone and emotion to short messages. The word itself is Japanese — e (picture) plus moji (character) — and its resemblance to "emotion" is a happy coincidence. Emoji went global once Unicode began standardizing them in 2010, which is the crucial detail behind a tool like this: because each emoji is an official Unicode character rather than an image, it copies and pastes between apps and devices the same way letters do. What differs is the artwork — Apple, Google, Samsung, and Microsoft each draw their own version of the same code point, which is why the "grinning face" you send from an iPhone looks a little different on an Android. Today there are well over three thousand emojis, with new ones added each year by the Unicode Consortium through a formal proposal process. They have become a genuine layer of digital language: studies of online communication show emojis carry real pragmatic meaning, softening requests, signalling tone, and replacing the body language that text strips away. A random picker is a playful slice of that — useful for sparking caption ideas, running guessing games, or just adding a little personality to a message you would otherwise send plain.',
+  },
+  {
+    slug: 'xbox-gamertag-generator',
+    title: 'Xbox Gamertag Generator — Cool Gamertag Ideas',
+    h1: 'Pixie Xbox Gamertag Generator',
+    shortName: 'Xbox Gamertag Generator',
+    tagline: 'Generate cool gamertag and username ideas instantly.',
+    metaDescription:
+      'Generate cool Xbox gamertags and gaming usernames with this free gamertag generator. Add numbers, leetspeak, and styling. No signup needed.',
+    keywords: [
+      'xbox gamertag generator',
+      'gamertag generator',
+      'xbox name generator',
+      'gaming username generator',
+      'twitch username generator',
+    ],
+    category: 'Generator',
+    emoji: '🎮',
+    image: '/tools/xbox-gamertag-generator.jpg',
+    imageAlt: 'Game controller glowing on a dark desk setup',
+    primaryKeyword: 'xbox gamertag generator',
+    intro:
+      'Generate cool gamertag and username ideas for Xbox, PlayStation, Steam, Twitch, and Discord. Toggle numbers, leetspeak, and the classic xX_ _Xx styling, then copy your favorite. Gamertags must be unique, so generate a batch and check availability.',
+    howItWorks: [
+      { title: 'Set your style', description: 'Toggle numbers, leetspeak (3, 0, 7…), and the xX_ _Xx wrap.' },
+      { title: 'Generate a batch', description: 'Get a set of fresh gamertag ideas built from edgy adjective + noun combos.' },
+      { title: 'Copy and claim', description: 'Copy one you like and check if it is available on your platform.' },
+    ],
+    faqs: [
+      {
+        q: 'What makes a good gamertag?',
+        a: 'Short, memorable, easy to say in voice chat, and ideally without confusing number/letter swaps. A strong tag pairs a punchy adjective with a noun (ShadowSniper, FrostByte) and avoids anything you will be embarrassed by in a year.',
+      },
+      {
+        q: 'Does this work for PlayStation, Steam, Twitch, and Discord too?',
+        a: 'Yes. Despite the name, the ideas work for any gaming or streaming handle — PSN online IDs, Steam names, Twitch usernames, Discord, and more. The generator does not check Xbox specifically; it gives you ideas.',
+      },
+      {
+        q: 'Why do I need numbers or leetspeak?',
+        a: 'Popular words are usually already taken, so adding numbers or swapping letters for look-alikes (e for 3, o for 0) helps you find an available variant. Toggle them on if your first choices are gone.',
+      },
+      {
+        q: 'Will the gamertag be available?',
+        a: 'Maybe — gamertags must be unique on each platform, and this tool generates ideas rather than checking availability. Generate several, then try them on Xbox/PSN/Steam to see which are free.',
+      },
+      {
+        q: 'Is it free?',
+        a: 'Yes, completely free and no signup. Generate as many as you want.',
+      },
+    ],
+    relatedSlugs: ['viking-name-generator', 'fancy-text-generator', 'glitch-text-generator'],
+    ctaHook: 'Building a gaming brand, team, or Twitch channel? Pixie builds your full website in 60 seconds — text us on WhatsApp.',
+    aboutHeading: 'The art of the gamertag',
+    about:
+      'A gamertag is the name you live under online, and Microsoft popularized the term with the original Xbox Live in 2002 — a single identity that follows you across every game and the social graph around it. Good ones share a few traits: they are short enough to type and say, distinctive enough to remember, and free of the kind of joke that gets stale fast. The hard part is that they must be unique, and with hundreds of millions of accounts the obvious words went years ago, which is exactly why number suffixes and "leetspeak" letter swaps exist — turning "Sniper" into "Sn1per" or appending a year reclaims a taken idea without abandoning it. The decorative xX_Name_Xx wrap is a nostalgic relic of the Xbox 360 and early YouTube era that has cycled back into ironic popularity. A generator helps because naming yourself from a blank slate is genuinely hard; seeing dozens of adjective-plus-noun combinations sparks recognition — you know the right one when you see it. Worth remembering: most platforms now let you change your display name (Xbox gives you one free change, then charges), so you are not locked in forever, but a tag you actually like is one less thing to overthink before you get into the game.',
+  },
+  {
+    slug: 'viking-name-generator',
+    title: 'Viking Name Generator — Norse Name Ideas',
+    h1: 'Pixie Viking Name Generator',
+    shortName: 'Viking Name Generator',
+    tagline: 'Generate authentic-sounding Norse Viking names.',
+    metaDescription:
+      'Generate Viking and Norse name ideas with this free Viking name generator. Get first names and earned bynames like Ragnar Bloodaxe. No signup.',
+    keywords: [
+      'viking name generator',
+      'norse name generator',
+      'viking names',
+      'norse names',
+      'nordic name generator',
+    ],
+    category: 'Generator',
+    emoji: '⚔️',
+    image: '/tools/viking-name-generator.jpg',
+    imageAlt: 'Norse longship and shields by a misty fjord',
+    primaryKeyword: 'viking name generator',
+    intro:
+      'Generate authentic-sounding Viking names — a Norse first name paired with an earned byname, like Ragnar Bloodaxe or Astrid the Fearless. Perfect for D&D and RPG characters, gamer handles, fantasy writing, and re-enactment. Hit generate for a fresh raiding party.',
+    howItWorks: [
+      { title: 'Tap generate', description: 'Get a batch of Norse names, each a first name plus a byname.' },
+      { title: 'Browse the set', description: 'Scan the list for one that fits your character or vibe.' },
+      { title: 'Copy your pick', description: 'Copy the name and use it for your character, handle, or story.' },
+    ],
+    faqs: [
+      {
+        q: 'Are these real Viking names?',
+        a: 'They are built from authentic Old Norse given names (Ragnar, Bjorn, Astrid, Sigrid) and the kind of descriptive bynames Vikings actually used. The combinations are generated for fun rather than pulled from a specific historical record, so they sound right without being tied to one real person.',
+      },
+      {
+        q: 'What is a byname?',
+        a: 'Vikings did not use family surnames the way we do; they used patronymics (Eriksson, "son of Erik") and earned nicknames called bynames — like "the Boneless", "Forkbeard", or "Bloodaxe" — that described a trait, deed, or appearance. The generator gives you a first name plus one of these bynames.',
+      },
+      {
+        q: 'Can I use these for D&D or video games?',
+        a: 'Yes — they are popular for D&D and tabletop characters, Skyrim and other RPG playthroughs, gamer handles, and fantasy fiction. Copy any name and use it freely.',
+      },
+      {
+        q: 'Do they work for male and female characters?',
+        a: 'Yes. The first-name pool includes both traditionally male and female Old Norse names, so re-roll until you get one that fits your character.',
+      },
+      {
+        q: 'Is it free?',
+        a: 'Completely free, no signup, runs in your browser. Generate as many as you like.',
+      },
+    ],
+    relatedSlugs: ['pirate-name-generator', 'anime-name-generator', 'superhero-name-generator'],
+    ctaHook: 'Building a game, brand, or fantasy project? Pixie builds full websites from one WhatsApp message.',
+    aboutHeading: 'How Vikings really named themselves',
+    about:
+      'Norse naming worked very differently from the modern first-name-plus-surname system. A Viking had a given name and then, instead of an inherited family name, a patronymic built from their father\'s name: Erik\'s son Leif was Leif Eriksson, and his daughter would be Eriksdóttir. On top of that, many Norse people picked up a byname — an earned nickname that stuck — and these are the part that feels most "Viking" to modern ears. They could be flattering or brutally literal: Harald Fairhair for his famous mane, Ivar the Boneless (historians still debate whether it referred to a physical condition or a metaphor), Eric Bloodaxe for obvious reasons, and Thorbjorn Skullsplitter for, presumably, similar ones. Bynames did real work in a world where the same dozen given names recurred constantly; they disambiguated people and broadcast reputation. This generator leans into that tradition by pairing a genuine Old Norse given name with a descriptive byname, which is why the results feel authentic even though the specific combinations are invented. For storytelling, tabletop characters, or a gamertag with some saga energy, the byname is what gives a name its bite — anyone can be "Bjorn", but "Bjorn Ironside" sounds like he has a story worth hearing.',
+  },
+  {
+    slug: 'superhero-name-generator',
+    title: 'Superhero Name Generator — Hero Name Ideas',
+    h1: 'Pixie Superhero Name Generator',
+    shortName: 'Superhero Name Generator',
+    tagline: 'Generate epic superhero names and alter egos.',
+    metaDescription:
+      'Generate epic superhero names with this free superhero name generator. Get hero aliases like The Crimson Falcon or Midnight Striker. No signup.',
+    keywords: [
+      'superhero name generator',
+      'generate a superhero name',
+      'hero name generator',
+      'superhero names',
+      'alter ego generator',
+    ],
+    category: 'Generator',
+    emoji: '🦸',
+    image: '/tools/superhero-name-generator.jpg',
+    imageAlt: 'Silhouette of a caped hero against a dramatic sky',
+    primaryKeyword: 'generate a superhero name',
+    intro:
+      'Generate epic superhero names and alter egos — The Crimson Falcon, Midnight Striker, Quantum Reaper. Built from the classic adjective-plus-noun formula comic writers have used for decades. Perfect for stories, games, costumes, team names, and just for fun.',
+    howItWorks: [
+      { title: 'Tap generate', description: 'Get a batch of hero names mixing bold adjectives with punchy nouns.' },
+      { title: 'Find your alias', description: 'Scan for the one that sounds like your hero (or villain).' },
+      { title: 'Copy and use it', description: 'Copy the name for your story, character, costume, or team.' },
+    ],
+    faqs: [
+      {
+        q: 'How does the superhero name generator work?',
+        a: 'It uses the time-tested comic-book formula — a vivid adjective (Crimson, Midnight, Quantum) plus a strong noun (Falcon, Striker, Reaper), sometimes with "The" in front. That structure is exactly how many famous hero names are built.',
+      },
+      {
+        q: 'Can I use these names for stories or games?',
+        a: 'Yes — they are great for fiction, comics, D&D and RPG characters, cosplay personas, team and squad names, and social handles. Generated names are free to use.',
+      },
+      {
+        q: 'Do these work for villains too?',
+        a: 'Definitely. The darker adjective-noun pairings (Obsidian Viper, Inferno Warden) read as villains just as easily as heroes — same formula, different vibe.',
+      },
+      {
+        q: 'Can it make a name from my own name?',
+        a: 'This version generates fresh random aliases rather than transforming your real name. Generate a batch and pick the one that feels like your secret identity.',
+      },
+      {
+        q: 'Is it free?',
+        a: 'Yes — free, no signup, runs in your browser. Generate as many as you want.',
+      },
+    ],
+    relatedSlugs: ['viking-name-generator', 'pirate-name-generator', 'xbox-gamertag-generator'],
+    ctaHook: 'Building a comic, game, or creative brand? Pixie builds full websites in 60 seconds — text us on WhatsApp.',
+    aboutHeading: 'The formula behind great hero names',
+    about:
+      'Superhero names are a tiny, almost mathematical art form. Look across a century of comics and a clear pattern emerges: the most memorable aliases are usually one or two strong syllabic beats built on a vivid modifier and a concrete noun. Sometimes the noun is the whole identity (Batman, Superman, Wolverine), but a huge share follow the adjective-plus-noun or "The [Adjective] [Noun]" shape that this generator uses, because that structure does two jobs at once — it hints at a power or theme (Crimson suggests blood or fire, Midnight suggests stealth) while staying punchy enough to shout in a fight scene. Alliteration is the other open secret of the genre: Marvel\'s Stan Lee famously gave characters alliterative real names — Peter Parker, Bruce Banner, Reed Richards, Sue Storm — partly so he could remember them, and that musicality carries into hero aliases too. Good names also leave room for the costume and the story; "Striker" tells you nothing about powers, which is a feature, because it lets the character define the name rather than the other way around. Whether you are naming a protagonist, a tabletop character, a cosplay persona, or a team, the trick is to say the name out loud — if it sounds like something a narrator could announce as the hero bursts through a wall, it works.',
+  },
+  {
+    slug: 'speech-bubble-meme-generator',
+    title: 'Speech Bubble Meme Generator — Add a Bubble',
+    h1: 'Pixie Speech Bubble Meme Generator',
+    shortName: 'Speech Bubble Meme Generator',
+    tagline: 'Add a classic reaction speech bubble to any image.',
+    metaDescription:
+      'Add a reaction speech bubble to any image with this free speech bubble meme generator. Upload, position the tail, add text, and download a PNG.',
+    keywords: [
+      'speech bubble meme generator',
+      'speech bubble generator',
+      'add speech bubble to image',
+      'reaction meme generator',
+      'meme speech bubble',
+    ],
+    category: 'Generator',
+    emoji: '💬',
+    image: '/tools/speech-bubble-meme-generator.jpg',
+    imageAlt: 'A white comic speech bubble over a photo',
+    primaryKeyword: 'speech bubble meme generator',
+    intro:
+      'Drop a white "reaction" speech bubble onto any image — the classic meme overlay used on GIFs and reaction shots. Upload a picture, position the tail, optionally add text, and download a transparent-ready PNG. Everything happens in your browser.',
+    howItWorks: [
+      { title: 'Upload an image', description: 'Drop in any photo or screenshot. A still frame works best.' },
+      { title: 'Place the bubble', description: 'Choose the tail position (left, center, right), size the bubble, and add optional text.' },
+      { title: 'Download the PNG', description: 'Export the finished image and share it, or layer it onto a GIF in your editor.' },
+    ],
+    faqs: [
+      {
+        q: 'What is a reaction speech bubble meme?',
+        a: 'It is the white speech bubble with a downward-pointing tail placed at the top of an image or GIF, making it look like the subject is "saying" something — usually left blank so the caption does the talking, or filled with a short line. It blew up on Discord, iMessage, and Tumblr as a reaction format.',
+      },
+      {
+        q: 'Can I use it on a GIF?',
+        a: 'This tool adds the bubble to a static image and exports a PNG. To put it on a GIF, generate the bubble on a representative frame, then overlay the PNG in a GIF/video editor — or screenshot the GIF, add the bubble, and post the still.',
+      },
+      {
+        q: 'Is my image uploaded anywhere?',
+        a: 'No. The image is drawn and composited entirely in your browser using a canvas, so nothing is uploaded to a server. It is safe for private screenshots.',
+      },
+      {
+        q: 'Can I leave the bubble empty?',
+        a: 'Yes — the classic look is an empty white bubble so the joke lives in the caption you write when you post it. Adding text inside is optional.',
+      },
+      {
+        q: 'Is it free?',
+        a: 'Yes, free and no signup. Make as many as you like.',
+      },
+    ],
+    relatedSlugs: ['fire-text-generator', 'cool-text-generator', 'random-emoji-generator'],
+    ctaHook: 'Run a meme page or social brand? Pixie builds full websites and link-in-bio pages in 60 seconds — text us on WhatsApp.',
+    aboutHeading: 'How the reaction bubble took over the internet',
+    about:
+      'The speech-bubble reaction meme is one of those formats that feels like it has always existed but actually spread very deliberately. The idea is simple: overlay the universally recognized comic speech balloon — a rounded white shape with a tail pointing at a "speaker" — onto a photo or GIF so the subject appears to be talking, then let the surrounding caption supply the punchline. Its modern explosion came from messaging culture, especially Discord and iMessage, where a blank bubble pinned to the top of a GIF became shorthand for "this is exactly what I want to say right now." Leaving the bubble empty is part of the genius: an empty balloon is a fill-in-the-blank, infinitely reusable across contexts, which is precisely the quality that makes a meme template spread. The comic speech balloon itself is a much older invention, with roots stretching back centuries to "speech scrolls" in medieval and Mesoamerican art and formalized in early twentieth-century newspaper comics; the downward tail evolved as the convention for pointing at whoever is speaking. This tool recreates that overlay on a canvas in your browser — you choose where the tail points and how big the bubble sits, optionally drop in a line of text, and export a clean PNG. Because the compositing is local, it works on private screenshots without anything leaving your device, and the transparent-ready output drops neatly onto the original GIF or image in any editor.',
+  },
+  {
+    slug: 'fire-text-generator',
+    title: 'Fire Text Generator — Make Flaming Text Free',
+    h1: 'Pixie Fire Text Generator',
+    shortName: 'Fire Text Generator',
+    tagline: 'Turn text into blazing fire and flame graphics.',
+    metaDescription:
+      'Create blazing fire text with this free fire text generator. Pick a flame style, preview live, and download a transparent PNG. No signup needed.',
+    keywords: [
+      'fire text generator',
+      'flame text generator',
+      'fire text',
+      'burning text generator',
+      'flaming text',
+    ],
+    category: 'Generator',
+    emoji: '🔥',
+    image: '/tools/fire-text-generator.jpg',
+    imageAlt: 'Glowing letters made of flames on a dark background',
+    primaryKeyword: 'fire text generator',
+    intro:
+      'Turn any word into blazing fire text — molten yellow-to-red gradients with a hot glow. Pick a flame style, preview live, and download a transparent PNG for thumbnails, banners, logos, and gaming graphics. Renders entirely in your browser.',
+    howItWorks: [
+      { title: 'Type your text', description: 'Enter a word or short phrase — titles and logos work best.' },
+      { title: 'Pick a flame style', description: 'Blaze, Ember, or Inferno — each with its own heat and glow.' },
+      { title: 'Download the PNG', description: 'Export a transparent, retina-crisp PNG ready for any design.' },
+    ],
+    faqs: [
+      {
+        q: 'What does the fire text generator make?',
+        a: 'It renders your text as a flaming graphic — a hot color gradient with a glowing aura — and exports it as a transparent PNG image, not as font characters. Drop it onto thumbnails, banners, or logos.',
+      },
+      {
+        q: 'Is the image free to use?',
+        a: 'Yes. The PNG is free for personal and commercial use, with no watermark and no attribution required.',
+      },
+      {
+        q: 'Why an image and not copy-paste text?',
+        a: 'Glow and gradient effects cannot be expressed with plain Unicode characters, so fire text has to be rendered as an image. For copy-paste styled letters, try the Fancy Text Generator instead.',
+      },
+      {
+        q: 'Does it have a transparent background?',
+        a: 'Yes — the export is transparent, so it sits cleanly on dark thumbnails, banners, or photos without a box around it.',
+      },
+      {
+        q: 'Does it work on mobile?',
+        a: 'Yes. It renders in any modern mobile browser and downloads straight to your device. Everything runs locally.',
+      },
+    ],
+    relatedSlugs: ['cool-text-generator', 'glitch-text-generator', 'speech-bubble-meme-generator'],
+    ctaHook: 'Need a full logo or brand identity, not just text art? Pixie delivers logos, websites, and ads from one WhatsApp message.',
+    aboutHeading: 'Faking fire with light and gradient',
+    about:
+      'Fire text is a classic piece of "word art" that has been a staple of the web since the days of early logo-maker sites, and the way it is faked is a neat little lesson in how digital flame works. Real fire reads as fire to our eyes because of a specific brightness gradient — white-hot and yellow at the base where combustion is hottest, shading up through orange to deep red at the cooler edges — combined with a soft glow that bleeds light onto everything around it. This generator reproduces both: it paints a vertical color ramp into each letterform (the Inferno style adds a white-hot core for extra heat) and then draws the text twice with a blurred, warm-colored shadow to simulate the glow a flame casts. Because it is drawn on an HTML canvas rather than built from a font, the result is a true image you can export with a transparent background and drop onto a dark thumbnail or banner. The trade-off is the same as any graphic-text tool: it is a picture, not editable type, and not a scalable vector, so it shines for one-off titles and decorative headers rather than body text or a logo you will need at every size. For a YouTube thumbnail, a stream overlay, a gaming clan banner, or a poster headline, though, a few seconds of fire text does a lot of visual work — heat and energy read instantly, which is exactly why the effect has stayed popular for decades.',
+  },
+  {
+    slug: 'pirate-name-generator',
+    title: 'Pirate Name Generator — Get Your Pirate Name',
+    h1: 'Pixie Pirate Name Generator',
+    shortName: 'Pirate Name Generator',
+    tagline: 'Generate swashbuckling pirate names and aliases.',
+    metaDescription:
+      'Generate swashbuckling pirate names with this free pirate name generator. Get aliases like Captain Jack Blackheart. No signup needed.',
+    keywords: [
+      'pirate name generator',
+      'pirate names',
+      'generate pirate name',
+      'pirate name ideas',
+      'random pirate name',
+    ],
+    category: 'Generator',
+    emoji: '🏴‍☠️',
+    image: '/tools/pirate-name-generator.jpg',
+    imageAlt: 'Pirate ship sailing under a skull-and-crossbones flag',
+    primaryKeyword: 'pirate name generator',
+    intro:
+      'Generate swashbuckling pirate names — Captain Jack Blackheart, Mad Anne Bones, Salty "Dread" Saltbeard. Perfect for D&D and RPG characters, gamer handles, party themes, stories, and Talk Like a Pirate Day. Hit generate for a fresh crew.',
+    howItWorks: [
+      { title: 'Tap generate', description: 'Get a batch of pirate names mixing titles, first names, and fearsome surnames.' },
+      { title: 'Pick your captain', description: 'Scan the list for the alias that suits your buccaneer.' },
+      { title: 'Copy your pick', description: 'Copy the name for your character, handle, or story.' },
+    ],
+    faqs: [
+      {
+        q: 'How does the pirate name generator work?',
+        a: 'It combines piratey titles (Captain, Mad, One-Eyed), classic first names (Jack, Anne, Morgan), and fearsome surnames (Blackheart, Bones, Saltbeard) into swashbuckling aliases, sometimes with a nickname in quotes.',
+      },
+      {
+        q: 'What can I use a pirate name for?',
+        a: 'D&D and tabletop characters, video-game handles, pirate-themed parties, story and novel characters, Talk Like a Pirate Day (September 19), and team or crew names. Generated names are free to use.',
+      },
+      {
+        q: 'Do these work for any gender?',
+        a: 'Yes — the name pool includes options like Anne, Mary, and Grace alongside Jack, Edward, and Morgan, so re-roll until you find one that fits your character.',
+      },
+      {
+        q: 'Are these based on real pirates?',
+        a: 'They are inspired by the style of the golden age of piracy — names like Blackbeard, Calico Jack, and Anne Bonny — but generated for fun rather than copied from history.',
+      },
+      {
+        q: 'Is it free?',
+        a: 'Completely free, no signup, runs in your browser. Generate as many as you like.',
+      },
+    ],
+    relatedSlugs: ['viking-name-generator', 'anime-name-generator', 'superhero-name-generator'],
+    ctaHook: 'Building a game, theme bar, or event brand? Pixie builds full websites from one WhatsApp message.',
+    aboutHeading: 'How pirates earned their names',
+    about:
+      'The pirates of the so-called golden age — roughly the late 1600s to the 1720s — are remembered as much for their names as their deeds, and there is a real pattern behind the theatrics. Many sailing under the black flag used aliases rather than their birth names, partly to protect families back home from the consequences of being kin to a wanted criminal, and partly because a fearsome name was itself a weapon. Edward Teach became "Blackbeard" and deliberately cultivated the legend, reportedly weaving lit slow-match into his beard to wreathe himself in smoke during a fight; the goal was to terrify a merchant crew into surrendering without a shot, because a bloodless capture was a profitable one. Others carried descriptive monikers in the same spirit as Viking bynames — "Calico Jack" Rackham for his bright cotton clothes, "Black Bart" Roberts, the most successful pirate of the era by sheer number of ships taken. Notably, two of the most famous figures were women, Anne Bonny and Mary Read, who sailed with Rackham and fought as fiercely as any of the crew. This generator riffs on that whole tradition — a title, a first name, and a vivid surname or nickname — to produce aliases that sound like they belong on a wanted poster. For a tabletop character, a gamer handle, or a story, the right pirate name does the same job it did three centuries ago: it sets a reputation before you have done anything to earn it.',
+  },
+  {
+    slug: 'anime-name-generator',
+    title: 'Anime Name Generator — Japanese Name Ideas',
+    h1: 'Pixie Anime Name Generator',
+    shortName: 'Anime Name Generator',
+    tagline: 'Generate anime-style Japanese names for characters.',
+    metaDescription:
+      'Generate anime-style Japanese names with this free anime name generator. Get given names and surnames for OCs and characters. No signup.',
+    keywords: [
+      'anime name generator',
+      'japanese name generator',
+      'anime names',
+      'anime character name generator',
+      'oc name generator',
+    ],
+    category: 'Generator',
+    emoji: '🌸',
+    image: '/tools/anime-name-generator.jpg',
+    imageAlt: 'Cherry blossoms against a soft pastel sky',
+    primaryKeyword: 'anime name generator',
+    intro:
+      'Generate anime-style Japanese names — a given name paired with a surname, like Akira Tanaka or Yuki Nakamura. Perfect for original characters (OCs), role-play, fan fiction, and gaming avatars. Hit generate for a fresh cast.',
+    howItWorks: [
+      { title: 'Tap generate', description: 'Get a batch of anime-style names, each a given name plus a surname.' },
+      { title: 'Cast your character', description: 'Browse the list for the one that suits your OC or avatar.' },
+      { title: 'Copy your pick', description: 'Copy the name for your character, story, or profile.' },
+    ],
+    faqs: [
+      {
+        q: 'How does the anime name generator work?',
+        a: 'It pairs a Japanese-style given name (Akira, Sakura, Ren, Yuki) with a common surname (Tanaka, Sato, Nakamura) to create names that fit the anime and manga aesthetic. In Japanese order the surname comes first, but the generator shows given-name-first for familiarity.',
+      },
+      {
+        q: 'What can I use these names for?',
+        a: 'Original characters (OCs), fan fiction, role-play, gaming avatars and usernames, and creative writing. Generated names are free to use.',
+      },
+      {
+        q: 'Are these real Japanese names?',
+        a: 'They are built from real, common Japanese given names and surnames, so they read as authentic. The specific combinations are generated for you rather than belonging to a real individual.',
+      },
+      {
+        q: 'Do the names work for any gender?',
+        a: 'Yes — the given-name pool includes names used across genders and some that are more specifically masculine or feminine, so generate a few and pick what fits your character.',
+      },
+      {
+        q: 'Is it free?',
+        a: 'Yes — free, no signup, runs in your browser. Generate as many as you want.',
+      },
+    ],
+    relatedSlugs: ['viking-name-generator', 'pirate-name-generator', 'superhero-name-generator'],
+    ctaHook: 'Building an anime, gaming, or creator brand? Pixie builds full websites in 60 seconds — text us on WhatsApp.',
+    aboutHeading: 'How Japanese names actually work',
+    about:
+      'Anime names feel distinctive because Japanese naming follows conventions quite different from Western ones, and understanding them makes a generated name land better. The first thing to know is order: in Japanese, the family name comes before the given name — the character Western fans call "Naruto Uzumaki" is "Uzumaki Naruto" in Japan — though media localized for English audiences usually flips it to given-name-first, which is the order this tool uses for familiarity. Given names carry a lot of meaning because they are written in kanji, characters that each hold significance; a name like Hikari can mean "light", Sora "sky", Haru "spring", and parents often choose kanji deliberately for the qualities they hope a child embodies. The same sound can be written with different kanji to mean different things, which is a layer of nuance Western names rarely have. Surnames, by contrast, are hugely varied — Japan has well over a hundred thousand of them, many rooted in geography and nature (Tanaka means "in the rice field", Yamamoto "base of the mountain", Kobayashi "small forest"). Anime and manga creators pick names the way novelists everywhere do — for sound, for meaning, sometimes for a pun or a hint about the character — which is why a good anime name feels expressive. This generator pairs authentic given names with common surnames so the results sit naturally in that tradition, ready for an OC, a story, or an avatar.',
+  },
+  {
+    slug: 'mission-statement-generator',
+    title: 'Mission Statement Generator — Free & Instant',
+    h1: 'Pixie Mission Statement Generator',
+    shortName: 'Mission Statement Generator',
+    tagline: 'Write a clear company mission statement in seconds.',
+    metaDescription:
+      'Write a clear mission statement with this free mission statement generator. Enter what you do, who you serve, and your values for instant options.',
+    keywords: [
+      'mission statement generator',
+      'mission statement maker',
+      'company mission statement',
+      'mission statement examples',
+      'free mission statement generator',
+    ],
+    category: 'Generator',
+    emoji: '🎯',
+    image: '/tools/mission-statement-generator.jpg',
+    imageAlt: 'A team reviewing goals on a whiteboard',
+    primaryKeyword: 'mission statement generator',
+    intro:
+      'Write a clear, professional mission statement in seconds. Enter what you do, who you serve, and your core value, and the generator gives you several polished one-sentence options to choose from and refine. Free, instant, and private — nothing is uploaded.',
+    howItWorks: [
+      { title: 'Fill in four fields', description: 'Company name, what you do, who you serve, and your core value.' },
+      { title: 'Generate options', description: 'Get several mission-statement variants built from proven structures.' },
+      { title: 'Pick and polish', description: 'Copy the one you like best and tweak the wording to sound like you.' },
+    ],
+    faqs: [
+      {
+        q: 'What makes a good mission statement?',
+        a: 'A strong mission statement is one clear sentence that says what you do, who you do it for, and why it matters — without jargon. It should be specific enough to guide decisions and short enough that your team can remember it.',
+      },
+      {
+        q: 'How is this different from a vision statement?',
+        a: 'A mission statement describes what you do today and for whom; a vision statement describes the future you are working toward. This tool focuses on the mission — your present purpose — which is the one customers and new hires read first.',
+      },
+      {
+        q: 'Does it use AI?',
+        a: 'No — it builds your statement from proven sentence structures using the details you enter, so it is instant, free, and completely private. You stay in control of every word.',
+      },
+      {
+        q: 'Can I use the result on my website or pitch deck?',
+        a: 'Yes. Pick the variant you like, refine the wording, and use it on your About page, pitch deck, careers page, or investor materials. It is yours to edit freely.',
+      },
+      {
+        q: 'Is it free?',
+        a: 'Yes — free, no signup, and nothing you type is sent to a server.',
+      },
+    ],
+    relatedSlugs: ['trust-badge-generator', 'da-pa-checker', 'text-summarizer'],
+    ctaHook: 'Got your mission? Pixie turns it into a full brand and website — logo, copy, and pages — from one WhatsApp message.',
+    aboutHeading: 'What a mission statement is really for',
+    about:
+      'A mission statement is one of the most misunderstood pieces of business writing — treated as a box-ticking exercise that ends up as a wall of vague buzzwords nobody can recite. Done well, it is the opposite: a single, plain sentence that answers what you do, who you serve, and why it matters, and that quietly steers a hundred small decisions. The best-known examples are striking precisely because they are concrete. TED\'s is "Spread ideas." Google\'s longtime mission was "to organize the world\'s information and make it universally accessible and useful." Patagonia\'s — "We\'re in business to save our home planet" — is short enough to fit on a sticker and pointed enough that employees can use it to argue for or against a decision. What these share is specificity and brevity; they avoid the trap of trying to please everyone with words like "world-class", "synergy", and "innovative", which sound impressive and mean nothing. A useful mission statement passes a simple test: could it help an employee decide between two options, and would a customer understand it instantly? This generator gets you to a solid first draft by plugging your specifics into proven sentence structures, which is the hard part — staring at a blank page. The real work after that is subtraction: cut the adjectives, make every word earn its place, and read it aloud until it sounds like a person rather than a committee. Once it does, it becomes the spine of everything outward-facing — your About page, your pitch, your hiring — which is exactly the foundation a brand and website get built on.',
+  },
 ];
 
 export function getTool(slug: string): ToolDefinition | undefined {

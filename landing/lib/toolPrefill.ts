@@ -342,6 +342,65 @@ export function buildToolPrefill(slug: string, data: PrefillData): ToolPrefillRe
           'Hi! Just used your Audio to Text tool. I run a podcast/agency — interested in a website.',
       };
 
+    case 'random-food-generator':
+      return {
+        headline: 'Run a restaurant, café, or food truck?',
+        subhead: 'Pixie builds full ordering sites with menus and checkout in 60 seconds.',
+        whatsappPrefill:
+          'Hi! Just used your Random Food Generator. I run a food business — interested in a website.',
+      };
+
+    case 'random-emoji-generator':
+      return {
+        headline: 'Run a social or content brand?',
+        subhead: 'Pixie builds full websites in 60 seconds — text us on WhatsApp.',
+        whatsappPrefill:
+          'Hi! Just used your Random Emoji Generator. I run a content brand — interested in a website.',
+      };
+
+    case 'xbox-gamertag-generator':
+      return {
+        headline: 'Building a gaming or streaming brand?',
+        subhead: 'Pixie builds your full website in 60 seconds — text us on WhatsApp.',
+        whatsappPrefill:
+          'Hi! Just used your Xbox Gamertag Generator. I run a gaming brand — interested in a website.',
+      };
+
+    case 'viking-name-generator':
+    case 'pirate-name-generator':
+    case 'anime-name-generator':
+    case 'superhero-name-generator':
+      return {
+        headline: 'Building a game, story, or creative brand?',
+        subhead: 'Pixie builds full websites from one WhatsApp message.',
+        whatsappPrefill:
+          'Hi! Just used your name generator. I run a creative/gaming brand — interested in a website.',
+      };
+
+    case 'speech-bubble-meme-generator':
+      return {
+        headline: 'Run a meme page or social brand?',
+        subhead: 'Pixie builds full websites and link-in-bio pages in 60 seconds.',
+        whatsappPrefill:
+          'Hi! Just used your Speech Bubble Meme Generator. I run a social brand — interested in a website.',
+      };
+
+    case 'fire-text-generator':
+      return {
+        headline: 'Need a real logo and brand identity?',
+        subhead: 'Pixie delivers logos, websites, and ads from one WhatsApp message.',
+        whatsappPrefill:
+          'Hi! Just used your Fire Text Generator. I need a logo and website for my brand.',
+      };
+
+    case 'mission-statement-generator':
+      return {
+        headline: 'Got your mission — now build the brand?',
+        subhead: 'Pixie turns it into a full website: logo, copy, and pages.',
+        whatsappPrefill:
+          'Hi! Just used your Mission Statement Generator. I want a website and brand built around it.',
+      };
+
     default:
       return {
         headline: 'Want a site like this?',
