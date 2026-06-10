@@ -2241,6 +2241,7 @@ export const TOOLS: ToolDefinition[] = [
       'transcribe audio',
       'audio transcription',
       'speech to text',
+      'voice recorder to text',
     ],
     category: 'Converter',
     emoji: '🎙️',
@@ -2248,11 +2249,11 @@ export const TOOLS: ToolDefinition[] = [
     imageAlt: 'A microphone beside a transcript of spoken words',
     primaryKeyword: 'audio to text',
     intro:
-      'Upload a voice memo, interview, lecture, podcast, or meeting recording and get an accurate text transcript back. Powered by OpenAI\'s Whisper model, it handles dozens of languages and auto-detects the spoken language if you are not sure. Copy the transcript and you are done.',
+      'Upload a voice memo, interview, lecture, podcast, or meeting recording — or record live from your microphone — and get an accurate text transcript back. Powered by OpenAI\'s Whisper model, it handles dozens of languages and auto-detects the spoken language if you are not sure. Copy the transcript and you are done.',
     howItWorks: [
       {
-        title: 'Upload audio',
-        description: 'Drag and drop an mp3, m4a, wav, ogg, flac, or webm file up to 25 MB.',
+        title: 'Upload or record',
+        description: 'Drag in an mp3, m4a, wav, ogg, flac, or webm file (up to 25 MB), or record live from your mic.',
       },
       {
         title: 'Choose the language',
@@ -2275,6 +2276,10 @@ export const TOOLS: ToolDefinition[] = [
       {
         q: 'What file formats and sizes can I use?',
         a: 'Common audio formats — mp3, m4a, wav, ogg, flac, and webm — up to 25 MB per file. For long recordings, exporting at a lower bitrate keeps you under the limit without hurting transcription much.',
+      },
+      {
+        q: 'Can I record audio directly in the browser?',
+        a: 'Yes. Switch to the Record tab and the tool captures audio straight from your microphone (your browser will ask for permission). Recordings can run up to 10 minutes; when you stop, you can play it back, then hit Transcribe. The recording happens locally and is only sent for transcription when you choose to transcribe it.',
       },
       {
         q: 'Is my audio stored?',
