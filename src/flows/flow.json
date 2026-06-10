@@ -13,7 +13,8 @@
     "PORTFOLIO": ["PEXP", "PROJECT", "PORTFOLIO_WORK"],
     "PEXP": ["PROJECT", "PORTFOLIO_WORK"],
     "PROJECT": ["PORTFOLIO_WORK"],
-    "PORTFOLIO_WORK": ["FINISH"],
+    "PORTFOLIO_WORK": ["FINISH", "PACKAGE"],
+    "PACKAGE": ["FINISH"],
     "FINISH": []
   },
   "screens": [
@@ -178,6 +179,62 @@
                 "on-click-action": {
                   "name": "data_exchange",
                   "payload": { "sname": "${form.sname}", "sprice": "${form.sprice}", "sdur": "${form.sdur}", "addmore": "${form.addmore}" }
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "PACKAGE",
+      "title": "${data.package_title}",
+      "data": {
+        "package_title": { "type": "string", "__example__": "Your packages" },
+        "package_required": { "type": "boolean", "__example__": true },
+        "added_summary": { "type": "string", "__example__": "Added so far: Wedding Day" },
+        "added_visible": { "type": "boolean", "__example__": false },
+        "l_pkgname": { "type": "string", "__example__": "Package name" },
+        "pkgname_helper": { "type": "string", "__example__": "e.g. Wedding Day" },
+        "l_pkgprice": { "type": "string", "__example__": "Price" },
+        "pkgprice_helper": { "type": "string", "__example__": "e.g. $3,400 or Starting at $3,400" },
+        "l_pkgdur": { "type": "string", "__example__": "Duration / coverage" },
+        "pkgdur_helper": { "type": "string", "__example__": "e.g. 8 hours coverage" },
+        "l_pkgincl": { "type": "string", "__example__": "What's included" },
+        "pkgincl_helper": { "type": "string", "__example__": "One per line — e.g. 8-hour coverage, 500+ edited photos, online gallery" },
+        "l_addmore": { "type": "string", "__example__": "Add more?" },
+        "addmore_options": {
+          "type": "array",
+          "items": { "type": "object", "properties": { "id": { "type": "string" }, "title": { "type": "string" } } },
+          "__example__": [{ "id": "add", "title": "Add another package" }, { "id": "done", "title": "That's all" }]
+        },
+        "l_continue": { "type": "string", "__example__": "Continue" },
+        "package_init": {
+          "type": "object",
+          "properties": { "pkgname": { "type": "string" }, "pkgprice": { "type": "string" }, "pkgdur": { "type": "string" }, "pkgincl": { "type": "string" }, "addmore": { "type": "string" } },
+          "__example__": { "pkgname": "", "pkgprice": "", "pkgdur": "", "pkgincl": "", "addmore": "" }
+        }
+      },
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          { "type": "TextBody", "text": "${data.added_summary}", "visible": "${data.added_visible}" },
+          {
+            "type": "Form",
+            "name": "f_package",
+            "init-values": "${data.package_init}",
+            "children": [
+              { "type": "TextInput", "name": "pkgname", "input-type": "text", "label": "${data.l_pkgname}", "helper-text": "${data.pkgname_helper}", "required": "${data.package_required}" },
+              { "type": "TextInput", "name": "pkgprice", "input-type": "text", "label": "${data.l_pkgprice}", "helper-text": "${data.pkgprice_helper}", "required": false },
+              { "type": "TextInput", "name": "pkgdur", "input-type": "text", "label": "${data.l_pkgdur}", "helper-text": "${data.pkgdur_helper}", "required": false },
+              { "type": "TextArea", "name": "pkgincl", "label": "${data.l_pkgincl}", "helper-text": "${data.pkgincl_helper}", "required": false },
+              { "type": "RadioButtonsGroup", "name": "addmore", "label": "${data.l_addmore}", "data-source": "${data.addmore_options}", "required": false },
+              {
+                "type": "Footer",
+                "label": "${data.l_continue}",
+                "on-click-action": {
+                  "name": "data_exchange",
+                  "payload": { "pkgname": "${form.pkgname}", "pkgprice": "${form.pkgprice}", "pkgdur": "${form.pkgdur}", "pkgincl": "${form.pkgincl}", "addmore": "${form.addmore}" }
                 }
               }
             ]

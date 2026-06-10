@@ -189,6 +189,17 @@ const ADDMORE_PROJECT_OPTIONS = {
     { id: 'done', title: '✓ Esses são todos' },
   ],
 };
+// ── "Add another?" radio on the PACKAGE loop (photographer). ────────────
+const ADDMORE_PACKAGE_OPTIONS = {
+  en: [
+    { id: 'add', title: '➕ Add another package' },
+    { id: 'done', title: '✓ That\'s all my packages' },
+  ],
+  pt: [
+    { id: 'add', title: '➕ Adicionar outro pacote' },
+    { id: 'done', title: '✓ Esses são todos' },
+  ],
+};
 
 // ── Listing status dropdown (LISTING screen). IDs stay English — the site
 //    generator matches on these exact strings (['For Sale','Just Listed',
@@ -282,6 +293,16 @@ const L = {
     l_addmore: 'Add more?',
     added_prefix: 'Added so far: ',
     continue: 'Continue',
+    // PACKAGE loop (photographer)
+    package_title: 'Your packages',
+    l_pkgname: 'Package name',
+    pkgname_helper: 'e.g. Wedding Day',
+    l_pkgprice: 'Price',
+    pkgprice_helper: 'e.g. $3,400 or "Starting at $3,400"',
+    l_pkgdur: 'Duration / coverage',
+    pkgdur_helper: 'e.g. 8 hours coverage. Optional.',
+    l_pkgincl: "What's included",
+    pkgincl_helper: 'One per line — e.g. 8-hour coverage, 500+ edited photos, online gallery',
     // listings (real estate — structured, looped)
     listing_title: 'Your listings',
     l_address: 'Address',
@@ -388,6 +409,16 @@ const L = {
     l_addmore: 'Adicionar mais?',
     added_prefix: 'Adicionados: ',
     continue: 'Continuar',
+    // PACKAGE loop (fotógrafo)
+    package_title: 'Seus pacotes',
+    l_pkgname: 'Nome do pacote',
+    pkgname_helper: 'Ex: Dia do Casamento',
+    l_pkgprice: 'Preço',
+    pkgprice_helper: 'Ex: R$3.400 ou "A partir de R$3.400"',
+    l_pkgdur: 'Duração / cobertura',
+    pkgdur_helper: 'Ex: 8 horas de cobertura. Opcional.',
+    l_pkgincl: 'O que está incluído',
+    pkgincl_helper: 'Um por linha — ex: cobertura de 8h, 500+ fotos editadas, galeria online',
     listing_title: 'Seus imóveis',
     l_address: 'Endereço',
     address_helper: 'Ex: Rua das Flores, 45',
@@ -492,6 +523,7 @@ const NICHE_FIELDS = {
   photographer: {
     title: { en: 'Your photography', pt: 'Sua fotografia' },
     photos: true, skills: false, years: true, focus: true, projects: false,
+    packages: true,
     aboutPhoto: true,
     photos_desc: {
       en: "Upload a few of your best shots — up to 6. Or skip and I'll add visuals.",
@@ -544,6 +576,7 @@ module.exports = {
   ADDMORE_LISTING_OPTIONS,
   ADDMORE_EXP_OPTIONS,
   ADDMORE_PROJECT_OPTIONS,
+  ADDMORE_PACKAGE_OPTIONS,
   LISTING_STATUS_OPTIONS,
   COUNTRY_CODES,
   DETAILS,

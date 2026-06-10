@@ -1,7 +1,7 @@
 'use strict';
 
 // Offline regression for the looped Flow screens (SERVICE / LISTING / PEXP /
-// PROJECT / HVAC_SERVICE). Two behaviours are locked here:
+// PROJECT / HVAC_SERVICE / PACKAGE). Two behaviours are locked here:
 //   1. The first field is required ONLY on the first render (empty list) so the
 //      user enters at least one entry; on loop renders it's optional so picking
 //      "That's all" can finish without re-entering the field. Driven by the
@@ -15,7 +15,7 @@
 
 const assert = require('assert');
 const {
-  serviceScreen, listingScreen, pexpScreen, projectScreen, hvacServiceScreen,
+  serviceScreen, listingScreen, pexpScreen, projectScreen, hvacServiceScreen, packageScreen,
 } = require('../../src/flows/endpoint');
 
 let pass = 0;
@@ -33,6 +33,7 @@ const CASES = [
   ['PEXP', pexpScreen, 'pexp_required', 'exp_init', [{ role: 'Engineer' }]],
   ['PROJECT', projectScreen, 'proj_required', 'proj_init', [{ title: 'Pixie' }]],
   ['HVAC_SERVICE', hvacServiceScreen, 'hsvc_required', 'hsvc_init', ['AC repair']],
+  ['PACKAGE', packageScreen, 'package_required', 'package_init', [{ name: 'Wedding Day' }]],
 ];
 
 for (const [label, build, reqKey, initKey, oneItem] of CASES) {

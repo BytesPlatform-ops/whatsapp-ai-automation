@@ -16,7 +16,7 @@
 const {
   classifyTheme, VALID_THEMES, INDUSTRY_OPTIONS, NICHE_OPTIONS, CURRENCY_OPTIONS,
   BOOKING_OPTIONS, ADDMORE_OPTIONS, ADDMORE_LISTING_OPTIONS,
-  ADDMORE_EXP_OPTIONS, ADDMORE_PROJECT_OPTIONS,
+  ADDMORE_EXP_OPTIONS, ADDMORE_PROJECT_OPTIONS, ADDMORE_PACKAGE_OPTIONS,
   LISTING_STATUS_OPTIONS, COUNTRY_CODES, DETAILS, NICHE_FIELDS, L, pick,
 } = require('./questionBank');
 const { getSession, patchSession } = require('./store');
@@ -393,6 +393,42 @@ async function portfolioAfterAbout(lang, niche, flowToken) {
   return portfolio2Screen(lang, niche);
 }
 
+// Format the running "added so far" summary for the PACKAGE loop.
+function summarizePackages(list, lang) {
+  if (!Array.isArray(list) || list.length === 0) return '';
+  const parts = list.map((p) => {
+    const extra = [p.price, p.duration].filter(Boolean).join(', ');
+    return extra ? `${p.name} (${extra})` : p.name;
+  }).filter(Boolean);
+  return (L[lang].added_prefix || 'Added so far: ') + parts.join(' · ');
+}
+
+// PACKAGE — photographer packages/pricing loop. name/price/duration + a
+// "what's included" TextArea, with an "add another" loop. Mirrors the salon
+// SERVICE screen; `list` is the packages accumulated so far (shown as a summary).
+function packageScreen(lang, list) {
+  const summary = summarizePackages(list, lang);
+  return {
+    screen: 'PACKAGE',
+    data: {
+      package_title: L[lang].package_title,
+      // Required only on the first render so a loop "That's all" can finish.
+      package_required: list.length === 0,
+      added_summary: summary || '—',
+      added_visible: !!summary,
+      l_pkgname: L[lang].l_pkgname, pkgname_helper: L[lang].pkgname_helper,
+      l_pkgprice: L[lang].l_pkgprice, pkgprice_helper: L[lang].pkgprice_helper,
+      l_pkgdur: L[lang].l_pkgdur, pkgdur_helper: L[lang].pkgdur_helper,
+      l_pkgincl: L[lang].l_pkgincl, pkgincl_helper: L[lang].pkgincl_helper,
+      l_addmore: L[lang].l_addmore,
+      addmore_options: ADDMORE_PACKAGE_OPTIONS[lang] || ADDMORE_PACKAGE_OPTIONS.en,
+      l_continue: L[lang].continue,
+      // Reset every input (incl. the addmore radio) to blank on each (re)load.
+      package_init: { pkgname: '', pkgprice: '', pkgdur: '', pkgincl: '', addmore: '' },
+    },
+  };
+}
+
 function finishScreen(lang) {
   return {
     screen: 'FINISH',
@@ -569,6 +605,8 @@ async function handleFlow(req, ctx = {}) {
     // photos, stashed as raw media descriptors like the COMMON logo / listing
     // photos — decrypt + upload is deferred to the completion handler) → FINISH.
     if (screen === 'PORTFOLIO_WORK') {
+      const niche = String(session?.answers?.portfolio_niche || '').trim();
+      const f = NICHE_FIELDS[niche] || NICHE_FIELDS.developer;
       if (flowToken) {
         // Re-join the discrete link slots into the single blob the shared parser
         // (portfolioLinksParse.js) consumes — newline-separated so each link is
@@ -576,8 +614,7 @@ async function handleFlow(req, ctx = {}) {
         // screen was built from), so a bare username/@handle gets tagged with
         // its platform keyword; a pasted URL is left raw so a mis-filled URL
         // can't be mis-tagged (the parser resolves it by its own domain).
-        const niche = String(session?.answers?.portfolio_niche || '').trim();
-        const slots = (NICHE_FIELDS[niche] || NICHE_FIELDS.developer).links || [];
+        const slots = f.links || [];
         const p_links = [data.p_link1, data.p_link2, data.p_link3]
           .map((v, i) => {
             const val = String(v || '').trim();
@@ -595,6 +632,44 @@ async function handleFlow(req, ctx = {}) {
         }
         await patchSession(flowToken, { answersPatch })
           .catch((err) => logger.warn(`[FLOW] persist PORTFOLIO_WORK failed: ${err.message}`));
+      }
+      // Photographer: collect packages/pricing next (the site has a packages
+      // section); every other niche finishes here.
+      if (f.packages) {
+        if (flowToken) {
+          await patchSession(flowToken, { answersPatch: { packages_list: [] } })
+            .catch((err) => logger.warn(`[FLOW] init packages_list failed: ${err.message}`));
+        }
+        return packageScreen(lang, []);
+      }
+      return finishScreen(lang);
+    }
+
+    // PACKAGE (photographer) → append this package, then loop ("add another" →
+    // refresh the PACKAGE screen) or proceed to FINISH. The accumulated list
+    // lives in the session (packages_list); the nfm_reply only carries the last
+    // row, so the session is the source of truth for the build.
+    if (screen === 'PACKAGE') {
+      const list = Array.isArray(session?.answers?.packages_list)
+        ? session.answers.packages_list.slice()
+        : [];
+      const name = String(data.pkgname || '').trim();
+      if (name) {
+        list.push({
+          name,
+          price: String(data.pkgprice || '').trim(),
+          duration: String(data.pkgdur || '').trim(),
+          includes: String(data.pkgincl || '').trim(),
+        });
+      }
+      if (flowToken) {
+        await patchSession(flowToken, { answersPatch: { packages_list: list } })
+          .catch((err) => logger.warn(`[FLOW] persist PACKAGE failed: ${err.message}`));
+      }
+      // "add" → loop for one more (only if they named this one), capped at 6.
+      if (data.addmore === 'add' && name && list.length < 6) {
+        logger.info(`[FLOW] PACKAGE loop (${list.length} so far) token=${flowToken}`);
+        return packageScreen(lang, list);
       }
       return finishScreen(lang);
     }
@@ -781,4 +856,4 @@ async function handleFlow(req, ctx = {}) {
   return { data: { acknowledged: true } };
 }
 
-module.exports = { handleFlow, commonScreen, salonScreen, serviceScreen, listingScreen, agentScreen, hvacServiceScreen, detailsScreen, pnicheScreen, portfolioScreen, portfolio2Screen, pexpScreen, projectScreen, finishScreen };
+module.exports = { handleFlow, commonScreen, salonScreen, serviceScreen, listingScreen, agentScreen, hvacServiceScreen, detailsScreen, pnicheScreen, portfolioScreen, portfolio2Screen, pexpScreen, projectScreen, packageScreen, finishScreen };

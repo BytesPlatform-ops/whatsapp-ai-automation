@@ -326,6 +326,23 @@ async function buildWebsiteDataFromFlow(answers = {}, theme, userId) {
           summary: String(e.summary || '').trim().slice(0, 300),
         }));
       }
+      // Structured packages from the PACKAGE loop (photographer) → the site's
+      // packages/pricing section. Template shape: name / price / duration /
+      // includes[]. "What's included" arrives one-per-line → split to an array.
+      const pkgList = Array.isArray(answers.packages_list) ? answers.packages_list : [];
+      const cleanPkgs = pkgList.filter((p) => p && String(p.name || '').trim());
+      if (cleanPkgs.length) {
+        wd.packages = cleanPkgs.slice(0, 6).map((p) => ({
+          name: String(p.name).trim().slice(0, 60),
+          price: String(p.price || '').trim().slice(0, 40),
+          duration: String(p.duration || '').trim().slice(0, 60),
+          includes: String(p.includes || '')
+            .split(/\r?\n/)
+            .map((s) => s.replace(/^[\s•\-*–]+/, '').trim())
+            .filter(Boolean)
+            .slice(0, 8),
+        }));
+      }
       // Real work samples from the PORTFOLIO PhotoPicker (photographer/designer).
       // Decrypt + upload each (reusing the generic listing-photo Supabase
       // uploader) → project.photoUrl, so the work grid shows the user's own

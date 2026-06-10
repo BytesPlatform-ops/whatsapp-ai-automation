@@ -341,6 +341,9 @@ async function generateWebsiteContent(businessData, extras = {}) {
     // come from the iterative WEB_COLLECT_PROJECTS_DETAILS flow.
     aboutText: userAboutText,
     projects: userProjects,
+    // Photographer packages/pricing (Flow PACKAGE loop). Only the photographer
+    // sub-template renders c.packages; empty/absent → its default tiers.
+    packages: userPackages,
     // Optional headshot for the About section (Flow "A photo of you" picker).
     // Photographer/general templates render c.aboutPhotoUrl; absent → no circle.
     aboutPhotoUrl,
@@ -845,6 +848,9 @@ Generate compelling website copy for this business. Return ONLY valid JSON.${lan
     projects: portfolioMode
       ? portfolioProjects
       : (Array.isArray(userProjects) && userProjects.length ? userProjects : null),
+    // Photographer packages from the Flow PACKAGE loop. Only the photographer
+    // template reads c.packages; empty → its default tiers. null otherwise.
+    packages: portfolioMode && Array.isArray(userPackages) && userPackages.length ? userPackages : null,
     portfolioAbout: userAboutText || null,
     aboutPhotoUrl: aboutPhotoUrl || null,
     // Niche + resolved sub-template. portfolioTemplate is stamped so the
