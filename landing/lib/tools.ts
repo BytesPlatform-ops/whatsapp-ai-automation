@@ -1715,6 +1715,582 @@ export const TOOLS: ToolDefinition[] = [
     about:
       'Domain Authority (DA) and Page Authority (PA) started as Moz metrics: a single 0–100 score that predicts how well a site or page is likely to rank in search, derived largely from its backlink profile — how many other sites link to it, and how trustworthy those sites are themselves. The scores are logarithmic, so climbing from 20 to 30 is far easier than climbing from 70 to 80, and they are relative, not absolute: a 40 is strong in a quiet niche and weak in a competitive one. Crucially, DA and PA are third-party estimates, not numbers Google publishes or uses — Google has repeatedly said it has no single "authority score." They are still useful precisely because they are comparable: line up five competitors or five link prospects and the scores tell you, at a glance, who carries weight. This tool is powered by Open PageRank, a free dataset that models the same web-link graph and outputs a comparable 0–100 authority score, so you get the practical signal without a paid subscription. Treat the number as a compass, not a verdict. A high score does not guarantee a page will rank for your keyword, and a low score does not mean you cannot win — relevance, content quality, search intent, page speed, and user experience all matter alongside links. The honest way to use an authority checker is for triage: spotting which competitors dominate a space, deciding whether a backlink is worth pursuing, and tracking whether your own trend line is moving up over months. Moving that line is the slow part — it comes from publishing things worth linking to, fixing the technical foundations of your site, and earning mentions from real, relevant sources. That is exactly the work Pixie is built to support: a fast, SEO-ready site to stand on, and ongoing audits to keep the trend pointing up.',
   },
+  {
+    slug: 'zalgo-text-generator',
+    title: 'Zalgo Text Generator — Make Glitchy Cursed Text',
+    h1: 'Pixie Zalgo Text Generator',
+    shortName: 'Zalgo Text Generator',
+    tagline: 'Turn normal text into creepy, glitchy zalgo text.',
+    metaDescription:
+      'Create creepy glitch text with this free zalgo text generator. Type anything, set the intensity, and copy zalgo text anywhere. No signup.',
+    keywords: [
+      'zalgo text generator',
+      'zalgo text',
+      'glitch text',
+      'cursed text',
+      'creepy text generator',
+    ],
+    category: 'Generator',
+    emoji: '💀',
+    image: '/tools/zalgo-text-generator.jpg',
+    imageAlt: 'Glitchy distorted typography on a dark screen',
+    primaryKeyword: 'zalgo text generator',
+    intro:
+      'Type any word and watch it melt into glitchy, corrupted zalgo text — the classic "he comes" effect. Drag the intensity slider, choose whether marks stack above, through, or below your letters, then copy it straight into Discord, Instagram, TikTok, or anywhere that accepts Unicode.',
+    howItWorks: [
+      {
+        title: 'Type your text',
+        description: 'Enter any word or sentence. The corruption is applied live as you type.',
+      },
+      {
+        title: 'Set the intensity',
+        description: 'Drag the slider for light static or full meltdown, and toggle marks above, middle, or below the line.',
+      },
+      {
+        title: 'Copy anywhere',
+        description: 'Hit copy and paste your zalgo text into Discord, IG bios, usernames, or captions.',
+      },
+    ],
+    faqs: [
+      {
+        q: 'What is zalgo text?',
+        a: 'Zalgo text is normal text decorated with dozens of stacked Unicode "combining" marks so it appears to glitch, drip, or corrupt. The look is associated with the internet horror meme "Zalgo" and the phrase "he comes". Because it uses real Unicode characters, it survives copy-paste across most apps.',
+      },
+      {
+        q: 'Does zalgo text work on Discord and Instagram?',
+        a: 'Yes. The output is real Unicode, so it pastes into Discord messages and nicknames, Instagram bios and captions, TikTok, and most chat apps. Some platforms cap how many combining marks they render, so extreme intensity may look slightly tamer once pasted.',
+      },
+      {
+        q: 'Is zalgo text the same as glitch or cursed text?',
+        a: 'They overlap. "Glitch" and "cursed" text usually mean the same combining-mark technique with a different vibe. Our Zalgo Text Generator gives you the strongest control over intensity and direction; the Glitch and Cursed generators are tuned for their own looks.',
+      },
+      {
+        q: 'Why does my zalgo text look broken in some places?',
+        a: 'Each app decides how many stacked marks to draw. Single-line inputs (usernames, search bars) often clip the marks, while multi-line text fields show the full effect. That clipping is the app, not your copied text — the characters are still there.',
+      },
+      {
+        q: 'Is it free?',
+        a: 'Completely. Everything runs in your browser, your text never touches a server, and there is no signup, watermark, or limit.',
+      },
+    ],
+    relatedSlugs: ['glitch-text-generator', 'cursed-text-generator', 'fancy-text-generator'],
+    ctaHook: 'Building a gaming, music, or horror brand? Pixie ships your full website in 60 seconds — text us on WhatsApp.',
+    aboutHeading: 'How zalgo text actually works',
+    about:
+      'Zalgo text exploits a feature of Unicode called combining diacritical marks — the accents and squiggles (U+0300 to U+036F) that normally sit on a single letter, like the tilde on ñ or the umlaut on ü. Unicode lets you stack many of these marks onto one base character, and renderers will try to draw all of them, piling glyphs above and below the line until the text looks like it is bleeding or corrupting. A zalgo generator simply takes each character you type and appends a random number of "up", "middle", and "down" combining marks. Because these are genuine characters rather than an image or font, the effect copies into almost any text field. The meme itself traces back to a 2004 webcomic edit and the eerie tagline "he comes / to end the world", which is why zalgo became shorthand for creepy, glitchy, corrupted text across forums, Discord servers, and horror content. The one practical caveat is accessibility: screen readers attempt to pronounce every combining mark, so heavy zalgo text is unreadable to assistive tech — use it for vibes and decoration, never for the core message you need everyone to understand.',
+  },
+  {
+    slug: 'cursed-text-generator',
+    title: 'Cursed Text Generator — Creepy Glitch Text',
+    h1: 'Pixie Cursed Text Generator',
+    shortName: 'Cursed Text Generator',
+    tagline: 'Generate creepy cursed text with one click presets.',
+    metaDescription:
+      'Make eerie cursed text with this free cursed text generator. Pick a curse level and copy creepy glitch text anywhere. No signup needed.',
+    keywords: [
+      'cursed text generator',
+      'cursed text',
+      'creepy text',
+      'glitch text generator',
+      'zalgo text',
+    ],
+    category: 'Generator',
+    emoji: '😈',
+    image: '/tools/cursed-text-generator.jpg',
+    imageAlt: 'Eerie distorted lettering glowing in the dark',
+    primaryKeyword: 'cursed text generator',
+    intro:
+      'Turn plain words into eerie, cursed text with one tap. Pick a curse level — from a faint flicker to fully possessed — and copy the result into Discord, Instagram, TikTok, or your gamer tag. Presets keep it readable when you want creepy-but-legible, or unleash full corruption.',
+    howItWorks: [
+      {
+        title: 'Type your text',
+        description: 'Enter the word or phrase you want to curse. The effect updates instantly.',
+      },
+      {
+        title: 'Pick a curse level',
+        description: 'Mild, Cursed, Haunted, or Possessed — each preset stacks more eerie overlay and glitch marks.',
+      },
+      {
+        title: 'Copy and paste',
+        description: 'Copy the cursed text into chats, bios, usernames, or video captions.',
+      },
+    ],
+    faqs: [
+      {
+        q: 'What is cursed text?',
+        a: 'Cursed text is normal text overlaid with stacked Unicode combining marks — strike-throughs, overlays, and diacritics — so it looks corrupted, haunted, or "cursed". It is the same underlying technique as zalgo and glitch text, presented with eerie one-tap presets here.',
+      },
+      {
+        q: 'Where can I use cursed text?',
+        a: 'Anywhere that accepts Unicode: Discord servers and nicknames, Instagram and TikTok bios and captions, Twitter/X, Tumblr, and most chat apps. Because it is real characters, it survives copy-paste rather than relying on fonts.',
+      },
+      {
+        q: 'What is the difference between the curse levels?',
+        a: '"Mild" adds a light flicker that stays readable, "Cursed" gives a solid creepy look, "Haunted" stacks more marks for heavy distortion, and "Possessed" goes full meltdown. Use Re-roll to get a fresh random variation at any level.',
+      },
+      {
+        q: 'Will cursed text break or show as boxes?',
+        a: 'On modern devices the marks render correctly. Some apps limit how many stacked marks they draw — especially in single-line fields — so very high levels may look milder once pasted. The characters themselves are still intact.',
+      },
+      {
+        q: 'Is the cursed text generator free?',
+        a: 'Yes — no signup, no watermark, no limits. It runs entirely in your browser, so nothing you type is uploaded anywhere.',
+      },
+    ],
+    relatedSlugs: ['zalgo-text-generator', 'glitch-text-generator', 'fancy-text-generator'],
+    ctaHook: 'Run a gaming, streaming, or horror-themed brand? Pixie builds your full site in 60 seconds — text us on WhatsApp.',
+    aboutHeading: 'Cursed, glitch, and zalgo text explained',
+    about:
+      'Cursed text, glitch text, and zalgo text are three names for the same Unicode trick: taking ordinary letters and layering "combining" marks on top of them. Combining marks are characters that have no width of their own — they attach to the letter before them, which is how accented letters work in many languages. Unicode does not stop you from attaching dozens of them to a single character, and most text renderers will dutifully try to draw every one, producing glyphs that drip, smear, and overflow their line. The "cursed" framing leans into overlay and strike-through marks for an eerie, haunted feel rather than the chaotic full-corruption of classic zalgo, which is why this tool ships curated curse-level presets instead of a raw slider. All three styles are popular in gaming usernames, horror edits, Discord communities, and aesthetic social posts because they read as unsettling and otherworldly while still being plain, copy-pasteable text. The trade-off is the same across all of them: screen readers and search engines cannot make sense of heavily decorated text, so keep cursed styling to decorative flourishes — a username, a caption accent, a title — rather than anything a reader genuinely needs to parse.',
+  },
+  {
+    slug: 'backwards-text-generator',
+    title: 'Backwards Text Generator — Reverse Any Text',
+    h1: 'Pixie Backwards Text Generator',
+    shortName: 'Backwards Text Generator',
+    tagline: 'Reverse text by letters, words, or lines instantly.',
+    metaDescription:
+      'Reverse any text with this free backwards text generator. Flip letters, word order, or lines and copy the result. No signup needed.',
+    keywords: [
+      'backwards text generator',
+      'reverse text',
+      'reverse text generator',
+      'flip text',
+      'mirror text',
+    ],
+    category: 'Generator',
+    emoji: '🔁',
+    image: '/tools/backwards-text-generator.jpg',
+    imageAlt: 'Letters reflected in a mirror on a clean desk',
+    primaryKeyword: 'backwards text generator',
+    intro:
+      'Paste any text and instantly reverse it — flip the letters (hello → olleh), reverse the word order, or flip the line order. Useful for puzzles, secret messages, social captions, and checking palindromes. Everything happens live in your browser.',
+    howItWorks: [
+      {
+        title: 'Type or paste text',
+        description: 'Enter anything — a word, sentence, or several lines.',
+      },
+      {
+        title: 'Choose a reverse mode',
+        description: 'Reverse letters, reverse the order of words, or reverse the order of whole lines.',
+      },
+      {
+        title: 'Copy the result',
+        description: 'Grab the reversed text with one tap and paste it anywhere.',
+      },
+    ],
+    faqs: [
+      {
+        q: 'What does the backwards text generator do?',
+        a: 'It reverses your text. "Reverse letters" turns "hello" into "olleh", "reverse word order" turns "hello world" into "world hello", and "reverse line order" flips a list top-to-bottom. Pick whichever matches what you need.',
+      },
+      {
+        q: 'Is backwards text the same as upside-down text?',
+        a: 'No. Backwards text reverses the order of characters but keeps them upright. Upside-down text flips each letter so the whole thing reads as if rotated 180°. If you want the flipped look, use our Upside Down Text Generator instead.',
+      },
+      {
+        q: 'Does it handle emoji and accented letters?',
+        a: 'Yes. The reversal is done character-aware, so multi-byte characters like emoji and accented letters stay intact instead of splitting into broken symbols.',
+      },
+      {
+        q: 'Can I use this to check palindromes?',
+        a: 'Absolutely — reverse the letters and compare to the original. If they match (ignoring spaces and case), it is a palindrome. It is also handy for word puzzles, riddles, and simple obfuscation.',
+      },
+      {
+        q: 'Is it free and private?',
+        a: 'Yes. There is no signup, and the reversal runs entirely in your browser, so your text is never sent anywhere.',
+      },
+    ],
+    relatedSlugs: ['upside-down-text-generator', 'fancy-text-generator', 'glitch-text-generator'],
+    ctaHook: 'Run a puzzle, education, or content brand? Pixie builds full websites from one WhatsApp message.',
+    aboutHeading: 'Reversing text: characters, words, and lines',
+    about:
+      'Reversing text sounds trivial, but there are three genuinely different things people mean by "backwards", and mixing them up is the usual reason an online reverser gives a surprising result. The first is character reversal: walk the string from the last character to the first, so "Hello" becomes "olleH". The subtlety is that modern text is made of Unicode code points, and naive reversal that works byte-by-byte will shatter emoji and combined characters into garbage — which is why this tool reverses by character, not by byte. The second meaning is word-order reversal, where the letters inside each word stay put but the sequence of words flips, turning "the quick brown fox" into "fox brown quick the"; this is what you usually want for readable secret messages or rearranging a sentence. The third is line-order reversal, which leaves each line untouched but flips the list from bottom to top — useful for reversing logs, rankings, or step lists. None of these is the same as upside-down text, which substitutes each letter for a rotated look-alike glyph so the result reads as if you physically turned the screen over. Reversed text shows up in word games, palindrome checking, light obfuscation, retro and mirror-writing aesthetics, and the classic trick of writing something that only makes sense when held up to a mirror.',
+  },
+  {
+    slug: 'cool-text-generator',
+    title: 'Cool Text Generator — Make Cool Text Logos Free',
+    h1: 'Pixie Cool Text Generator',
+    shortName: 'Cool Text Generator',
+    tagline: 'Design cool text logos with neon, gradient, and 3D styles.',
+    metaDescription:
+      'Create cool text logos with this free cool text generator. Pick neon, gradient, chrome, or 3D styles and download a transparent PNG. No signup.',
+    keywords: [
+      'cool text generator',
+      'cool text',
+      'text logo maker',
+      'cool fonts generator',
+      'graphic text generator',
+    ],
+    category: 'Generator',
+    emoji: '🎨',
+    image: '/tools/cool-text-generator.jpg',
+    imageAlt: 'Colorful stylized 3D text logo on a gradient background',
+    primaryKeyword: 'cool text generator',
+    intro:
+      'Type a word and turn it into a cool, graphic text logo — neon glow, gradient, fire, chrome, 3D, or outline. Pick your color, preview live, and download a transparent PNG ready for a YouTube thumbnail, banner, profile picture, or logo mockup.',
+    howItWorks: [
+      {
+        title: 'Type your text',
+        description: 'Enter a word or short phrase — names, brands, gamer tags, and titles work best.',
+      },
+      {
+        title: 'Pick a style and color',
+        description: 'Choose neon, gradient, fire, chrome, 3D, or outline, then set your brand color.',
+      },
+      {
+        title: 'Download the PNG',
+        description: 'Export a transparent, retina-crisp PNG and drop it into any design.',
+      },
+    ],
+    faqs: [
+      {
+        q: 'What does the cool text generator make?',
+        a: 'It renders your text as a styled graphic — a small text logo — with effects like neon glow, gradients, chrome, fire, 3D depth, and outlines. The result downloads as a transparent PNG image, not as font characters.',
+      },
+      {
+        q: 'Is the downloaded image free to use?',
+        a: 'Yes. The PNG you generate is free for personal and commercial use — thumbnails, banners, merch, logos — with no watermark and no attribution required.',
+      },
+      {
+        q: 'Why is this an image instead of copy-paste text?',
+        a: 'Effects like glow, gradient, and 3D depth cannot be expressed with plain Unicode characters, so they have to be rendered as an image. If you want copy-paste styled letters instead, try the Fancy Text Generator.',
+      },
+      {
+        q: 'Does the PNG have a transparent background?',
+        a: 'Yes — the export is transparent, so you can layer it over any photo, color, or thumbnail without a white box around it.',
+      },
+      {
+        q: 'Does it work on mobile?',
+        a: 'Yes. It renders in any modern mobile browser, and the download saves straight to your device. Everything runs locally — your text never leaves your phone.',
+      },
+    ],
+    relatedSlugs: ['fancy-text-generator', 'glitch-text-generator', 'trust-badge-generator'],
+    ctaHook: 'Need a full logo and brand identity, not just text art? Pixie delivers logos, websites, and ads from one WhatsApp message.',
+    aboutHeading: 'From cool text to a real brand identity',
+    about:
+      'The "cool text" category goes back to the early web, when sites like CoolText let anyone render a word as a glossy, beveled, flaming logo without opening Photoshop. The appeal has never really faded: creators still need quick, good-looking text graphics for YouTube thumbnails, Twitch overlays, Discord banners, profile pictures, and event flyers, and most of them do not want to learn vector software to get one. This generator draws your text onto an HTML canvas and applies the effect in real time — neon uses layered strokes and shadow blur to fake a glowing tube, the gradient and fire styles paint a vertical color ramp into the letterforms, chrome stacks light-to-dark-to-light bands for a metallic sheen, and the 3D style offsets multiple shadow copies to extrude depth. Because it is canvas-based, the export is a true transparent PNG you can drop onto any background. The honest limitation is that a single styled word is a graphic, not a brand: it cannot adapt to every size, it is not a vector you can recolor infinitely, and it does not come with the typography system, palette, and logo lockups a real identity needs. That is the line where a free tool stops and a designed brand begins — and exactly where Pixie picks up, turning a single WhatsApp message into a full logo, website, and ad set.',
+  },
+  {
+    slug: 'compare-text',
+    title: 'Compare Text — Free Text Difference Checker',
+    h1: 'Pixie Compare Text Tool',
+    shortName: 'Compare Text',
+    tagline: 'Spot every difference between two blocks of text.',
+    metaDescription:
+      'Compare two texts and highlight every difference with this free text compare tool. See added and removed lines instantly. No signup, fully private.',
+    keywords: [
+      'compare text',
+      'text compare',
+      'text difference checker',
+      'diff checker',
+      'compare two texts',
+    ],
+    category: 'Converter',
+    emoji: '🔍',
+    image: '/tools/compare-text.jpg',
+    imageAlt: 'Two documents side by side with differences highlighted',
+    primaryKeyword: 'compare text',
+    intro:
+      'Paste two versions of any text and instantly see what changed — added lines in green, removed lines in red. Ideal for proofreading edits, comparing contract drafts, checking code or config changes, and catching plagiarism or duplicate copy. Runs entirely in your browser.',
+    howItWorks: [
+      {
+        title: 'Paste both versions',
+        description: 'Drop the original text on the left and the changed text on the right.',
+      },
+      {
+        title: 'See the differences',
+        description: 'A line-by-line diff highlights additions in green and removals in red, with a running count.',
+      },
+      {
+        title: 'Tune the match',
+        description: 'Optionally ignore case and leading/trailing spaces so only real changes show up.',
+      },
+    ],
+    faqs: [
+      {
+        q: 'How does the text compare tool work?',
+        a: 'It runs a line-by-line difference algorithm (longest common subsequence) between your two texts. Lines that exist only in the changed version are shown in green ("added"), lines only in the original are shown in red ("removed"), and unchanged lines stay neutral.',
+      },
+      {
+        q: 'Is my text uploaded anywhere?',
+        a: 'No. The entire comparison runs locally in your browser. Nothing is sent to a server, which makes it safe for confidential documents, contracts, and code.',
+      },
+      {
+        q: 'What can I use it for?',
+        a: 'Proofreading two drafts, reviewing contract or policy changes, comparing code or configuration files, checking whether two pieces of content are duplicates, and confirming that a copy-edit only changed what you intended.',
+      },
+      {
+        q: 'What do "ignore case" and "ignore spaces" do?',
+        a: '"Ignore case" treats "Hello" and "hello" as identical. "Ignore leading/trailing spaces" ignores indentation and trailing whitespace differences. Turn them on to focus on meaningful changes and hide cosmetic ones.',
+      },
+      {
+        q: 'Is there a length limit?',
+        a: 'There is no hard limit, but comparison is line-based and works best on documents up to a few thousand lines. Very large files may slow down because everything runs in your browser.',
+      },
+    ],
+    relatedSlugs: ['text-summarizer', 'pdf-to-text', 'ai-text-humanizer'],
+    ctaHook: 'Run a legal, editorial, or dev team? Pixie builds full websites and internal tools from one WhatsApp message.',
+    aboutHeading: 'How a text diff actually finds changes',
+    about:
+      'Comparing two pieces of text is a surprisingly deep problem, and the elegant answer is an algorithm called the longest common subsequence, or LCS. Rather than comparing the texts character by character — which would flag everything after a single inserted word as "changed" — LCS finds the longest sequence of lines that appears in both versions in the same order, then treats everything not in that sequence as either an addition or a removal. That is why a good diff can insert one new paragraph in the middle of a document and still recognize that everything around it is unchanged, instead of marking half the file red. It is the same core technique that powers "track changes" in word processors and the side-by-side views in version-control tools like Git. This tool applies LCS at the line level and colors the result: green for lines that exist only in your changed text, red for lines that existed only in the original, and neutral for the common backbone. The optional case- and whitespace-insensitive modes let you decide what counts as a "real" difference — useful when comparing code where indentation is noise, or prose where capitalization at the start of a re-flowed line is not a meaningful edit. Because the whole comparison happens in your browser, you can safely diff sensitive material — contracts, medical notes, unreleased copy — without it ever leaving your device.',
+  },
+  {
+    slug: 'pdf-to-text',
+    title: 'PDF to Text — Free PDF Text Extractor',
+    h1: 'Pixie PDF to Text Converter',
+    shortName: 'PDF to Text',
+    tagline: 'Extract text from any PDF right in your browser.',
+    metaDescription:
+      'Extract text from any PDF with this free PDF to text converter. No upload, no signup — your file stays in your browser. Copy or edit the result.',
+    keywords: [
+      'pdf to text',
+      'pdf to text converter',
+      'extract text from pdf',
+      'pdf text extractor',
+      'convert pdf to text',
+    ],
+    category: 'Converter',
+    emoji: '📄',
+    image: '/tools/pdf-to-text.jpg',
+    imageAlt: 'A PDF document converting into editable plain text',
+    primaryKeyword: 'pdf to text',
+    intro:
+      'Drop in a PDF and pull out all its text in seconds — ready to copy, edit, or paste elsewhere. The whole conversion happens inside your browser, so even confidential PDFs never leave your device. Works page by page across multi-page documents.',
+    howItWorks: [
+      {
+        title: 'Choose a PDF',
+        description: 'Drag and drop or browse for any PDF file on your device.',
+      },
+      {
+        title: 'We extract the text',
+        description: 'The PDF is parsed page by page in your browser, preserving line breaks where possible.',
+      },
+      {
+        title: 'Copy or edit',
+        description: 'The extracted text lands in an editable box — tweak it, then copy it out.',
+      },
+    ],
+    faqs: [
+      {
+        q: 'Is my PDF uploaded to a server?',
+        a: 'No. The PDF is read and parsed entirely in your browser using a JavaScript PDF engine. Your file never leaves your device, which makes the tool safe for contracts, statements, and other private documents.',
+      },
+      {
+        q: 'Does it work on scanned PDFs?',
+        a: 'Only if the PDF has a real text layer. A scanned document is essentially an image of text, so there is nothing to extract. For those, take a screenshot or export a page as an image and run it through our Image to Text (OCR) tool instead.',
+      },
+      {
+        q: 'Will it keep my formatting?',
+        a: 'It preserves the text content and reasonable line breaks, but not visual layout like columns, tables, fonts, or images. PDFs store text positionally, so complex multi-column layouts may extract in an unexpected reading order.',
+      },
+      {
+        q: 'Is there a file size or page limit?',
+        a: 'There is no hard limit, but because everything runs in your browser, very large PDFs (hundreds of pages) will take longer and use more memory. Most documents extract in a second or two.',
+      },
+      {
+        q: 'Is it really free?',
+        a: 'Yes — no signup, no watermark, no email required. Convert as many PDFs as you like.',
+      },
+    ],
+    relatedSlugs: ['image-to-text', 'text-summarizer', 'compare-text'],
+    ctaHook: 'Run a business that drowns in documents? Pixie builds websites and tools that handle them — text us on WhatsApp.',
+    aboutHeading: 'Why extracting PDF text is trickier than it looks',
+    about:
+      'A PDF is not a document in the way a Word file is — it is a set of drawing instructions. When software creates a PDF, it records exactly where to paint each glyph on the page, which means the "text" is really a cloud of positioned characters rather than flowing sentences. Extracting readable text means reading those positions back and reconstructing lines and word boundaries from the coordinates, which is why this tool groups characters by their vertical position to rebuild line breaks. It works beautifully for PDFs that were exported from a word processor, web page, or design tool, because the underlying text layer is intact. It cannot help with scanned PDFs, though: a scan is just a photograph of a page wrapped in a PDF container, with no text layer at all, so there is literally nothing to read out — that job belongs to optical character recognition, which is what our Image to Text tool does. The big advantage of doing extraction in the browser, as this tool does with the open-source pdf.js engine, is privacy: your PDF is parsed locally and never uploaded, so you can safely pull text out of bank statements, signed contracts, medical forms, or unreleased manuscripts without trusting a third-party server. Once the text is out, it is plain and editable — ready to summarize, translate, compare against another version, or paste into whatever you are writing.',
+  },
+  {
+    slug: 'image-to-text',
+    title: 'Image to Text — Free OCR to Extract Text',
+    h1: 'Pixie Image to Text (OCR)',
+    shortName: 'Image to Text',
+    tagline: 'Extract text from any image with free in-browser OCR.',
+    metaDescription:
+      'Extract text from images with this free image to text OCR tool. Drop a photo or screenshot and copy the text. No upload, no signup, fully private.',
+    keywords: [
+      'extract text from image',
+      'image to text',
+      'picture to text',
+      'picture to text converter',
+      'ocr online',
+    ],
+    category: 'Converter',
+    emoji: '🖼️',
+    image: '/tools/image-to-text.jpg',
+    imageAlt: 'A photo of printed text being converted to editable characters',
+    primaryKeyword: 'extract text from image',
+    intro:
+      'Drop in a photo, screenshot, or scan and pull the words out as editable text. Powered by in-browser OCR (optical character recognition) in six languages, it reads printed text from images without uploading them anywhere — your picture stays on your device.',
+    howItWorks: [
+      {
+        title: 'Choose an image',
+        description: 'Drag and drop or browse for a JPG, PNG, WebP, or screenshot containing text.',
+      },
+      {
+        title: 'Pick the language',
+        description: 'Select the language of the text so OCR recognizes the right characters and accents.',
+      },
+      {
+        title: 'Copy the text',
+        description: 'OCR runs in your browser and drops the recognized text into an editable, copyable box.',
+      },
+    ],
+    faqs: [
+      {
+        q: 'What is OCR?',
+        a: 'OCR stands for optical character recognition — technology that looks at an image of text and works out which letters and words it contains, turning a picture into editable, searchable text. This tool uses the open-source Tesseract engine running directly in your browser.',
+      },
+      {
+        q: 'Is my image uploaded anywhere?',
+        a: 'No. The OCR model runs locally in your browser, so your image never leaves your device. That makes it safe for screenshots of private messages, documents, or anything confidential.',
+      },
+      {
+        q: 'What kinds of images work best?',
+        a: 'Clear, high-contrast printed text — screenshots, scanned documents, signs, slides, book pages. Accuracy drops on handwriting, very small or blurry text, low light, heavy stylization, or text at an angle. A sharper photo almost always helps.',
+      },
+      {
+        q: 'Which languages are supported?',
+        a: 'English, Spanish, French, German, Italian, and Portuguese. Pick the matching language before running OCR — it tells the engine which character set and accents to expect, which improves accuracy.',
+      },
+      {
+        q: 'Why is the first run a bit slow?',
+        a: 'The first time you use a language, the OCR engine downloads its recognition model (a few megabytes). After that it is cached, so subsequent images process faster.',
+      },
+    ],
+    relatedSlugs: ['pdf-to-text', 'text-summarizer', 'audio-to-text'],
+    ctaHook: 'Digitizing receipts, forms, or documents for your business? Pixie builds the website and tools around it — text us on WhatsApp.',
+    aboutHeading: 'How optical character recognition reads an image',
+    about:
+      'Optical character recognition is one of the oldest practical applications of machine vision, and it is genuinely clever about something humans do effortlessly: looking at shapes and recognizing them as letters. A modern OCR engine like Tesseract first cleans up the image — adjusting contrast, straightening lines, and separating text from background — then segments the page into blocks, lines, words, and finally individual character shapes. Each shape is compared against learned models of what letters look like, using neural networks trained on enormous amounts of text in many fonts and languages, and the engine combines that with a language model so it can prefer real words over near-miss gibberish. Telling it which language you are scanning matters because each language has its own alphabet, accents, and common word patterns; an English model does not expect ñ or ü, and a French model knows that "été" is more likely than a random accented string. The remarkable part of this particular tool is that all of that runs inside your web browser via WebAssembly — there is no server doing the recognition, so your image stays private and you can even use it offline once the model is cached. OCR has limits worth respecting: it reads printed type far better than handwriting, it struggles with low resolution and motion blur, and it can scramble the reading order of complex multi-column layouts. But for the everyday job of lifting text out of a screenshot, a photographed sign, a slide, or a scanned page, it turns a picture you cannot edit into words you can copy, search, translate, and reuse.',
+  },
+  {
+    slug: 'text-to-speech',
+    title: 'Text to Speech — Free Text to Voice Reader',
+    h1: 'Pixie Text to Speech',
+    shortName: 'Text to Speech',
+    tagline: 'Turn any text into natural spoken audio, free.',
+    metaDescription:
+      'Convert text to speech free with this online text to voice reader. Pick a voice, adjust speed and pitch, and listen instantly. No signup needed.',
+    keywords: [
+      'text to speech',
+      'text to voice',
+      'read text aloud',
+      'tts online',
+      'text to speech free',
+    ],
+    category: 'Converter',
+    emoji: '🔊',
+    image: '/tools/text-to-speech.jpg',
+    imageAlt: 'Sound waves emanating from a block of text',
+    primaryKeyword: 'text to voice',
+    intro:
+      'Type or paste any text and have it read aloud in a natural voice. Choose from the voices installed on your device, adjust the speed and pitch, and play, pause, or stop. Great for proofreading by ear, accessibility, learning pronunciation, or listening to articles hands-free.',
+    howItWorks: [
+      {
+        title: 'Enter your text',
+        description: 'Type or paste anything you want read aloud — a paragraph, an article, a script.',
+      },
+      {
+        title: 'Pick a voice and speed',
+        description: 'Choose from your device voices and fine-tune the reading speed and pitch.',
+      },
+      {
+        title: 'Press play',
+        description: 'Listen instantly, and pause or stop whenever you like. Nothing is uploaded.',
+      },
+    ],
+    faqs: [
+      {
+        q: 'How does the text to speech tool work?',
+        a: 'It uses your browser\'s built-in speech synthesis engine to read text aloud using the voices already installed on your device. Because it is local, playback is instant, private, and free.',
+      },
+      {
+        q: 'Why do the available voices differ on my phone vs laptop?',
+        a: 'The voice list comes from your operating system, not from us. iPhones, Android phones, Windows, and Macs each ship different built-in voices, so the same page will offer different options depending on the device and browser you open it in.',
+      },
+      {
+        q: 'Can I download the audio as an MP3?',
+        a: 'Browser speech synthesis plays audio live but does not expose a downloadable file, so this tool is for listening rather than exporting. If you need downloadable, studio-quality AI voiceovers, message us on WhatsApp — that is something Pixie can build for you.',
+      },
+      {
+        q: 'What is text to speech good for?',
+        a: 'Proofreading by ear (you catch awkward phrasing faster when you hear it), accessibility for low-vision or dyslexic readers, learning pronunciation, listening to long articles hands-free, and previewing scripts or voiceover copy.',
+      },
+      {
+        q: 'Is it free and private?',
+        a: 'Yes. There is no signup, and because synthesis happens on your device, the text you enter is never sent to a server.',
+      },
+    ],
+    relatedSlugs: ['audio-to-text', 'text-summarizer', 'image-to-text'],
+    ctaHook: 'Need real AI voiceovers or an accessible website? Pixie builds it from one WhatsApp message.',
+    aboutHeading: 'Text to speech, on-device and in the cloud',
+    about:
+      'Text to speech has quietly become one of the most useful everyday accessibility technologies, and most people do not realize their phone and laptop already ship a capable engine for it. This tool taps the Web Speech API, a browser standard that hands your text to the operating system\'s built-in synthesizer and streams the audio back instantly. That design has real advantages: it is free, it works offline, and because nothing is uploaded, the text you paste stays completely private. The catch is that the voices come from the device, so quality and selection vary — Apple, Google, and Microsoft each bundle their own set, and a high-end phone may sound noticeably more natural than an old laptop. There is also no way to capture the spoken audio as a file, because the browser plays it rather than rendering it to a download. That is the dividing line between an on-device reader like this and a cloud text-to-speech service: modern neural voices from providers like ElevenLabs or OpenAI sound strikingly human, can be exported as MP3 or WAV, and let you clone or customize a voice, but they cost money per character and send your text to a server. For the common jobs — proofreading by ear, reading an article hands-free, checking pronunciation, or making content accessible — the on-device reader is more than enough and respects your privacy. When you need broadcast-quality narration you can ship, that is where a built solution comes in, and exactly the kind of thing Pixie can wire into a website or product for you.',
+  },
+  {
+    slug: 'audio-to-text',
+    title: 'Audio to Text — Free Audio Transcription',
+    h1: 'Pixie Audio to Text',
+    shortName: 'Audio to Text',
+    tagline: 'Transcribe audio recordings into text in minutes.',
+    metaDescription:
+      'Transcribe audio to text with this free audio to text converter. Upload a recording in any language and get an accurate transcript you can copy.',
+    keywords: [
+      'audio to text',
+      'audio to text converter',
+      'transcribe audio',
+      'audio transcription',
+      'speech to text',
+    ],
+    category: 'Converter',
+    emoji: '🎙️',
+    image: '/tools/audio-to-text.jpg',
+    imageAlt: 'A microphone beside a transcript of spoken words',
+    primaryKeyword: 'audio to text',
+    intro:
+      'Upload a voice memo, interview, lecture, podcast, or meeting recording and get an accurate text transcript back. Powered by OpenAI\'s Whisper model, it handles dozens of languages and auto-detects the spoken language if you are not sure. Copy the transcript and you are done.',
+    howItWorks: [
+      {
+        title: 'Upload audio',
+        description: 'Drag and drop an mp3, m4a, wav, ogg, flac, or webm file up to 25 MB.',
+      },
+      {
+        title: 'Choose the language',
+        description: 'Leave it on auto-detect, or pick the spoken language for best accuracy.',
+      },
+      {
+        title: 'Get your transcript',
+        description: 'The recording is transcribed and the text appears ready to copy.',
+      },
+    ],
+    faqs: [
+      {
+        q: 'How accurate is the transcription?',
+        a: 'It uses OpenAI\'s Whisper model, which is among the most accurate general-purpose speech recognizers available and handles accents and background noise well. Accuracy is highest on clear recordings; heavy noise, crosstalk, or very faint audio will reduce it.',
+      },
+      {
+        q: 'What languages are supported?',
+        a: 'Whisper supports dozens of languages and can auto-detect the one being spoken. You can also pick a specific language — English, Spanish, French, German, Italian, Portuguese, Hindi, Arabic, and more — to nudge accuracy.',
+      },
+      {
+        q: 'What file formats and sizes can I use?',
+        a: 'Common audio formats — mp3, m4a, wav, ogg, flac, and webm — up to 25 MB per file. For long recordings, exporting at a lower bitrate keeps you under the limit without hurting transcription much.',
+      },
+      {
+        q: 'Is my audio stored?',
+        a: 'No. Your file is sent securely to the transcription service, converted to text, and not retained by us. The transcript is returned to your browser and nowhere else.',
+      },
+      {
+        q: 'What can I use it for?',
+        a: 'Turning interviews and meetings into notes, captioning videos, drafting show notes from a podcast, transcribing voice memos and lectures, and making spoken content searchable. The transcript is plain editable text you can clean up and reuse.',
+      },
+    ],
+    relatedSlugs: ['text-to-speech', 'text-summarizer', 'pdf-to-text'],
+    ctaHook: 'Run a podcast, agency, or research team? Pixie builds the website and workflow around your content — text us on WhatsApp.',
+    aboutHeading: 'Speech recognition, finally good enough to trust',
+    about:
+      'Automatic transcription used to be a punchline — the kind of feature that turned "recognize speech" into "wreck a nice beach" — but the technology crossed a real threshold with large speech models trained on enormous, diverse audio. OpenAI\'s Whisper, which powers this tool, was trained on hundreds of thousands of hours of multilingual speech, and the result is a transcriber that copes gracefully with accents, casual speech, technical vocabulary, and a fair amount of background noise. It also detects the spoken language automatically and can transcribe dozens of them, which is why a single tool can handle an English podcast, a Spanish interview, and a Hindi voice memo without you changing any settings. Under the hood the model listens to the audio in short overlapping windows and predicts the most likely sequence of words, using its language understanding to disambiguate similar-sounding phrases from context — the same principle that lets a human catch a mumbled word because they know what the sentence is about. The practical limits are honest ones: extremely noisy recordings, several people talking over each other, and very long files are still hard, and like any model it can occasionally invent a plausible-sounding word in a silent or garbled stretch, so a quick read-through is wise before you rely on a transcript. Used well, though, it collapses one of the most tedious knowledge-work tasks there is — turning hours of spoken audio into searchable, editable, shareable text — from an afternoon into a couple of minutes, freeing interviews, meetings, lectures, and podcasts to be summarized, quoted, captioned, and translated.',
+  },
 ];
 
 export function getTool(slug: string): ToolDefinition | undefined {

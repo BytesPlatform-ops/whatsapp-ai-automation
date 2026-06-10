@@ -270,6 +270,78 @@ export function buildToolPrefill(slug: string, data: PrefillData): ToolPrefillRe
           "Hi! Just used your DA/PA Checker. I want to improve my website's SEO — interested in a website and SEO audit.",
       };
 
+    case 'zalgo-text-generator':
+      return {
+        headline: 'Run a gaming or music brand?',
+        subhead: 'Pixie builds full websites in 60 seconds — text us on WhatsApp.',
+        whatsappPrefill:
+          'Hi! Just used your Zalgo Text Generator. I run a gaming/music brand — interested in a website.',
+      };
+
+    case 'cursed-text-generator':
+      return {
+        headline: 'Run a gaming or streaming brand?',
+        subhead: 'Pixie builds full websites in 60 seconds — text us on WhatsApp.',
+        whatsappPrefill:
+          'Hi! Just used your Cursed Text Generator. I run a gaming/streaming brand — interested in a website.',
+      };
+
+    case 'backwards-text-generator':
+      return {
+        headline: 'Run a puzzle or education brand?',
+        subhead: 'Pixie builds full websites from one WhatsApp message.',
+        whatsappPrefill:
+          'Hi! Just used your Backwards Text Generator. I run a content/education brand — interested in a website.',
+      };
+
+    case 'cool-text-generator':
+      return {
+        headline: 'Need a real logo and brand identity?',
+        subhead: 'Pixie delivers logos, websites, and ads from one WhatsApp message.',
+        whatsappPrefill:
+          'Hi! Just used your Cool Text Generator. I need a logo and website for my brand.',
+      };
+
+    case 'compare-text':
+      return {
+        headline: 'Run a legal, editorial, or dev team?',
+        subhead: 'Pixie builds full websites and internal tools from one WhatsApp message.',
+        whatsappPrefill:
+          'Hi! Just used your Compare Text tool. I run a business that needs a website — interested.',
+      };
+
+    case 'pdf-to-text':
+      return {
+        headline: 'Drowning in documents?',
+        subhead: 'Pixie builds websites and tools that handle them — text us on WhatsApp.',
+        whatsappPrefill:
+          'Hi! Just used your PDF to Text tool. I run a business — interested in a website.',
+      };
+
+    case 'image-to-text':
+      return {
+        headline: 'Digitizing receipts, forms, or docs?',
+        subhead: 'Pixie builds the website and tools around it — text us on WhatsApp.',
+        whatsappPrefill:
+          'Hi! Just used your Image to Text (OCR) tool. I run a business — interested in a website.',
+      };
+
+    case 'text-to-speech':
+      return {
+        headline: 'Need real AI voiceovers or an accessible site?',
+        subhead: 'Pixie builds it from one WhatsApp message.',
+        whatsappPrefill:
+          'Hi! Just used your Text to Speech tool. I need an accessible website — interested.',
+      };
+
+    case 'audio-to-text':
+      return {
+        headline: 'Run a podcast, agency, or research team?',
+        subhead: 'Pixie builds the website and workflow around your content — text us on WhatsApp.',
+        whatsappPrefill:
+          'Hi! Just used your Audio to Text tool. I run a podcast/agency — interested in a website.',
+      };
+
     default:
       return {
         headline: 'Want a site like this?',
