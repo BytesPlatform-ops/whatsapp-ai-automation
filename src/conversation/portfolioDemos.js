@@ -37,10 +37,10 @@ const PORTFOLIO_SUBTYPES = [
     key: 'designer',
     label: 'designer (brand / UX / graphic / product)',
     matches: 'designer, UX, UI, graphic designer, brand designer, product designer, art director',
-    // scratch/designer-portfolio-preview — Priya Nair, Brand & UX Designer
-    previewUrl: 'https://priyanair.pixiebot.co',
+    // scratch/designer-portfolio-preview — Eleanor, Brand & UX Designer
+    previewUrl: 'https://eleanor.pixiebot.co',
     screenshotUrl: 'https://pixiebot.co/portfolio-designer.png',
-    live: false,
+    live: true,
   },
   {
     key: 'photographer',
