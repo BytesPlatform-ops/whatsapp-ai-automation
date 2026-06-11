@@ -534,6 +534,7 @@ const NICHE_FIELDS = {
   designer: {
     title: { en: 'Your design work', pt: 'Seu trabalho de design' },
     photos: true, skills: true, years: true, focus: true, projects: false,
+    aboutPhoto: true, // optional headshot for the hero — no stock fallback if skipped
     skills_label: { en: 'Tools', pt: 'Ferramentas' },
     skills_helper: {
       en: 'e.g. Figma, Photoshop, Illustrator. Comma-separated. Or leave blank.',

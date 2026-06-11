@@ -66,5 +66,14 @@ export const DEMO_SITES: DemoSite[] = [
     "industry": "Photography portfolio",
     "city": "San Francisco",
     "url": "https://hana.pixiebot.co"
+  },
+  {
+    "id": "designer",
+    "label": "Designer",
+    "prompt": "I'm a graphic & poster designer in London. I want a portfolio site for my posters, my process, and an easy way for clients to reach me.",
+    "businessName": "Eleanor Hartley",
+    "industry": "Graphic & Poster Designer",
+    "city": "London",
+    "url": "https://eleanor-portfolio.netlify.app"
   }
 ];

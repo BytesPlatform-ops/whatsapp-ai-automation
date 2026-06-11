@@ -76,7 +76,7 @@
     let px=innerWidth/2,py=innerHeight/2,cx=px,cy=py,raf=0,active=false;
     const loop=()=>{cx+=(px-cx)*.14;cy+=(py-cy)*.14;ip.style.left=cx+"px";ip.style.top=cy+"px";raf=active?requestAnimationFrame(loop):0;};
     rows.forEach(r=>{
-      r.addEventListener("mouseenter",()=>{gx.className="gx "+(r.getAttribute("data-cover")||"gx-a");ip.classList.add("on");if(!active){active=true;loop();}});
+      r.addEventListener("mouseenter",()=>{var im=r.getAttribute("data-img");if(im){gx.className="gx";gx.style.backgroundImage="url('"+im+"')";gx.style.backgroundSize="cover";gx.style.backgroundPosition="center";}else{gx.style.backgroundImage="";gx.className="gx "+(r.getAttribute("data-cover")||"gx-a");}ip.classList.add("on");if(!active){active=true;loop();}});
       r.addEventListener("mouseleave",()=>{ip.classList.remove("on");active=false;});
     });
     addEventListener("mousemove",e=>{px=e.clientX+38;py=e.clientY;},{passive:true});

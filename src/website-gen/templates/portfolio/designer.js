@@ -40,6 +40,40 @@ const EXTRA_CSS = `
 .form-status{font-size:13px;color:var(--muted);margin-top:2px}
 .form-status.ok{color:#1A7A3A}.form-status.err{color:#B3261E}
 .cs-live{margin-top:6px}
+/* Service-card image (relevant photo behind the spec, paper scrim keeps text readable) */
+.spec-img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:0;transition:transform .9s var(--e)}
+.spec:hover .spec-img{transform:scale(1.06)}
+.spec-shade{position:absolute;inset:0;z-index:0;background:linear-gradient(180deg,rgba(17,17,17,.22) 0%,transparent 26%,rgba(251,248,242,.84) 62%,var(--paper) 100%)}
+.spec.has-img .n{position:relative;z-index:2;align-self:flex-start;background:var(--bg);padding:4px 11px;border-radius:100px;color:var(--ink-2)}
+.spec.has-img .nm,.spec.has-img .ds{position:relative;z-index:1}
+/* "How it works" — connected step flow: dashed line draws in, circles fill in
+   sequence on scroll, accent hover. */
+.proc{background:var(--paper) !important}
+.flow{position:relative;display:grid;grid-template-columns:repeat(4,1fr);gap:clamp(20px,3vw,44px)}
+@media(max-width:860px){.flow{grid-template-columns:1fr 1fr;row-gap:clamp(40px,6vw,54px)}}
+@media(max-width:520px){.flow{grid-template-columns:1fr}}
+.flow-line{position:absolute;top:26px;left:26px;right:calc((100% - 3 * clamp(20px,3vw,44px)) / 4 - 26px);height:0;z-index:0}
+.flow-line::before{content:"";position:absolute;inset:0;border-top:1.5px dashed var(--line-2)}
+.flow-line::after{content:"";position:absolute;left:0;top:-1px;width:0;border-top:1.5px solid var(--accent);transition:width 1.6s var(--e) .3s}
+.flow.in .flow-line::after{width:100%}
+@media(max-width:860px){.flow-line{display:none}}
+.flow-step{position:relative;z-index:1}
+.flow-circle{display:grid;place-items:center;width:52px;height:52px;border-radius:50%;border:1.5px solid var(--line-2);background:var(--bg);box-shadow:0 0 0 6px var(--paper);font-family:var(--mono);font-size:14px;font-weight:600;color:var(--ink-2);transition:border-color .5s var(--e),color .5s var(--e),background .5s var(--e),transform .5s var(--e)}
+.flow.in .flow-step:nth-child(2) .flow-circle{transition-delay:.25s}
+.flow.in .flow-step:nth-child(3) .flow-circle{transition-delay:.55s}
+.flow.in .flow-step:nth-child(4) .flow-circle{transition-delay:.85s}
+.flow.in .flow-step:nth-child(5) .flow-circle{transition-delay:1.15s}
+.flow.in .flow-circle{border-color:var(--accent);color:var(--accent)}
+.flow-step:hover .flow-circle{background:var(--accent);border-color:var(--accent);color:#fff;transform:scale(1.1)}
+.flow-name{font-family:var(--serif);font-size:clamp(26px,2.6vw,36px);line-height:1;margin-top:22px;transition:color .4s var(--e)}
+.flow-step:hover .flow-name{color:var(--accent)}
+.flow-desc{font-size:15px;line-height:1.55;color:var(--muted);max-width:28ch;margin-top:12px}
+.flow-tag{display:inline-flex;align-items:center;gap:8px;margin-top:18px;padding:8px 15px;border:1px solid var(--line);border-radius:100px;font-size:12.5px;font-weight:600;color:var(--ink-2);background:var(--paper);transition:border-color .4s var(--e),transform .4s var(--e)}
+.flow-tag .dot{width:7px;height:7px;border-radius:50%;background:var(--accent)}
+.flow-step:hover .flow-tag{border-color:var(--accent);transform:translateY(-2px)}
+/* Activation banner offsets .nav/nav.nav by 48px in preview mode, but this
+   template's bar is .head — offset it too so it isn't hidden behind the banner. */
+html.pixie-preview-mode .head{top:48px !important}
 /* No-portrait hero: drop the right card, go full-width editorial */
 .hero--solo .hero-inner{grid-template-columns:1fr;align-items:start}
 .hero--solo .hero-l{max-width:none;gap:clamp(20px,2.6vw,32px)}
@@ -95,6 +129,16 @@ function defaultDisciplines() {
 function disciplineList(c) {
   const skills = normalizeSkillsList(c.services);
   return skills.length ? skills : defaultDisciplines();
+}
+// Service-card images, found from the user's services. Reads an explicit
+// serviceImages array (demo) OR the generator's per-service image field
+// (production: services arrive as { title, desc, image } with a Pexels photo).
+function serviceImageList(c) {
+  if (Array.isArray(c.serviceImages) && c.serviceImages.length) return c.serviceImages;
+  if (Array.isArray(c.services)) {
+    return c.services.map((s) => (s && typeof s === 'object' ? (s.image || s.imageUrl || s.photoUrl || null) : null));
+  }
+  return [];
 }
 
 // Pre-written case-study content for the default disciplines (the "concept
@@ -217,7 +261,7 @@ function contactFooter(c) {
 }
 
 function scripts() {
-  const imgFallback = '(function(){var i=document.querySelectorAll(".portrait-img,.cover-img");[].forEach.call(i,function(im){function f(){im.style.display="none";}if(im.complete&&im.naturalWidth===0)f();im.addEventListener("error",f);});})();';
+  const imgFallback = '(function(){var i=document.querySelectorAll(".portrait-img,.cover-img,.spec-img");[].forEach.call(i,function(im){function f(){im.style.display="none";}if(im.complete&&im.naturalWidth===0)f();im.addEventListener("error",f);});})();';
   return `<script>${APP_JS}</script>\n<script>${imgFallback}</script>`;
 }
 
@@ -261,12 +305,10 @@ function hero(c) {
   const place = esc(c.contactAddress || (Array.isArray(c.serviceAreas) && c.serviceAreas[0]) || 'Remote · Worldwide');
   const avail = esc(c.availabilityStatus || 'Available for new projects');
   const mono = esc(initialsOf(c.businessName) || twoLetters(c.businessName));
-  // Portrait: explicit about photo → hero image (auto-fetched in production) →
-  // first project photo. None of those? the monogram fallback below shows.
-  const portraitUrl = c.aboutPhotoUrl
-    || (c.heroImage && c.heroImage.url)
-    || (Array.isArray(c.projects) && c.projects[0] && c.projects[0].photoUrl)
-    || null;
+  // Hero photo is the user's OWN headshot only — an OPTIONAL upload. No random
+  // fallback: if they didn't give one, the hero runs full-width solo (no empty
+  // card, nothing stock).
+  const portraitUrl = c.aboutPhotoUrl || null;
   const hasPortrait = !!portraitUrl;
   // With a photo → two-column hero with the portrait card. Without one → drop
   // the card entirely and run a clean, full-width editorial hero (the empty
@@ -315,13 +357,18 @@ function marquee(c) {
 }
 
 function specializations(c) {
-  const cells = disciplineList(c).slice(0, 4).map((name, i) => `
-    <div class="spec reveal${i ? ` d${i}` : ''}">
+  const imgs = serviceImageList(c);
+  const cells = disciplineList(c).slice(0, 4).map((name, i) => {
+    const im = imgs[i];
+    return `
+    <div class="spec reveal${i ? ` d${i}` : ''}${im ? ' has-img' : ''}">
       <span class="gx ${GX[i % GX.length]}"></span>
+      ${im ? `<img class="spec-img" src="${attr(im)}" alt="${attr(name)}" loading="lazy"><span class="spec-shade"></span>` : ''}
       <span class="n">${pad2(i + 1)}</span>
       <h3 class="nm">${esc(name)}</h3>
       <p class="ds">${esc(specDesc(name))}</p>
-    </div>`).join('');
+    </div>`;
+  }).join('');
   return `
 <section class="section" id="expertise" data-screen-label="Specializations">
   <div class="wrap">
@@ -358,7 +405,7 @@ function selectedWork(c, items) {
   const real = items.length && items[0].isProject;
   const note = real ? 'Selected projects' : 'Concept showcase — add real projects anytime';
   const rows = items.map((it, i) => `
-    <a class="idx-row" href="/work/${it.slug}/" data-cover="${it.cover}">
+    <a class="idx-row" href="/work/${it.slug}/" data-cover="${it.cover}"${it.photoUrl ? ` data-img="${attr(it.photoUrl)}"` : ''}>
       <span class="ix">${pad2(i + 1)}</span>
       <span class="t">${esc(it.title)}</span>
       <span class="c">${esc(it.role)}</span>
@@ -383,13 +430,18 @@ function selectedWork(c, items) {
 
 function process() {
   const steps = [
-    ['Discover', 'We dig into your goals, audience and what makes you different.'],
-    ['Design', 'Directions explored, then sharpened into a single confident system.'],
-    ['Refine', 'We pressure-test every detail together until it feels inevitable.'],
-    ['Deliver', 'Files, guidelines and everything you need to launch with confidence.'],
+    ['Discover', 'We dig into the brief, the audience and what the work has to achieve.', 'Brief & moodboard'],
+    ['Direction', 'Distinct routes explored, then sharpened into one confident direction.', 'Concept directions'],
+    ['Craft', 'Every detail — type, composition, colour — pushed until it feels inevitable.', 'Final proofs'],
+    ['Deliver', 'Production-ready files, specs and everything you need to ship.', 'Files & specs'],
   ];
-  const cells = steps.map(([n, p], i) => `
-    <div class="step reveal${i ? ` d${i}` : ''}"><span class="ring">${pad2(i + 1)}</span><span class="si">${n}</span><h3 class="sn">${n}</h3><p class="sp">${p}</p></div>`).join('');
+  const cells = steps.map(([n, p, tag], i) => `
+    <div class="flow-step">
+      <span class="flow-circle">${pad2(i + 1)}</span>
+      <h3 class="flow-name">${esc(n)}</h3>
+      <p class="flow-desc">${esc(p)}</p>
+      <span class="flow-tag"><span class="dot"></span>${esc(tag)}</span>
+    </div>`).join('');
   return `
 <section class="section proc" id="process" data-screen-label="Process">
   <div class="wrap">
@@ -397,7 +449,10 @@ function process() {
       <div><span class="kicker reveal">How it works</span><h2 class="h-md t reveal d1" style="margin-top:18px">A simple, <span class="serif it">considered</span> process.</h2></div>
       <p class="lead reveal d2" style="max-width:24ch">Four steps from first conversation to final handover.</p>
     </div>
-    <div class="proc-grid">${cells}</div>
+    <div class="flow reveal d1">
+      <div class="flow-line" aria-hidden="true"></div>
+      ${cells}
+    </div>
   </div>
 </section>`;
 }
@@ -518,7 +573,6 @@ function generateCaseStudyPage(c, it, next) {
   <div class="cs-block reveal"><div class="bh">Overview</div><div class="body">${paras(d.overview)}</div></div>
   <div class="cs-block reveal"><div class="bh">Approach</div><div class="body">${paras(d.approach)}</div></div>
   <div class="cs-block reveal"><div class="bh">Deliverables</div><div class="body"><div class="cs-deliv">${d.deliv.map((t) => `<span>${esc(t)}</span>`).join('')}</div></div></div>
-  <div class="cs-block reveal"><div class="bh">Palette</div><div class="body"><div class="cs-palette">${swatches(d.palette)}</div></div></div>
   ${d.link ? `<div class="cs-block reveal"><div class="bh">Live</div><div class="body cs-live"><a class="btn btn--out" href="${attr(d.link)}" target="_blank" rel="noopener">Visit project ↗</a></div></div>` : ''}
   <div class="cs-next">
     <span class="nl">Next ${it.isProject ? 'project' : 'discipline'}</span>
