@@ -33,7 +33,14 @@ function normalizePrice(price, currency) {
   const p = String(price || '').trim();
   if (!p) return '';
   if (/[^\d.,\s]/.test(p)) return p.slice(0, 40); // already has a symbol/word
-  const SYM = { USD: '$', EUR: '€', GBP: '£', BRL: 'R$', AED: 'dh ', INR: '₹', PKR: 'Rs ' };
+  const SYM = {
+    USD: '$', EUR: '€', GBP: '£', BRL: 'R$', AED: 'dh ', INR: '₹', PKR: 'Rs ',
+    CAD: 'C$', AUD: 'A$', SAR: 'SAR ', QAR: 'QAR ', ZAR: 'R', NGN: '₦', MXN: '$',
+    JPY: '¥', CNY: '¥', CHF: 'Fr ', SEK: 'kr ', NOK: 'kr ', DKK: 'kr ', PLN: 'zł ',
+    TRY: '₺', EGP: 'E£', KES: 'KSh ', BDT: '৳', LKR: 'Rs ', IDR: 'Rp ', MYR: 'RM ',
+    PHP: '₱', SGD: 'S$', THB: '฿', VND: '₫', NZD: 'NZ$', KWD: 'KD ', BHD: 'BD ',
+    OMR: 'OMR ', MAD: 'dh ', ARS: '$', CLP: '$', COP: '$',
+  };
   const sym = SYM[String(currency || '').toUpperCase()] || '';
   return (sym + p).slice(0, 40);
 }
@@ -334,7 +341,9 @@ async function buildWebsiteDataFromFlow(answers = {}, theme, userId) {
       if (cleanPkgs.length) {
         wd.packages = cleanPkgs.slice(0, 6).map((p) => ({
           name: String(p.name).trim().slice(0, 60),
-          price: String(p.price || '').trim().slice(0, 40),
+          // Price is a bare number from the Flow now; prefix the chosen
+          // currency's symbol (free-text legacy values pass through as-is).
+          price: normalizePrice(p.price, answers.currency),
           duration: String(p.duration || '').trim().slice(0, 60),
           includes: String(p.includes || '')
             .split(/\r?\n/)
