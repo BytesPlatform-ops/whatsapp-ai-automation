@@ -1,6 +1,7 @@
 const { sendTextMessage, sendInteractiveButtons, sendWithMenuButton } = require('../../messages/sender');
 const { logMessage, getConversationHistory } = require('../../db/conversations');
 const { generateResponse } = require('../../llm/provider');
+const { logger } = require('../../utils/logger');
 const { GENERAL_CHAT_PROMPT } = require('../../llm/prompts');
 const { formatWhatsApp } = require('../../utils/formatWhatsApp');
 const { STATES } = require('../states');
@@ -85,9 +86,17 @@ async function handleFollowUp(user, message) {
 
   // Handle follow-up questions with LLM. afterTimestamp keeps
   // pre-reset messages out of the LLM context.
-  const history = await getConversationHistory(user.id, 20, {
-    afterTimestamp: user.metadata?.lastResetAt || null,
-  });
+  // Degrade, don't crash: a transient history-read failure shouldn't abort the
+  // whole turn into the router's generic "glitched" fallback — fall back to an
+  // empty window so the user still gets a reply.
+  let history = [];
+  try {
+    history = await getConversationHistory(user.id, 20, {
+      afterTimestamp: user.metadata?.lastResetAt || null,
+    });
+  } catch (err) {
+    logger.warn(`[marketing] history read failed — proceeding with empty window: ${err.message}`);
+  }
   const messages = history.map((h) => ({
     role: h.role,
     content: h.message_text,

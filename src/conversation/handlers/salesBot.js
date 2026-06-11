@@ -277,9 +277,21 @@ async function handleSalesBot(user, message) {
   // Get conversation history (last 40 messages for full context).
   // Pass afterTimestamp so /reset gives a clean slate — pre-reset
   // messages stay in the DB for admin but are invisible to the LLM.
-  const history = await getConversationHistory(user.id, 40, {
-    afterTimestamp: user.metadata?.lastResetAt || null,
-  });
+  //
+  // Degrade, don't crash: getConversationHistory throws on a transient Supabase
+  // read error. Unwrapped, that aborted the ENTIRE turn before any reply, and
+  // the router surfaced the generic "something glitched" fallback — a dead end
+  // for the user. Fall back to an empty window instead: the LLM still receives
+  // the persisted KNOWN FACTS + long-term summary blocks built below (both from
+  // metadata, not this read), so it keeps context and the user gets a real reply.
+  let history = [];
+  try {
+    history = await getConversationHistory(user.id, 40, {
+      afterTimestamp: user.metadata?.lastResetAt || null,
+    });
+  } catch (err) {
+    logger.warn(`[SALES] history read failed — proceeding with empty window: ${err.message}`);
+  }
 
   // Entry turn — the bot hasn't spoken yet this (post-reset) session.
   // We test for the absence of any assistant turn rather than an empty
