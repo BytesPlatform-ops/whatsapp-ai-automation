@@ -2846,6 +2846,556 @@ export const TOOLS: ToolDefinition[] = [
     about:
       'A mission statement is one of the most misunderstood pieces of business writing — treated as a box-ticking exercise that ends up as a wall of vague buzzwords nobody can recite. Done well, it is the opposite: a single, plain sentence that answers what you do, who you serve, and why it matters, and that quietly steers a hundred small decisions. The best-known examples are striking precisely because they are concrete. TED\'s is "Spread ideas." Google\'s longtime mission was "to organize the world\'s information and make it universally accessible and useful." Patagonia\'s — "We\'re in business to save our home planet" — is short enough to fit on a sticker and pointed enough that employees can use it to argue for or against a decision. What these share is specificity and brevity; they avoid the trap of trying to please everyone with words like "world-class", "synergy", and "innovative", which sound impressive and mean nothing. A useful mission statement passes a simple test: could it help an employee decide between two options, and would a customer understand it instantly? This generator gets you to a solid first draft by plugging your specifics into proven sentence structures, which is the hard part — staring at a blank page. The real work after that is subtraction: cut the adjectives, make every word earn its place, and read it aloud until it sounds like a person rather than a committee. Once it does, it becomes the spine of everything outward-facing — your About page, your pitch, your hiring — which is exactly the foundation a brand and website get built on.',
   },
+  {
+    slug: 'qr-code-generator',
+    title: 'QR Code Generator — Free Custom QR Codes',
+    h1: 'Pixie QR Code Generator',
+    shortName: 'QR Code Generator',
+    tagline: 'Turn any link or text into a downloadable QR code.',
+    metaDescription:
+      'Create custom QR codes free with this QR code generator. Turn any link or text into a downloadable PNG. Pick the size and color. No signup.',
+    keywords: [
+      'qr code generator',
+      'qr generator',
+      'free qr code',
+      'create qr code',
+      'qr code maker',
+    ],
+    category: 'Converter',
+    emoji: '🔲',
+    image: '/tools/qr-code-generator.jpg',
+    imageAlt: 'A smartphone scanning a QR code',
+    primaryKeyword: 'qr code generator',
+    intro:
+      'Turn any link, text, phone number, or Wi-Fi detail into a crisp QR code in seconds. Pick the size and color, preview live, and download a high-resolution PNG ready for print, packaging, menus, posters, or your storefront. Everything generates in your browser.',
+    howItWorks: [
+      { title: 'Enter your content', description: 'Paste a URL or any text you want the QR code to open or display.' },
+      { title: 'Style it', description: 'Set the size and pick a color that matches your brand.' },
+      { title: 'Download the PNG', description: 'Export a high-resolution QR code ready for screen or print.' },
+    ],
+    faqs: [
+      {
+        q: 'Do these QR codes expire?',
+        a: 'No. This tool makes static QR codes that encode your link or text directly, so they never expire and have no scan limits or tracking. The code works as long as the destination (your URL) exists.',
+      },
+      {
+        q: 'What can I put in a QR code?',
+        a: 'Anything text-based: a website URL, plain text, a phone number, an email, an SMS, or Wi-Fi credentials. The most common use is linking to a web page, menu, or social profile.',
+      },
+      {
+        q: 'Is the QR code free for commercial use?',
+        a: 'Yes — the PNG is free for personal and commercial use, with no watermark and no attribution required. Put it on packaging, flyers, menus, business cards, anything.',
+      },
+      {
+        q: 'Why should I keep good contrast and size?',
+        a: 'Scanners need clear contrast between the code and its background, and enough physical size to resolve the pattern. Keep a dark code on a light background, leave the quiet margin around it, and size up for print — especially for codes scanned from a distance.',
+      },
+      {
+        q: 'Is my data uploaded?',
+        a: 'No. The QR code is generated entirely in your browser, so the link or text you encode never touches a server.',
+      },
+    ],
+    relatedSlugs: ['color-picker', 'image-resizer', 'trust-badge-generator'],
+    ctaHook: 'Want the website that QR code points to? Pixie builds your full site in 60 seconds — text us on WhatsApp.',
+    aboutHeading: 'How QR codes actually work',
+    about:
+      'The QR code — short for "Quick Response" code — was invented in 1994 by Masahiro Hara at the Japanese company Denso Wave, originally to track car parts on Toyota assembly lines. Its breakthrough over the old one-dimensional barcode was storing data in two dimensions, across both width and height, which lets a small square hold thousands of characters and be read from any angle at high speed. The three large squares in the corners are finding patterns that tell a scanner where the code is and how it is oriented, which is why a QR code still scans when it is rotated or slightly skewed. Crucially, QR codes include built-in error correction using Reed–Solomon math, so they keep working even when part of the code is dirty, damaged, or covered by a logo — depending on the level, up to about 30% of the code can be obscured and still resolve, which is how branded QR codes with a logo in the middle are possible. There are two practical flavours: static codes, like the ones this tool makes, which encode the destination directly and therefore never expire or track you; and dynamic codes, which encode a short redirect URL so the destination can be changed later and scans can be counted (those depend on a third-party service staying alive). For most needs — a link on a flyer, a menu, a business card, a product label — a static code is simpler, free, and permanent. The two things that make a code reliable are contrast and size: keep it dark-on-light, preserve the quiet margin around it, and print it large enough for the scanning distance.',
+  },
+  {
+    slug: 'word-counter',
+    title: 'Word Counter — Free Word & Character Count',
+    h1: 'Pixie Word Counter',
+    shortName: 'Word Counter',
+    tagline: 'Count words, characters, sentences, and reading time live.',
+    metaDescription:
+      'Count words, characters, sentences, and reading time with this free word counter. Live results as you type. No signup, fully private.',
+    keywords: [
+      'word counter',
+      'character counter',
+      'word count tool',
+      'count words',
+      'words to characters',
+    ],
+    category: 'Calculator',
+    emoji: '🔢',
+    image: '/tools/word-counter.jpg',
+    imageAlt: 'A writer typing on a laptop with text on screen',
+    primaryKeyword: 'word counter',
+    intro:
+      'Paste or type your text and instantly see the word count, character count (with and without spaces), sentences, paragraphs, and estimated reading time. Perfect for essays, social posts, SEO meta tags, and any task with a length limit. Everything updates live in your browser.',
+    howItWorks: [
+      { title: 'Type or paste', description: 'Drop in any text — an essay, caption, email, or article.' },
+      { title: 'Read the live counts', description: 'Words, characters, sentences, paragraphs, and reading time update as you type.' },
+      { title: 'Hit your target', description: 'Trim or expand until you meet the limit you are writing to.' },
+    ],
+    faqs: [
+      {
+        q: 'How is a "word" counted?',
+        a: 'A word is any run of non-space characters separated by whitespace, which matches how word processors and most platforms count. So "well-known" counts as one word and "I\'m" counts as one.',
+      },
+      {
+        q: 'What is the difference between the two character counts?',
+        a: '"Characters" counts everything including spaces and line breaks — useful for Twitter/X, SMS, and meta descriptions. "Characters (no spaces)" excludes whitespace, which some assignments and forms ask for.',
+      },
+      {
+        q: 'How is reading time estimated?',
+        a: 'Reading time assumes an average adult reading pace of roughly 200 words per minute. It is a rough guide for blog posts and scripts, not an exact figure — dense or technical text reads slower.',
+      },
+      {
+        q: 'Is there a character limit or paywall?',
+        a: 'No limit and no paywall. Paste as much as you like; it all runs in your browser, so nothing is uploaded.',
+      },
+      {
+        q: 'Why do writers care about character limits?',
+        a: 'Many platforms enforce them: SEO title tags display around 60 characters, meta descriptions around 155, a tweet is 280, and Instagram captions and ad headlines have their own caps. Counting as you write keeps you inside the limit.',
+      },
+    ],
+    relatedSlugs: ['case-converter', 'text-summarizer', 'compare-text'],
+    ctaHook: 'Run a writing, content, or SEO business? Pixie builds full websites in 60 seconds — text us on WhatsApp.',
+    aboutHeading: 'Why word and character counts matter',
+    about:
+      'Counting words sounds trivial until you realize how many things quietly depend on it. Students write to assignment limits; journalists and copywriters write to space; and on the web, character counts govern whether your message survives at all. Search engines truncate page titles at roughly 600 pixels — about 60 characters — and meta descriptions around 155, so an SEO writer who ignores the count watches Google chop their carefully written snippet mid-sentence. Social platforms are stricter still: a tweet caps at 280 characters, an SMS segments every 160, and ad platforms reject headlines that run a character over. Beyond limits, counts are a planning tool — knowing that a 1,500-word article is roughly a seven-to-eight minute read helps you size content to an audience\'s attention. The subtlety most people miss is that "word count" is not perfectly universal: tools differ on whether a hyphenated term or a number is one word, and character counts diverge on whether spaces and line breaks are included, which is why this tool shows both. There is also a deeper wrinkle in the digital age — a "character" to a human is not always one character to a computer. An emoji or an accented letter can be one visible glyph but several underlying code units, which is why a tweet with emoji sometimes hits the limit sooner than you expect. For everyday writing, counting whitespace-separated words and visible characters as this tool does is exactly what you want; it mirrors how the platforms you are writing for will count you.',
+  },
+  {
+    slug: 'password-generator',
+    title: 'Password Generator — Strong Random Passwords',
+    h1: 'Pixie Password Generator',
+    shortName: 'Password Generator',
+    tagline: 'Generate strong, random passwords that stay in your browser.',
+    metaDescription:
+      'Generate strong random passwords with this free password generator. Choose length and character sets. Everything stays in your browser. No signup.',
+    keywords: [
+      'password generator',
+      'random password generator',
+      'strong password generator',
+      'secure password',
+      'create password',
+    ],
+    category: 'Generator',
+    emoji: '🔑',
+    image: '/tools/password-generator.jpg',
+    imageAlt: 'A padlock over a field of code',
+    primaryKeyword: 'password generator',
+    intro:
+      'Generate strong, random passwords with the length and character mix you want — uppercase, lowercase, numbers, and symbols, with an option to skip look-alike characters. A strength meter shows how solid each one is. Passwords are created with your browser\'s secure random generator and never leave your device.',
+    howItWorks: [
+      { title: 'Set the length', description: 'Drag the slider — 16 or more characters is recommended.' },
+      { title: 'Choose character sets', description: 'Toggle uppercase, lowercase, numbers, symbols, and "no look-alikes".' },
+      { title: 'Copy and save', description: 'Copy your password into a password manager, or regenerate for another.' },
+    ],
+    faqs: [
+      {
+        q: 'Are these passwords safe to use?',
+        a: 'Yes. They are generated locally using your browser\'s cryptographically secure random number generator (Web Crypto), and nothing is sent to any server. For best security, store them in a password manager rather than reusing them.',
+      },
+      {
+        q: 'What makes a password strong?',
+        a: 'Length and unpredictability. A long password drawn from a large mix of character types has more possible combinations — more "entropy" — which makes brute-force guessing impractical. 16+ characters with mixed sets is a strong baseline; longer is better.',
+      },
+      {
+        q: 'Should I use symbols and numbers?',
+        a: 'They help by enlarging the pool of possible characters, but length matters more. A long passphrase can be stronger than a short password full of symbols. Use both length and variety where a site allows it.',
+      },
+      {
+        q: 'What does "no look-alikes" do?',
+        a: 'It removes easily confused characters like capital I, lowercase l, the number 1, and O versus 0. Handy when a password might be read aloud or typed manually from a screen.',
+      },
+      {
+        q: 'Is anything stored or sent?',
+        a: 'No. Generation happens entirely in your browser — no logging, no transmission, no history. Close the tab and it is gone.',
+      },
+    ],
+    relatedSlugs: ['word-counter', 'case-converter', 'qr-code-generator'],
+    ctaHook: 'Building a product or site that needs real security? Pixie builds full websites in 60 seconds — text us on WhatsApp.',
+    aboutHeading: 'What actually makes a password strong',
+    about:
+      'Most advice about passwords is a decade out of date, and the gap matters because weak or reused passwords remain the single most common way accounts get breached. The security that counts is measured in entropy — the number of possible passwords an attacker would have to try — and entropy grows with both length and the size of the character pool you draw from. That is the crucial insight behind the famous xkcd comic "correct horse battery staple": a long, random passphrase of ordinary words can be both easier to remember and harder to crack than a short string like "Tr0ub4dor&3", because length beats complexity. The other half of the story is uniqueness. The real-world threat is rarely someone guessing your specific password; it is "credential stuffing", where attackers take billions of username-password pairs leaked from one breached site and replay them against every other site, betting that people reuse passwords — which they overwhelmingly do. That is why the modern consensus from bodies like NIST is: make passwords long, make every one unique, stop forcing arbitrary periodic changes, and let a password manager remember them so you never have to. A generator like this fits that workflow exactly — it produces a fresh, high-entropy password for each account using your browser\'s cryptographically secure randomness, and because it runs locally, the password is never transmitted or stored anywhere you did not put it. Generate, paste into your password manager, and enable two-factor authentication wherever it is offered; together those three habits eliminate the vast majority of account-takeover risk.',
+  },
+  {
+    slug: 'case-converter',
+    title: 'Case Converter — Change Text Case Online Free',
+    h1: 'Pixie Case Converter',
+    shortName: 'Case Converter',
+    tagline: 'Convert text to UPPERCASE, lowercase, Title Case, and more.',
+    metaDescription:
+      'Convert text case online free — UPPERCASE, lowercase, Title Case, Sentence case, and more. Paste, convert, and copy in one click. No signup.',
+    keywords: [
+      'case converter',
+      'uppercase to lowercase',
+      'title case converter',
+      'change text case',
+      'sentence case converter',
+    ],
+    category: 'Converter',
+    emoji: '🔠',
+    image: '/tools/case-converter.jpg',
+    imageAlt: 'Letter blocks showing upper and lower case',
+    primaryKeyword: 'case converter',
+    intro:
+      'Paste any text and instantly switch it between UPPERCASE, lowercase, Title Case, Sentence case, Capitalize Each Word, and aLtErNaTiNg case. Fixes caps-lock accidents, formats headings, and tidies copied text in one click. Then copy the result. Everything runs in your browser.',
+    howItWorks: [
+      { title: 'Paste your text', description: 'Drop in text that is in the wrong case — even an all-caps accident.' },
+      { title: 'Pick a case', description: 'UPPERCASE, lowercase, Title Case, Sentence case, capitalize, or alternating.' },
+      { title: 'Copy the result', description: 'Grab the converted text with one tap.' },
+    ],
+    faqs: [
+      {
+        q: 'What is the difference between Title Case and Sentence case?',
+        a: 'Title Case capitalizes the first letter of every word ("The Quick Brown Fox") — used for headlines. Sentence case only capitalizes the first letter of each sentence ("The quick brown fox.") — used for normal prose.',
+      },
+      {
+        q: 'Can it fix text I typed with caps lock on?',
+        a: 'Yes. Paste the all-caps text and choose Sentence case or lowercase to recover normal capitalization in one click, instead of retyping it.',
+      },
+      {
+        q: 'Does it change my words or just the case?',
+        a: 'Only the letter case changes. Your words, spacing, and punctuation stay exactly the same — it simply switches capital and lowercase letters.',
+      },
+      {
+        q: 'What is "alternating" case for?',
+        a: 'aLtErNaTiNg case is mostly used for a sarcastic or mocking tone online (the "mocking SpongeBob" meme). It is a fun style rather than a formatting standard.',
+      },
+      {
+        q: 'Is it free and private?',
+        a: 'Yes. No signup, and the conversion runs entirely in your browser — your text is never uploaded.',
+      },
+    ],
+    relatedSlugs: ['word-counter', 'fancy-text-generator', 'compare-text'],
+    ctaHook: 'Run a writing or content business? Pixie builds full websites in 60 seconds — text us on WhatsApp.',
+    aboutHeading: 'Letter case, from typesetting to the web',
+    about:
+      'The words "uppercase" and "lowercase" are a literal relic of the printing press. In a hand-set type shop, a compositor kept metal letters in two wooden trays, or cases: the capital letters lived in the upper case, and the small letters in the lower case, simply because capitals were used less often and sat further away. Centuries later we still use the terms, even though the trays are long gone. Case carries real meaning beyond history, though. Title Case signals a heading and is governed by surprisingly fussy style rules — different style guides disagree on whether to capitalize short prepositions and conjunctions — while Sentence case has become the modern default for UI text and many publications because it reads as less shouty and more human. ALL CAPS is read by most people as shouting online, and it is also genuinely harder to read in long passages because the uniform rectangular shape of capital letters removes the word-shape cues our eyes use to read quickly. There are also technical cases this tool touches on the edges of: developers use camelCase, PascalCase, and snake_case for variable names, and converting between them is a routine chore. For everyday writing, the common need is simpler and this tool handles it instantly — rescue a paragraph from an accidental caps-lock, format a headline into Title Case, or normalize pasted text into clean Sentence case — all without retyping a word, and all in your browser so even sensitive text stays private.',
+  },
+  {
+    slug: 'age-calculator',
+    title: 'Age Calculator — Calculate Your Exact Age',
+    h1: 'Pixie Age Calculator',
+    shortName: 'Age Calculator',
+    tagline: 'Find your exact age in years, months, and days.',
+    metaDescription:
+      'Calculate your exact age in years, months, and days with this free age calculator. See total days and your next birthday countdown. No signup.',
+    keywords: [
+      'age calculator',
+      'calculate age',
+      'how old am i',
+      'age in days',
+      'date of birth calculator',
+    ],
+    category: 'Calculator',
+    emoji: '🎂',
+    image: '/tools/age-calculator.jpg',
+    imageAlt: 'A calendar with a date circled',
+    primaryKeyword: 'age calculator',
+    intro:
+      'Enter your date of birth and instantly see your exact age in years, months, and days — plus your total days lived and a countdown to your next birthday. Optionally set a target date to find your age on any past or future day. Everything is calculated in your browser.',
+    howItWorks: [
+      { title: 'Enter your birth date', description: 'Pick your date of birth from the calendar.' },
+      { title: 'Optional: set a target date', description: 'Leave it blank for today, or choose any date to find your age then.' },
+      { title: 'See the breakdown', description: 'Exact years/months/days, total days, and days to your next birthday.' },
+    ],
+    faqs: [
+      {
+        q: 'How is exact age calculated?',
+        a: 'It counts full years from your birth date to the target date, then the remaining whole months, then the remaining days — borrowing from the previous month\'s real length where needed. That is the standard "calendar age" people use.',
+      },
+      {
+        q: 'Can I calculate age on a future or past date?',
+        a: 'Yes. Set the "age at date" field to any date — a future birthday, a historical date, or an event — to see how old you (or anyone) will be or were then.',
+      },
+      {
+        q: 'Does it handle leap years correctly?',
+        a: 'Yes. Because it works with real calendar dates and actual month lengths, leap days and varying month lengths are handled automatically.',
+      },
+      {
+        q: 'What is the "total days" number?',
+        a: 'It is the exact number of days between the two dates — useful for milestones like your 10,000th day. The next-birthday countdown shows how many days until the anniversary of your birth date.',
+      },
+      {
+        q: 'Is my birth date stored?',
+        a: 'No. The calculation runs entirely in your browser; nothing is uploaded or saved.',
+      },
+    ],
+    relatedSlugs: ['half-birthday-calculator', 'bmi-calculator', 'word-counter'],
+    ctaHook: 'Run an events, health, or membership business? Pixie builds full websites in 60 seconds — text us on WhatsApp.',
+    aboutHeading: 'The surprising messiness of counting age',
+    about:
+      'Calculating age seems like simple subtraction until you look closely, and the wrinkles are a small tour of how human calendars work. The first issue is that months are not equal — borrowing a "month" when the day-of-month goes negative means borrowing 28, 29, 30, or 31 days depending on which month you came from, which is exactly why a correct age calculator works with real dates rather than dividing total days by 30. Leap years add another layer: roughly every four years February gains a day, and people born on February 29 — "leaplings" — technically only have a real birthday once every four years, though they celebrate on the 28th or March 1st in common years. Different cultures even count age differently; the traditional East Asian system considered a baby one year old at birth and added a year at the new year, so a person could be a year or two "older" by that reckoning than by the international standard, a difference South Korea only formally retired in 2023. Then there is the question of what you are measuring: your age in years is one thing, but your total days lived is another, and milestone-watchers like to celebrate round numbers — your 10,000th day falls around age 27, and your 1-billion-second mark lands near age 31. This calculator gives you all of it from a single date: the conventional years-months-days that you would say out loud, the exact day count for milestone hunting, and a countdown to your next birthday — computed against today or any date you choose, with leap years and month lengths handled correctly.',
+  },
+  {
+    slug: 'bmi-calculator',
+    title: 'BMI Calculator — Free Body Mass Index Calculator',
+    h1: 'Pixie BMI Calculator',
+    shortName: 'BMI Calculator',
+    tagline: 'Calculate your Body Mass Index in metric or imperial.',
+    metaDescription:
+      'Calculate your BMI free with this body mass index calculator. Enter height and weight in metric or imperial to see your BMI and category. No signup.',
+    keywords: [
+      'bmi calculator',
+      'body mass index calculator',
+      'calculate bmi',
+      'bmi chart',
+      'healthy weight calculator',
+    ],
+    category: 'Calculator',
+    emoji: '⚖️',
+    image: '/tools/bmi-calculator.jpg',
+    imageAlt: 'A measuring tape and scale',
+    primaryKeyword: 'bmi calculator',
+    intro:
+      'Enter your height and weight in metric or imperial units and instantly see your Body Mass Index (BMI) and which category it falls in. A quick, free screening number — calculated in your browser, with nothing uploaded.',
+    howItWorks: [
+      { title: 'Pick your units', description: 'Switch between metric (cm / kg) and imperial (ft·in / lb).' },
+      { title: 'Enter height and weight', description: 'Type your measurements into the fields.' },
+      { title: 'See your BMI', description: 'Get your BMI value and category, with the healthy range for reference.' },
+    ],
+    faqs: [
+      {
+        q: 'How is BMI calculated?',
+        a: 'BMI is your weight in kilograms divided by your height in metres squared (kg/m²). In imperial units it is 703 × pounds ÷ inches². This calculator does the conversion automatically for whichever units you choose.',
+      },
+      {
+        q: 'What are the BMI categories?',
+        a: 'For adults: under 18.5 is underweight, 18.5–24.9 is a healthy weight, 25–29.9 is overweight, and 30 or above is obese. These are the standard World Health Organization ranges.',
+      },
+      {
+        q: 'Is BMI accurate for everyone?',
+        a: 'No — it is a screening tool, not a diagnosis. BMI does not distinguish muscle from fat, so very muscular people can read as "overweight" while it can understate risk for others. It is also not designed for children, pregnant people, or the elderly without adjustment. Treat it as a rough flag, and see a doctor for a real assessment.',
+      },
+      {
+        q: 'What should I do with my BMI?',
+        a: 'Use it as one data point. If it falls outside the healthy range and you are concerned, talk to a healthcare professional who can consider your waist measurement, body composition, activity, and history — a far fuller picture than BMI alone.',
+      },
+      {
+        q: 'Is my data stored?',
+        a: 'No. Everything is calculated in your browser and nothing is uploaded.',
+      },
+    ],
+    relatedSlugs: ['age-calculator', 'word-counter', 'mortgage-calculator'],
+    ctaHook: 'Run a gym, clinic, or wellness brand? Pixie builds full booking websites in 60 seconds — text us on WhatsApp.',
+    aboutHeading: 'What BMI does — and does not — tell you',
+    about:
+      'Body Mass Index has an unusual history for something printed in every doctor\'s office: it was devised in the 1830s by a Belgian mathematician and astronomer, Adolphe Quetelet, who was studying the statistics of populations, not the health of individuals. He never intended his "Quetelet Index" to diagnose a single person, and that origin explains both its usefulness and its limits. As a population measure it is excellent — cheap, requiring only height and weight, and well correlated across large groups with rates of weight-related illness, which is why public-health bodies still rely on it. As an individual measure it is blunt. Because it only knows your height and total weight, it cannot tell muscle from fat or where fat sits on your body, so a muscular athlete can land in the "overweight" band while carrying very little fat, and two people with the same BMI can have very different health profiles. It also was not designed for growing children, pregnant people, or older adults whose muscle mass has declined, all of whom need adjusted interpretations. Modern clinicians increasingly pair BMI with other quick measures — waist circumference, waist-to-height ratio, and body-fat estimates — precisely because where you carry weight (especially around the abdomen) predicts metabolic risk better than total weight alone. None of this makes BMI useless; it makes it a starting point. This calculator gives you that starting number instantly in whichever units you prefer, with the standard categories for context — but the honest reading of a BMI outside the healthy range is "worth a conversation with a professional," not a verdict.',
+  },
+  {
+    slug: 'business-name-generator',
+    title: 'Business Name Generator — Brandable Name Ideas',
+    h1: 'Pixie Business Name Generator',
+    shortName: 'Business Name Generator',
+    tagline: 'Generate brandable business name ideas in seconds.',
+    metaDescription:
+      'Generate brandable business name ideas free. Enter a keyword and get startup, brand, and company name ideas instantly. No signup needed.',
+    keywords: [
+      'business name generator',
+      'company name generator',
+      'startup name generator',
+      'brand name generator',
+      'business name ideas',
+    ],
+    category: 'Generator',
+    emoji: '🏢',
+    image: '/tools/business-name-generator.jpg',
+    imageAlt: 'A storefront sign being designed',
+    primaryKeyword: 'business name generator',
+    intro:
+      'Stuck naming your business? Enter a keyword and generate brandable company name ideas — modern suffixes, prefixes, and invented words that sound like a real brand. Leave the keyword blank for abstract, brandable names. Generate as many batches as you like.',
+    howItWorks: [
+      { title: 'Enter a keyword', description: 'Type a word your business is about — or leave it blank for invented brand names.' },
+      { title: 'Generate ideas', description: 'Get a batch of brandable names built from proven naming patterns.' },
+      { title: 'Shortlist and check', description: 'Copy your favorites, then check domain and trademark availability.' },
+    ],
+    faqs: [
+      {
+        q: 'How does the business name generator work?',
+        a: 'It combines your keyword with proven branding patterns — adding modern suffixes (Hub, Labs, ly, ify), prefixes (Get, Go, Pro), and "The ___ Co." style constructions — to produce names that sound like real brands rather than random words.',
+      },
+      {
+        q: 'Should I check availability before using a name?',
+        a: 'Yes, always. Before committing, check that the matching domain is available, search your country\'s trademark database, and make sure the social handles are free. A great name you cannot legally use or get a domain for is not usable.',
+      },
+      {
+        q: 'What makes a good business name?',
+        a: 'Short, easy to say and spell, memorable, and not boxed into one product so you can grow. Avoid hard-to-spell substitutions and names that limit you to a single city or product line if you plan to expand.',
+      },
+      {
+        q: 'Can I use these names commercially?',
+        a: 'The generated ideas are free to use, but you are responsible for clearing them — a name being suggested here does not mean it is unregistered or free of trademark conflicts. Do the availability checks first.',
+      },
+      {
+        q: 'Is it free?',
+        a: 'Yes — free, no signup, runs in your browser. Generate unlimited batches.',
+      },
+    ],
+    relatedSlugs: ['slogan-generator', 'mission-statement-generator', 'trust-badge-generator'],
+    ctaHook: 'Got the name? Pixie turns it into a full brand and website — logo, domain, and pages — from one WhatsApp message.',
+    aboutHeading: 'What separates a name from a brand',
+    about:
+      'Naming a business is one of the highest-leverage, most-agonized-over decisions a founder makes, and a generator helps with the hardest part: getting unstuck. Staring at a blank page, your brain fixates on the literal and the taken; seeing dozens of constructed options breaks the block and trains your ear for what sounds right. The patterns this tool uses are the ones real brands lean on. Invented or modified words — think of how many startups end in "-ly", "-ify", or "-io" — are popular precisely because they are brandable and ownable: a made-up word has no prior meaning competing with yours and a far better shot at an available domain and trademark. Compound and descriptive names (a keyword plus "Hub", "Labs", "Works") trade a little distinctiveness for instant clarity about what you do. The classic advice still holds: a strong name is short, easy to say and spell on the first try, and not so literal that it traps you — "Amazon" outgrew being a bookstore in a way "Books.com" never could, and "Best Plumbers of Denver" cannot expand to a second city. The crucial step a generator cannot do for you is clearance. Before you fall in love with a name, confirm the domain is gettable, search the trademark register in your market, and check the social handles — because the cost of discovering a conflict after you have printed signage and built a site is painful. Use this tool to generate a long shortlist fast, say each candidate out loud, narrow to the few that feel like a brand, and only then do the legal and domain checks. That is exactly the path from a raw idea to a name worth building a business — and a website — around.',
+  },
+  {
+    slug: 'slogan-generator',
+    title: 'Slogan Generator — Free Tagline & Slogan Ideas',
+    h1: 'Pixie Slogan Generator',
+    shortName: 'Slogan Generator',
+    tagline: 'Generate catchy slogans and taglines for your brand.',
+    metaDescription:
+      'Generate catchy slogans and taglines free. Enter your brand and keyword to get memorable slogan ideas instantly. No signup needed.',
+    keywords: [
+      'slogan generator',
+      'tagline generator',
+      'slogan maker',
+      'catchy slogans',
+      'business slogan generator',
+    ],
+    category: 'Generator',
+    emoji: '📣',
+    image: '/tools/slogan-generator.jpg',
+    imageAlt: 'A bold marketing tagline on a poster',
+    primaryKeyword: 'slogan generator',
+    intro:
+      'Enter your brand name and what you do, and get a batch of catchy slogan and tagline ideas built from proven advertising structures. A fast way to break a blank page and find the angle worth refining for your website, ads, or packaging. Free and instant.',
+    howItWorks: [
+      { title: 'Enter brand + keyword', description: 'Type your brand name and the thing you do or sell.' },
+      { title: 'Generate slogans', description: 'Get a set of taglines in different proven styles.' },
+      { title: 'Pick and polish', description: 'Copy the strongest one and trim it to its punchiest form.' },
+    ],
+    faqs: [
+      {
+        q: 'What makes a slogan effective?',
+        a: 'The best slogans are short, easy to remember, and say something true about the benefit you offer — Nike\'s "Just Do It" or De Beers\' "A Diamond Is Forever". Memorability and a clear promise beat clever wordplay that means nothing.',
+      },
+      {
+        q: 'What is the difference between a slogan and a tagline?',
+        a: 'They overlap. A tagline is usually the permanent line that sits with your brand or logo; a slogan is often tied to a specific campaign. Both are short brand phrases, and this tool helps with either.',
+      },
+      {
+        q: 'Does it use AI?',
+        a: 'No — it builds slogans from proven advertising templates using your brand and keyword, so it is instant, free, and private. Treat the results as strong starting points to refine.',
+      },
+      {
+        q: 'Can I use these commercially?',
+        a: 'Yes, the ideas are free to use. As with any brand phrase, do a quick search to make sure your final choice is not already a well-known trademarked slogan in your industry.',
+      },
+      {
+        q: 'Is it free?',
+        a: 'Yes — free, no signup, nothing uploaded.',
+      },
+    ],
+    relatedSlugs: ['business-name-generator', 'mission-statement-generator', 'trust-badge-generator'],
+    ctaHook: 'Got your tagline? Pixie builds the full brand and website around it — text us on WhatsApp.',
+    aboutHeading: 'The craft of the one-line promise',
+    about:
+      'A slogan is the smallest, hardest-working piece of writing a brand owns — a handful of words meant to lodge in memory and stand for everything the company wants you to feel. The great ones look effortless and are anything but. "Just Do It" says nothing about shoes, yet it captures an attitude that made Nike feel like a coach in your corner; "A Diamond Is Forever", written by a young copywriter at the agency N.W. Ayer in 1947, single-handedly cemented the idea that an engagement ring should be a diamond and is routinely called the slogan of the century. What these share is not cleverness but compression: a true, emotional benefit squeezed into a rhythm you can repeat. The mechanics that help are well known to copywriters — brevity (most memorable slogans are three to five words), rhythm and sometimes rhyme, a focus on the customer\'s benefit rather than the company\'s features, and a tone that matches the brand\'s personality. A template-based generator like this is not trying to replace that craft; it is trying to defeat the blank page, which is where most slogans die. By dropping your brand and keyword into a range of proven structures, it surfaces angles you would not have reached by staring — a benefit framing, a "think X, think Y" hook, a confident declaration — and lets your ear pick the one with a spark. The real work then is subtraction: cut a word, sharpen the verb, read it aloud until it sounds inevitable. A slogan you would actually say out loud, that means something true about why you are different, is the seed a whole brand identity and website can grow from.',
+  },
+  {
+    slug: 'image-resizer',
+    title: 'Image Resizer — Resize & Compress Images Free',
+    h1: 'Pixie Image Resizer',
+    shortName: 'Image Resizer',
+    tagline: 'Resize and compress images in your browser, free.',
+    metaDescription:
+      'Resize and compress images free with this in-browser image resizer. Set dimensions, pick JPG/PNG/WebP, and download. No upload, fully private.',
+    keywords: [
+      'image resizer',
+      'resize image',
+      'image compressor',
+      'compress image',
+      'resize photo online',
+    ],
+    category: 'Converter',
+    emoji: '🖼️',
+    image: '/tools/image-resizer.jpg',
+    imageAlt: 'An image being scaled with dimension handles',
+    primaryKeyword: 'image resizer',
+    intro:
+      'Resize and compress any image right in your browser — set a new width (with locked aspect ratio), choose JPG, PNG, or WebP, and tune the quality to shrink the file size. See the before/after dimensions and bytes, then download. Your image is never uploaded.',
+    howItWorks: [
+      { title: 'Upload an image', description: 'Drop in a JPG, PNG, or WebP from your device.' },
+      { title: 'Resize and compress', description: 'Set the width, choose a format, and adjust quality to hit your target size.' },
+      { title: 'Download', description: 'Save the resized image — compare the new dimensions and file size first.' },
+    ],
+    faqs: [
+      {
+        q: 'Is my image uploaded to a server?',
+        a: 'No. The image is loaded, resized, and compressed entirely in your browser using a canvas, so it never leaves your device. That makes it safe for private photos and screenshots.',
+      },
+      {
+        q: 'What is the difference between resizing and compressing?',
+        a: 'Resizing changes the pixel dimensions (e.g. 4000px wide down to 1200px). Compressing reduces file size by lowering quality, usually for JPG or WebP. Doing both — smaller dimensions plus quality tuning — gives the biggest file-size savings.',
+      },
+      {
+        q: 'Which format should I choose?',
+        a: 'JPG is best for photographs and gives small files. PNG preserves sharp edges and transparency (logos, screenshots) but is larger. WebP usually beats both on size at the same quality and is supported by all modern browsers.',
+      },
+      {
+        q: 'Will resizing reduce quality?',
+        a: 'Making an image smaller generally keeps it sharp. Enlarging beyond the original dimensions will look soft, since the detail isn\'t there to begin with. Lowering JPG/WebP quality trades visible fidelity for a smaller file.',
+      },
+      {
+        q: 'Is it free?',
+        a: 'Yes — free, no signup, no watermark. Resize as many images as you like.',
+      },
+    ],
+    relatedSlugs: ['image-to-text', 'color-picker', 'qr-code-generator'],
+    ctaHook: 'Need a fast, image-optimized website? Pixie builds full sites in 60 seconds — text us on WhatsApp.',
+    aboutHeading: 'Why image size is the web\'s quiet performance killer',
+    about:
+      'Images are, by weight, the heaviest thing on most web pages, and oversized images are the single most common reason sites load slowly — which matters because page speed affects both how long visitors stay and how well a page ranks. The mistake is everywhere: a photo straight off a modern phone can be 4,000+ pixels wide and several megabytes, but the slot it fills on a web page might be 800 pixels, so the browser downloads many times more data than it can ever display, then shrinks it. Resizing the image to the dimensions it will actually appear at, before uploading, can cut the file size by 80–90% with no visible difference. Compression does the rest: formats like JPG and WebP throw away detail the eye barely notices to shrink files further, and choosing the right format matters — JPG and WebP for photographs, PNG for graphics with sharp edges or transparency, with WebP increasingly the best all-rounder because it delivers comparable quality at a smaller size. The reason a browser-based tool like this is appealing is privacy and speed: because the resizing happens on a canvas in your own browser, your photo is never uploaded to anyone\'s server, there is no queue or size cap, and it works offline. The practical workflow is simple — drop in the original, set the width to what your page, marketplace listing, or email actually needs, switch to WebP or JPG, and nudge the quality down while watching the file-size readout until you hit a good balance. Do that to every image on a site and you often halve total page weight, which is one of the cheapest performance wins there is.',
+  },
+  {
+    slug: 'color-picker',
+    title: 'Color Picker — HEX, RGB & HSL Color Tool',
+    h1: 'Pixie Color Picker',
+    shortName: 'Color Picker',
+    tagline: 'Pick a color and get HEX, RGB, and HSL values.',
+    metaDescription:
+      'Pick any color and get HEX, RGB, and HSL values with this free color picker. Copy codes and generate shades and tints. No signup needed.',
+    keywords: [
+      'color picker',
+      'hex color picker',
+      'hex to rgb',
+      'rgb to hex',
+      'html color codes',
+    ],
+    category: 'Converter',
+    emoji: '🎨',
+    image: '/tools/color-picker.jpg',
+    imageAlt: 'A color wheel and swatches',
+    primaryKeyword: 'color picker',
+    intro:
+      'Pick any color and instantly get its HEX, RGB, and HSL codes, ready to copy into your CSS, design tool, or brand palette. Tap the generated shades and tints to explore lighter and darker variants. Everything runs in your browser.',
+    howItWorks: [
+      { title: 'Pick a color', description: 'Use the color picker or type a HEX value directly.' },
+      { title: 'Copy the code', description: 'Grab the HEX, RGB, or HSL value with one tap.' },
+      { title: 'Explore shades', description: 'Tap a generated shade or tint to make it the active color.' },
+    ],
+    faqs: [
+      {
+        q: 'What is the difference between HEX, RGB, and HSL?',
+        a: 'They describe the same color three ways. HEX (#22C55E) is a compact code used in CSS and design tools. RGB (red, green, blue) gives the light mix as 0–255 values. HSL (hue, saturation, lightness) is the most intuitive for tweaking — change lightness to get shades and tints of the same hue.',
+      },
+      {
+        q: 'How do I convert HEX to RGB?',
+        a: 'Paste or pick a HEX value and this tool shows the matching RGB (and HSL) instantly — no math needed. It works in reverse too: any color you pick gives all three formats at once.',
+      },
+      {
+        q: 'What are shades and tints?',
+        a: 'A shade is the color mixed darker; a tint is mixed lighter. They share the same hue, which is why they work together in a palette. Tap any swatch to adopt it and read its codes.',
+      },
+      {
+        q: 'Where do I use these codes?',
+        a: 'HEX and RGB go straight into CSS and HTML; all three work in design tools like Figma, Canva, and Photoshop. Use them to keep brand colors consistent across your website, graphics, and documents.',
+      },
+      {
+        q: 'Is it free?',
+        a: 'Yes — free, no signup, runs entirely in your browser.',
+      },
+    ],
+    relatedSlugs: ['image-resizer', 'qr-code-generator', 'cool-text-generator'],
+    ctaHook: 'Building a brand palette? Pixie turns it into a full website and identity — text us on WhatsApp.',
+    aboutHeading: 'How computers describe color',
+    about:
+      'Every color on a screen is made by mixing three lights — red, green, and blue — and the different "color codes" you run into are just different ways of writing down that mix. RGB is the most literal: three numbers from 0 to 255 saying how much of each light to use, so pure red is rgb(255, 0, 0). HEX is the same information in a shorter, hexadecimal form — #FF0000 is that same red — which is why it became the standard in CSS and design tools where compactness matters. HSL takes a different, more human angle: instead of light amounts, it describes a color by its hue (its position on the color wheel, 0–360°), its saturation (how vivid versus grey), and its lightness (how close to white or black). That last model is the designer\'s friend, because to make a set of shades and tints that belong together you simply hold the hue and saturation steady and slide the lightness up and down — which is exactly what the swatch strip in this tool does. Understanding that these are interchangeable views of one color is what lets you move fluidly between a brand guideline that lists HEX codes, a CSS file, and a design app that prefers HSL. A good palette is built on this: a primary hue, a few tints and shades for backgrounds and hover states, and enough lightness contrast between text and background to stay readable — an accessibility requirement, not just an aesthetic one, since low-contrast text fails real users and automated audits alike. This picker gives you all three codes for any color at once and the shade ramp to build from, so whether you are writing CSS, filling a Figma swatch, or documenting a brand, you can copy the exact value you need.',
+  },
 ];
 
 export function getTool(slug: string): ToolDefinition | undefined {

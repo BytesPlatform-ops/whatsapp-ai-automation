@@ -122,3 +122,26 @@ export function randomFood(category: string): string {
   const pool = category === 'Any' ? FOOD_ALL : FOOD_CATEGORIES[category] ?? FOOD_ALL;
   return pick(pool);
 }
+
+/* ------------------------------- Business name ----------------------------- */
+const BIZ_PREFIX = ['Get', 'Go', 'Try', 'My', 'Neo', 'Pro', 'Smart', 'True', 'Prime', 'Next'];
+const BIZ_SUFFIX = ['Hub', 'Labs', 'io', 'Co', 'Works', 'Spot', 'Base', 'Nest', 'Forge', 'Pulse', 'Wave', 'Mate', 'Genix', 'Sphere', 'Loop'];
+const BIZ_GENERIC = ['Brand', 'Venture', 'Studio', 'Craft', 'Summit', 'Vertex', 'Pixel', 'Orbit', 'Cobalt', 'Maple', 'Atlas', 'Nova', 'Ember', 'Quill'];
+
+function cap(s: string): string {
+  return s ? s[0].toUpperCase() + s.slice(1) : s;
+}
+
+// Generates one business-name idea, optionally seeded with a keyword.
+export function businessName(keyword: string): string {
+  const raw = (keyword || '').trim().split(/\s+/)[0].replace(/[^a-zA-Z]/g, '');
+  const base = raw ? cap(raw.toLowerCase()) : cap(pick(BIZ_GENERIC).toLowerCase());
+  const r = Math.random();
+  if (r < 0.24) return `${base}${pick(BIZ_SUFFIX)}`;
+  if (r < 0.42) return `${pick(BIZ_PREFIX)}${base}`;
+  if (r < 0.56) return `${base}ly`;
+  if (r < 0.68) return `The ${base} Co.`;
+  if (r < 0.8) return `${base}ify`;
+  if (r < 0.9) return `${base} ${pick(['Labs', 'Studio', 'Works', 'Collective', 'Group'])}`;
+  return `${base}${pick(BIZ_SUFFIX)}`;
+}

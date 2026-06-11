@@ -401,6 +401,65 @@ export function buildToolPrefill(slug: string, data: PrefillData): ToolPrefillRe
           'Hi! Just used your Mission Statement Generator. I want a website and brand built around it.',
       };
 
+    case 'qr-code-generator':
+      return {
+        headline: 'Want the website that QR points to?',
+        subhead: 'Pixie builds your full site in 60 seconds — text us on WhatsApp.',
+        whatsappPrefill:
+          'Hi! Just used your QR Code Generator. I need a website for my business — interested.',
+      };
+
+    case 'word-counter':
+    case 'case-converter':
+      return {
+        headline: 'Run a writing or content business?',
+        subhead: 'Pixie builds full websites in 60 seconds — text us on WhatsApp.',
+        whatsappPrefill:
+          'Hi! Just used your text tool. I run a content/writing business — interested in a website.',
+      };
+
+    case 'password-generator':
+      return {
+        headline: 'Building a product that needs real security?',
+        subhead: 'Pixie builds full websites in 60 seconds — text us on WhatsApp.',
+        whatsappPrefill:
+          'Hi! Just used your Password Generator. I need a website built — interested.',
+      };
+
+    case 'age-calculator':
+    case 'bmi-calculator':
+      return {
+        headline: 'Run a health, fitness, or events brand?',
+        subhead: 'Pixie builds full booking websites in 60 seconds.',
+        whatsappPrefill:
+          'Hi! Just used your calculator. I run a health/fitness business — interested in a website.',
+      };
+
+    case 'business-name-generator':
+      return {
+        headline: 'Got the name — now build it?',
+        subhead: 'Pixie turns it into a full brand and website: logo, domain, pages.',
+        whatsappPrefill:
+          'Hi! Just used your Business Name Generator. I\'m starting a business and need a website.',
+      };
+
+    case 'slogan-generator':
+      return {
+        headline: 'Got your tagline — now the brand?',
+        subhead: 'Pixie builds the full brand and website around it.',
+        whatsappPrefill:
+          'Hi! Just used your Slogan Generator. I want a website and brand built around it.',
+      };
+
+    case 'image-resizer':
+    case 'color-picker':
+      return {
+        headline: 'Need a fast, well-designed website?',
+        subhead: 'Pixie builds full sites in 60 seconds — text us on WhatsApp.',
+        whatsappPrefill:
+          'Hi! Just used your design tool. I need a website built — interested.',
+      };
+
     default:
       return {
         headline: 'Want a site like this?',
