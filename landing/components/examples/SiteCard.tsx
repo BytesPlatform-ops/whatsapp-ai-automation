@@ -13,6 +13,7 @@ const CACHE_BUST_HOSTS: Record<string, string> = {
   'austinclimate.pixiebot.co': 'v2',
   'sarahmitchell.pixiebot.co': 'v2',
   'bytecoffee.pixiebot.co': 'v2',
+  'eleanor-portfolio.netlify.app': 'v2',
 };
 function screenshotUrl(url: string) {
   const params: Record<string, string> = {

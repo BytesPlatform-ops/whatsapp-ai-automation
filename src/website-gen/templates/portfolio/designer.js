@@ -487,11 +487,10 @@ function generateWorkPage(c) {
   const cards = items.map((it, i) => {
     const cover = (it.photoUrl ? `<img class="cover-img" src="${attr(it.photoUrl)}" alt="${attr(it.title)}">` : '')
       + `<span class="gx ${it.cover}"></span><span class="big-let">${esc(twoLetters(it.title))}</span>`;
-    const pal = PAL.map((col) => `<i style="background:${col}"></i>`).join('');
     return `
       <a class="concept ${spans[i] || ''} reveal${i ? ` d${i % 3}` : ''}" href="/work/${it.slug}/" data-cursor="View">
         <div class="cover">${cover}<span class="num">${pad2(i + 1)}</span><span class="cat">${esc(it.title)}</span>
-          <div class="panel"><div class="pal">${pal}</div><span class="vb">View case study ↗</span></div></div>
+          <div class="panel"><span class="vb">View case study ↗</span></div></div>
         <div class="concept-foot"><span class="ttl">${esc(it.title)}</span><span class="role">${esc(it.role)}</span></div>
       </a>`;
   }).join('');
@@ -549,7 +548,7 @@ function caseContent(c, it) {
   };
 }
 
-function generateCaseStudyPage(c, it, next) {
+function generateCaseStudyPage(c, it, next, prev) {
   const d = caseContent(c, it);
   const paras = (arr) => arr.map((p) => `<p>${esc(p)}</p>`).join('');
   const coverImg = d.photoUrl ? `<img class="cover-img" src="${attr(d.photoUrl)}" alt="${attr(it.title)}">` : '';
@@ -575,8 +574,8 @@ function generateCaseStudyPage(c, it, next) {
   <div class="cs-block reveal"><div class="bh">Deliverables</div><div class="body"><div class="cs-deliv">${d.deliv.map((t) => `<span>${esc(t)}</span>`).join('')}</div></div></div>
   ${d.link ? `<div class="cs-block reveal"><div class="bh">Live</div><div class="body cs-live"><a class="btn btn--out" href="${attr(d.link)}" target="_blank" rel="noopener">Visit project ↗</a></div></div>` : ''}
   <div class="cs-next">
-    <span class="nl">Next ${it.isProject ? 'project' : 'discipline'}</span>
-    <a href="/work/${next.slug}/" data-cursor="View"><span class="nt">${esc(next.title)}</span> ↗</a>
+    ${prev && prev.slug !== it.slug ? `<a class="cs-nav prev" href="/work/${prev.slug}/" data-cursor="View"><span class="nl">← Previous ${it.isProject ? 'project' : 'discipline'}</span><span class="nt">${esc(prev.title)}</span></a>` : '<span></span>'}
+    <a class="cs-nav next" href="/work/${next.slug}/" data-cursor="View"><span class="nl">Next ${it.isProject ? 'project' : 'discipline'} →</span><span class="nt">${esc(next.title)}</span></a>
   </div>
 </section>
 ${contactFooter(c)}`;
@@ -635,7 +634,8 @@ function generatePages(config) {
   // One auto-generated case study per work item.
   items.forEach((it, i) => {
     const next = items[(i + 1) % items.length];
-    pages[`/work/${it.slug}/index.html`] = generateCaseStudyPage(config, it, next);
+    const prev = items[(i - 1 + items.length) % items.length];
+    pages[`/work/${it.slug}/index.html`] = generateCaseStudyPage(config, it, next, prev);
   });
   return pages;
 }
