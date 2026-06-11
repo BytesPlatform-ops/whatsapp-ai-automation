@@ -11,6 +11,7 @@
 const { env } = require('../config/env');
 const { logger } = require('../utils/logger');
 const { searchPhotos, mapPhotoToResult } = require('./pexelsClient');
+const { generateResponse } = require('../llm/provider');
 
 const CONCURRENCY = 4;
 const PER_FETCH_TIMEOUT_MS = 7000;
@@ -53,6 +54,10 @@ const PHOTOGRAPHER_ROLE_QUERY = [
 ];
 
 function buildProjectQuery(project, template, index) {
+  // An explicit per-card query (e.g. from the LLM specialty seeder, tuned to
+  // what the photographer actually shoots) always wins over the generic pool.
+  const explicit = project && typeof project.imageQuery === 'string' && project.imageQuery.trim();
+  if (explicit) return explicit.trim().slice(0, 80);
   const tpl = NICHE_POOL[template] ? template : 'general';
   const pool = NICHE_POOL[tpl];
   if (tpl === 'photographer') {
@@ -161,4 +166,96 @@ function seedPlaceholderProjects(template) {
   return SEED_PROJECTS[tpl].map((p) => ({ ...p, tools: [...(p.tools || [])] }));
 }
 
-module.exports = { attachPortfolioImages, seedPlaceholderProjects, buildProjectQuery };
+// ── LLM-driven, specialty-matched work grid ─────────────────────────────────
+// When a photographer uploads no photos, the fixed SEED_PROJECTS spread shows a
+// generic mix (wedding + portrait + commercial + family…) regardless of what
+// they actually shoot. This reads their own words (bio / services) and asks the
+// LLM for a grid that matches their specialty — e.g. a wedding photographer gets
+// wedding/engagement cards, each with a precise Pexels query. Any failure (no
+// signal, bad JSON, LLM error) falls back to the fixed seeds, so the grid is
+// never empty.
+const WORKGRID_SYSTEM = `You plan the "selected work" grid for a photographer's portfolio site.
+
+Given what the photographer says they do (their bio and/or service list), output a JSON array of 6 realistic past-work cards that match THEIR actual specialty — not a generic spread. If they only shoot weddings, every card is a wedding. If they do two things (e.g. weddings + newborns), weight toward the dominant one and let one or two cards cover the other. If their focus is unclear, cover the most likely shoot types for that kind of photographer.
+
+Each card is an object:
+- "title": a short, real-sounding project/client name (e.g. "Maya & Owen", "The Reyes Family", "Bloom Studio Launch"). No quotes inside.
+- "role": the shoot type as a 1-2 word label (e.g. "Wedding", "Newborn", "Portrait", "Brand", "Event", "Maternity", "Product", "Food", "Real Estate").
+- "year": "2023", "2024" or "2025".
+- "description": one concrete sentence about the shoot.
+- "imageQuery": 2-4 concrete keywords describing ONE photographable subject for a stock-photo search (nouns + adjectives, no abstract words, NO commas). Keep it short — long queries return no results. e.g. "outdoor wedding ceremony", "newborn baby studio", "maternity portrait", "restaurant food plating", "real estate interior". Never "photography business" or "professional".
+
+Return ONLY the JSON array — no prose, no code fences.`;
+
+function cleanWorkCard(card) {
+  if (!card || typeof card !== 'object') return null;
+  const title = String(card.title || '').trim().slice(0, 60);
+  const role = String(card.role || '').trim().slice(0, 24) || 'Photography';
+  if (!title) return null;
+  const year = /^(20\d{2})$/.test(String(card.year || '').trim()) ? String(card.year).trim() : '2024';
+  // Keep only the first clause and cap length — Pexels returns few/no results
+  // for long multi-phrase queries, which would drop the card to a text placeholder.
+  const imageQuery = String(card.imageQuery || '').split(/[,;]/)[0].trim().slice(0, 50);
+  return {
+    title,
+    role,
+    year,
+    link: '',
+    tools: [role],
+    photoUrl: null,
+    description: String(card.description || '').trim().slice(0, 160),
+    imageQuery,
+  };
+}
+
+/**
+ * Build a specialty-matched work grid for a photographer with no uploaded work.
+ * Falls back to the fixed seedPlaceholderProjects on any failure or weak signal.
+ *
+ * @param {object} opts
+ * @param {string} opts.template   resolved sub-template id
+ * @param {string} [opts.businessName]
+ * @param {string} [opts.aboutText] the photographer's bio (their words)
+ * @param {string[]} [opts.services]
+ * @param {string} [opts.niche]
+ * @param {string} [opts.userId]
+ */
+async function seedSpecialtyProjects(opts = {}) {
+  const { template, businessName, aboutText, services, niche, userId } = opts;
+  const fallback = () => seedPlaceholderProjects(template);
+  // Only photographer grids are specialty-shaped today; other niches keep the
+  // fixed seeds (their grids are project-based, not shoot-type-based).
+  if (template !== 'photographer') return fallback();
+  const signal = [
+    aboutText,
+    Array.isArray(services) && services.length ? `Services: ${services.join(', ')}` : '',
+    niche && niche !== 'photographer' ? `Niche: ${niche}` : '',
+  ].filter(Boolean).join('\n').trim();
+  // No bio / services → nothing to tailor to; keep the generic spread (a true
+  // generalist is better served by variety than by a guessed specialty).
+  if (!signal) return fallback();
+
+  try {
+    const userPrompt = `Photographer: ${businessName || 'a photographer'}\n${signal}\n\nReturn the 6-card JSON array now.`;
+    const resp = await generateResponse(
+      WORKGRID_SYSTEM,
+      [{ role: 'user', content: userPrompt }],
+      { userId, operation: 'portfolio_workgrid' }
+    );
+    const jsonMatch = resp.match(/```(?:json)?\s*([\s\S]*?)\s*```/) || [null, resp];
+    const parsed = JSON.parse(jsonMatch[1]);
+    const arr = Array.isArray(parsed) ? parsed : (Array.isArray(parsed.cards) ? parsed.cards : []);
+    const clean = arr.map(cleanWorkCard).filter(Boolean).slice(0, 6);
+    if (clean.length >= 3) {
+      logger.info(`[PORTFOLIO-IMG] LLM work grid: ${clean.length} specialty cards (${clean.map((c) => c.role).join(', ')})`);
+      return clean;
+    }
+    logger.warn(`[PORTFOLIO-IMG] LLM work grid too thin (${clean.length} cards) — using fixed seeds`);
+    return fallback();
+  } catch (err) {
+    logger.warn(`[PORTFOLIO-IMG] LLM work grid failed: ${err.message} — using fixed seeds`);
+    return fallback();
+  }
+}
+
+module.exports = { attachPortfolioImages, seedPlaceholderProjects, seedSpecialtyProjects, buildProjectQuery };

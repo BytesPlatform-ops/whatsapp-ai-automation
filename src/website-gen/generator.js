@@ -5,7 +5,7 @@ const { getHeroImage } = require('./heroImage');
 const { attachServiceImages } = require('./serviceImages');
 const { attachHvacServiceImages } = require('./hvacServiceImages');
 const { attachRealEstateListingImages } = require('./realEstateListingImages');
-const { attachPortfolioImages, seedPlaceholderProjects } = require('./portfolioImages');
+const { attachPortfolioImages, seedPlaceholderProjects, seedSpecialtyProjects } = require('./portfolioImages');
 const { selectTemplate: selectPortfolioTemplate } = require('./templates/portfolio');
 const { fetchNeighborhoodImages, fetchAgentPlaceholderImage } = require('./neighborhoodImages');
 const { inferTimezoneFromAddress } = require('./timezone');
@@ -706,9 +706,27 @@ Generate compelling website copy for this business. Return ONLY valid JSON.${lan
   // array so the template renders images instead of typographic placeholders.
   let portfolioProjects = null;
   if (portfolioMode) {
-    portfolioProjects = Array.isArray(userProjects) && userProjects.length
-      ? userProjects
-      : seedPlaceholderProjects(portfolioTpl);
+    if (Array.isArray(userProjects) && userProjects.length) {
+      portfolioProjects = userProjects;
+    } else {
+      // No uploaded work → seed a grid that matches what the photographer
+      // actually shoots (LLM reads their bio/services), falling back to the
+      // fixed niche spread on any miss. seedPlaceholderProjects stays imported
+      // as that fallback's home.
+      try {
+        portfolioProjects = await seedSpecialtyProjects({
+          template: portfolioTpl,
+          businessName,
+          aboutText: userAboutText,
+          services,
+          niche: portfolioNiche,
+          userId: extras.userId,
+        });
+      } catch (err) {
+        logger.warn(`[WEBGEN] Specialty work-grid seed failed: ${err.message}`);
+        portfolioProjects = seedPlaceholderProjects(portfolioTpl);
+      }
+    }
     try {
       portfolioProjects = await attachPortfolioImages(portfolioProjects, { template: portfolioTpl, industry });
     } catch (err) {
