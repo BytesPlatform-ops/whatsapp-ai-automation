@@ -1,0 +1,22 @@
+{
+  "name": "portfolio-classify-tech-individual",
+  "description": "At the industry step an individual answers 'i work in tech industry'. The context-aware classifier must label this portfolio (a person showcasing their own work), NOT generic — so the developer-portfolio sub-flow runs and lands on the niche step. Regression for: bare 'tech' classified generic, dumping a portfolio user into the generic services step.",
+  "channel": "whatsapp",
+  "seed": {
+    "state": "WEB_COLLECT_INDUSTRY",
+    "metadata": {
+      "websiteData": {
+        "businessName": "Alex Rivera"
+      }
+    }
+  },
+  "turns": [
+    {
+      "user": "i work in tech industry",
+      "expect": {
+        "metadata.websiteData.industryKey": "portfolio",
+        "state": "WEB_COLLECT_PORTFOLIO_NICHE"
+      }
+    }
+  ]
+}

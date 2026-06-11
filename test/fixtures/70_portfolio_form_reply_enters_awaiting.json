@@ -1,0 +1,31 @@
+{
+  "name": "portfolio-form-reply-enters-awaiting",
+  "description": "After the projects-step form offer, the user replies 'form'. Bot must resend the form link and move to WEB_AWAITING_FORM with formAwaitingKind=portfolio, so a later form submit maps to projects[]. Mirrors the salon form-reply interception.",
+  "channel": "whatsapp",
+  "seed": {
+    "state": "WEB_COLLECT_PROJECTS_ASK",
+    "metadata": {
+      "websiteData": {
+        "businessName": "Alex Rivera",
+        "industry": "Tech",
+        "industryKey": "portfolio",
+        "portfolioNiche": "developer",
+        "aboutText": "Full-stack engineer.",
+        "portfolioSkillsDone": true,
+        "portfolioProfileDone": true,
+        "projectsFormOffered": true,
+        "projectsFormToken": "abc234"
+      }
+    }
+  },
+  "turns": [
+    {
+      "user": "form",
+      "expect": {
+        "state": "WEB_AWAITING_FORM",
+        "metadata.websiteData.formAwaitingKind": "portfolio",
+        "reply_contains": "services-form/abc234"
+      }
+    }
+  ]
+}

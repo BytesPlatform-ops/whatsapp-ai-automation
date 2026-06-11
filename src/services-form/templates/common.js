@@ -91,17 +91,18 @@ const BASE_STYLES = `
   .card .remove:hover{color:#EF4444;background:#FEF2F2}
 
   label{display:block;font-size:13px;font-weight:600;color:${BRAND.ink900};margin:12px 0 6px}
-  input[type=text],input[type=number],select{
+  input[type=text],input[type=number],select,textarea{
     width:100%;padding:11px 13px;border:1.5px solid ${BRAND.ink200};
     border-radius:10px;font:inherit;color:inherit;background:#fff;
     transition:border-color .15s ease, box-shadow .15s ease;
   }
-  input[type=text]:hover,input[type=number]:hover,select:hover{border-color:${BRAND.ink300}}
-  input[type=text]:focus,input[type=number]:focus,select:focus{
+  textarea{min-height:78px;resize:vertical;line-height:1.5}
+  input[type=text]:hover,input[type=number]:hover,select:hover,textarea:hover{border-color:${BRAND.ink300}}
+  input[type=text]:focus,input[type=number]:focus,select:focus,textarea:focus{
     outline:none;border-color:${BRAND.green};
     box-shadow:0 0 0 4px rgba(37,211,102,0.18);
   }
-  input::placeholder{color:${BRAND.ink300}}
+  input::placeholder,textarea::placeholder{color:${BRAND.ink300}}
 
   .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
   .grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}

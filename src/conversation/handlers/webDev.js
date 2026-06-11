@@ -172,6 +172,7 @@ function buildFormUrl(token) {
 // hasn't been explicitly set yet but whose businessName is "X Salon" /
 // "Y Beauty" still get offered the form.
 function shouldOfferServicesForm(nextState, websiteData) {
+  const { isPortfolio } = require('../../website-gen/templates');
   const wd = websiteData || {};
   const isSalonByContext =
     isSalonIndustry(wd.industry, wd.industryKey) || isSalonIndustry(wd.businessName);
@@ -188,6 +189,15 @@ function shouldOfferServicesForm(nextState, websiteData) {
   ) {
     return 'real_estate';
   }
+  // Portfolio: offer a web form (image + name + description per project) at
+  // the projects step instead of the chat loop. Same infra as salon/listings.
+  if (
+    nextState === STATES.WEB_COLLECT_PROJECTS_ASK &&
+    isPortfolio(wd.industry, wd.industryKey) &&
+    !wd.projectsFormOffered
+  ) {
+    return 'portfolio';
+  }
   return null;
 }
 
@@ -195,7 +205,9 @@ async function offerServicesForm(user, kind, opts = {}) {
   const wd = { ...(user.metadata?.websiteData || {}) };
   const fallbackState = kind === 'salon'
     ? STATES.WEB_COLLECT_SERVICES
-    : STATES.WEB_COLLECT_LISTINGS_ASK;
+    : kind === 'portfolio'
+      ? STATES.WEB_COLLECT_PROJECTS_ASK
+      : STATES.WEB_COLLECT_LISTINGS_ASK;
   // Optional ack to prepend to the offer message so the bot sends one
   // combined message instead of two stacked ones (smartAdvance / salesBot
   // both pass an "ack" line that used to go out as a separate sendTextMessage).
@@ -232,18 +244,22 @@ async function offerServicesForm(user, kind, opts = {}) {
   const url = buildFormUrl(token);
   const offerBody = kind === 'salon'
     ? `Quick choice — easier in chat or in a quick form?\n\n📋 Open the form: ${url}\n\nOr just type your services here (e.g. *Haircut 30min $40, Color 90min $120, Manicure 45min $30…*).\nReply *chat* if you'd rather type them out one by one.`
-    : `Quick choice — easier in chat or in a quick form?\n\n📋 Open the form: ${url}\n\nOr reply *yes* to send your listings here in chat, *skip* to use placeholder listings, or *chat* to switch to typing them out.`;
+    : kind === 'portfolio'
+      ? `Quick choice — easier in chat or in a quick form?\n\n📋 Open the form: ${url}\n\nEach project: a name, a short description, plus an optional link and photo. Or reply *yes* to type them here in chat, *skip* for placeholder cards, or *chat* to type them out.`
+      : `Quick choice — easier in chat or in a quick form?\n\n📋 Open the form: ${url}\n\nOr reply *yes* to send your listings here in chat, *skip* to use placeholder listings, or *chat* to switch to typing them out.`;
   const intro = prefixAck ? `${prefixAck}\n\n${offerBody}` : offerBody;
 
   const flagPatch = kind === 'salon'
     ? { servicesFormOffered: true, servicesFormToken: token }
-    : { listingsFormOffered: true, listingsFormToken: token };
+    : kind === 'portfolio'
+      ? { projectsFormOffered: true, projectsFormToken: token }
+      : { listingsFormOffered: true, listingsFormToken: token };
   const merged = { ...wd, ...flagPatch };
   await updateUserMetadata(user.id, { websiteData: merged });
   user.metadata = { ...(user.metadata || {}), websiteData: merged };
 
   await sendTextMessage(user.phone_number, await dynamicPhrase(intro, user, latestUserMessage));
-  return kind === 'salon' ? STATES.WEB_COLLECT_SERVICES : STATES.WEB_COLLECT_LISTINGS_ASK;
+  return fallbackState;
 }
 
 const FORM_REPLY_RX = /^\s*(form|link|open form|send link|re-?send)\s*$/i;
@@ -260,8 +276,10 @@ async function handleAwaitingForm(user, message) {
       ...wd,
       servicesFormOffered: false,
       listingsFormOffered: false,
+      projectsFormOffered: false,
       servicesFormToken: null,
       listingsFormToken: null,
+      projectsFormToken: null,
       formAwaitingKind: null,
       formAwaitingToken: null,
     };
@@ -269,7 +287,9 @@ async function handleAwaitingForm(user, message) {
     user.metadata = { ...(user.metadata || {}), websiteData: cleared };
     const fallbackState = kind === 'salon'
       ? STATES.WEB_COLLECT_SERVICES
-      : STATES.WEB_COLLECT_LISTINGS_ASK;
+      : kind === 'portfolio'
+        ? STATES.WEB_COLLECT_PROJECTS_ASK
+        : STATES.WEB_COLLECT_LISTINGS_ASK;
     await sendTextMessage(
       user.phone_number,
       await dynamicPhrase(
@@ -1023,7 +1043,7 @@ async function handleCollectIndustry(user, message) {
 
   // List selections are trusted as-is — the user picked a pre-defined option.
   if (message.listId) {
-    const industryKey = await classifyIndustry(rawInput);
+    const industryKey = await classifyIndustry(rawInput, { context: rawInput });
     const websiteData = { ...(user.metadata?.websiteData || {}), industry: rawInput, industryKey };
     await updateUserMetadata(user.id, { websiteData });
     user.metadata = { ...(user.metadata || {}), websiteData };
@@ -1089,7 +1109,7 @@ async function handleCollectIndustry(user, message) {
     announcedByFallback = true;
   }
 
-  const industryKey = await classifyIndustry(industry);
+  const industryKey = await classifyIndustry(industry, { context: rawInput });
   const merged = { ...websiteData, industry, industryKey };
   await updateUserMetadata(user.id, { websiteData: merged });
   user.metadata = { ...(user.metadata || {}), websiteData: merged };
@@ -3955,6 +3975,45 @@ async function handleCollectPortfolioProfile(user, message) {
 async function handleCollectProjectsAsk(user, message) {
   const raw = (message.text || '').trim();
   const wd = { ...(user.metadata?.websiteData || {}) };
+
+  // Form-offer mode: bot just sent the "form or chat?" CTA at the projects
+  // step. Intercept the explicit reply types before the yes/skip/project
+  // classifier — otherwise "form" / "chat" would be misread as project content.
+  if (wd.projectsFormOffered) {
+    if (raw && CHAT_REPLY_RX.test(raw)) {
+      const cleared = { ...wd, projectsFormOffered: false, projectsFormToken: null };
+      await updateUserMetadata(user.id, { websiteData: cleared });
+      user.metadata = { ...(user.metadata || {}), websiteData: cleared };
+      await sendTextMessage(
+        user.phone_number,
+        await dynamicPhrase(questionForState(STATES.WEB_COLLECT_PROJECTS_ASK, cleared), user, raw)
+      );
+      return STATES.WEB_COLLECT_PROJECTS_ASK;
+    }
+    if (raw && FORM_REPLY_RX.test(raw)) {
+      const url = wd.projectsFormToken ? buildFormUrl(wd.projectsFormToken) : null;
+      const merged = {
+        ...wd,
+        formAwaitingKind: 'portfolio',
+        formAwaitingToken: wd.projectsFormToken || null,
+      };
+      await updateUserMetadata(user.id, { websiteData: merged });
+      user.metadata = { ...(user.metadata || {}), websiteData: merged };
+      const msg = url
+        ? `Great — fill out the form here whenever you're ready: ${url}\n\nReply *chat* anytime to switch back to typing.`
+        : `Great — opening the form. Reply *chat* anytime to switch back to typing.`;
+      await sendTextMessage(user.phone_number, await dynamicPhrase(msg, user, raw));
+      return STATES.WEB_AWAITING_FORM;
+    }
+    if (raw) {
+      // Real content (a project, "yes", "skip", etc.) — clear the offer flag on
+      // the local copy too so the branches below don't re-persist it.
+      wd.projectsFormOffered = false;
+      wd.projectsFormToken = null;
+      await updateUserMetadata(user.id, { websiteData: { ...wd } });
+      user.metadata = { ...(user.metadata || {}), websiteData: { ...wd } };
+    }
+  }
 
   const reaskProjectsAsk = 'Now, do you want to send your projects, or reply *skip* to use placeholders?';
   if (raw) {

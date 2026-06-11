@@ -18,6 +18,7 @@ const { logMessage } = require('../db/conversations');
 const { uploadListingPhoto } = require('../website-gen/listingPhotoUploader');
 const { renderSalonForm } = require('./templates/salon');
 const { renderRealEstateForm } = require('./templates/realEstate');
+const { renderPortfolioForm } = require('./templates/portfolio');
 const { infoPage } = require('./templates/common');
 const { STATES } = require('../conversation/states');
 
@@ -101,7 +102,9 @@ router.get('/services-form/:token', async (req, res) => {
     const businessName = user?.metadata?.websiteData?.businessName || '';
     const html = row.industry === 'real_estate'
       ? renderRealEstateForm({ token: row.token, businessName })
-      : renderSalonForm({ token: row.token, businessName });
+      : row.industry === 'portfolio'
+        ? renderPortfolioForm({ token: row.token, businessName })
+        : renderSalonForm({ token: row.token, businessName });
     return htmlResponse(res, 200, html);
   } catch (err) {
     logger.error(`[SERVICES-FORM] GET failed: ${err.message}`);
@@ -168,7 +171,9 @@ async function uploadPhoto(file, kind) {
   if (!file || !file.buffer || !file.size) return null;
   const opts = kind === 'real_estate'
     ? { bucket: 'listing-photos', tag: 'LISTING-UPLOAD' }
-    : { bucket: 'salon-service-photos', tag: 'SALON-PHOTO-UPLOAD' };
+    : kind === 'portfolio'
+      ? { bucket: 'listing-photos', tag: 'PORTFOLIO-PHOTO-UPLOAD' }
+      : { bucket: 'salon-service-photos', tag: 'SALON-PHOTO-UPLOAD' };
   try {
     return await uploadListingPhoto(file.buffer, file.mimetype || 'image/jpeg', opts);
   } catch (err) {
@@ -223,6 +228,59 @@ function parseRealEstateRows(rows, currency) {
     });
   }
   return out;
+}
+
+function parsePortfolioRows(rows) {
+  const out = [];
+  for (const row of rows.slice(0, 6)) {
+    const name = (row.name || '').toString().trim();
+    if (!name) continue;
+    let link = (row.link || '').toString().trim();
+    // Bare domain → add scheme so the website template renders a working link.
+    if (link && !/^https?:\/\//i.test(link) && /\./.test(link)) link = `https://${link}`;
+    out.push({
+      title: name.slice(0, 80),
+      description: (row.description || '').toString().trim().slice(0, 300),
+      link: link.slice(0, 200),
+      __photo: row.__photo || null,
+    });
+  }
+  return out;
+}
+
+async function handlePortfolioSubmit(user, parsed) {
+  const projects = [];
+  for (const row of parsed) {
+    const photoUrl = await uploadPhoto(row.__photo, 'portfolio');
+    // Same shape the chat-side WEB_COLLECT_PROJECTS_DETAILS flow produces, so
+    // the portfolio website template consumes these unchanged.
+    projects.push({
+      title: row.title,
+      description: row.description || '',
+      role: '',
+      year: '',
+      link: row.link || '',
+      tools: [],
+      photoUrl: photoUrl || null,
+    });
+  }
+  const wd = { ...(user.metadata?.websiteData || {}) };
+  const merged = {
+    ...wd,
+    projects,
+    // Mark the whole projects sub-flow done so nextMissingWebDevState skips
+    // WEB_COLLECT_PROJECTS_ASK/DETAILS/PHOTOS and advances to contact/logo.
+    projectsAskAnswered: true,
+    projectsDetailsDone: true,
+    projectsFlowDone: true,
+    projectsFormOffered: false,
+    projectsFormToken: null,
+    formAwaitingKind: null,
+    formAwaitingToken: null,
+  };
+  await updateUserMetadata(user.id, { websiteData: merged });
+  await logMessage(user.id, `Form submitted: ${projects.length} portfolio project(s)`, 'assistant');
+  return projects.length;
 }
 
 async function handleSalonSubmit(user, parsed) {
@@ -298,9 +356,8 @@ async function handleRealEstateSubmit(user, parsed) {
 }
 
 async function postSubmitNotify(user, kind, count) {
-  const ack = kind === 'salon'
-    ? `Got your ${count} service${count === 1 ? '' : 's'} — let's keep going.`
-    : `Got your ${count} listing${count === 1 ? '' : 's'} — let's keep going.`;
+  const noun = kind === 'salon' ? 'service' : kind === 'portfolio' ? 'project' : 'listing';
+  const ack = `Got your ${count} ${noun}${count === 1 ? '' : 's'} — let's keep going.`;
 
   try {
     const refreshed = await fetchUser(user.id);
@@ -323,9 +380,9 @@ async function postSubmitNotify(user, kind, count) {
               '• If not, type *no* and we\'ll build a built-in booking system for you.'
           );
         } else {
-          // Real-estate: smartAdvance computes nextMissingWebDevState (which
-          // skips listings now that listingsFlowDone is true), sends its
-          // question, and returns the new state for us to persist.
+          // Real-estate / portfolio: smartAdvance computes nextMissingWebDevState
+          // (which skips the loop now that listingsFlowDone / projectsFlowDone is
+          // true), sends its question, and returns the new state for us to persist.
           const { smartAdvance } = require('../conversation/handlers/webDev');
           const newState = await smartAdvance(refreshed, { text: '', type: 'text' });
           if (newState) await updateUserState(refreshed.id, newState);
@@ -372,10 +429,17 @@ router.post('/services-form/:token', upload.any(), async (req, res) => {
       }));
     }
 
-    const isSalon = row.industry !== 'real_estate';
+    const kind = row.industry === 'real_estate' ? 'real_estate'
+      : row.industry === 'portfolio' ? 'portfolio'
+      : 'salon';
     const currency = sanitizeCurrency(req.body?.currency);
-    const rawRows = collectRows(req.body, req.files, isSalon ? 'services' : 'listings');
-    const parsed = isSalon ? parseSalonRows(rawRows, currency) : parseRealEstateRows(rawRows, currency);
+    const prefix = kind === 'real_estate' ? 'listings' : kind === 'portfolio' ? 'projects' : 'services';
+    const rawRows = collectRows(req.body, req.files, prefix);
+    const parsed = kind === 'real_estate'
+      ? parseRealEstateRows(rawRows, currency)
+      : kind === 'portfolio'
+        ? parsePortfolioRows(rawRows)
+        : parseSalonRows(rawRows, currency);
     if (parsed.length === 0) {
       return htmlResponse(res, 400, infoPage({
         title: 'Nothing submitted',
@@ -383,20 +447,23 @@ router.post('/services-form/:token', upload.any(), async (req, res) => {
       }));
     }
 
-    const count = isSalon
-      ? await handleSalonSubmit(user, parsed)
-      : await handleRealEstateSubmit(user, parsed);
+    const count = kind === 'real_estate'
+      ? await handleRealEstateSubmit(user, parsed)
+      : kind === 'portfolio'
+        ? await handlePortfolioSubmit(user, parsed)
+        : await handleSalonSubmit(user, parsed);
     await markSubmitted(row.token);
 
     // Fire-and-forget the proactive notification so the user gets a
     // success response immediately even if WhatsApp is slow.
-    postSubmitNotify(user, isSalon ? 'salon' : 'real_estate', count).catch((err) => {
+    postSubmitNotify(user, kind, count).catch((err) => {
       logger.warn(`[SERVICES-FORM] post-submit notify failed: ${err.message}`);
     });
 
+    const noun = kind === 'real_estate' ? 'listing' : kind === 'portfolio' ? 'project' : 'service';
     return htmlResponse(res, 200, infoPage({
       title: 'Saved',
-      message: `Saved ${count} ${isSalon ? 'service' : 'listing'}${count === 1 ? '' : 's'}. Head back to WhatsApp — we'll continue from there.`,
+      message: `Saved ${count} ${noun}${count === 1 ? '' : 's'}. Head back to WhatsApp — we'll continue from there.`,
       accent: '#16A34A',
     }));
   } catch (err) {

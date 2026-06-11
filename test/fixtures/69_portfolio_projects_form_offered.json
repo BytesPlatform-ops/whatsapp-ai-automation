@@ -1,0 +1,28 @@
+{
+  "name": "portfolio-projects-form-offered",
+  "description": "A developer portfolio reaches the projects step (after profile). Instead of the chat-only loop, the bot now offers the hosted web form (image + name + description per project), mirroring the salon services form. Regression for: portfolio projects had no form option.",
+  "channel": "whatsapp",
+  "seed": {
+    "state": "WEB_COLLECT_PORTFOLIO_PROFILE",
+    "metadata": {
+      "websiteData": {
+        "businessName": "Alex Rivera",
+        "industry": "Tech",
+        "industryKey": "portfolio",
+        "portfolioNiche": "developer",
+        "aboutText": "Full-stack engineer building web apps.",
+        "portfolioSkillsDone": true
+      }
+    }
+  },
+  "turns": [
+    {
+      "user": "skip",
+      "expect": {
+        "state": "WEB_COLLECT_PROJECTS_ASK",
+        "metadata.websiteData.projectsFormOffered": true,
+        "reply_contains": "services-form"
+      }
+    }
+  ]
+}
