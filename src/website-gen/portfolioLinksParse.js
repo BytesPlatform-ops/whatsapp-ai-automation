@@ -7,7 +7,7 @@
 // the same paste into the same handles.
 //
 // Returns only the keys that were found:
-//   { githubHandle, linkedinHandle, twitterHandle, instagramHandle, behanceHandle }
+//   { githubHandle, linkedinHandle, twitterHandle, instagramHandle, facebookHandle, behanceHandle }
 //
 // Accepts both pasted URLs ("github.com/foo", "https://www.linkedin.com/in/foo/")
 // and labelled handles ("github: foo", "insta @foo", "behance bar").
@@ -22,6 +22,8 @@ const STOP_SEGMENTS = new Set([
   'in', 'pub', 'company', 'school', 'feed', 'home', 'explore', 'search',
   'p', 'reel', 'reels', 'stories', 'tv', 'about', 'login', 'signup', 'i',
   'sharing', 'gallery', 'collection', 'orgs', 'sponsors', 'settings',
+  // Facebook sub-pages that aren't a vanity handle.
+  'profile.php', 'pages', 'people', 'groups', 'events', 'watch',
 ]);
 
 // Pull the username out of a captured tail (URL path or bare handle).
@@ -68,12 +70,14 @@ function parseProfileLinks(input) {
     firstMatch(text, /linkedin\.com\/((?:in|pub)\/[^\s,]+|[^\s,]+)/i, cleanLinkedin);
   const twitter = keep(firstMatch(text, /(?:twitter\.com|x\.com)\/([^\s,]+)/i));
   const instagram = keep(firstMatch(text, /(?:instagram\.com|instagr\.am)\/([^\s,]+)/i));
+  const facebook = keep(firstMatch(text, /(?:facebook\.com|fb\.com|fb\.me)\/([^\s,]+)/i));
   const behance = keep(firstMatch(text, /behance\.net\/([^\s,]+)/i));
 
   if (github) out.githubHandle = github;
   if (linkedin) out.linkedinHandle = linkedin;
   if (twitter) out.twitterHandle = twitter;
   if (instagram) out.instagramHandle = instagram;
+  if (facebook) out.facebookHandle = facebook;
   if (behance) out.behanceHandle = behance;
 
   // ── Labelled handles ("github: foo", "ig @foo") — only fill gaps the
@@ -92,6 +96,7 @@ function parseProfileLinks(input) {
     ['linkedinHandle', new RegExp(`\\blinked\\s?in\\b(?!\\.)${SEP}(?:in/)?(${H})`, 'i')],
     ['twitterHandle', new RegExp(`\\b(?:twitter|x)\\b(?!\\.)\\s*[:\\-]?\\s*@(${H})`, 'i')],
     ['instagramHandle', new RegExp(`\\b(?:instagram|insta|ig)\\b(?!\\.)${SEP}(${H})`, 'i')],
+    ['facebookHandle', new RegExp(`\\b(?:facebook|fb)\\b(?!\\.)${SEP}(${H})`, 'i')],
     ['behanceHandle', new RegExp(`\\bbehance\\b(?!\\.)${SEP}(${H})`, 'i')],
   ];
   for (const [key, re] of labelled) {

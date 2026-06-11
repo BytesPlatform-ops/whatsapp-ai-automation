@@ -298,7 +298,7 @@ const L = {
     l_pkgname: 'Package name',
     pkgname_helper: 'e.g. Wedding Day',
     l_pkgprice: 'Price',
-    pkgprice_helper: 'e.g. $3,400 or "Starting at $3,400"',
+    pkgprice_helper: 'e.g. 3400',
     l_pkgdur: 'Duration / coverage',
     pkgdur_helper: 'e.g. 8 hours coverage. Optional.',
     l_pkgincl: "What's included",
@@ -414,7 +414,7 @@ const L = {
     l_pkgname: 'Nome do pacote',
     pkgname_helper: 'Ex: Dia do Casamento',
     l_pkgprice: 'Preço',
-    pkgprice_helper: 'Ex: R$3.400 ou "A partir de R$3.400"',
+    pkgprice_helper: 'Ex: 3400',
     l_pkgdur: 'Duração / cobertura',
     pkgdur_helper: 'Ex: 8 horas de cobertura. Opcional.',
     l_pkgincl: 'O que está incluído',
@@ -508,6 +508,7 @@ const LINK = {
   linkedin: { key: 'linkedin', label: { en: 'LinkedIn', pt: 'LinkedIn' }, helper: { en: 'linkedin.com/in/you', pt: 'linkedin.com/in/voce' } },
   twitter: { key: 'twitter', label: { en: 'X / Twitter', pt: 'X / Twitter' }, helper: { en: '@handle', pt: '@usuario' } },
   instagram: { key: 'instagram', label: { en: 'Instagram', pt: 'Instagram' }, helper: { en: 'instagram.com/you — or @handle', pt: 'instagram.com/voce — ou @usuario' } },
+  facebook: { key: 'facebook', label: { en: 'Facebook', pt: 'Facebook' }, helper: { en: 'facebook.com/yourpage — or your page name', pt: 'facebook.com/suapagina — ou o nome da página' } },
   behance: { key: 'behance', label: { en: 'Behance', pt: 'Behance' }, helper: { en: 'behance.net/you', pt: 'behance.net/voce' } },
 };
 
@@ -522,14 +523,14 @@ const LINK = {
 const NICHE_FIELDS = {
   photographer: {
     title: { en: 'Your photography', pt: 'Sua fotografia' },
-    photos: true, skills: false, years: true, focus: true, projects: false,
+    photos: true, skills: false, years: true, focus: false, projects: false,
     packages: true,
     aboutPhoto: true,
     photos_desc: {
       en: "Upload a few of your best shots — up to 6. Or skip and I'll add visuals.",
       pt: 'Envie algumas das suas melhores fotos — até 6. Ou pule e eu adiciono os visuais.',
     },
-    links: [LINK.instagram, LINK.behance, LINK.linkedin],
+    links: [LINK.instagram, LINK.facebook, LINK.behance, LINK.linkedin],
   },
   designer: {
     title: { en: 'Your design work', pt: 'Seu trabalho de design' },

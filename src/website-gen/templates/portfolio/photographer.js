@@ -711,8 +711,12 @@ body.fonts-loaded .hero-cta { opacity: 1; transform: translateY(0); }
 .packages-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
+  justify-content: center;
   gap: var(--space-5);
 }
+/* Center a lone (or paired) package instead of leaving it in the left column. */
+.packages-grid--n1 { grid-template-columns: minmax(0, 380px); }
+.packages-grid--n2 { grid-template-columns: repeat(2, minmax(0, 380px)); }
 @media (max-width: 1023px) { .packages-grid { grid-template-columns: 1fr; } }
 .package-card {
   background: var(--bg-secondary);
@@ -1050,6 +1054,7 @@ function getFooter(c) {
   const firstName = firstNameOf(c.businessName);
   const socials = [];
   if (c.instagramHandle) socials.push({ label: 'Instagram', href: `https://instagram.com/${c.instagramHandle}` });
+  if (c.facebookHandle)  socials.push({ label: 'Facebook',  href: `https://facebook.com/${c.facebookHandle}` });
   if (c.contactEmail)    socials.push({ label: 'Email',     href: `mailto:${c.contactEmail}` });
   return `
 <footer class="footer">
@@ -1507,7 +1512,10 @@ function generateHomePage(c) {
   const eventTypes = ['Wedding', 'Portrait Session', 'Engagement', 'Family / Maternity', 'Event', 'Commercial / Brand', 'Other'];
   // Package names mirror the packages section so the inquiry form can capture
   // which tier a visitor clicked "Inquire about this" on.
-  const packageNames = ((c.packages && Array.isArray(c.packages) && c.packages.length) ? c.packages : defaultPackages()).map((p) => p.name).filter(Boolean);
+  const packageList = (c.packages && Array.isArray(c.packages) && c.packages.length) ? c.packages : defaultPackages();
+  const packageNames = packageList.map((p) => p.name).filter(Boolean);
+  // 1 or 2 packages center in the grid (n1/n2); 3+ keep the 3-up layout.
+  const packagesGridClass = `packages-grid packages-grid--n${Math.min(packageList.length, 3)}`;
 
   const yr = new Date().getFullYear();
 
@@ -1571,7 +1579,7 @@ ${renderYearTicker(projects)}
       <span class="eyebrow">Packages &amp; Pricing</span>
       <h2>${italicAccent('What I offer')}</h2>
     </div>
-    <div class="packages-grid">
+    <div class="${packagesGridClass}">
       ${renderPackages(c)}
     </div>
   </div>
@@ -1599,6 +1607,7 @@ ${c.testimonialQuote ? `
         ${c.contactEmail ? `<div class="contact-direct-item"><span class="lbl">Email</span><a href="mailto:${attr(c.contactEmail)}">${esc(c.contactEmail)}</a></div>` : ''}
         ${c.contactPhone ? `<div class="contact-direct-item"><span class="lbl">Phone</span><a href="tel:${attr(c.contactPhone)}">${esc(c.contactPhone)}</a></div>` : ''}
         ${c.instagramHandle ? `<div class="contact-direct-item"><span class="lbl">Instagram</span><a href="https://instagram.com/${attr(c.instagramHandle)}" target="_blank" rel="noopener">@${esc(c.instagramHandle)}</a></div>` : ''}
+        ${c.facebookHandle ? `<div class="contact-direct-item"><span class="lbl">Facebook</span><a href="https://facebook.com/${attr(c.facebookHandle)}" target="_blank" rel="noopener">${esc(c.facebookHandle)}</a></div>` : ''}
       </div>
       <p class="contact-response">I respond within 24 hours.</p>
     </div>
@@ -1682,6 +1691,7 @@ function generateContactPage(c) {
       ${c.contactEmail ? `<p><a href="mailto:${attr(c.contactEmail)}">${esc(c.contactEmail)}</a></p>` : ''}
       ${c.contactPhone ? `<p><a href="tel:${attr(c.contactPhone)}">${esc(c.contactPhone)}</a></p>` : ''}
       ${c.instagramHandle ? `<p><a href="https://instagram.com/${attr(c.instagramHandle)}" target="_blank" rel="noopener">@${esc(c.instagramHandle)}</a></p>` : ''}
+      ${c.facebookHandle ? `<p><a href="https://facebook.com/${attr(c.facebookHandle)}" target="_blank" rel="noopener">Facebook</a></p>` : ''}
     </div>
   </div>
 </section>`;

@@ -290,10 +290,10 @@ function portfolioScreen(lang, niche) {
 // (shown for every niche). Niche-toggled the same way.
 function portfolio2Screen(lang, niche) {
   const f = NICHE_FIELDS[niche] || NICHE_FIELDS.developer;
-  // Discrete, niche-tailored link slots (up to 3). Unfilled slots are hidden.
+  // Discrete, niche-tailored link slots (up to 4). Unfilled slots are hidden.
   const slots = Array.isArray(f.links) ? f.links : [];
   const linkData = {};
-  for (let i = 0; i < 3; i++) {
+  for (let i = 0; i < 4; i++) {
     const slot = slots[i];
     linkData[`l_link${i + 1}`] = slot ? pick(slot.label, lang) : '';
     linkData[`link${i + 1}_helper`] = slot ? pick(slot.helper, lang) : '';
@@ -408,14 +408,20 @@ function summarizePackages(list, lang) {
 // SERVICE screen; `list` is the packages accumulated so far (shown as a summary).
 function packageScreen(lang, list) {
   const summary = summarizePackages(list, lang);
+  const first = list.length === 0;
   return {
     screen: 'PACKAGE',
     data: {
       package_title: L[lang].package_title,
       // Required only on the first render so a loop "That's all" can finish.
-      package_required: list.length === 0,
+      package_required: first,
       added_summary: summary || '—',
       added_visible: !!summary,
+      // Currency is asked once (first package) and applies to every package's
+      // price; on loop renders it's hidden — the pick persists in the session.
+      l_currency: L[lang].l_currency,
+      currency_options: CURRENCY_OPTIONS[lang] || CURRENCY_OPTIONS.en,
+      currency_visible: first,
       l_pkgname: L[lang].l_pkgname, pkgname_helper: L[lang].pkgname_helper,
       l_pkgprice: L[lang].l_pkgprice, pkgprice_helper: L[lang].pkgprice_helper,
       l_pkgdur: L[lang].l_pkgdur, pkgdur_helper: L[lang].pkgdur_helper,
@@ -615,7 +621,7 @@ async function handleFlow(req, ctx = {}) {
         // its platform keyword; a pasted URL is left raw so a mis-filled URL
         // can't be mis-tagged (the parser resolves it by its own domain).
         const slots = f.links || [];
-        const p_links = [data.p_link1, data.p_link2, data.p_link3]
+        const p_links = [data.p_link1, data.p_link2, data.p_link3, data.p_link4]
           .map((v, i) => {
             const val = String(v || '').trim();
             if (!val) return '';
@@ -663,7 +669,13 @@ async function handleFlow(req, ctx = {}) {
         });
       }
       if (flowToken) {
-        await patchSession(flowToken, { answersPatch: { packages_list: list } })
+        const answersPatch = { packages_list: list };
+        // Currency dropdown is shown on the first package only; persist it the
+        // first time it arrives so the build can prefix every package price.
+        if (data.currency && !session?.answers?.currency) {
+          answersPatch.currency = String(data.currency).trim().slice(0, 8);
+        }
+        await patchSession(flowToken, { answersPatch })
           .catch((err) => logger.warn(`[FLOW] persist PACKAGE failed: ${err.message}`));
       }
       // "add" → loop for one more (only if they named this one), capped at 6.

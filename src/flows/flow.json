@@ -194,10 +194,17 @@
         "package_required": { "type": "boolean", "__example__": true },
         "added_summary": { "type": "string", "__example__": "Added so far: Wedding Day" },
         "added_visible": { "type": "boolean", "__example__": false },
+        "l_currency": { "type": "string", "__example__": "Currency" },
+        "currency_options": {
+          "type": "array",
+          "items": { "type": "object", "properties": { "id": { "type": "string" }, "title": { "type": "string" } } },
+          "__example__": [{ "id": "USD", "title": "USD ($)" }, { "id": "EUR", "title": "EUR (€)" }]
+        },
+        "currency_visible": { "type": "boolean", "__example__": true },
         "l_pkgname": { "type": "string", "__example__": "Package name" },
         "pkgname_helper": { "type": "string", "__example__": "e.g. Wedding Day" },
         "l_pkgprice": { "type": "string", "__example__": "Price" },
-        "pkgprice_helper": { "type": "string", "__example__": "e.g. $3,400 or Starting at $3,400" },
+        "pkgprice_helper": { "type": "string", "__example__": "e.g. 3400" },
         "l_pkgdur": { "type": "string", "__example__": "Duration / coverage" },
         "pkgdur_helper": { "type": "string", "__example__": "e.g. 8 hours coverage" },
         "l_pkgincl": { "type": "string", "__example__": "What's included" },
@@ -224,8 +231,9 @@
             "name": "f_package",
             "init-values": "${data.package_init}",
             "children": [
+              { "type": "Dropdown", "name": "currency", "label": "${data.l_currency}", "data-source": "${data.currency_options}", "visible": "${data.currency_visible}", "required": "${data.currency_visible}" },
               { "type": "TextInput", "name": "pkgname", "input-type": "text", "label": "${data.l_pkgname}", "helper-text": "${data.pkgname_helper}", "required": "${data.package_required}" },
-              { "type": "TextInput", "name": "pkgprice", "input-type": "text", "label": "${data.l_pkgprice}", "helper-text": "${data.pkgprice_helper}", "required": false },
+              { "type": "TextInput", "name": "pkgprice", "input-type": "number", "label": "${data.l_pkgprice}", "helper-text": "${data.pkgprice_helper}", "required": false },
               { "type": "TextInput", "name": "pkgdur", "input-type": "text", "label": "${data.l_pkgdur}", "helper-text": "${data.pkgdur_helper}", "required": false },
               { "type": "TextArea", "name": "pkgincl", "label": "${data.l_pkgincl}", "helper-text": "${data.pkgincl_helper}", "required": false },
               { "type": "RadioButtonsGroup", "name": "addmore", "label": "${data.l_addmore}", "data-source": "${data.addmore_options}", "required": false },
@@ -234,7 +242,7 @@
                 "label": "${data.l_continue}",
                 "on-click-action": {
                   "name": "data_exchange",
-                  "payload": { "pkgname": "${form.pkgname}", "pkgprice": "${form.pkgprice}", "pkgdur": "${form.pkgdur}", "pkgincl": "${form.pkgincl}", "addmore": "${form.addmore}" }
+                  "payload": { "currency": "${form.currency}", "pkgname": "${form.pkgname}", "pkgprice": "${form.pkgprice}", "pkgdur": "${form.pkgdur}", "pkgincl": "${form.pkgincl}", "addmore": "${form.addmore}" }
                 }
               }
             ]
@@ -414,6 +422,9 @@
         "l_link3": { "type": "string", "__example__": "X / Twitter" },
         "link3_helper": { "type": "string", "__example__": "@handle" },
         "link3_visible": { "type": "boolean", "__example__": true },
+        "l_link4": { "type": "string", "__example__": "Facebook" },
+        "link4_helper": { "type": "string", "__example__": "facebook.com/yourpage" },
+        "link4_visible": { "type": "boolean", "__example__": false },
         "l_next": { "type": "string", "__example__": "Next" }
       },
       "layout": {
@@ -436,12 +447,13 @@
               { "type": "TextInput", "name": "p_link1", "input-type": "text", "label": "${data.l_link1}", "helper-text": "${data.link1_helper}", "required": false, "visible": "${data.link1_visible}" },
               { "type": "TextInput", "name": "p_link2", "input-type": "text", "label": "${data.l_link2}", "helper-text": "${data.link2_helper}", "required": false, "visible": "${data.link2_visible}" },
               { "type": "TextInput", "name": "p_link3", "input-type": "text", "label": "${data.l_link3}", "helper-text": "${data.link3_helper}", "required": false, "visible": "${data.link3_visible}" },
+              { "type": "TextInput", "name": "p_link4", "input-type": "text", "label": "${data.l_link4}", "helper-text": "${data.link4_helper}", "required": false, "visible": "${data.link4_visible}" },
               {
                 "type": "Footer",
                 "label": "${data.l_next}",
                 "on-click-action": {
                   "name": "data_exchange",
-                  "payload": { "work_photos": "${form.work_photos}", "p_link1": "${form.p_link1}", "p_link2": "${form.p_link2}", "p_link3": "${form.p_link3}" }
+                  "payload": { "work_photos": "${form.work_photos}", "p_link1": "${form.p_link1}", "p_link2": "${form.p_link2}", "p_link3": "${form.p_link3}", "p_link4": "${form.p_link4}" }
                 }
               }
             ]
