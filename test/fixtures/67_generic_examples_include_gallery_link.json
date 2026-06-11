@@ -1,0 +1,22 @@
+{
+  "name": "generic-examples-include-gallery-link",
+  "description": "User wants a website and names a generic trade (gym), then asks for examples. For the `generic` fallback the bot must send the screenshot AND also include the pixiebot.co/examples gallery link in the text so the user can browse our range. Regression for: generic only ever sent a single bytecoffee screenshot, never the gallery page.",
+  "channel": "whatsapp",
+  "turns": [
+    {
+      "user": "i want a website",
+      "expect": {
+        "state": "SALES_CHAT"
+      }
+    },
+    {
+      "user": "i run a gym, can you show me some examples?",
+      "expect": {
+        "state": "SALES_CHAT",
+        "metadata.websiteDemoTriggered": "*missing*",
+        "sent_kind_contains": "image",
+        "reply_contains": "pixiebot.co/examples"
+      }
+    }
+  ]
+}

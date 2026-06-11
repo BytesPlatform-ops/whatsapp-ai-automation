@@ -1,0 +1,27 @@
+{
+  "name": "portfolio-trade-shows-example-no-trigger",
+  "description": "User says they want a website, then names their trade ('portfolio website') with NO business name. Bot must do Stage 2 — show a portfolio example (screenshot + a *.pixiebot.co demo URL) and STAY in SALES_CHAT. It must NOT fire [TRIGGER_WEBSITE_DEMO] or jump to 'what's your business name?' on trade-alone. Regression for: LLM over-triggered on bare trade, skipped the example, and dumped the user straight into WEB_COLLECT_NAME.",
+  "channel": "whatsapp",
+  "turns": [
+    {
+      "user": "i want to create a website",
+      "expect": {
+        "state": "SALES_CHAT"
+      }
+    },
+    {
+      "user": "its a portfolio website",
+      "expect": {
+        "state": "SALES_CHAT",
+        "state_not": "WEB_COLLECT_NAME",
+        "metadata.websiteDemoTriggered": "*missing*",
+        "sent_kind_contains": "image",
+        "reply_contains": "pixiebot.co",
+        "reply_not_contains": [
+          "Let's build it",
+          "business name"
+        ]
+      }
+    }
+  ]
+}
