@@ -29,11 +29,11 @@ export const TOOLS: ToolDefinition[] = [
   {
     slug: 'trust-badge-generator',
     title: 'Free Trust Badge Generator for Online Stores',
-    h1: 'Pixie Trust Badge Generator',
+    h1: 'Trust Badge Generator',
     shortName: 'Trust Badge Generator',
     tagline: 'Generate trust badges for your online store in seconds.',
     metaDescription:
-      'Use this free trust badge generator to create guarantee, secure checkout, and shipping badges for your store. No signup, instant export.',
+      'Create guarantee, secure-checkout, and free-shipping trust badges for your store in seconds. Free trust badge generator — export PNG or SVG, no signup.',
     keywords: [
       'trust badge generator',
       'ecommerce trust badges',
@@ -92,12 +92,12 @@ export const TOOLS: ToolDefinition[] = [
   },
   {
     slug: 'ambigram-generator',
-    title: 'Free Ambigram Generator — Make Ambigrams Fast',
-    h1: 'Pixie Ambigram Generator',
+    title: 'Ambigram Generator — Words That Read Upside Down',
+    h1: 'Ambigram Generator',
     shortName: 'Ambigram Generator',
     tagline: 'Create ambigram designs that read the same upside down.',
     metaDescription:
-      'Create your own design with this free ambigram generator. Type any word and get an ambigram that reads the same upside down. No signup.',
+      'Type any word and get an ambigram that reads the same upside down. Free ambigram generator for tattoos, logos, and designs — no signup needed.',
     keywords: [
       'ambigram generator',
       'ambigram maker',
@@ -156,12 +156,12 @@ export const TOOLS: ToolDefinition[] = [
   },
   {
     slug: 'superscript-generator',
-    title: 'Superscript Generator — Make Superscript Text',
-    h1: 'Pixie Superscript Generator',
+    title: 'Superscript Generator — Copy Raised Text Free',
+    h1: 'Superscript Generator',
     shortName: 'Superscript Generator',
     tagline: 'Convert any text to superscript characters instantly.',
     metaDescription:
-      'Turn any text into superscript with this free superscript generator. Copy and paste small raised characters anywhere. No signup needed.',
+      'Turn any text into superscript and copy raised characters anywhere — exponents, footnotes, or bios. Free superscript generator, no signup needed.',
     keywords: [
       'superscript generator',
       'superscript text',
@@ -220,12 +220,12 @@ export const TOOLS: ToolDefinition[] = [
   },
   {
     slug: 'subscript-generator',
-    title: 'Subscript Generator — Make Subscript Text Free',
-    h1: 'Pixie Subscript Generator',
+    title: 'Subscript Generator — Copy Lowered Text Free',
+    h1: 'Subscript Generator',
     shortName: 'Subscript Generator',
     tagline: 'Convert any text to subscript characters instantly.',
     metaDescription:
-      'Convert text to subscript with this free subscript generator. Copy and paste small lowered characters anywhere online. No signup needed.',
+      'Convert text to subscript and copy small lowered characters anywhere — formulas, footnotes, or chats. Free subscript generator, no signup needed.',
     keywords: [
       'subscript generator',
       'subscript text',
@@ -285,11 +285,11 @@ export const TOOLS: ToolDefinition[] = [
   {
     slug: 'mortgage-calculator',
     title: 'Free Mortgage Calculator — Monthly Payments',
-    h1: 'Pixie Mortgage Calculator',
+    h1: 'Mortgage Calculator',
     shortName: 'Mortgage Calculator',
     tagline: 'Calculate your monthly mortgage payment and full amortization.',
     metaDescription:
-      'Estimate your monthly home loan payment with this free mortgage calculator. Enter price, rate, and term to see your payment instantly.',
+      'Estimate your monthly home loan payment in seconds. Enter price, down payment, rate, and term to see principal and interest. Free, no signup.',
     keywords: [
       'mortgage calculator',
       'mortgage payment calculator',
@@ -348,12 +348,12 @@ export const TOOLS: ToolDefinition[] = [
   },
   {
     slug: 'midpoint-calculator',
-    title: 'Midpoint Calculator — Find the Midpoint Fast',
-    h1: 'Pixie Midpoint Calculator',
+    title: 'Midpoint Calculator — Find the Midpoint of Two Points',
+    h1: 'Midpoint Calculator',
     shortName: 'Midpoint Calculator',
     tagline: 'Find the midpoint between two coordinates with steps.',
     metaDescription:
-      'Find the midpoint between two points with this free midpoint calculator. Enter your coordinates and get the exact midpoint instantly.',
+      'Find the exact midpoint between two coordinates instantly. Enter (x1, y1) and (x2, y2) to get the midpoint formula result. Free, no signup.',
     keywords: [
       'midpoint calculator',
       'midpoint formula',
@@ -412,12 +412,12 @@ export const TOOLS: ToolDefinition[] = [
   },
   {
     slug: 'ap-chem-score-calculator',
-    title: 'AP Chem Score Calculator — Predict Your Score',
+    title: 'AP Chem Score Calculator — Predict Your 1-5 Score',
     h1: 'AP Chemistry Score Calculator',
     shortName: 'AP Chem Score Calculator',
     tagline: 'Predict your AP Chemistry score from practice exam results.',
     metaDescription:
-      'Estimate your AP Chemistry exam result with this free AP Chem score calculator. Enter your raw points to see your predicted 1-5 score.',
+      'Estimate your AP Chemistry exam score before results day. Enter your multiple-choice and free-response points to see a predicted 1-5. Free, no signup.',
     keywords: [
       'ap chemistry score calculator',
       'ap chem score predictor',
@@ -477,11 +477,11 @@ export const TOOLS: ToolDefinition[] = [
   {
     slug: 'pool-salt-calculator',
     title: 'Pool Salt Calculator — How Much Salt to Add',
-    h1: 'Pixie Pool Salt Calculator',
+    h1: 'Pool Salt Calculator',
     shortName: 'Pool Salt Calculator',
     tagline: 'Calculate exactly how much salt your saltwater pool needs.',
     metaDescription:
-      'Find out how much salt your pool needs with this free pool salt calculator. Enter pool size and current level for the exact amount.',
+      'Find out exactly how much salt your saltwater pool needs. Enter pool volume and current salt level to get the pounds to add. Free, no signup.',
     keywords: [
       'pool salt calculator',
       'saltwater pool calculator',
@@ -541,11 +541,11 @@ export const TOOLS: ToolDefinition[] = [
   {
     slug: 'share-incentive-plan-calculator',
     title: 'Share Incentive Plan Calculator for UK SIPs',
-    h1: 'Pixie Share Incentive Plan (SIP) Calculator',
+    h1: 'Share Incentive Plan (SIP) Calculator',
     shortName: 'SIP Calculator',
     tagline: 'Calculate your UK Share Incentive Plan tax savings.',
     metaDescription:
-      'Work out the value and tax savings of your shares with this free share incentive plan calculator for UK SIP employee share schemes.',
+      'Work out the value and tax savings of your UK SIP shares. Free share incentive plan calculator covering partnership, matching, and free shares. No signup.',
     keywords: [
       'share incentive plan calculator',
       'sip calculator uk',
@@ -604,12 +604,12 @@ export const TOOLS: ToolDefinition[] = [
   },
   {
     slug: 'half-birthday-calculator',
-    title: 'Half Birthday Calculator — Find Your Half Day',
-    h1: 'Pixie Half Birthday Calculator',
+    title: 'Half Birthday Calculator — Find Your Half Birthday',
+    h1: 'Half Birthday Calculator',
     shortName: 'Half Birthday Calculator',
     tagline: 'Find your half birthday — exactly 6 months from your birth date.',
     metaDescription:
-      'Find your exact half birthday with this free half birthday calculator. Enter your birth date to see the day you turn another half year.',
+      'Find your exact half birthday in one click. Enter your birth date and see the day you turn another half year older. Free, no signup.',
     keywords: [
       'half birthday calculator',
       'half birthday',
@@ -668,12 +668,12 @@ export const TOOLS: ToolDefinition[] = [
   },
   {
     slug: 'ap-bio-score-calculator',
-    title: 'AP Bio Score Calculator — Predict Your Score',
+    title: 'AP Bio Score Calculator — Predict Your 1-5 Score',
     h1: 'AP Biology Score Calculator',
     shortName: 'AP Bio Score Calculator',
     tagline: 'Predict your AP Biology score from practice exam results.',
     metaDescription:
-      'Estimate your AP Biology exam result with this free AP Bio score calculator. Enter your raw points to see your predicted 1-5 score.',
+      'Estimate your AP Biology exam score before results day. Enter your multiple-choice and free-response points to see a predicted 1-5. Free, no signup.',
     keywords: ['ap bio score calculator', 'ap biology score calculator', 'ap bio score predictor', 'ap biology curve', 'ap bio exam score'],
     category: 'Calculator',
     emoji: '🧬',
@@ -717,12 +717,12 @@ export const TOOLS: ToolDefinition[] = [
   },
   {
     slug: 'ap-calc-ab-score-calculator',
-    title: 'AP Calc AB Score Calculator — Predict Score',
+    title: 'AP Calc AB Score Calculator — Predict 1-5 Score',
     h1: 'AP Calculus AB Score Calculator',
     shortName: 'AP Calc AB Score Calculator',
     tagline: 'Predict your AP Calculus AB score from practice exam results.',
     metaDescription:
-      'Estimate your AP Calculus AB result with this free AP Calc AB score calculator. Enter your raw points to see your predicted 1-5 score.',
+      'Estimate your AP Calculus AB exam score before results day. Enter your multiple-choice and free-response points to see a predicted 1-5. Free, no signup.',
     keywords: ['ap calc ab score calculator', 'ap calculus ab score', 'ap calc ab predictor', 'ap calculus ab curve', 'ap calc score'],
     category: 'Calculator',
     emoji: '∫',
@@ -766,12 +766,12 @@ export const TOOLS: ToolDefinition[] = [
   },
   {
     slug: 'ap-psych-score-calculator',
-    title: 'AP Psych Score Calculator — Predict Your Score',
+    title: 'AP Psych Score Calculator — Predict Your 1-5 Score',
     h1: 'AP Psychology Score Calculator',
     shortName: 'AP Psych Score Calculator',
     tagline: 'Predict your AP Psychology score from practice exam results.',
     metaDescription:
-      'Estimate your AP Psychology result with this free AP Psych score calculator. Enter your raw points to see your predicted 1-5 score.',
+      'Estimate your AP Psychology exam score before results day. Enter your multiple-choice and free-response points to see a predicted 1-5. Free, no signup.',
     keywords: ['ap psych score calculator', 'ap psychology score', 'ap psych predictor', 'ap psychology curve', 'ap psych exam score'],
     category: 'Calculator',
     emoji: '🧠',
@@ -820,7 +820,7 @@ export const TOOLS: ToolDefinition[] = [
     shortName: 'Calculator Bacalaureat',
     tagline: 'Calculează media de absolvire a examenului de bacalaureat.',
     metaDescription:
-      'Folosește acest calculator Bacalaureat gratuit pentru a afla media ta la BAC. Introdu notele de la fiecare probă și vezi rezultatul.',
+      'Calculează-ți media la Bacalaureat în câteva secunde. Introdu notele de la fiecare probă și află instant rezultatul final. Gratuit, fără cont.',
     keywords: ['calculator bacalaureat', 'media bacalaureat', 'calcul bacalaureat', 'nota bacalaureat', 'promovat bacalaureat'],
     category: 'Calculator',
     emoji: '🎓',
@@ -864,12 +864,12 @@ export const TOOLS: ToolDefinition[] = [
   },
   {
     slug: 'crosswind-calculator',
-    title: 'Crosswind Calculator for Pilots — Free Tool',
+    title: 'Crosswind Calculator — Runway Wind Component',
     h1: 'Crosswind Calculator',
     shortName: 'Crosswind Calculator',
     tagline: 'Calculate crosswind and headwind components for any runway.',
     metaDescription:
-      'Work out the crosswind component for any runway with this free crosswind calculator. Enter wind and runway heading for an instant result.',
+      'Calculate the crosswind and headwind component for any runway in seconds. Enter wind direction, speed, and runway heading. Free, no signup.',
     keywords: ['crosswind calculator', 'crosswind component calculator', 'aviation crosswind', 'headwind calculator', 'runway crosswind'],
     category: 'Calculator',
     emoji: '✈️',
@@ -918,7 +918,7 @@ export const TOOLS: ToolDefinition[] = [
     shortName: 'Dunk Calculator',
     tagline: 'Find out if you can dunk — and exactly how high you need to jump.',
     metaDescription:
-      'Find out if you can dunk with this free dunk calculator. Enter your height, reach, and vertical jump to see the rim height you can hit.',
+      'Find out if you can dunk and how high you need to jump. Enter your height, standing reach, and vertical to see the rim you can reach. Free, no signup.',
     keywords: ['dunk calculator', 'can i dunk calculator', 'vertical jump to dunk', 'how high to dunk', 'basketball dunk calculator'],
     category: 'Calculator',
     emoji: '🏀',
@@ -967,7 +967,7 @@ export const TOOLS: ToolDefinition[] = [
     shortName: 'DOTS Calculator',
     tagline: 'Score your powerlifting total across any bodyweight.',
     metaDescription:
-      'Score your powerlifting total with this free DOTS calculator. Enter bodyweight and lift total to compare strength across weight classes.',
+      'Score and compare powerlifting totals across body weights with the DOTS formula. Enter bodyweight and total to get your DOTS points. Free, no signup.',
     keywords: ['dots calculator', 'dots score calculator', 'powerlifting dots calculator', 'dots coefficient calculator', 'powerlifting score calculator'],
     category: 'Calculator',
     emoji: '🏋️',
@@ -1011,12 +1011,12 @@ export const TOOLS: ToolDefinition[] = [
   },
   {
     slug: 'middle-name-generator',
-    title: 'Middle Name Generator — Find the Right Name',
+    title: 'Middle Name Generator — Find the Perfect Middle Name',
     h1: 'Middle Name Generator',
     shortName: 'Middle Name Generator',
     tagline: 'Generate perfect middle name ideas based on first and last name.',
     metaDescription:
-      'Find the perfect middle name with this free middle name generator. Pick a first name, get matching middle name ideas instantly.',
+      'Find a middle name that flows with any first name. Enter a first name and get matching middle name ideas for boys and girls. Free, no signup.',
     keywords: ['middle name generator', 'middle name ideas', 'baby middle name', 'find middle name', 'middle name for baby'],
     category: 'Generator',
     emoji: '👶',
@@ -1060,12 +1060,12 @@ export const TOOLS: ToolDefinition[] = [
   },
   {
     slug: 'era-calculator',
-    title: 'ERA Calculator — Calculate Baseball ERA Fast',
+    title: 'ERA Calculator — Earned Run Average for Baseball',
     h1: 'ERA Calculator',
     shortName: 'ERA Calculator',
     tagline: 'Calculate a pitcher\'s earned run average in seconds.',
     metaDescription:
-      'Calculate any pitcher\'s earned run average with this free ERA calculator. Enter earned runs and innings pitched to get the exact ERA.',
+      "Calculate a pitcher's earned run average instantly. Enter earned runs and innings pitched to get an accurate ERA. Free baseball ERA calculator, no signup.",
     keywords: ['era calculator', 'earned run average calculator', 'baseball era calculator', 'how to calculate era', 'pitching era calculator'],
     category: 'Calculator',
     emoji: '⚾',
@@ -1109,12 +1109,12 @@ export const TOOLS: ToolDefinition[] = [
   },
   {
     slug: 'uma-affinity-calculator',
-    title: 'Uma Affinity Calculator — Best Inherit Pairs',
+    title: 'Uma Affinity Calculator — Best Breeding Pairs',
     h1: 'Uma Musume Affinity Calculator',
     shortName: 'Uma Affinity Calculator',
     tagline: 'Check breeding compatibility before you pick inherit parents.',
     metaDescription:
-      'Find the best parent pairs with this free Uma affinity calculator. Check Uma Musume compatibility scores before breeding your next horse.',
+      'Find the best parent pairs in Uma Musume before you breed. Check affinity and compatibility scores between two Umas in one click. Free, no signup.',
     keywords: ['uma affinity calculator', 'uma musume affinity', 'uma musume breeding', 'uma musume inherit pairs', 'pretty derby affinity'],
     category: 'Calculator',
     emoji: '🐴',
@@ -1163,7 +1163,7 @@ export const TOOLS: ToolDefinition[] = [
     shortName: 'Fancy Text Generator',
     tagline: 'Turn plain text into dozens of cool fonts you can copy and paste anywhere.',
     metaDescription:
-      'Turn plain text into cool styled fonts with this free fancy text generator. Copy and paste fancy text into Instagram, TikTok, or anywhere.',
+      'Turn plain text into 100+ cool fancy fonts you can copy and paste into Instagram, TikTok, and bios. Free fancy text generator, no signup needed.',
     keywords: ['fancy text generator', 'cool text generator', 'text fonts', 'font generator', 'cool fonts copy and paste', 'stylish text'],
     category: 'Generator',
     emoji: '✨',
@@ -1212,7 +1212,7 @@ export const TOOLS: ToolDefinition[] = [
     shortName: 'Glitch Text Generator',
     tagline: 'Create creepy zalgo and cursed glitch text with an adjustable intensity.',
     metaDescription:
-      'Create creepy distorted text with this free glitch text generator. Copy and paste Zalgo glitch text into chats, videos, or social posts.',
+      'Create creepy, distorted glitch text and copy it into chats, videos, or posts. Free glitch text generator with adjustable Zalgo intensity. No signup.',
     keywords: ['glitch text generator', 'zalgo text generator', 'cursed text generator', 'zalgo text', 'glitch text', 'creepy text'],
     category: 'Generator',
     emoji: '👾',
@@ -1256,12 +1256,12 @@ export const TOOLS: ToolDefinition[] = [
   },
   {
     slug: 'heart-symbol-generator',
-    title: 'Heart Symbol Generator — Copy Heart Symbols',
+    title: 'Heart Symbol Generator — Copy Heart Symbols & Emojis',
     h1: 'Heart Symbol Generator',
     shortName: 'Heart Symbol Generator',
     tagline: 'Tap to copy hearts, stars, and aesthetic text symbols for any platform.',
     metaDescription:
-      'Find every heart you need with this free heart symbol generator. Click any heart symbol to copy and paste it into messages or social posts.',
+      'Browse every heart symbol and heart emoji, then tap to copy and paste anywhere. Free heart symbol generator for messages, bios, and posts. No signup.',
     keywords: ['heart symbol text', 'heart text symbol', 'text symbols', 'heart symbol copy and paste', 'text emojis', 'aesthetic symbols'],
     category: 'Generator',
     emoji: '💕',
@@ -1310,7 +1310,7 @@ export const TOOLS: ToolDefinition[] = [
     shortName: 'Tiny Text Generator',
     tagline: 'Shrink your words into tiny superscript, subscript, and small-caps text.',
     metaDescription:
-      'Turn any text into tiny letters with this free tiny text generator. Copy small caps, superscript, and subscript styles for bios and chats.',
+      'Turn text into tiny letters — small caps, superscript, and subscript — then copy it into bios and chats. Free tiny text generator, no signup.',
     keywords: ['tiny text generator', 'small text', 'small text generator', 'tiny text copy and paste', 'small caps generator', 'mini text'],
     category: 'Generator',
     emoji: '🔡',
@@ -1359,7 +1359,7 @@ export const TOOLS: ToolDefinition[] = [
     shortName: 'Upside Down Text Generator',
     tagline: 'Flip your text upside down to copy and paste anywhere.',
     metaDescription:
-      'Flip any sentence with this free upside down text generator. Copy and paste backwards, mirrored text into chats, bios, and social posts.',
+      'Flip any sentence upside down and copy the mirrored text into chats, bios, and posts. Free upside down text generator — instant, no signup.',
     keywords: ['upside down text', 'upside down text generator', 'flip text', 'reverse text', 'flip text generator', 'text flipper'],
     category: 'Generator',
     emoji: '🙃',
@@ -1408,7 +1408,7 @@ export const TOOLS: ToolDefinition[] = [
     shortName: 'Invisible Text Generator',
     tagline: 'Copy invisible blank characters for empty messages, names, and bios.',
     metaDescription:
-      'Create blank usernames and empty messages with this free invisible text generator. Copy and paste invisible characters anywhere online.',
+      'Copy invisible characters and blank spaces for empty usernames, messages, and bios. Free invisible text generator that works anywhere. No signup.',
     keywords: ['invisible text', 'blank text copy paste', 'invisible character', 'empty character', 'blank space copy paste', 'invisible text generator'],
     category: 'Generator',
     emoji: '👻',
@@ -1457,7 +1457,7 @@ export const TOOLS: ToolDefinition[] = [
     shortName: 'Bold Text Generator',
     tagline: 'Make real bold text that stays bold when you copy and paste it.',
     metaDescription:
-      'Turn plain text into bold Unicode with this free bold text generator. Copy and paste bold characters into Instagram, LinkedIn, or anywhere.',
+      'Turn plain text into bold Unicode you can paste into Instagram, LinkedIn, and bios. Free bold text generator — no formatting menus, just copy and paste.',
     keywords: ['bold text', 'bold text generator', 'bold font copy and paste', 'bold text for instagram', 'bold letters', 'bold unicode'],
     category: 'Generator',
     emoji: '🅱️',
@@ -1506,7 +1506,7 @@ export const TOOLS: ToolDefinition[] = [
     shortName: 'Strikethrough Text Generator',
     tagline: 'Cross out your text with strikethrough, slash, and underline styles.',
     metaDescription:
-      'Cross out any text with this free strikethrough text generator. Copy and paste struck-through text into chats, bios, and social media posts.',
+      'Cross out text with a line through it and paste it into chats, bios, and posts. Free strikethrough text generator — copy struck-through text, no signup.',
     keywords: ['strikethrough text', 'strikethrough text generator', 'cross out text', 'strikethrough copy and paste', 'crossed out text', 'underline text'],
     category: 'Generator',
     emoji: '🚫',
@@ -1555,7 +1555,7 @@ export const TOOLS: ToolDefinition[] = [
     shortName: 'Text Summarizer',
     tagline: 'Paste any text and get a clear AI summary with key points.',
     metaDescription:
-      'Shrink long articles, emails, or notes with this free text summarizer. Paste any text and get a clear short summary in just a few seconds.',
+      'Paste long articles, emails, or notes and get a clear, short summary in seconds. Free AI text summarizer — adjust the length, no signup needed.',
     keywords: ['text summarizer', 'summarize text', 'ai summarizer', 'article summarizer', 'summary generator', 'free text summarizer'],
     category: 'Generator',
     emoji: '📝',
@@ -1599,12 +1599,12 @@ export const TOOLS: ToolDefinition[] = [
   },
   {
     slug: 'ai-text-humanizer',
-    title: 'AI Text Humanizer — Rewrite AI Text Free',
+    title: 'AI Text Humanizer — Make AI Writing Sound Human',
     h1: 'AI Text Humanizer',
     shortName: 'AI Text Humanizer',
     tagline: 'Rewrite stiff or AI-sounding text so it reads naturally human.',
     metaDescription:
-      'Make AI writing sound natural with this free AI text humanizer. Paste any AI text and get a rewritten version that reads like a real person.',
+      'Paste AI-generated text and get a natural rewrite that reads like a real person. Free AI text humanizer to soften robotic tone. No signup needed.',
     keywords: ['ai text humanizer', 'humanize ai text', 'text humanizer', 'humanize ai text free', 'ai to human text', 'make ai text sound human'],
     category: 'Generator',
     emoji: '🧑‍💻',
@@ -1648,12 +1648,12 @@ export const TOOLS: ToolDefinition[] = [
   },
   {
     slug: 'da-pa-checker',
-    title: 'Free DA PA Checker — Check Domain Authority Instantly',
-    h1: 'Pixie DA / PA Checker',
+    title: 'DA PA Checker — Check Domain & Page Authority Free',
+    h1: 'DA / PA Checker',
     shortName: 'DA / PA Checker',
     tagline: "Check any website's authority score in seconds — free, no signup.",
     metaDescription:
-      'Free DA PA checker: enter any domain to see its authority score and global rank. Instant results, no signup. Powered by the free Open PageRank dataset.',
+      "Check any website's Domain Authority and Page Authority score in seconds. Free DA PA checker tool — no signup, instant results, unlimited checks.",
     keywords: [
       'da pa checker',
       'domain authority checker',
@@ -1717,12 +1717,12 @@ export const TOOLS: ToolDefinition[] = [
   },
   {
     slug: 'zalgo-text-generator',
-    title: 'Zalgo Text Generator — Make Glitchy Cursed Text',
-    h1: 'Pixie Zalgo Text Generator',
+    title: 'Zalgo Text Generator — Creepy Glitch Text Free',
+    h1: 'Zalgo Text Generator',
     shortName: 'Zalgo Text Generator',
     tagline: 'Turn normal text into creepy, glitchy zalgo text.',
     metaDescription:
-      'Create creepy glitch text with this free zalgo text generator. Type anything, set the intensity, and copy zalgo text anywhere. No signup.',
+      'Turn normal text into creepy, glitchy zalgo text with adjustable intensity. Copy and paste it anywhere. Free zalgo text generator — no signup needed.',
     keywords: [
       'zalgo text generator',
       'zalgo text',
@@ -1781,12 +1781,12 @@ export const TOOLS: ToolDefinition[] = [
   },
   {
     slug: 'cursed-text-generator',
-    title: 'Cursed Text Generator — Creepy Glitch Text',
-    h1: 'Pixie Cursed Text Generator',
+    title: 'Cursed Text Generator — Creepy Text Effects Online',
+    h1: 'Cursed Text Generator',
     shortName: 'Cursed Text Generator',
     tagline: 'Generate creepy cursed text with one click presets.',
     metaDescription:
-      'Make eerie cursed text with this free cursed text generator. Pick a curse level and copy creepy glitch text anywhere. No signup needed.',
+      'Generate cursed, demonic-looking text with one-click presets. Copy and paste into Discord, social media, bios, or messages. Free cursed text tool, no signup.',
     keywords: [
       'cursed text generator',
       'cursed text',
@@ -1845,12 +1845,12 @@ export const TOOLS: ToolDefinition[] = [
   },
   {
     slug: 'backwards-text-generator',
-    title: 'Backwards Text Generator — Reverse Any Text',
-    h1: 'Pixie Backwards Text Generator',
+    title: 'Backwards Text Generator — Reverse Text Instantly',
+    h1: 'Backwards Text Generator',
     shortName: 'Backwards Text Generator',
     tagline: 'Reverse text by letters, words, or lines instantly.',
     metaDescription:
-      'Reverse any text with this free backwards text generator. Flip letters, word order, or lines and copy the result. No signup needed.',
+      'Reverse text by letters, words, or lines in one click. Free backwards text generator — paste your text, choose a mode, and copy the result. No signup needed.',
     keywords: [
       'backwards text generator',
       'reverse text',
@@ -1909,12 +1909,12 @@ export const TOOLS: ToolDefinition[] = [
   },
   {
     slug: 'cool-text-generator',
-    title: 'Cool Text Generator — Make Cool Text Logos Free',
-    h1: 'Pixie Cool Text Generator',
+    title: 'Cool Text Generator — Neon, 3D & Gradient Text Logos',
+    h1: 'Cool Text Generator',
     shortName: 'Cool Text Generator',
     tagline: 'Design cool text logos with neon, gradient, and 3D styles.',
     metaDescription:
-      'Create cool text logos with this free cool text generator. Pick neon, gradient, chrome, or 3D styles and download a transparent PNG. No signup.',
+      'Design cool text logos with neon, gradient, and 3D styles. Free online cool text generator — create stylized lettering for thumbnails, bios, and profiles.',
     keywords: [
       'cool text generator',
       'cool text',
@@ -1973,12 +1973,12 @@ export const TOOLS: ToolDefinition[] = [
   },
   {
     slug: 'compare-text',
-    title: 'Compare Text — Free Text Difference Checker',
-    h1: 'Pixie Compare Text Tool',
+    title: 'Compare Text — Spot Differences Between Two Texts',
+    h1: 'Compare Text Tool',
     shortName: 'Compare Text',
     tagline: 'Spot every difference between two blocks of text.',
     metaDescription:
-      'Compare two texts and highlight every difference with this free text compare tool. See added and removed lines instantly. No signup, fully private.',
+      'Paste two blocks of text and instantly see every difference highlighted. Free text comparison tool — no signup, no install, works in your browser.',
     keywords: [
       'compare text',
       'text compare',
@@ -2037,12 +2037,12 @@ export const TOOLS: ToolDefinition[] = [
   },
   {
     slug: 'pdf-to-text',
-    title: 'PDF to Text — Free PDF Text Extractor',
-    h1: 'Pixie PDF to Text Converter',
+    title: 'PDF to Text — Extract Text from Any PDF Free',
+    h1: 'PDF to Text Converter',
     shortName: 'PDF to Text',
     tagline: 'Extract text from any PDF right in your browser.',
     metaDescription:
-      'Extract text from any PDF with this free PDF to text converter. No upload, no signup — your file stays in your browser. Copy or edit the result.',
+      'Extract text from any PDF file right in your browser — no upload to a server, no signup required. Free PDF to text converter that works instantly.',
     keywords: [
       'pdf to text',
       'pdf to text converter',
@@ -2101,12 +2101,12 @@ export const TOOLS: ToolDefinition[] = [
   },
   {
     slug: 'image-to-text',
-    title: 'Image to Text — Free OCR to Extract Text',
-    h1: 'Pixie Image to Text (OCR)',
+    title: 'Image to Text — Free Online OCR Tool',
+    h1: 'Image to Text (OCR)',
     shortName: 'Image to Text',
     tagline: 'Extract text from any image with free in-browser OCR.',
     metaDescription:
-      'Extract text from images with this free image to text OCR tool. Drop a photo or screenshot and copy the text. No upload, no signup, fully private.',
+      'Extract text from any image using free in-browser OCR. Upload a photo, screenshot, or scan and get editable text in seconds. No signup, no file upload limits.',
     keywords: [
       'extract text from image',
       'image to text',
@@ -2165,12 +2165,12 @@ export const TOOLS: ToolDefinition[] = [
   },
   {
     slug: 'text-to-speech',
-    title: 'Text to Speech — Free Text to Voice Reader',
-    h1: 'Pixie Text to Speech',
+    title: 'Text to Speech — Free Online TTS Tool',
+    h1: 'Text to Speech',
     shortName: 'Text to Speech',
     tagline: 'Turn any text into natural spoken audio, free.',
     metaDescription:
-      'Convert text to speech free with this online text to voice reader. Pick a voice, adjust speed and pitch, and listen instantly. No signup needed.',
+      'Convert any text to natural-sounding speech for free. Listen in your browser or download the audio. No signup needed — free text to speech tool online.',
     keywords: [
       'text to speech',
       'text to voice',
@@ -2229,12 +2229,12 @@ export const TOOLS: ToolDefinition[] = [
   },
   {
     slug: 'audio-to-text',
-    title: 'Audio to Text — Free Audio Transcription',
-    h1: 'Pixie Audio to Text',
+    title: 'Audio to Text — Transcribe Audio Free Online',
+    h1: 'Audio to Text',
     shortName: 'Audio to Text',
     tagline: 'Transcribe audio recordings into text in minutes.',
     metaDescription:
-      'Transcribe audio to text with this free audio to text converter. Upload a recording in any language and get an accurate transcript you can copy.',
+      'Transcribe audio recordings into accurate text in minutes. Upload any audio file and get a full transcript. Free audio to text converter — no signup needed.',
     keywords: [
       'audio to text',
       'audio to text converter',
@@ -2299,11 +2299,11 @@ export const TOOLS: ToolDefinition[] = [
   {
     slug: 'random-food-generator',
     title: 'Random Food Generator — What Should I Eat?',
-    h1: 'Pixie Random Food Generator',
+    h1: 'Random Food Generator',
     shortName: 'Random Food Generator',
     tagline: 'Can\'t decide what to eat? Let the generator pick.',
     metaDescription:
-      'Stuck on what to eat? This free random food generator picks a meal or snack for you. Filter by breakfast, lunch, dinner, or dessert. No signup.',
+      "Can't decide what to eat? Our free random food generator picks a meal or snack for you. Filter by breakfast, lunch, dinner, dessert, or snack. No signup.",
     keywords: [
       'random food generator',
       'what should i eat',
@@ -2353,12 +2353,12 @@ export const TOOLS: ToolDefinition[] = [
   },
   {
     slug: 'random-emoji-generator',
-    title: 'Random Emoji Generator — Pick Random Emojis',
-    h1: 'Pixie Random Emoji Generator',
+    title: 'Random Emoji Generator — Pick Random Emojis Free',
+    h1: 'Random Emoji Generator',
     shortName: 'Random Emoji Generator',
     tagline: 'Generate random emojis to copy and paste anywhere.',
     metaDescription:
-      'Generate random emojis with this free random emoji generator. Pick a category and count, then copy and paste anywhere. No signup needed.',
+      'Generate random emojis by category and count, then copy and paste anywhere. Pick from smileys, animals, food, hearts, and more. Free, no signup.',
     keywords: [
       'random emoji generator',
       'random emoji',
@@ -2408,12 +2408,12 @@ export const TOOLS: ToolDefinition[] = [
   },
   {
     slug: 'xbox-gamertag-generator',
-    title: 'Xbox Gamertag Generator — Cool Gamertag Ideas',
-    h1: 'Pixie Xbox Gamertag Generator',
+    title: 'Xbox Gamertag Generator — Cool Username Ideas',
+    h1: 'Xbox Gamertag Generator',
     shortName: 'Xbox Gamertag Generator',
     tagline: 'Generate cool gamertag and username ideas instantly.',
     metaDescription:
-      'Generate cool Xbox gamertags and gaming usernames with this free gamertag generator. Add numbers, leetspeak, and styling. No signup needed.',
+      'Generate unique, cool Xbox gamertag and username ideas instantly. Free online tool — no signup, no install. Find a gamertag that actually sounds good.',
     keywords: [
       'xbox gamertag generator',
       'gamertag generator',
@@ -2463,12 +2463,12 @@ export const TOOLS: ToolDefinition[] = [
   },
   {
     slug: 'viking-name-generator',
-    title: 'Viking Name Generator — Norse Name Ideas',
-    h1: 'Pixie Viking Name Generator',
+    title: 'Viking Name Generator — Norse Names for Warriors',
+    h1: 'Viking Name Generator',
     shortName: 'Viking Name Generator',
     tagline: 'Generate authentic-sounding Norse Viking names.',
     metaDescription:
-      'Generate Viking and Norse name ideas with this free Viking name generator. Get first names and earned bynames like Ragnar Bloodaxe. No signup.',
+      'Generate authentic-sounding Norse Viking names for characters, games, or fun. Tap once for a name, keep going until you find the perfect one. Free, no signup.',
     keywords: [
       'viking name generator',
       'norse name generator',
@@ -2518,12 +2518,12 @@ export const TOOLS: ToolDefinition[] = [
   },
   {
     slug: 'superhero-name-generator',
-    title: 'Superhero Name Generator — Hero Name Ideas',
-    h1: 'Pixie Superhero Name Generator',
+    title: 'Superhero Name Generator — Epic Hero & Villain Names',
+    h1: 'Superhero Name Generator',
     shortName: 'Superhero Name Generator',
     tagline: 'Generate epic superhero names and alter egos.',
     metaDescription:
-      'Generate epic superhero names with this free superhero name generator. Get hero aliases like The Crimson Falcon or Midnight Striker. No signup.',
+      'Generate epic superhero names and alter egos in seconds. Great for comics, games, costumes, and creative writing. Free superhero name generator, no signup.',
     keywords: [
       'superhero name generator',
       'generate a superhero name',
@@ -2573,12 +2573,12 @@ export const TOOLS: ToolDefinition[] = [
   },
   {
     slug: 'speech-bubble-meme-generator',
-    title: 'Speech Bubble Meme Generator — Add a Bubble',
-    h1: 'Pixie Speech Bubble Meme Generator',
+    title: 'Speech Bubble Meme Generator — Add Bubbles to Photos',
+    h1: 'Speech Bubble Meme Generator',
     shortName: 'Speech Bubble Meme Generator',
     tagline: 'Add a classic reaction speech bubble to any image.',
     metaDescription:
-      'Add a reaction speech bubble to any image with this free speech bubble meme generator. Upload, position the tail, add text, and download a PNG.',
+      'Add a classic white speech bubble to any photo and create reaction memes instantly. Free in-browser meme generator — upload, customize, and download. No signup.',
     keywords: [
       'speech bubble meme generator',
       'speech bubble generator',
@@ -2628,12 +2628,12 @@ export const TOOLS: ToolDefinition[] = [
   },
   {
     slug: 'fire-text-generator',
-    title: 'Fire Text Generator — Make Flaming Text Free',
-    h1: 'Pixie Fire Text Generator',
+    title: 'Fire Text Generator — Flame & Burning Text Effects',
+    h1: 'Fire Text Generator',
     shortName: 'Fire Text Generator',
     tagline: 'Turn text into blazing fire and flame graphics.',
     metaDescription:
-      'Create blazing fire text with this free fire text generator. Pick a flame style, preview live, and download a transparent PNG. No signup needed.',
+      'Turn any text into blazing fire and flame graphics for free. Create fire text effects for thumbnails, logos, and social posts. No signup, instant results.',
     keywords: [
       'fire text generator',
       'flame text generator',
@@ -2683,12 +2683,12 @@ export const TOOLS: ToolDefinition[] = [
   },
   {
     slug: 'pirate-name-generator',
-    title: 'Pirate Name Generator — Get Your Pirate Name',
-    h1: 'Pixie Pirate Name Generator',
+    title: 'Pirate Name Generator — Swashbuckling Name Ideas',
+    h1: 'Pirate Name Generator',
     shortName: 'Pirate Name Generator',
     tagline: 'Generate swashbuckling pirate names and aliases.',
     metaDescription:
-      'Generate swashbuckling pirate names with this free pirate name generator. Get aliases like Captain Jack Blackheart. No signup needed.',
+      'Generate swashbuckling pirate names and aliases in one click. Perfect for costumes, games, and characters. Free pirate name generator — no signup needed.',
     keywords: [
       'pirate name generator',
       'pirate names',
@@ -2738,12 +2738,12 @@ export const TOOLS: ToolDefinition[] = [
   },
   {
     slug: 'anime-name-generator',
-    title: 'Anime Name Generator — Japanese Name Ideas',
-    h1: 'Pixie Anime Name Generator',
+    title: 'Anime Name Generator — Japanese Anime Character Names',
+    h1: 'Anime Name Generator',
     shortName: 'Anime Name Generator',
     tagline: 'Generate anime-style Japanese names for characters.',
     metaDescription:
-      'Generate anime-style Japanese names with this free anime name generator. Get given names and surnames for OCs and characters. No signup.',
+      'Generate anime-style Japanese names for your characters instantly. Great for OCs, fan fiction, games, and roleplay. Free anime name generator, no signup.',
     keywords: [
       'anime name generator',
       'japanese name generator',
@@ -2793,12 +2793,12 @@ export const TOOLS: ToolDefinition[] = [
   },
   {
     slug: 'mission-statement-generator',
-    title: 'Mission Statement Generator — Free & Instant',
-    h1: 'Pixie Mission Statement Generator',
+    title: 'Mission Statement Generator — Write Yours in Seconds',
+    h1: 'Mission Statement Generator',
     shortName: 'Mission Statement Generator',
     tagline: 'Write a clear company mission statement in seconds.',
     metaDescription:
-      'Write a clear mission statement with this free mission statement generator. Enter what you do, who you serve, and your values for instant options.',
+      'Write a clear, professional company mission statement in seconds. Answer a few quick questions and get a polished result instantly. Free, no signup required.',
     keywords: [
       'mission statement generator',
       'mission statement maker',
