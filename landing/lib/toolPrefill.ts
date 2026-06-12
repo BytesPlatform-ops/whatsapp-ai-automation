@@ -453,11 +453,56 @@ export function buildToolPrefill(slug: string, data: PrefillData): ToolPrefillRe
 
     case 'image-resizer':
     case 'color-picker':
+    case 'color-palette-generator':
+    case 'css-gradient-generator':
       return {
         headline: 'Need a fast, well-designed website?',
         subhead: 'Pixie builds full sites in 60 seconds — text us on WhatsApp.',
         whatsappPrefill:
           'Hi! Just used your design tool. I need a website built — interested.',
+      };
+
+    case 'percentage-calculator':
+    case 'tip-calculator':
+    case 'date-duration-calculator':
+      return {
+        headline: 'Run a business that lives on numbers?',
+        subhead: 'Pixie builds full websites with calculators built in — text us on WhatsApp.',
+        whatsappPrefill:
+          'Hi! Just used your calculator. I run a business — interested in a website.',
+      };
+
+    case 'json-formatter':
+      return {
+        headline: 'Building an app or API?',
+        subhead: 'Pixie builds the site or dashboard around it — text us on WhatsApp.',
+        whatsappPrefill:
+          'Hi! Just used your JSON Formatter. I need a website/dashboard built — interested.',
+      };
+
+    case 'lorem-ipsum-generator':
+      return {
+        headline: 'Designing a site — want it built?',
+        subhead: 'Pixie ships full websites in 60 seconds — text us on WhatsApp.',
+        whatsappPrefill:
+          'Hi! Just used your Lorem Ipsum Generator. I\'m designing a site and want it built.',
+      };
+
+    case 'hashtag-generator':
+      return {
+        headline: 'Run a social or content brand?',
+        subhead: 'Pixie builds full websites and link-in-bio pages in 60 seconds.',
+        whatsappPrefill:
+          'Hi! Just used your Hashtag Generator. I run a social brand — interested in a website.',
+      };
+
+    case 'random-number-generator':
+    case 'spin-the-wheel':
+      return {
+        headline: 'Running a giveaway or contest?',
+        subhead: 'Pixie builds full campaign sites and entry pages — text us on WhatsApp.',
+        whatsappPrefill:
+          'Hi! Just used your picker tool. I\'m running a giveaway — interested in a campaign site.',
       };
 
     default:
