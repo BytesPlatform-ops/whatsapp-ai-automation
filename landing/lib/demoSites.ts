@@ -74,6 +74,6 @@ export const DEMO_SITES: DemoSite[] = [
     "businessName": "Eleanor Hartley",
     "industry": "Graphic & Poster Designer",
     "city": "London",
-    "url": "https://eleanor-portfolio.netlify.app"
+    "url": "https://eleanor.pixiebot.co"
   }
 ];

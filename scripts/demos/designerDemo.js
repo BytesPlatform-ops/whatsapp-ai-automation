@@ -22,10 +22,10 @@ module.exports = {
   id: 'designer',
   label: 'Designer',
   static: true,
-  // Working Netlify URL. To switch to the pretty eleanor.pixiebot.co subdomain,
-  // add the CNAME (eleanor -> eleanor-portfolio.netlify.app) in pixiebot.co DNS
-  // first, then change this + demoSites.ts to https://eleanor.pixiebot.co.
-  url: 'https://eleanor-portfolio.netlify.app',
+  // Pretty subdomain — CNAME (eleanor -> eleanor-portfolio.netlify.app) is live
+  // in pixiebot.co DNS and SSL is provisioned. Raw Netlify URL still resolves:
+  // https://eleanor-portfolio.netlify.app.
+  url: 'https://eleanor.pixiebot.co',
   prompt:
     "I'm a graphic & poster designer in London. I want a portfolio site for my posters, my process, and an easy way for clients to reach me.",
   businessName: 'Eleanor Hartley',
