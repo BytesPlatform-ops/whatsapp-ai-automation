@@ -221,7 +221,8 @@ function getStyles(pc, ac, ctx = {}) {
   // Button text colour against `pc`. When pc is light, fg is dark already.
   const pcBtnFg = onPc.fg;
   return `
-:root{--pc:${pc};--ac:${ac}}*{margin:0;padding:0;box-sizing:border-box}html{scroll-behavior:smooth}body{font-family:'Inter',sans-serif;color:#1a1a2e;overflow-x:hidden}
+:root{--pc:${pc};--ac:${ac}}*{margin:0;padding:0;box-sizing:border-box}html{scroll-behavior:smooth}body{font-family:'Inter',sans-serif;color:#1a1a2e;overflow-x:hidden;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+h1,h2,h3,h4,h5,h6,.nav-b,.display{font-family:'Space Grotesk','Inter',sans-serif}
 @keyframes fadeUp{from{opacity:0;transform:translateY(40px)}to{opacity:1;transform:translateY(0)}}
 @keyframes fadeDown{from{opacity:0;transform:translateY(-30px)}to{opacity:1;transform:translateY(0)}}
 @keyframes fadeIn{from{opacity:0}to{opacity:1}}
@@ -242,18 +243,21 @@ body{animation:pageIn 0.5s ease-out}
 .rs{opacity:0;transform:scale(0.9);transition:all 0.8s cubic-bezier(0.16,1,0.3,1)}.rs.v{opacity:1;transform:scale(1)}
 .d1{transition-delay:.1s}.d2{transition-delay:.2s}.d3{transition-delay:.3s}.d4{transition-delay:.4s}.d5{transition-delay:.5s}.d6{transition-delay:.6s}.d7{transition-delay:.7s}
 .blob{border-radius:60% 40% 30% 70%/60% 30% 70% 40%;animation:morphBlob 8s ease-in-out infinite}
-.hl{transition:all 0.4s cubic-bezier(0.16,1,0.3,1)}.hl:hover{transform:translateY(-8px);box-shadow:0 25px 60px rgba(0,0,0,0.12)}
-.tilt{transition:transform 0.4s ease}.tilt:hover{transform:perspective(800px) rotateY(-4deg) rotateX(4deg) translateY(-6px);box-shadow:0 25px 60px rgba(0,0,0,0.15)}
+.hl{transition:all 0.4s cubic-bezier(0.16,1,0.3,1)}.hl:hover{transform:translateY(-8px);box-shadow:0 28px 60px -28px rgba(16,24,40,0.28),0 10px 24px -18px rgba(16,24,40,0.14)}
+.tilt{transition:transform 0.4s ease}.tilt:hover{transform:perspective(800px) rotateY(-4deg) rotateX(4deg) translateY(-6px);box-shadow:0 28px 60px -24px rgba(16,24,40,0.3)}
 .sect{padding:100px 24px;position:relative}@media(min-width:768px){.sect{padding:120px 48px}}
 .ctn{max-width:1200px;margin:0 auto}
-.btn-p{display:inline-flex;align-items:center;gap:8px;padding:16px 32px;font-size:16px;font-weight:600;color:${pcBtnFg};background:linear-gradient(135deg,${pc},${pc}dd);border:none;border-radius:50px;cursor:pointer;transition:all 0.4s cubic-bezier(0.16,1,0.3,1);text-decoration:none;position:relative;overflow:hidden}
-.btn-p::before{content:'';position:absolute;inset:0;background:linear-gradient(135deg,transparent,rgba(255,255,255,0.15),transparent);transform:translateX(-100%);transition:transform 0.6s}.btn-p:hover::before{transform:translateX(100%)}
-.btn-p:hover{transform:translateY(-3px);box-shadow:0 15px 40px ${pc}44}
-.btn-s{display:inline-flex;align-items:center;gap:8px;padding:16px 32px;font-size:16px;font-weight:600;color:${pc};background:transparent;border:2px solid ${pc};border-radius:50px;cursor:pointer;transition:all 0.4s;text-decoration:none}.btn-s:hover{background:${pc};color:#fff;transform:translateY(-3px)}
-.btn-w{display:inline-flex;align-items:center;gap:8px;padding:16px 32px;font-size:16px;font-weight:600;color:${pc};background:#fff;border:none;border-radius:50px;cursor:pointer;transition:all 0.4s cubic-bezier(0.16,1,0.3,1);text-decoration:none}.btn-w:hover{transform:translateY(-3px);box-shadow:0 15px 40px rgba(255,255,255,0.3)}
-.glow-card{position:relative;background:#fff;border-radius:20px;padding:40px 32px;border:1px solid #f0f0f0;overflow:hidden;transition:all 0.5s}
+.btn-p{display:inline-flex;align-items:center;gap:9px;padding:15px 30px;font-size:15.5px;font-weight:600;letter-spacing:0.2px;color:${pcBtnFg};background:linear-gradient(135deg,${pc},${pc}dd);border:none;border-radius:14px;cursor:pointer;transition:all 0.4s cubic-bezier(0.16,1,0.3,1);text-decoration:none;position:relative;overflow:hidden;box-shadow:0 1px 2px ${pc}33,0 10px 24px -10px ${pc}88}
+.btn-p::before{content:'';position:absolute;inset:0;background:linear-gradient(135deg,transparent,rgba(255,255,255,0.18),transparent);transform:translateX(-100%);transition:transform 0.6s}.btn-p:hover::before{transform:translateX(100%)}
+.btn-p:hover{transform:translateY(-3px);box-shadow:0 6px 14px -6px ${pc}66,0 18px 36px -12px ${pc}99}
+.btn-s{display:inline-flex;align-items:center;gap:9px;padding:13.5px 28px;font-size:15.5px;font-weight:600;letter-spacing:0.2px;color:${pc};background:transparent;border:1.5px solid ${pc}4d;border-radius:14px;cursor:pointer;transition:all 0.4s;text-decoration:none}.btn-s:hover{background:${pc};border-color:${pc};color:#fff;transform:translateY(-3px);box-shadow:0 14px 30px -12px ${pc}88}
+.btn-w{display:inline-flex;align-items:center;gap:9px;padding:15px 30px;font-size:15.5px;font-weight:600;letter-spacing:0.2px;color:${pc};background:#fff;border:none;border-radius:14px;cursor:pointer;transition:all 0.4s cubic-bezier(0.16,1,0.3,1);text-decoration:none;box-shadow:0 2px 6px rgba(16,24,40,0.12),0 12px 28px -12px rgba(16,24,40,0.4)}.btn-w:hover{transform:translateY(-3px);box-shadow:0 6px 14px rgba(16,24,40,0.14),0 20px 40px -14px rgba(16,24,40,0.5)}
+.btn-p svg,.btn-s svg,.btn-w svg,.lm svg{transition:transform 0.3s cubic-bezier(0.16,1,0.3,1)}
+.btn-p:hover svg,.btn-s:hover svg,.btn-w:hover svg,.lm:hover svg{transform:translateX(4px)}
+.lm{position:relative}.lm::after{content:'';position:absolute;left:0;bottom:-3px;width:0;height:2px;background:${pc};transition:width 0.3s cubic-bezier(0.16,1,0.3,1);border-radius:2px}.lm:hover::after{width:calc(100% - 26px)}
+.glow-card{position:relative;background:#fff;border-radius:20px;padding:40px 32px;border:1px solid #eef0f4;overflow:hidden;transition:all 0.5s;box-shadow:0 1px 2px rgba(16,24,40,0.04),0 14px 34px -22px rgba(16,24,40,0.16)}
 .glow-card::before{content:'';position:absolute;top:-2px;left:-2px;right:-2px;bottom:-2px;background:linear-gradient(135deg,${pc},${ac},${pc});border-radius:inherit;z-index:-1;opacity:0;transition:opacity 0.5s;background-size:200% 200%;animation:borderFlow 3s ease infinite}
-.glow-card:hover::before{opacity:1}.glow-card:hover{border-color:transparent;box-shadow:0 20px 60px rgba(0,0,0,0.08)}
+.glow-card:hover::before{opacity:1}.glow-card:hover{border-color:transparent;box-shadow:0 28px 64px -28px rgba(16,24,40,0.26),0 10px 24px -18px rgba(16,24,40,0.12)}
 .dot-grid{background-image:radial-gradient(circle,${pc}15 1px,transparent 1px);background-size:32px 32px;animation:gridPulse 4s ease-in-out infinite}
 .noise::after{content:'';position:absolute;inset:0;opacity:0.03;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");pointer-events:none}
 .nav{position:fixed;top:0;left:0;right:0;z-index:1000;transition:all 0.4s;padding:20px 24px}
@@ -289,9 +293,38 @@ body{animation:pageIn 0.5s ease-out}
 .faq-item.open .faq-q svg{transform:rotate(180deg)}
 .cursor-glow{position:fixed;width:300px;height:300px;border-radius:50%;background:radial-gradient(circle,${pc}08 0%,transparent 70%);pointer-events:none;z-index:0;transform:translate(-50%,-50%);transition:opacity 0.3s;opacity:0}
 .cursor-glow.active{opacity:1}
+@keyframes auroraA{0%{transform:translate(0,0) scale(1)}33%{transform:translate(9%,7%) scale(1.18)}66%{transform:translate(-7%,4%) scale(.92)}100%{transform:translate(0,0) scale(1)}}
+@keyframes auroraB{0%{transform:translate(0,0) scale(1)}33%{transform:translate(-8%,-6%) scale(1.12)}66%{transform:translate(7%,-5%) scale(1.05)}100%{transform:translate(0,0) scale(1)}}
+.aurora{position:absolute;inset:0;overflow:hidden;pointer-events:none;z-index:0}
+.aurora b{position:absolute;display:block;border-radius:50%;filter:blur(70px);opacity:.4;will-change:transform}
+.aurora .a1{width:55%;height:65%;top:-12%;right:-8%;background:${ac};animation:auroraA 19s ease-in-out infinite}
+.aurora .a2{width:50%;height:60%;bottom:-15%;left:-10%;background:${ac};animation:auroraB 24s ease-in-out infinite}
+.card-media{transition:transform .6s cubic-bezier(0.16,1,0.3,1)}
+.glow-card:hover .card-media,.hl:hover .card-media{transform:scale(1.08)}
+.ubar{background-size:200% 100%!important;animation:borderFlow 5s ease infinite}
+.btn-p,.btn-s,.btn-w{will-change:transform}
 @media(min-width:768px){.md2{grid-template-columns:1fr 1fr!important}}
 @media(max-width:640px){.mobile-1col{grid-template-columns:1fr!important}.mobile-stack{display:flex!important;flex-direction:column!important}.sect{padding:60px 16px}}
+::selection{background:${pc}33;color:#1a1a2e}
+a:focus-visible,button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible,[tabindex]:focus-visible{outline:3px solid ${ac}!important;outline-offset:2px;border-radius:6px}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.001ms!important}html{scroll-behavior:auto}.rv,.rl,.rr,.rs{opacity:1!important;transform:none!important}.blob{border-radius:50%}}
 `;
+}
+
+// ─── Mesh gradient ──────────────────────────────────────────────────────────
+// Layered radial glows over a solid brand base. Replaces flat two-stop
+// gradients on the hero + CTA bands so they read with depth instead of the
+// generic "AI template" look. Both glows are derived from the brand palette
+// (pc/ac) so it stays on-brand for any colour the user picks; the pc-coloured
+// radials reinforce the corners so the base stays dark enough for white text
+// regardless of how bright the accent is.
+function heroMesh(pc, ac) {
+  return `background-color:${pc};background-image:`
+    + `radial-gradient(at 78% 14%,${ac}66 0px,transparent 55%),`
+    + `radial-gradient(at 14% 20%,${pc}ff 0px,transparent 50%),`
+    + `radial-gradient(at 88% 86%,${ac}4d 0px,transparent 50%),`
+    + `radial-gradient(at 20% 92%,${pc}cc 0px,transparent 55%),`
+    + `linear-gradient(135deg,${pc} 0%,${pc}e6 45%,${ac}55 100%)`;
 }
 
 // ─── Script ─────────────────────────────────────────────────────────────────
@@ -319,6 +352,8 @@ if(hero)hero.addEventListener('mousemove',e=>{hero.querySelectorAll('.ps').forEa
 if(cg)document.addEventListener('mousemove',e=>{cg.style.left=e.clientX+'px';cg.style.top=e.clientY+'px';cg.classList.add('active')});
 document.querySelectorAll('.faq-q').forEach(q=>{q.addEventListener('click',()=>{const item=q.parentElement;document.querySelectorAll('.faq-item').forEach(f=>{if(f!==item)f.classList.remove('open')});item.classList.toggle('open')})});
 document.querySelectorAll('.tilt').forEach(card=>{card.addEventListener('mousemove',e=>{const r=card.getBoundingClientRect();const x=(e.clientX-r.left)/r.width;const y=(e.clientY-r.top)/r.height;card.style.transform='perspective(800px) rotateY('+(x-0.5)*8+'deg) rotateX('+((0.5-y)*8)+'deg) translateY(-6px)'});card.addEventListener('mouseleave',()=>{card.style.transform=''})});
+var reduce=window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+if(!reduce&&window.matchMedia('(hover: hover)').matches){document.querySelectorAll('.btn-p,.btn-s,.btn-w').forEach(b=>{b.addEventListener('mousemove',e=>{const r=b.getBoundingClientRect();b.style.transform='translate('+((e.clientX-r.left-r.width/2)*0.25)+'px,'+((e.clientY-r.top-r.height/2)*0.4)+'px)'});b.addEventListener('mouseleave',()=>{b.style.transform=''})})}
 </script>`;
 }
 
@@ -396,13 +431,17 @@ function wrap(c, cur, body) {
 <link rel="apple-touch-icon" href="${esc(c.logoUrl || 'https://pixiebot.co/pixie-logo.png')}">
 <script src="https://cdn.tailwindcss.com"><\/script>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
 <style>${getStyles(pc, ac, { onPc, heroPageHasLightBg })}</style></head><body>${renderActivationBanner(c)}${getNav(c,cur)}<main>${body}</main>${getFoot(c)}${getScript()}</body></html>`;
 }
 
 // ─── Arrow SVG shortcut ─────────────────────────────────────────────────────
 const ARR = '<svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 8l4 4m0 0l-4 4m4-4H3"/></svg>';
 const CHK = '<svg style="flex-shrink:0;margin-top:2px" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>';
+// Slow-drifting glow layer that makes the mesh-gradient bands feel alive.
+// Sits at z-index:0 under the content (which is z-index:10); frozen by the
+// prefers-reduced-motion rule in getStyles.
+const AURORA = '<div class="aurora"><b class="a1"></b><b class="a2"></b></div>';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // HOME PAGE
@@ -445,20 +484,20 @@ function generateHomePage(c) {
     // Prefer a real Unsplash service photo; fall back to the coloured icon tile.
     const hasImg = !!(s.image && s.image.url);
     const visual = hasImg
-      ? `<div style="width:100%;height:180px;border-radius:14px;background:#f2f2f2 url('${String(s.image.url).replace(/'/g,'%27')}') center/cover no-repeat;margin-bottom:24px"></div>`
+      ? `<div style="overflow:hidden;border-radius:14px;margin-bottom:24px"><div class="card-media" style="width:100%;height:180px;background:#f2f2f2 url('${String(s.image.url).replace(/'/g,'%27')}') center/cover no-repeat"></div></div>`
       : `<div style="width:56px;height:56px;border-radius:16px;background:linear-gradient(135deg,${pc}15,${pc}08);display:flex;align-items:center;justify-content:center;color:${pc};margin-bottom:24px;transition:all 0.4s">${getIcon(s.icon||'star')}</div>`;
     return `
     <div class="glow-card tilt rv d${(i%4)+1}">
       ${visual}
       <h3 style="font-size:20px;font-weight:700;margin-bottom:12px;color:#1a1a2e">${esc(s.title)}</h3>
       <p style="font-size:15px;line-height:1.7;color:#666;margin-bottom:20px">${esc(s.shortDescription||s.description)}</p>
-      <a href="/services" style="font-size:14px;font-weight:600;color:${pc};text-decoration:none;display:inline-flex;align-items:center;gap:6px">Learn more ${ARR}</a>
+      <a href="/services" class="lm" style="font-size:14px;font-weight:600;color:${pc};text-decoration:none;display:inline-flex;align-items:center;gap:6px">Learn more ${ARR}</a>
     </div>`;
   }).join('');
 
   const stats = (c.stats||[]).map((s,i)=>`
     <div class="rv d${i+1}" style="text-align:center">
-      <p data-count="${esc(s.number)}" style="font-size:52px;font-weight:900;background:linear-gradient(135deg,${pc},${ac});-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;line-height:1">0</p>
+      <p data-count="${esc(s.number)}" class="display" style="font-size:52px;font-weight:900;background:linear-gradient(135deg,${pc},${ac});-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;line-height:1">0</p>
       <p style="font-size:14px;color:#666;margin-top:8px;font-weight:500">${esc(s.label)}</p>
     </div>`).join('');
 
@@ -489,12 +528,19 @@ function generateHomePage(c) {
   // behind the overlay has mixed-luminance regions (e.g. bright sky + dark
   // foreground). Cheap, no extra work at render time, and perceptually
   // gentle — just enough to lift the glyphs off a noisy background.
-  const heroShadow = palette.fg === '#fff'
-    ? 'text-shadow:0 2px 18px rgba(0,0,0,0.5),0 1px 2px rgba(0,0,0,0.35)'
-    : 'text-shadow:0 1px 14px rgba(255,255,255,0.75),0 0 2px rgba(255,255,255,0.6)';
+  // Photos need a heavy shadow to lift glyphs off mixed-luminance regions; the
+  // mesh-gradient hero is clean and even, so a soft depth shadow reads better
+  // than the muddy heavy one.
+  const heroShadow = hasHeroImg
+    ? (palette.fg === '#fff'
+        ? 'text-shadow:0 2px 18px rgba(0,0,0,0.5),0 1px 2px rgba(0,0,0,0.35)'
+        : 'text-shadow:0 1px 14px rgba(255,255,255,0.75),0 0 2px rgba(255,255,255,0.6)')
+    : (palette.fg === '#fff'
+        ? 'text-shadow:0 4px 24px rgba(0,0,0,0.18)'
+        : 'text-shadow:0 1px 2px rgba(255,255,255,0.45)');
   const heroBg = hasHeroImg
     ? `background:#0a0a1a url('${c.heroImage.url.replace(/'/g, '%27')}') center/cover no-repeat`
-    : `background:linear-gradient(135deg,${pc} 0%,${pc}dd 40%,${ac}88 100%)`;
+    : heroMesh(pc, ac);
   // When there's an image, apply a stronger darkening layer so white text
   // stays readable even on bright photos (white walls, sky, beach, etc.)
   // If the palette chose dark text instead (rare but possible with a very
@@ -508,16 +554,12 @@ function generateHomePage(c) {
 
   const body = `
     <section class="hero-section" style="min-height:100vh;display:flex;align-items:center;justify-content:center;text-align:center;color:${palette.fg};position:relative;overflow:hidden;${heroBg}">
+      ${hasHeroImg ? '' : AURORA}
       <div class="noise" style="position:absolute;inset:0;pointer-events:none"></div>
       <div class="dot-grid" style="position:absolute;inset:0;pointer-events:none"></div>
       <div style="position:absolute;inset:0;overflow:hidden">
         <div class="ps blob" style="position:absolute;top:-10%;right:-5%;width:500px;height:500px;background:${ac};opacity:0.08"></div>
         <div class="ps blob" style="position:absolute;bottom:-15%;left:-10%;width:400px;height:400px;background:${palette.fg};opacity:0.06;animation-direction:reverse"></div>
-        <div class="ps" style="position:absolute;top:20%;left:10%;width:200px;height:200px;border-radius:50%;border:1px solid ${palette.border};animation:float 7s ease-in-out infinite"></div>
-        <div class="ps" style="position:absolute;bottom:30%;right:15%;width:120px;height:120px;border-radius:50%;border:1px solid ${palette.border};animation:floatSlow 9s ease-in-out infinite"></div>
-        <div style="position:absolute;top:35%;left:65%;width:6px;height:6px;background:${palette.fgMuted};border-radius:50%;animation:float 4s ease-in-out infinite"></div>
-        <div style="position:absolute;top:55%;left:25%;width:4px;height:4px;background:${palette.fgMuted};border-radius:50%;animation:floatSlow 5s ease-in-out infinite"></div>
-        <div style="position:absolute;top:70%;right:35%;width:5px;height:5px;background:${palette.fgMuted};border-radius:50%;animation:float 6s ease-in-out infinite 1s"></div>
       </div>
       ${heroOverlay}
       ${heroCredit}
@@ -543,7 +585,7 @@ function generateHomePage(c) {
       <div class="rv" style="text-align:center;margin-bottom:64px">
         <span style="display:inline-block;padding:8px 20px;border-radius:50px;font-size:13px;font-weight:600;letter-spacing:1px;text-transform:uppercase;background:${pc}10;color:${pc};margin-bottom:16px">${esc(c.labels?.secWhatWeDo||'What We Do')}</span>
         <h2 style="font-size:clamp(28px,4vw,48px);font-weight:800;color:#1a1a2e;letter-spacing:-1px">${esc(c.servicesTitle)}</h2>
-        <div style="width:60px;height:4px;border-radius:2px;background:linear-gradient(90deg,${pc},${ac});margin:20px auto 0"></div>
+        <div class="ubar" style="width:60px;height:4px;border-radius:2px;background:linear-gradient(90deg,${pc},${ac});margin:20px auto 0"></div>
       </div>
       <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(min(320px,100%),1fr));gap:28px">${services}</div>
       <div class="rv d4" style="text-align:center;margin-top:48px"><a href="/services" class="btn-p">${esc(c.labels?.btnViewServices||'View All Services')} ${ARR}</a></div>
@@ -554,7 +596,7 @@ function generateHomePage(c) {
         <div class="rl">
           <span style="display:inline-block;padding:8px 20px;border-radius:50px;font-size:13px;font-weight:600;letter-spacing:1px;text-transform:uppercase;background:${pc}10;color:${pc};margin-bottom:16px">${esc(c.labels?.secAboutUs||'About Us')}</span>
           <h2 style="font-size:clamp(28px,4vw,44px);font-weight:800;color:#1a1a2e;letter-spacing:-1px;margin-bottom:24px">${esc(c.aboutTitle)}</h2>
-          <div style="width:60px;height:4px;border-radius:2px;background:linear-gradient(90deg,${pc},${ac});margin-bottom:24px"></div>
+          <div class="ubar" style="width:60px;height:4px;border-radius:2px;background:linear-gradient(90deg,${pc},${ac});margin-bottom:24px"></div>
           <p style="font-size:17px;line-height:1.8;color:#555;margin-bottom:32px">${esc(c.aboutText)}</p>
           <a href="/about" class="btn-s">${esc(c.labels?.btnLearnMoreAboutUs||'Learn More About Us')}</a>
         </div>
@@ -585,7 +627,8 @@ function generateHomePage(c) {
       <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(min(320px,100%),1fr));gap:28px">${testimonials}</div>
     </div></section>`:''}
 
-    <section class="sect" style="background:linear-gradient(135deg,${pc} 0%,${pc}dd 50%,${ac}88 100%);color:#fff;text-align:center;position:relative;overflow:hidden">
+    <section class="sect" style="${heroMesh(pc, ac)};color:#fff;text-align:center;position:relative;overflow:hidden">
+      ${AURORA}
       <div class="noise" style="position:absolute;inset:0"></div>
       <div class="dot-grid" style="position:absolute;inset:0;opacity:0.5"></div>
       <div style="position:absolute;inset:0;overflow:hidden"><div class="blob" style="position:absolute;top:-20%;right:-10%;width:400px;height:400px;background:${ac};opacity:0.1"></div><div class="blob" style="position:absolute;bottom:-20%;left:-10%;width:350px;height:350px;background:#fff;opacity:0.05"></div></div>
@@ -674,7 +717,7 @@ function generateServicesPage(c) {
       <div style="max-width:700px;margin:0 auto">${processTimeline}</div>
     </div></section>`:''}
 
-    <section class="sect" style="background:linear-gradient(135deg,${pc},${ac}88);color:#fff;text-align:center"><div class="ctn rv">
+    <section class="sect" style="${heroMesh(pc, ac)};color:#fff;text-align:center;position:relative;overflow:hidden">${AURORA}<div class="ctn rv" style="position:relative;z-index:10">
       <h2 style="font-size:clamp(28px,4vw,44px);font-weight:900;margin-bottom:20px">${esc(c.ctaTitle)}</h2>
       <p style="font-size:18px;opacity:0.85;max-width:500px;margin:0 auto 32px">${esc(c.ctaText)}</p>
       <a href="/contact" class="btn-w">${esc(c.ctaButton)} ${ARR}</a>
@@ -696,7 +739,7 @@ function generateAboutPage(c) {
 
   const statsBar = (c.stats||[]).map((s,i)=>`
     <div class="rv d${i+1}" style="text-align:center;padding:32px">
-      <p data-count="${esc(s.number)}" style="font-size:52px;font-weight:900;color:#fff;line-height:1">0</p>
+      <p data-count="${esc(s.number)}" class="display" style="font-size:52px;font-weight:900;color:#fff;line-height:1">0</p>
       <p style="font-size:14px;color:rgba(255,255,255,0.7);margin-top:8px">${esc(s.label)}</p>
     </div>`).join('');
 
@@ -734,7 +777,7 @@ function generateAboutPage(c) {
       </div></div>
     </div></div></section>
 
-    ${(c.stats||[]).length>0?`<section style="padding:80px 24px;background:linear-gradient(135deg,${pc},${pc}dd);position:relative;overflow:hidden"><div class="noise" style="position:absolute;inset:0"></div><div class="dot-grid" style="position:absolute;inset:0;opacity:0.5"></div><div class="ctn" style="position:relative;z-index:10"><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(140px,45%),1fr));gap:16px">${statsBar}</div></div></section>`:''}
+    ${(c.stats||[]).length>0?`<section style="padding:80px 24px;${heroMesh(pc, ac)};position:relative;overflow:hidden">${AURORA}<div class="noise" style="position:absolute;inset:0"></div><div class="dot-grid" style="position:absolute;inset:0;opacity:0.5"></div><div class="ctn" style="position:relative;z-index:10"><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(140px,45%),1fr));gap:16px">${statsBar}</div></div></section>`:''}
 
     ${(c.values||[]).length>0?`<section class="sect" style="background:#fafafa"><div class="ctn">
       <div class="rv" style="text-align:center;margin-bottom:64px">
@@ -749,13 +792,13 @@ function generateAboutPage(c) {
         <div class="rl">
           <span style="display:inline-block;padding:8px 20px;border-radius:50px;font-size:13px;font-weight:600;letter-spacing:1px;text-transform:uppercase;background:${pc}10;color:${pc};margin-bottom:16px">Why Us</span>
           <h2 style="font-size:clamp(28px,4vw,44px);font-weight:800;color:#1a1a2e;letter-spacing:-1px;margin-bottom:24px">Why Choose ${esc(c.businessName)}</h2>
-          <div style="width:60px;height:4px;border-radius:2px;background:linear-gradient(90deg,${pc},${ac});margin-bottom:24px"></div>
+          <div class="ubar" style="width:60px;height:4px;border-radius:2px;background:linear-gradient(90deg,${pc},${ac});margin-bottom:24px"></div>
         </div>
         <div style="display:flex;flex-direction:column;gap:32px">${why}</div>
       </div>
     </div></section>`:''}
 
-    <section class="sect" style="background:linear-gradient(135deg,${pc},${ac}88);color:#fff;text-align:center"><div class="ctn rv">
+    <section class="sect" style="${heroMesh(pc, ac)};color:#fff;text-align:center;position:relative;overflow:hidden">${AURORA}<div class="ctn rv" style="position:relative;z-index:10">
       <h2 style="font-size:clamp(28px,4vw,44px);font-weight:900;margin-bottom:20px">Ready to Work Together?</h2>
       <p style="font-size:18px;opacity:0.85;max-width:500px;margin:0 auto 32px">Let's discuss how we can help your business grow.</p>
       <a href="/contact" class="btn-w">${esc(c.ctaButton)} ${ARR}</a>
@@ -834,7 +877,7 @@ function generateContactPage(c) {
       <div style="display:flex;flex-direction:column;gap:12px">${faqItems}</div>
     </div></section>`:''}
 
-    <section class="sect" style="background:linear-gradient(135deg,${pc},${ac}88);color:#fff;text-align:center"><div class="ctn rv">
+    <section class="sect" style="${heroMesh(pc, ac)};color:#fff;text-align:center;position:relative;overflow:hidden">${AURORA}<div class="ctn rv" style="position:relative;z-index:10">
       <h2 style="font-size:clamp(28px,4vw,44px);font-weight:900;margin-bottom:20px">${esc(c.ctaTitle)}</h2>
       <p style="font-size:18px;opacity:0.85;max-width:500px;margin:0 auto 32px">${esc(c.ctaText)}</p>
       ${c.contactEmail?`<a href="mailto:${esc(c.contactEmail)}" class="btn-w">${esc(c.ctaButton)} ${ARR}</a>`:''}
