@@ -135,7 +135,7 @@ export function PixieMobileRoleExperience({ reducedMotion }: { reducedMotion: bo
         />
       ))}
 
-      {railVisible && <MobileProgressRail activeIndex={activeIndex} onSelect={scrollToIndex} />}
+      {railVisible && <MobileProgressRail items={MOBILE_ROLES} activeIndex={activeIndex} onSelect={scrollToIndex} />}
 
       {/* Footer landing — mobile uses the static normal Pixie (no flight). */}
       <PixieFooter />

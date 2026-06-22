@@ -5,14 +5,37 @@ import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { motion, AnimatePresence, type Variants } from 'framer-motion';
 import { hexToRgbString, getReadableButtonText, interpolateColor } from '../../mascot-role-hero/colorUtils';
-import { MOBILE_ROLES } from './mobileContent';
+import { MOBILE_ROLES, type MobileRole } from './mobileContent';
+import { NORMAL_FORM, INTRO } from '../roleData';
+import { INTRO_THEME } from '../themeMap';
 import { MobileTopBar } from './MobileTopBar';
 import { MobileMenuOverlay } from './MobileMenuOverlay';
 import { MobileProgressRail } from './MobileProgressRail';
 import { PixieFooter } from '@/components/sections/PixieFooter';
 
-// Avatar entry direction per role: strictly alternating left/right (Core too).
-const DIRS = [-1, 1, -1, 1, -1, 1];
+// First/main mobile screen — mirrors the desktop intro: the NORMAL Pixie avatar
+// + the headline hero. After it, the role-changing flow begins (greeter → …).
+const INTRO_SCENE: MobileRole = {
+  id: 'intro',
+  label: 'Pixie',
+  badge: INTRO.eyebrow,
+  headingLines: ['One AI.', 'Every role.'],
+  sub: '',
+  primaryCta: 'Join Pixie',
+  secondaryCta: '',
+  href: '/join-pixie',
+  chips: ['Builds', 'Markets', 'Answers'],
+  image: NORMAL_FORM.image,
+  accent: INTRO_THEME.accent,
+  soft: INTRO_THEME.soft,
+};
+
+// Scenes = intro hero first, then the six roles.
+const SCENES: MobileRole[] = [INTRO_SCENE, ...MOBILE_ROLES];
+
+// Avatar entry direction per scene: intro arrives centre (0); roles then
+// strictly alternate left/right (greeter left … core right).
+const DIRS = [0, -1, 1, -1, 1, -1, 1];
 const EASE = [0.65, 0, 0.35, 1] as const;
 
 /**
@@ -26,7 +49,7 @@ const EASE = [0.65, 0, 0.35, 1] as const;
  * Desktop is a separate component and is untouched.
  */
 export function MobilePinnedRoleExperience({ reducedMotion }: { reducedMotion: boolean }) {
-  const N = MOBILE_ROLES.length;
+  const N = SCENES.length;
   const rootRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
   const lastIdx = useRef(0);
@@ -40,7 +63,7 @@ export function MobilePinnedRoleExperience({ reducedMotion }: { reducedMotion: b
   // ── Theme (mirrored to :root so the top bar / menu / rail inherit it) ────
   const proxy = useRef({ p: 0 });
   const tween = useRef<ReturnType<typeof gsap.to> | null>(null);
-  const curRef = useRef(MOBILE_ROLES[0]);
+  const curRef = useRef(SCENES[0]);
 
   const writeVars = (accent: string, soft: string) => {
     const el = document.documentElement;
@@ -50,12 +73,12 @@ export function MobilePinnedRoleExperience({ reducedMotion }: { reducedMotion: b
     el.style.setProperty('--button-text', getReadableButtonText(accent));
   };
 
-  const applyTheme = (role: (typeof MOBILE_ROLES)[number]) => {
+  const applyTheme = (role: MobileRole) => {
     writeVars(role.accent, role.soft);
     curRef.current = role;
   };
 
-  const tweenTheme = (role: (typeof MOBILE_ROLES)[number]) => {
+  const tweenTheme = (role: MobileRole) => {
     if (reducedMotion) {
       applyTheme(role);
       return;
@@ -76,9 +99,9 @@ export function MobilePinnedRoleExperience({ reducedMotion }: { reducedMotion: b
     });
   };
 
-  // Preload all six avatars.
+  // Preload the normal + all six role avatars.
   useEffect(() => {
-    MOBILE_ROLES.forEach((r) => {
+    SCENES.forEach((r) => {
       const img = new Image();
       img.src = r.image;
     });
@@ -86,7 +109,7 @@ export function MobilePinnedRoleExperience({ reducedMotion }: { reducedMotion: b
 
   // Seed theme.
   useEffect(() => {
-    applyTheme(MOBILE_ROLES[0]);
+    applyTheme(SCENES[0]);
     return () => {
       tween.current?.kill();
     };
@@ -111,7 +134,7 @@ export function MobilePinnedRoleExperience({ reducedMotion }: { reducedMotion: b
           lastIdx.current = idx;
           scanKey.current += 1;
           setActiveIndex(idx);
-          tweenTheme(MOBILE_ROLES[idx]);
+          tweenTheme(SCENES[idx]);
         },
       });
     }, rootRef);
@@ -146,7 +169,7 @@ export function MobilePinnedRoleExperience({ reducedMotion }: { reducedMotion: b
     window.scrollTo({ top: target, behavior: reducedMotion ? 'auto' : 'smooth' });
   };
 
-  const role = MOBILE_ROLES[activeIndex];
+  const role = SCENES[activeIndex];
   const dir = DIRS[activeIndex];
 
   // Avatar enter/exit variants (reduced motion → opacity only).
@@ -181,7 +204,8 @@ export function MobilePinnedRoleExperience({ reducedMotion }: { reducedMotion: b
         {/* Background glow (accent + dark) — updates as --accent tweens */}
         <div aria-hidden className="m-scene-grad" />
 
-        <div className="relative z-10 mx-auto flex h-[100svh] w-full max-w-md flex-col items-center px-6 pb-[max(env(safe-area-inset-bottom),22px)] pt-[70px] text-center">
+        {/* pt clears the fixed top bar (60px) + the top progress indicators. */}
+        <div className="relative z-10 mx-auto flex h-[100svh] w-full max-w-md flex-col items-center px-6 pb-[max(env(safe-area-inset-bottom),22px)] pt-[104px] text-center">
           {/* Badge */}
           <motion.div key={`b-${activeIndex}`} className="flex shrink-0 justify-center pt-1" variants={panelV} initial="hidden" animate="show">
             <motion.span className="m-badge" variants={itemV}>{role.badge}</motion.span>
@@ -236,7 +260,7 @@ export function MobilePinnedRoleExperience({ reducedMotion }: { reducedMotion: b
       </div>
       </div>
 
-      {railVisible && <MobileProgressRail activeIndex={activeIndex} onSelect={scrollToIndex} />}
+      {railVisible && <MobileProgressRail items={SCENES} activeIndex={activeIndex} onSelect={scrollToIndex} />}
 
       {/* Footer landing — mobile uses the static normal Pixie. */}
       <PixieFooter />

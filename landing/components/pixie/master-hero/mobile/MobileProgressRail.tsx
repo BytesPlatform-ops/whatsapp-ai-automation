@@ -1,22 +1,24 @@
 'use client';
 
-import { MOBILE_ROLES } from './mobileContent';
+import type { MobileRole } from './mobileContent';
 
 /**
- * MobileProgressRail — fixed right-edge dots (one per role). Active dot
- * elongates + uses the active --accent (inherited from :root). 44px tap
- * targets; tapping scrolls to that scene.
+ * MobileProgressRail — fixed dots, one per scene (intro + roles), laid out
+ * horizontally across the TOP on mobile. Active dot elongates + uses the active
+ * --accent (inherited from :root). Tapping scrolls to that scene.
  */
 export function MobileProgressRail({
+  items,
   activeIndex,
   onSelect,
 }: {
+  items: MobileRole[];
   activeIndex: number;
   onSelect: (i: number) => void;
 }) {
   return (
     <nav className="m-rail" aria-label="Pixie roles">
-      {MOBILE_ROLES.map((role, i) => {
+      {items.map((role, i) => {
         const on = i === activeIndex;
         return (
           <button

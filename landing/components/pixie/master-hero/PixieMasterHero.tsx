@@ -214,7 +214,7 @@ export function PixieMasterHero() {
       <FlyingRobot
         positionRef={robotTrackRef}
         bobRef={robotBobRef}
-        activeId={activeId === 'intro' ? 'greeter' : activeId}
+        activeId={activeId === 'intro' ? 'normal' : activeId}
         scanKey={scanKey}
         idle={!reducedMotion}
         className="pointer-events-none absolute left-0 top-0 z-30 will-change-transform"
