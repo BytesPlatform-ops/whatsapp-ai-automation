@@ -9,7 +9,7 @@ import { IntroServiceChips } from './IntroServiceChips';
 import { RolePanel } from './RolePanel';
 import { RoleProgress } from './RoleProgress';
 import { PremiumNavbar } from './PremiumNavbar';
-import { PixieMobileRoleExperience } from './mobile/PixieMobileRoleExperience';
+import { MobilePinnedRoleExperience } from './mobile/MobilePinnedRoleExperience';
 import { JoinPixie } from '@/pixie/JoinPixie';
 import { PixieFooter } from '@/components/sections/PixieFooter';
 import { FLYING_ROLES, INTRO, STUDIO_BG_SRC, NORMAL_FORM, preloadImage } from './roleData';
@@ -187,7 +187,7 @@ export function PixieMasterHero() {
 
   // ── Mobile / tablet / reduced-motion: premium mobile-native experience ───
   if (mounted && (!isDesktop || reducedMotion)) {
-    return <PixieMobileRoleExperience reducedMotion={reducedMotion} />;
+    return <MobilePinnedRoleExperience reducedMotion={reducedMotion} />;
   }
 
   // ── Desktop document-flight layout (also SSR / pre-mount default) ─────────

@@ -506,6 +506,25 @@
     animation: mobileAvatarBob 3.2s ease-in-out infinite;
     will-change: transform;
   }
+  /* Pinned single-screen experience: idle bob + one-shot scan flash on swap */
+  .mh-mobile-bob {
+    animation: mobileAvatarBob 3.2s ease-in-out infinite;
+    will-change: transform;
+  }
+  .mh-mscan {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 78%;
+    height: 58%;
+    transform: translate(-50%, -50%);
+    border-radius: 50%;
+    border: 1px solid color-mix(in srgb, var(--accent) 72%, transparent);
+    box-shadow: 0 0 28px color-mix(in srgb, var(--accent) 38%, transparent), inset 0 0 22px color-mix(in srgb, var(--accent) 18%, transparent);
+    opacity: 0;
+    pointer-events: none;
+    animation: mScan 0.5s ease-out 0.1s 1 forwards;
+  }
   .m-avatar-img {
     height: clamp(260px, 45svh, 430px);
     width: auto;
@@ -782,12 +801,14 @@
     .m-menu-link,
     .m-micro,
     .m-micro-chip,
-    .m-micro-line {
+    .m-micro-line,
+    .mh-mobile-bob {
       animation: none !important;
       opacity: 1 !important;
       transform: none !important;
     }
-    .m-scan { opacity: 0 !important; } /* never show the flash ring statically */
+    .m-scan,
+    .mh-mscan { opacity: 0 !important; animation: none !important; } /* never show the flash ring statically */
     html:has(.pixie-mobile-exp) {
       scroll-snap-type: none;
     }
