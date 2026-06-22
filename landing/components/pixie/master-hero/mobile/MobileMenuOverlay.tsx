@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
-import Link from 'next/link';
+import { JoinPixie } from '@/pixie/JoinPixie';
 
 const LINKS = [
   { href: '/', label: 'Home' },
@@ -59,9 +59,8 @@ export function MobileMenuOverlay({ open, onClose }: { open: boolean; onClose: (
         ))}
       </nav>
       <div className="m-menu-cta-wrap">
-        <Link href="/join-pixie" onClick={onClose} className="m-primary-cta" style={{ width: '100%' }}>
-          Start with Pixie
-        </Link>
+        {/* Multi-colour shimmer "Join Pixie" CTA → /join-pixie onboarding. */}
+        <JoinPixie label="Join Pixie" size="lg" className="w-full" />
       </div>
     </div>
   );
