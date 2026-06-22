@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { Navigation } from '@/components/sections/Navigation';
+import { PixieMasterHero } from '@/components/pixie/master-hero';
 import { Hero } from '@/components/sections/Hero';
 import { TrustStrip } from '@/components/sections/TrustStrip';
 import { HowItWorks } from '@/components/sections/HowItWorks';
@@ -23,7 +23,13 @@ export const metadata: Metadata = {
 export default function Page() {
   return (
     <>
-      <Navigation />
+      {/* Master flying-robot hero — includes its own PremiumNavbar AND the new
+          PixieFooter as its final landing. Every Join Pixie CTA now navigates
+          to the dedicated /join-pixie onboarding page (no modal/overlay). */}
+      <PixieMasterHero />
+
+      {/* ── LEGACY WhatsApp-focused sections — preserved, not deleted. Remove
+          everything below once the redesign is signed off. ──────────────── */}
       <main>
         <Hero />
         <TrustStrip />

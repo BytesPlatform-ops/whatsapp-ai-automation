@@ -6,18 +6,48 @@
   :root {
     --font-display: 'Plus Jakarta Sans', system-ui, sans-serif;
     --font-sans: 'Inter', system-ui, sans-serif;
+
+    /* Pixie halo theme tokens — change the accent in ONE place to retheme the
+       entire mascot glow system (aura, floor ring, beam, placeholder). */
+    --pixie-accent: #34d399;
+    --pixie-accent-soft: #6ee7b7;
+    --pixie-accent-rgb: 52 211 153;
+    --pixie-glow: color-mix(in srgb, var(--pixie-accent) 60%, transparent);
+    --pixie-glow-soft: color-mix(in srgb, var(--pixie-accent-soft) 35%, transparent);
+    /* Fallback for engines without color-mix() */
+    --pixie-glow-fallback: rgba(52, 211, 153, 0.45);
+
+    /* Adaptive accent (master hero). JS tweens --accent/--accent-soft/
+       --accent-rgb/--button-text/--core-glow-opacity HERE on :root so both the
+       hero AND the fixed navbar inherit them. Glow vars derive automatically.
+       Default = intro neutral; do NOT redeclare --accent on the hero element
+       (it would shadow these root values and break the navbar theming). */
+    --accent: #8fb3c8;
+    --accent-soft: #bbd2e0;
+    --accent-rgb: 143 179 200;
+    --button-text: #06110c;
+    --core-glow-opacity: 0;
+    --accent-glow: color-mix(in srgb, var(--accent) 45%, transparent);
+    --accent-glow-soft: color-mix(in srgb, var(--accent-soft) 30%, transparent);
   }
 
   html {
     scroll-behavior: smooth;
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
+    /* Belt-and-suspenders against horizontal scroll on small screens. `clip`
+       keeps window vertical scroll (and the GSAP pin) fully intact. */
+    overflow-x: clip;
   }
 
   body {
     font-family: var(--font-sans);
     color: #0F172A;
     background: #ffffff;
+    /* Never allow horizontal scroll on any breakpoint. `clip` (not `hidden`)
+       avoids creating a scroll container, so it can't interfere with the
+       GSAP-pinned hero or sticky descendants. */
+    overflow-x: clip;
   }
 
   ::selection {
@@ -53,6 +83,649 @@
       linear-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 1px),
       linear-gradient(90deg, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
     background-size: 48px 48px;
+  }
+
+  /* ── Role Morph Hero — emerald scan ring animations ─────────────────── */
+  @keyframes rm-spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+  @keyframes rm-flash {
+    0% {
+      opacity: 0.9;
+      transform: scale(1.04);
+    }
+    100% {
+      opacity: 0;
+      transform: scale(1.18);
+    }
+  }
+  /* Mascot idle float + holographic prop drift (Mascot Role Hero) */
+  @keyframes mascot-float {
+    0%, 100% {
+      transform: translateY(0);
+    }
+    50% {
+      transform: translateY(-8px);
+    }
+  }
+  .mascot-float {
+    animation: mascot-float 5.5s ease-in-out infinite;
+  }
+  @keyframes rm-drift-a {
+    0%, 100% { transform: translate3d(0, 0, 0); }
+    50% { transform: translate3d(0, -10px, 0); }
+  }
+  @keyframes rm-drift-b {
+    0%, 100% { transform: translate3d(0, 0, 0); }
+    50% { transform: translate3d(0, 9px, 0); }
+  }
+  @keyframes rm-drift-c {
+    0%, 100% { transform: translate3d(0, 0, 0); }
+    50% { transform: translate3d(0, -6px, 0); }
+  }
+  .rm-drift-a { animation: rm-drift-a 7s ease-in-out infinite; }
+  .rm-drift-b { animation: rm-drift-b 8s ease-in-out infinite; }
+  .rm-drift-c { animation: rm-drift-c 6.5s ease-in-out infinite; }
+
+  /* ── Pixie mascot stage: halo sizing + glow animations ──────────────── */
+  .pixie-stage {
+    --mascot-width: min(40vw, 480px);
+    --pixie-aura: min(52vw, 660px);
+    --pixie-ring: min(32vw, 400px);
+
+    /* Adaptive per-role accent. GSAP tweens --accent / --accent-soft /
+       --accent-rgb / --button-text on role change; the glow vars derive from
+       them via color-mix so they recolour in lockstep. Default = role 0
+       (Concierge Gold) to avoid a flash before hydration. */
+    --accent: #e6b45a;
+    --accent-soft: #f2ce86;
+    --accent-rgb: 230 180 90;
+    --button-text: #06110c;
+    --accent-glow: color-mix(in srgb, var(--accent) 55%, transparent);
+    --accent-glow-soft: color-mix(in srgb, var(--accent-soft) 35%, transparent);
+    --core-glow-opacity: 0;
+  }
+
+  /* Subtle iridescent layer — only fades in for Core/Omnichannel mode. */
+  .pixie-iridescent-core-glow {
+    opacity: var(--core-glow-opacity, 0);
+    background:
+      radial-gradient(circle at 50% 48%, rgba(139, 124, 246, 0.18), transparent 45%),
+      radial-gradient(circle at 40% 44%, rgba(34, 211, 238, 0.12), transparent 38%),
+      radial-gradient(circle at 62% 58%, rgba(244, 114, 182, 0.1), transparent 42%);
+    background-size: 140% 140%, 130% 130%, 130% 130%;
+    animation: pixieIridescent 14s ease-in-out infinite alternate;
+  }
+  @keyframes pixieIridescent {
+    0% { background-position: 0% 0%, 100% 0%, 50% 100%; }
+    100% { background-position: 30% 20%, 60% 30%, 40% 70%; }
+  }
+  @media (max-width: 1023px) {
+    .pixie-stage {
+      --mascot-width: min(62vw, 420px);
+      --pixie-aura: min(70vw, 520px);
+      --pixie-ring: min(48vw, 320px);
+    }
+  }
+  @media (max-width: 767px) {
+    .pixie-stage {
+      --mascot-width: min(78vw, 340px);
+      --pixie-aura: min(90vw, 420px);
+      --pixie-ring: min(60vw, 280px);
+    }
+  }
+
+  .pixie-back-aura {
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 0.5;
+    filter: blur(70px);
+    will-change: transform, opacity;
+    animation: pixieAuraBreath 5s ease-in-out infinite alternate;
+  }
+  .pixie-chest-core-aura {
+    transform: translate(-50%, -50%);
+    opacity: 0.35;
+    filter: blur(45px);
+  }
+  .pixie-floor-ring {
+    will-change: transform, opacity;
+    /* offset rhythm from the aura so they don't pulse in sync */
+    animation: pixieRingShimmer 4s ease-in-out 0.6s infinite alternate;
+  }
+  .pixie-fade-in {
+    animation: pixie-fade-in 0.5s ease-out both;
+  }
+
+  @keyframes pixieAuraBreath {
+    0% { transform: translate(-50%, -50%) scale(1); opacity: 0.45; }
+    100% { transform: translate(-50%, -50%) scale(1.06); opacity: 0.6; }
+  }
+  @keyframes pixieRingShimmer {
+    0% { opacity: 0.6; transform: translateX(-50%) scaleX(1); }
+    100% { opacity: 0.9; transform: translateX(-50%) scaleX(1.025); }
+  }
+  @keyframes pixie-fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  /* ── Master flying-robot hero ───────────────────────────────────────── */
+  .pixie-master-hero {
+    /* Sizing only — accent vars live on :root so the navbar inherits them. */
+    --mascot-width: min(38vw, 460px);
+    --pixie-aura: min(50vw, 640px);
+    --pixie-ring: min(30vw, 380px);
+    --chip-r: clamp(300px, 26vw, 360px);
+    --flight: 0;
+    --intro: 1;
+    --site-max: 1200px;
+    --site-pad: clamp(1rem, 4vw, 3rem);
+  }
+  @media (min-width: 1536px) {
+    .pixie-master-hero {
+      --chip-r: 400px;
+    }
+  }
+  @media (max-width: 1023px) {
+    .pixie-master-hero {
+      --mascot-width: min(56vw, 300px);
+      --pixie-aura: min(78vw, 440px);
+      --pixie-ring: min(54vw, 300px);
+    }
+  }
+  @media (max-width: 767px) {
+    .pixie-master-hero {
+      --mascot-width: min(70vw, 280px);
+      --pixie-aura: min(88vw, 380px);
+      --pixie-ring: min(64vw, 260px);
+    }
+  }
+
+  .mh-back-aura {
+    transform: translate(-50%, -50%);
+    opacity: 0.5;
+    filter: blur(70px);
+    will-change: transform, opacity;
+    animation: pixieAuraBreath 5s ease-in-out infinite alternate;
+  }
+  .mh-robot-bob {
+    animation: mhBob 3s ease-in-out infinite;
+  }
+  .mh-ring-shimmer {
+    animation: mhRingShimmer 4s ease-in-out 0.6s infinite alternate;
+  }
+  .mh-chip-float {
+    animation: mhChipFloat 6s ease-in-out infinite;
+  }
+  .mh-scan-flash {
+    animation: mhScanFlash 0.85s ease-out 1 forwards;
+  }
+  .mh-nav-enter {
+    animation: mhNavEnter 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+  .mh-menu-link {
+    animation: mhMenuLink 0.4s ease-out both;
+  }
+  /* Animated underline for nav links (uses active accent) */
+  .mh-nav-link::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: -6px;
+    height: 1.5px;
+    background: var(--accent);
+    transform: scaleX(0);
+    transform-origin: center;
+    transition: transform 0.25s ease;
+  }
+  .mh-nav-link:hover::after {
+    transform: scaleX(1);
+  }
+
+  @keyframes mhBob {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-6px); }
+  }
+  @keyframes mhRingShimmer {
+    0% { transform: scaleX(1); }
+    100% { transform: scaleX(1.025); }
+  }
+  @keyframes mhChipFloat {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-7px); }
+  }
+  @keyframes mhScanFlash {
+    0% { opacity: 0.85; transform: translate(-50%, -50%) scale(0.96); }
+    100% { opacity: 0; transform: translate(-50%, -50%) scale(1.12); }
+  }
+  @keyframes mhNavEnter {
+    from { opacity: 0; transform: translateY(-10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes mhMenuLink {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  /* Kill continuous decorative motion when the user prefers reduced motion. */
+  @media (prefers-reduced-motion: reduce) {
+    [style*='rm-spin'],
+    .mascot-float,
+    .rm-drift-a,
+    .rm-drift-b,
+    .rm-drift-c,
+    .pixie-back-aura,
+    .pixie-chest-core-aura,
+    .pixie-floor-ring,
+    .pixie-iridescent-core-glow,
+    .mh-back-aura,
+    .mh-robot-bob,
+    .mh-ring-shimmer,
+    .mh-chip-float,
+    .mh-scan-flash {
+      animation: none !important;
+    }
+    .mh-back-aura {
+      transform: translate(-50%, -50%) !important;
+    }
+  }
+
+  /* Join Pixie CTA shimmer + dedicated onboarding page wrapper */
+  @keyframes pixie-shimmer {
+    0% { background-position: 0% 50%; }
+    100% { background-position: 200% 50%; }
+  }
+  .join-pixie-page {
+    min-height: 100svh;
+    background:
+      radial-gradient(circle at 50% 16%, rgba(102, 214, 190, 0.16), transparent 42%),
+      linear-gradient(180deg, #02070a 0%, #05080c 100%);
+    color: #f8fffb;
+    overflow-x: clip;
+  }
+
+  /* ── Pixie footer (the new website ending after Omni/Core) ──────────── */
+  .pixie-footer-float {
+    animation: pixieFooterFloat 5s ease-in-out infinite;
+    will-change: transform;
+  }
+  @keyframes pixieFooterFloat {
+    0%, 100% { transform: translate3d(0, 0, 0); }
+    50% { transform: translate3d(0, -8px, 0); }
+  }
+  .pixie-footer-aura {
+    animation: pixieFooterAura 6s ease-in-out infinite;
+  }
+  @keyframes pixieFooterAura {
+    0%, 100% { opacity: 0.55; transform: scale(0.98); }
+    50% { opacity: 0.72; transform: scale(1.03); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .pixie-footer-float,
+    .pixie-footer-aura {
+      animation: none !important;
+    }
+  }
+
+  /* ── Pixie mobile-native role experience (<lg) ──────────────────────── */
+  .pixie-mobile-exp {
+    overflow-x: clip;
+  }
+  /* Gentle page snapping only on pages that host the mobile experience. */
+  html:has(.pixie-mobile-exp) {
+    scroll-snap-type: y proximity;
+  }
+
+  .m-scene {
+    position: relative;
+    display: flex;
+    min-height: 100svh;
+    scroll-snap-align: start;
+    overflow: hidden;
+    color: #f8fffb;
+  }
+  .m-scene-grad {
+    position: absolute;
+    inset: 0;
+    background:
+      radial-gradient(circle at 50% 16%, color-mix(in srgb, var(--accent) 32%, transparent) 0%, color-mix(in srgb, var(--accent) 14%, transparent) 32%, transparent 62%),
+      linear-gradient(180deg, #071014 0%, #02070a 56%, #010304 100%);
+  }
+  .m-scene-content {
+    position: relative;
+    z-index: 1;
+    display: grid;
+    grid-template-rows: auto 1fr auto auto auto;
+    align-items: center;
+    width: 100%;
+    min-height: 100svh;
+    gap: clamp(14px, 2.4svh, 24px);
+    padding-inline: clamp(18px, 5vw, 28px);
+    padding-top: calc(env(safe-area-inset-top) + 76px);
+    padding-bottom: calc(env(safe-area-inset-bottom) + 26px);
+    text-align: center;
+  }
+
+  .m-badge {
+    display: inline-flex;
+    align-items: center;
+    min-height: 34px;
+    padding: 0 14px;
+    border-radius: 999px;
+    border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+    color: color-mix(in srgb, var(--accent-soft) 82%, white);
+    backdrop-filter: blur(14px);
+    font-size: 0.72rem;
+    letter-spacing: 0.16em;
+    font-weight: 700;
+  }
+
+  .m-avatar-stage {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 0;
+  }
+  .m-aura {
+    position: absolute;
+    inset: 6% 4%;
+    border-radius: 999px;
+    background: radial-gradient(circle, color-mix(in srgb, var(--accent) 42%, transparent) 0%, color-mix(in srgb, var(--accent) 16%, transparent) 42%, transparent 72%);
+    filter: blur(34px);
+    opacity: 0.55;
+    transform: scale(0.96);
+    pointer-events: none;
+    animation: mobileAuraBreath 4.4s ease-in-out infinite;
+  }
+  .m-scan {
+    position: absolute;
+    left: 50%;
+    top: 52%;
+    width: 76%;
+    height: 56%;
+    transform: translate(-50%, -50%);
+    border-radius: 50%;
+    border: 2px solid rgb(var(--accent-rgb) / 0.8);
+    box-shadow: 0 0 34px rgb(var(--accent-rgb) / 0.45);
+    opacity: 0;
+    pointer-events: none;
+  }
+  .m-scene.in-view .m-scan {
+    animation: mScan 0.5s ease-out 0.18s 1 forwards;
+  }
+  .m-avatar-entrance {
+    opacity: 0;
+    transform: translateY(40px) scale(0.9);
+    will-change: transform, opacity;
+  }
+  .m-scene.in-view .m-avatar-entrance {
+    animation: mAvatarIn 0.66s cubic-bezier(0.22, 1, 0.36, 1) 0.08s forwards;
+  }
+  .m-bob {
+    animation: mobileAvatarBob 3.2s ease-in-out infinite;
+    will-change: transform;
+  }
+  .m-avatar-img {
+    height: clamp(260px, 45svh, 430px);
+    width: auto;
+    max-width: min(86vw, 420px);
+    object-fit: contain;
+    filter: drop-shadow(0 26px 50px rgba(0, 0, 0, 0.5));
+    user-select: none;
+  }
+
+  .m-copy {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .m-heading {
+    font-family: var(--font-display);
+    font-size: clamp(2.1rem, 9.5vw, 3.4rem);
+    line-height: 0.98;
+    letter-spacing: -0.04em;
+    font-weight: 800;
+    color: #f8fffb;
+    text-wrap: balance;
+  }
+  .m-heading span {
+    display: block;
+  }
+  .m-sub {
+    max-width: 31rem;
+    margin-inline: auto;
+    color: rgba(248, 255, 251, 0.72);
+    font-size: clamp(1rem, 4vw, 1.1rem);
+    line-height: 1.5;
+  }
+
+  .m-cta-stack {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+  }
+  .m-primary-cta {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 52px;
+    width: min(100%, 360px);
+    border-radius: 999px;
+    background: var(--accent);
+    color: var(--button-text);
+    box-shadow: 0 18px 50px color-mix(in srgb, var(--accent) 26%, transparent), inset 0 1px 0 rgba(255, 255, 255, 0.22);
+    font-weight: 800;
+    font-size: 0.95rem;
+    transition: transform 180ms ease, filter 180ms ease;
+  }
+  .m-primary-cta:active {
+    transform: scale(0.97);
+  }
+  .m-secondary-cta {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 48px;
+    width: min(100%, 360px);
+    border-radius: 999px;
+    border: 1px solid color-mix(in srgb, var(--accent) 32%, transparent);
+    background: rgba(255, 255, 255, 0.04);
+    color: rgba(248, 255, 251, 0.86);
+    backdrop-filter: blur(14px);
+    font-weight: 600;
+    font-size: 0.9rem;
+  }
+
+  .m-chips {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 8px;
+  }
+  .m-chip {
+    display: inline-flex;
+    align-items: center;
+    min-height: 34px;
+    padding: 0 12px;
+    border-radius: 999px;
+    border: 1px solid color-mix(in srgb, var(--accent) 28%, transparent);
+    background: rgba(255, 255, 255, 0.055);
+    color: rgba(248, 255, 251, 0.8);
+    backdrop-filter: blur(14px);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    font-size: 0.78rem;
+    font-weight: 600;
+  }
+
+  /* Staggered reveal: inline animation-delay (higher specificity) sets timing;
+     we avoid the `animation` shorthand here so it isn't reset to 0. */
+  .m-reveal {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  .m-scene.in-view .m-reveal {
+    animation-name: mReveal;
+    animation-duration: 0.55s;
+    animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+    animation-fill-mode: both;
+  }
+
+  /* Progress rail */
+  .m-rail {
+    position: fixed;
+    right: max(8px, env(safe-area-inset-right));
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 60;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  .m-rail-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 40px;
+  }
+  .m-rail-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.28);
+    transition: height 260ms ease, background 260ms ease, box-shadow 260ms ease;
+  }
+  .m-rail-dot.is-active {
+    height: 26px;
+    background: var(--accent);
+    box-shadow: 0 0 20px color-mix(in srgb, var(--accent) 45%, transparent);
+  }
+
+  /* Top bar */
+  .m-topbar {
+    position: fixed;
+    inset: 0 0 auto 0;
+    height: calc(60px + env(safe-area-inset-top));
+    padding-top: env(safe-area-inset-top);
+    padding-inline: 18px;
+    z-index: 80;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    transition: background 240ms ease, border-color 240ms ease, backdrop-filter 240ms ease;
+    border-bottom: 1px solid transparent;
+  }
+  .m-topbar.is-scrolled {
+    background: rgba(2, 7, 10, 0.68);
+    backdrop-filter: blur(16px);
+    border-bottom-color: color-mix(in srgb, var(--accent) 22%, rgba(255, 255, 255, 0.08));
+  }
+  .m-icon-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    color: #fff;
+  }
+
+  /* Full-screen menu overlay */
+  .m-menu {
+    position: fixed;
+    inset: 0;
+    z-index: 90;
+    display: flex;
+    flex-direction: column;
+    background: rgba(2, 7, 10, 0.96);
+    backdrop-filter: blur(20px);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 300ms ease;
+  }
+  .m-menu.is-open {
+    opacity: 1;
+    pointer-events: auto;
+  }
+  .m-menu-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: calc(60px + env(safe-area-inset-top));
+    padding-top: env(safe-area-inset-top);
+    padding-inline: 18px;
+  }
+  .m-menu-links {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+  }
+  .m-menu-link {
+    padding: 10px;
+    font-size: 1.6rem;
+    font-weight: 700;
+    color: rgba(255, 255, 255, 0.9);
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  .m-menu.is-open .m-menu-link {
+    animation-name: mMenuLink;
+    animation-duration: 0.4s;
+    animation-timing-function: ease-out;
+    animation-fill-mode: both;
+  }
+  .m-menu-cta-wrap {
+    padding: 0 18px calc(env(safe-area-inset-bottom) + 28px);
+  }
+
+  @keyframes mobileAuraBreath {
+    0%, 100% { transform: scale(0.96); opacity: 0.46; }
+    50% { transform: scale(1.04); opacity: 0.66; }
+  }
+  @keyframes mobileAvatarBob {
+    0%, 100% { transform: translate3d(0, 0, 0); }
+    50% { transform: translate3d(0, -6px, 0); }
+  }
+  @keyframes mAvatarIn {
+    to { opacity: 1; transform: translateY(0) scale(1); }
+  }
+  @keyframes mReveal {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes mScan {
+    0% { opacity: 0.8; transform: translate(-50%, -50%) scale(0.9); }
+    100% { opacity: 0; transform: translate(-50%, -50%) scale(1.16); }
+  }
+  @keyframes mMenuLink {
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  /* Reduced motion: show everything in its final state, no looping motion. */
+  @media (prefers-reduced-motion: reduce) {
+    .m-aura,
+    .m-bob,
+    .m-scan,
+    .m-avatar-entrance,
+    .m-reveal,
+    .m-menu-link {
+      animation: none !important;
+      opacity: 1 !important;
+      transform: none !important;
+    }
+    html:has(.pixie-mobile-exp) {
+      scroll-snap-type: none;
+    }
   }
 
   /* Slim, on-brand horizontal scrollbar for the tool rails */
