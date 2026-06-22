@@ -20,30 +20,41 @@ export const metadata: Metadata = {
   alternates: { canonical: 'https://www.pixiebot.co' },
 };
 
+// TEMP: Pixie products are not live yet, so the older WhatsApp website-builder
+// story (and its floating WhatsApp button + legacy footer) is hidden from the
+// rendered site. Nothing is deleted — flip this flag back to `true` to restore
+// the full legacy page once the products ship.
+const SHOW_LEGACY_WHATSAPP_SECTIONS = false;
+
 export default function Page() {
   return (
     <>
       {/* Master flying-robot hero — includes its own PremiumNavbar AND the new
           PixieFooter as its final landing. Every Join Pixie CTA now navigates
-          to the dedicated /join-pixie onboarding page (no modal/overlay). */}
+          to the dedicated /join-pixie onboarding page (no modal/overlay).
+          With the legacy sections disabled, the site visually ends here. */}
       <PixieMasterHero />
 
-      {/* ── LEGACY WhatsApp-focused sections — preserved, not deleted. Remove
-          everything below once the redesign is signed off. ──────────────── */}
-      <main>
-        <Hero />
-        <TrustStrip />
-        <HowItWorks />
-        <ExamplesPreview />
-        <SeoAuditFeature />
-        <Services />
-        <WhyUs />
-        <Testimonials />
-        <FAQ />
-        <FinalCTA />
-      </main>
-      <Footer />
-      <FloatingWhatsApp />
+      {/* ── LEGACY WhatsApp-focused sections — preserved, not deleted. Gated
+          behind SHOW_LEGACY_WHATSAPP_SECTIONS so they restore in one edit. ── */}
+      {SHOW_LEGACY_WHATSAPP_SECTIONS && (
+        <>
+          <main>
+            <Hero />
+            <TrustStrip />
+            <HowItWorks />
+            <ExamplesPreview />
+            <SeoAuditFeature />
+            <Services />
+            <WhyUs />
+            <Testimonials />
+            <FAQ />
+            <FinalCTA />
+          </main>
+          <Footer />
+          <FloatingWhatsApp />
+        </>
+      )}
     </>
   );
 }

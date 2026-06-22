@@ -12,6 +12,11 @@ import {
  * Master-hero role content. IDs align with the flight path + theme map
  * (greeter / architect / creator / star / analyst / core). Each role's `image`
  * is its transparent Pixie "form" cutout.
+ *
+ * TEMP (products not live): `primaryCta` / `secondaryCta` / `href` below are
+ * intentionally PRESERVED but no longer drive the rendered button — RolePanel
+ * and PixieMasterHero render a single "Join Pixie" → /join-pixie CTA instead.
+ * Restore the per-role CTAs in those components once the products ship.
  */
 export interface FlyingRole {
   id: string;

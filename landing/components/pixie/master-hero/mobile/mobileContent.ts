@@ -5,6 +5,10 @@ import { FLYING_ROLES } from '../roleData';
  * Mobile-native editorial copy for the six Pixie role scenes. Reuses the
  * existing form images (by id) and the shared role theme map — no duplicated
  * assets or colours. Headlines are pre-split into lines for staggered reveal.
+ *
+ * TEMP (products not live): `primaryCta` / `secondaryCta` / `href` are
+ * PRESERVED but no longer rendered — MobilePinnedRoleExperience shows a single
+ * "Join Pixie" → /join-pixie CTA per scene. Restore per-role CTAs there later.
  */
 export interface MobileRole {
   id: string;

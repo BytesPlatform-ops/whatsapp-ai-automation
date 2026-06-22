@@ -220,8 +220,10 @@ export function MobilePinnedRoleExperience({ reducedMotion }: { reducedMotion: b
               ))}
             </h2>
 
+            {/* TEMP: products not live yet — one "Join Pixie" CTA → /join-pixie.
+                role.primaryCta / role.href stay in mobileContent.ts for restore. */}
             <motion.div className="m-cta-stack w-full" variants={itemV}>
-              <a href={role.href} className="m-primary-cta">{role.primaryCta}</a>
+              <a href="/join-pixie" className="m-primary-cta">Join Pixie</a>
             </motion.div>
 
             <motion.ul className="m-chips flex-nowrap" variants={itemV}>

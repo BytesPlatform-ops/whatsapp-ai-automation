@@ -58,9 +58,11 @@ export function PixieFooter({ landingZone = false }: { landingZone?: boolean }) 
             </p>
             <div className="mt-7 flex flex-col items-center gap-3 sm:flex-row sm:justify-center lg:justify-start">
               <JoinPixie label="Join Pixie" size="lg" />
+              {/* TEMP DISABLED: secondary "See how Pixie works" CTA hidden until products are ready.
               <a href="#" className="text-sm font-semibold text-white/70 underline-offset-4 transition-colors hover:text-white hover:underline">
                 See how Pixie works
               </a>
+              */}
             </div>
           </div>
         </div>
