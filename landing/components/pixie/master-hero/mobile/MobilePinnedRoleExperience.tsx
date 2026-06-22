@@ -11,8 +11,8 @@ import { MobileMenuOverlay } from './MobileMenuOverlay';
 import { MobileProgressRail } from './MobileProgressRail';
 import { PixieFooter } from '@/components/sections/PixieFooter';
 
-// Avatar entry direction per role: left / right alternating, Core from below.
-const DIRS = [-1, 1, -1, 1, -1, 0];
+// Avatar entry direction per role: strictly alternating left/right (Core too).
+const DIRS = [-1, 1, -1, 1, -1, 1];
 const EASE = [0.65, 0, 0.35, 1] as const;
 
 /**
@@ -187,8 +187,8 @@ export function MobilePinnedRoleExperience({ reducedMotion }: { reducedMotion: b
             <motion.span className="m-badge" variants={itemV}>{role.badge}</motion.span>
           </motion.div>
 
-          {/* Avatar stage — fills the middle (~50% of the screen) */}
-          <div className="relative my-1.5 w-full max-w-[340px] flex-1 min-h-0">
+          {/* Avatar stage — the dominant element (~half the screen) */}
+          <div className="relative my-1 w-full max-w-[400px] flex-1 min-h-0">
             <div className="m-aura" aria-hidden />
             <span key={`scan-${scanKey.current}-${activeIndex}`} aria-hidden className="mh-mscan" />
             <div className="mh-mobile-bob absolute inset-0">
@@ -210,23 +210,23 @@ export function MobilePinnedRoleExperience({ reducedMotion }: { reducedMotion: b
             </div>
           </div>
 
-          {/* Copy + CTAs + chips (keyed → re-stagger on role change) */}
-          <motion.div key={`c-${activeIndex}`} variants={panelV} initial="hidden" animate="show" className="flex w-full shrink-0 flex-col items-center gap-3">
+          {/* Copy + CTA + chips (keyed → re-stagger on role change).
+              Mobile is intentionally lean: short 2-line heading, ONE button,
+              one row of chips — no subtext — so the avatar dominates. */}
+          <motion.div key={`c-${activeIndex}`} variants={panelV} initial="hidden" animate="show" className="flex w-full shrink-0 flex-col items-center gap-3.5">
             <h2 className="m-heading">
               {role.headingLines.map((line) => (
                 <motion.span key={line} variants={itemV} style={{ display: 'block' }}>{line}</motion.span>
               ))}
             </h2>
-            <motion.p className="m-sub" variants={itemV}>{role.sub}</motion.p>
 
-            <motion.div className="m-cta-stack mt-1 w-full" variants={itemV}>
+            <motion.div className="m-cta-stack w-full" variants={itemV}>
               <a href={role.href} className="m-primary-cta">{role.primaryCta}</a>
-              <a href={role.href} className="m-secondary-cta">{role.secondaryCta}</a>
             </motion.div>
 
-            <motion.ul className="m-chips mt-0.5" variants={itemV}>
+            <motion.ul className="m-chips flex-nowrap" variants={itemV}>
               {role.chips.map((c) => (
-                <li key={c} className="m-chip">{c}</li>
+                <li key={c} className="m-chip whitespace-nowrap">{c}</li>
               ))}
             </motion.ul>
           </motion.div>
