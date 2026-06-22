@@ -84,6 +84,37 @@ export function PixieMobileRoleExperience({ reducedMotion }: { reducedMotion: bo
     return () => window.removeEventListener('scroll', onScroll);
   }, []);
 
+  // Subtle avatar parallax — each visible avatar stage shifts a few px slower
+  // than the page (max ±18px). One passive listener, rAF-throttled. Off for
+  // reduced motion. Only on-screen scenes are touched (2-3 at a time).
+  useEffect(() => {
+    if (reducedMotion) return;
+    let raf = 0;
+    const update = () => {
+      raf = 0;
+      const vh = window.innerHeight;
+      sceneRefs.current.forEach((s) => {
+        if (!s) return;
+        const r = s.getBoundingClientRect();
+        const stage = s.querySelector<HTMLElement>('.m-avatar-stage');
+        if (!stage) return;
+        if (r.bottom < -40 || r.top > vh + 40) return;
+        const offset = (vh / 2 - (r.top + r.height / 2)) / vh; // -0.5..0.5
+        const y = Math.max(-18, Math.min(18, offset * 36));
+        stage.style.transform = `translate3d(0, ${y.toFixed(1)}px, 0)`;
+      });
+    };
+    const onScroll = () => {
+      if (!raf) raf = requestAnimationFrame(update);
+    };
+    update();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => {
+      window.removeEventListener('scroll', onScroll);
+      if (raf) cancelAnimationFrame(raf);
+    };
+  }, [reducedMotion]);
+
   const scrollToIndex = (i: number) => {
     sceneRefs.current[i]?.scrollIntoView({ behavior: reducedMotion ? 'auto' : 'smooth', block: 'start' });
   };

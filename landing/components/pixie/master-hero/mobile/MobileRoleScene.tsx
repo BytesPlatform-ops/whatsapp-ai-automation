@@ -3,6 +3,8 @@
 import { forwardRef } from 'react';
 import { hexToRgbString, getReadableButtonText } from '../../mascot-role-hero/colorUtils';
 import { type MobileRole } from './mobileContent';
+import { entranceVars } from './mobileMotion';
+import { MobileRoleMicroEffects } from './MobileRoleMicroEffects';
 
 /**
  * MobileRoleScene — one full-screen, role-coloured Pixie scene. Self-themed via
@@ -43,8 +45,9 @@ export const MobileRoleScene = forwardRef<HTMLElement, { role: MobileRole; index
           {/* Avatar stage */}
           <div className="m-avatar-stage">
             <div className="m-aura" aria-hidden />
+            <MobileRoleMicroEffects roleId={role.id} />
             <div className="m-scan" aria-hidden />
-            <div className="m-avatar-entrance">
+            <div className="m-avatar-entrance" style={entranceVars(role.id)}>
               <div className="m-bob">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={role.image} alt={`Pixie AI assistant in ${role.label} form`} className="m-avatar-img" draggable={false} />
