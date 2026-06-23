@@ -373,6 +373,19 @@
   /* ── Pixie mobile-native role experience (<lg) ──────────────────────── */
   .pixie-mobile-exp {
     overflow-x: clip;
+    /* Dark base so the address-bar strip / scene transitions / pre-footer gap
+       never reveal the white <body>. The mobile stage is 100svh while the
+       scroll track uses vh — when the URL bar hides, the viewport grows past
+       the stage; this keeps that exposed strip dark instead of white. */
+    background: #02070a;
+  }
+  /* Dark the document + kill overscroll/rubber-band white on hero pages only
+     (scoped via :has — other routes keep the default light body). */
+  html:has(.pixie-master-hero),
+  html:has(.pixie-mobile-exp),
+  body:has(.pixie-master-hero),
+  body:has(.pixie-mobile-exp) {
+    background: #02070a;
   }
   /* Gentle page snapping only on pages that host the mobile experience. */
   html:has(.pixie-mobile-exp) {

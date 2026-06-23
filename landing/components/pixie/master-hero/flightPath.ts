@@ -49,7 +49,7 @@ export interface Anchor {
 }
 
 export const ANCHORS: Anchor[] = [
-  { key: 'intro', roleId: 'intro', side: 'center', yRatio: 0.33, scale: 0.82, rot: 0 },
+  { key: 'intro', roleId: 'intro', side: 'center', yRatio: 0.31, scale: 1.12, rot: 0 },
   { key: 'greeter', roleId: 'greeter', side: 'left', yRatio: 0.52, scale: 0.92, rot: -6 },
   { key: 'architect', roleId: 'architect', side: 'right', yRatio: 0.42, scale: 0.95, rot: 6 },
   { key: 'creator', roleId: 'creator', side: 'left', yRatio: 0.48, scale: 0.92, rot: -5 },
