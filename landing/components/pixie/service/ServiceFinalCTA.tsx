@@ -13,11 +13,16 @@ export function ServiceFinalCTA({
   ctaLabel,
   onPrimary,
   related,
+  avatar,
+  serviceLabel,
 }: {
   headline: string;
   ctaLabel: string;
   onPrimary: () => void;
   related: ServiceRelated[];
+  /** Role-specific Pixie avatar, repeated here as the closing visual anchor. */
+  avatar: string;
+  serviceLabel: string;
 }) {
   const reduce = useReducedMotion();
 
@@ -34,6 +39,18 @@ export function ServiceFinalCTA({
         transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
         className="relative mx-auto max-w-3xl text-center"
       >
+        <div className="relative mx-auto mb-8 h-[180px] w-[180px] sm:h-[220px] sm:w-[220px]">
+          <div
+            className="absolute inset-0 rounded-full blur-3xl"
+            style={{ background: 'radial-gradient(circle, color-mix(in srgb, var(--accent) 45%, transparent) 0%, transparent 70%)' }}
+          />
+          <img
+            src={avatar}
+            alt={`${serviceLabel} — Pixie`}
+            className="relative h-full w-full select-none object-contain mascot-float"
+            draggable={false}
+          />
+        </div>
         <h2 className="font-display text-[clamp(2rem,5vw,3.5rem)] font-extrabold leading-[1.05] tracking-tight text-white text-balance">
           {headline}
         </h2>

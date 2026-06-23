@@ -21,9 +21,9 @@ const INTRO_SCENE: MobileRole = {
   badge: INTRO.eyebrow,
   headingLines: ['One AI.', 'Every role.'],
   sub: '',
-  primaryCta: 'Join Pixie',
+  primaryCta: INTRO.primaryCta,
   secondaryCta: '',
-  href: '/join-pixie',
+  href: INTRO.primaryHref,
   chips: ['Builds', 'Markets', 'Answers'],
   image: NORMAL_FORM.image,
   accent: INTRO_THEME.accent,
@@ -244,10 +244,9 @@ export function MobilePinnedRoleExperience({ reducedMotion }: { reducedMotion: b
               ))}
             </h2>
 
-            {/* TEMP: products not live yet — one "Join Pixie" CTA → /join-pixie.
-                role.primaryCta / role.href stay in mobileContent.ts for restore. */}
+            {/* Products are live — each scene routes to its service page. */}
             <motion.div className="m-cta-stack w-full" variants={itemV}>
-              <a href="/join-pixie" className="m-primary-cta">Join Pixie</a>
+              <a href={role.href} className="m-primary-cta">{role.primaryCta}</a>
             </motion.div>
 
             <motion.ul className="m-chips flex-nowrap" variants={itemV}>

@@ -66,6 +66,8 @@ export function ServicePage({ config }: { config: ServiceConfig }) {
         ctaLabel={config.primaryCta}
         onPrimary={scrollToSetup}
         related={config.related}
+        avatar={config.avatarForm}
+        serviceLabel={config.serviceLabel}
       />
     </ServicePageLayout>
   );

@@ -56,13 +56,13 @@ export function RolePanel({
         {role.sub}
       </p>
 
-      {/* TEMP: products are not live yet. Each role panel shows a single
-          "Join Pixie" CTA → /join-pixie waitlist. The original product label
-          (role.primaryCta) and route (role.href) stay in roleData.ts and the
-          secondary CTA is commented out below — restore both once products ship. */}
+      {/* Products are live — each role panel routes to its dedicated service
+          page (role.href). Primary = product CTA, secondary = "learn more" to
+          the same page. (Previously a single "Join Pixie" → /join-pixie while
+          product pages weren't shipped.) */}
       <div className={`mt-7 flex flex-col items-center gap-3 sm:flex-row ${alignCenter ? 'sm:justify-center' : 'sm:justify-center lg:justify-start'}`}>
         <a
-          href="/join-pixie"
+          href={role.href}
           className="group relative inline-flex h-[52px] items-center justify-center gap-2 overflow-hidden rounded-full px-7 text-sm font-semibold tracking-wide transition-transform hover:-translate-y-0.5 active:scale-[0.98]"
           style={{
             background: 'var(--accent)',
@@ -71,12 +71,11 @@ export function RolePanel({
           }}
         >
           <span className="absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/40 to-transparent transition-transform duration-700 group-hover:translate-x-full" />
-          <span className="relative z-10">Join Pixie</span>
+          <span className="relative z-10">{role.primaryCta}</span>
           <svg className="relative z-10 h-4 w-4 transition-transform group-hover:translate-x-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
             <path d="M5 12h14M13 6l6 6-6 6" />
           </svg>
         </a>
-        {/* TEMP DISABLED: secondary product CTA hidden until product is ready.
         <a
           href={role.href}
           className="inline-flex h-[52px] items-center justify-center rounded-full border bg-white/[0.04] px-6 text-sm font-semibold text-white/[0.86] backdrop-blur-md transition-colors hover:text-white"
@@ -84,7 +83,6 @@ export function RolePanel({
         >
           {role.secondaryCta}
         </a>
-        */}
       </div>
 
       <ul className={`mt-7 flex flex-wrap gap-2 ${alignCenter ? 'justify-center' : 'justify-center lg:justify-start'} ${compact ? 'hidden' : ''}`}>
