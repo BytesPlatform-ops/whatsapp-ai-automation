@@ -19,6 +19,9 @@ export function useLenisGsap(enabled: boolean) {
 
     const lenis = new Lenis({ smoothWheel: true, lerp: 0.08 });
     lenisRef.current = lenis;
+    // Exposed so the loading intro can stop/reset scroll while it plays and
+    // start it again afterwards (keeps the page pinned to the top during intro).
+    (window as unknown as { __pixieLenis?: Lenis }).__pixieLenis = lenis;
 
     const onScroll = () => ScrollTrigger.update();
     lenis.on('scroll', onScroll);
@@ -31,6 +34,7 @@ export function useLenisGsap(enabled: boolean) {
       lenis.off('scroll', onScroll);
       lenis.destroy();
       lenisRef.current = null;
+      delete (window as unknown as { __pixieLenis?: Lenis }).__pixieLenis;
     };
   }, [enabled]);
 

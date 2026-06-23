@@ -1,0 +1,182 @@
+/* =========================================================================
+   Pixie cinematic loading intro — top-left → bottom-right cape flight.
+   Pure CSS for the visual layers; GSAP drives the motion (see the .tsx).
+   ========================================================================= */
+
+/* Scroll lock while the intro runs (added/removed on <html> by the component). */
+html.pixie-intro-lock,
+html.pixie-intro-lock body {
+  overflow: hidden !important;
+  touch-action: none;
+}
+
+.pixie-loading-intro {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  overflow: hidden;
+  /* Transparent: the dark cover is provided by the two gate panels below, so
+     they can slide apart to reveal the real site behind. */
+  background: transparent;
+  color: #fff;
+  /* Belt-and-suspenders: never let the overlay itself create a scrollbar. */
+  contain: strict;
+}
+
+/* ── Gate panels — the dark cover that opens to reveal the website ─────── */
+.pli-curtain {
+  position: absolute;
+  top: -1px;
+  bottom: -1px;
+  width: 51%;
+  background: linear-gradient(135deg, #02070a 0%, #05080c 100%);
+  z-index: 1;
+  will-change: transform;
+}
+.pli-curtain-left {
+  left: 0;
+  box-shadow: 1px 0 0 0 #04080c; /* hide any seam hairline at the centre */
+}
+.pli-curtain-right {
+  right: 0;
+}
+
+/* Soft mint ambience over the gates (top-left), fades at the reveal. */
+.pli-ambient {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  background: radial-gradient(circle at 12% 12%, rgba(102, 214, 190, 0.2), transparent 38%);
+  will-change: opacity;
+}
+
+/* Diagonal reveal/wipe — a soft rotated band that sweeps across the path so the
+   site behind appears to be "cut open" as Pixie travels. GSAP rotates + slides
+   it (xPercent -120 → 180). */
+.pli-wipe {
+  position: absolute;
+  inset: -30%;
+  z-index: 3;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(102, 214, 190, 0.18),
+    rgba(255, 255, 255, 0.16),
+    transparent
+  );
+  filter: blur(18px);
+  pointer-events: none;
+  will-change: transform;
+}
+
+/* Avatar carrier — GSAP moves this (x / y / scale); xPercent/yPercent -50
+   center it on the travel point. */
+.pli-avatar-wrap {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 6;
+  width: clamp(96px, 11vw, 168px);
+  pointer-events: none;
+  will-change: transform;
+}
+
+.pixie-loading-avatar {
+  display: block;
+  width: 100%;
+  height: auto;
+  opacity: 0; /* GSAP fades it in; avoids a flash at the wrong spot pre-JS */
+  transform-origin: center;
+  will-change: transform, opacity;
+  filter: drop-shadow(0 18px 36px rgba(0, 0, 0, 0.45));
+  pointer-events: none;
+}
+
+/* Soft mint charge/flight glow that travels behind the avatar. */
+.pli-glow {
+  position: absolute;
+  inset: -55%;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle,
+    rgba(102, 214, 190, 0.55) 0%,
+    rgba(102, 214, 190, 0.22) 38%,
+    transparent 70%
+  );
+  filter: blur(6px);
+  opacity: 0;
+  pointer-events: none;
+  will-change: transform, opacity;
+}
+
+/* Diagonal mint trail behind the avatar (right edge pinned at the avatar,
+   extending back up the path). GSAP rotates it to the flight angle + fades it. */
+.pli-trail {
+  position: absolute;
+  right: 50%;
+  top: 50%;
+  width: 34vw;
+  height: 3px;
+  border-radius: 999px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(102, 214, 190, 0.65),
+    rgba(255, 255, 255, 0.35),
+    transparent
+  );
+  filter: blur(8px);
+  opacity: 0;
+  transform-origin: right center;
+  pointer-events: none;
+  will-change: transform, opacity;
+}
+
+/* Landing burst at the bottom-right impact point. */
+.pli-burst {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 5;
+  width: clamp(120px, 18vw, 260px);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle,
+    rgba(102, 214, 190, 0.55) 0%,
+    rgba(167, 243, 208, 0.3) 40%,
+    transparent 72%
+  );
+  filter: blur(4px);
+  opacity: 0;
+  pointer-events: none;
+  will-change: transform, opacity;
+}
+
+/* ── Mobile: lighter avatar, shorter/softer trail ─────────────────────── */
+@media (max-width: 767px) {
+  .pli-avatar-wrap {
+    width: clamp(86px, 26vw, 124px);
+  }
+  .pli-trail {
+    width: 26vw;
+    height: 2px;
+    filter: blur(5px);
+  }
+  .pli-wipe {
+    filter: blur(12px);
+  }
+}
+
+/* Reduced motion: the component runs only a quick fade; make sure none of the
+   moving layers are visible. */
+@media (prefers-reduced-motion: reduce) {
+  .pli-wipe,
+  .pli-trail,
+  .pli-glow,
+  .pli-burst,
+  .pli-avatar-wrap {
+    display: none !important;
+  }
+}

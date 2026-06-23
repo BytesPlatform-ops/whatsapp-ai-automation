@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { PixieMasterHero } from '@/components/pixie/master-hero';
+import { PixieLoadingIntro } from '@/components/pixie/loading/PixieLoadingIntro';
 import { Hero } from '@/components/sections/Hero';
 import { TrustStrip } from '@/components/sections/TrustStrip';
 import { HowItWorks } from '@/components/sections/HowItWorks';
@@ -29,6 +30,12 @@ const SHOW_LEGACY_WHATSAPP_SECTIONS = false;
 export default function Page() {
   return (
     <>
+      {/* Cinematic one-shot loading intro (cape Pixie flies top-left →
+          bottom-right and reveals the site). Plays once per browser session,
+          fast-fades on repeat / reduced motion, then unmounts itself. Landing
+          page only — not on /join-pixie. */}
+      <PixieLoadingIntro />
+
       {/* Master flying-robot hero — includes its own PremiumNavbar AND the new
           PixieFooter as its final landing. Every Join Pixie CTA now navigates
           to the dedicated /join-pixie onboarding page (no modal/overlay).
