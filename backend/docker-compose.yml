@@ -1,0 +1,36 @@
+# Whole Pixie backend, local. `docker compose up` → api + Postgres(pgvector) + Redis.
+# Step 2 the api doesn't talk to the DBs yet; they're here so the stack is fixed
+# and steps 4–6 (rag/billing/quota) wire in without compose changes.
+
+services:
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql://pixie:pixie@db:5432/pixie
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      - db
+      - redis
+    volumes:
+      - .:/app
+
+  db:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: pixie
+      POSTGRES_PASSWORD: pixie
+      POSTGRES_DB: pixie
+    ports:
+      - "5432:5432"
+    volumes:
+      - pixie_pg:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+volumes:
+  pixie_pg:
