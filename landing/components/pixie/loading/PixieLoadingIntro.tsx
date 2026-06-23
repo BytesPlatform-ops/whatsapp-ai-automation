@@ -96,26 +96,35 @@ export function PixieLoadingIntro() {
     const trailOpacity = isMobile ? 0.65 : 0.95;
     const tf = 0.9; // flight (and reveal) start time
 
-    // "Boat cutting water": the reveal edge is a line perpendicular to the
-    // travel direction that passes just BEHIND the avatar. Driven by the avatar's
-    // live position every frame, so the website opens exactly at Pixie's wake —
-    // never faster than it travels.
+    // "Boat cutting water": the reveal edge is a V (chevron) whose apex is the
+    // bow at the avatar; the wake opens behind it in a V. Driven by the avatar's
+    // live position every frame, so the site opens exactly at Pixie's wake —
+    // never faster than it travels. The still-dark cover is the region AHEAD of
+    // the V (toward the bottom-right); the V-wedge behind the bow is revealed.
     const len = Math.hypot(endX - startX, endY - startY) || 1;
-    const wx = (endX - startX) / len; // unit vector along travel
+    const wx = (endX - startX) / len; // unit vector along travel (toward BR)
     const wy = (endY - startY) / len;
-    const ux = -wy; // perpendicular (the cut edge direction)
+    const ux = -wy; // perpendicular
     const uy = wx;
-    const margin = len * 0.1; // how far behind the avatar the cut sits
+    const margin = len * 0.03; // cut sits a hair behind the avatar
+    const TH = (40 * Math.PI) / 180; // wake half-angle (V sharpness)
+    const cosT = Math.cos(TH);
+    const sinT = Math.sin(TH);
+    // The two wake arms: out along ±u, tilted back along -w by the wake angle.
+    const a1x = ux * cosT - wx * sinT;
+    const a1y = uy * cosT - wy * sinT;
+    const a2x = -ux * cosT - wx * sinT;
+    const a2y = -uy * cosT - wy * sinT;
     const BIG = 6000;
     const coverClip = (cx: number, cy: number) => {
-      const lx = cx - wx * margin; // a point on the cut line, behind the avatar
-      const ly = cy - wy * margin;
-      const ax = lx + ux * BIG, ay = ly + uy * BIG;
-      const bx = lx - ux * BIG, by = ly - uy * BIG;
-      const cX = bx + wx * BIG, cY = by + wy * BIG;
-      const dX = ax + wx * BIG, dY = ay + wy * BIG;
-      // Quad = the still-covered half-plane AHEAD of the cut (toward bottom-right).
-      return `polygon(${ax}px ${ay}px, ${dX}px ${dY}px, ${cX}px ${cY}px, ${bx}px ${by}px)`;
+      const px = cx - wx * margin; // bow apex (just behind the avatar)
+      const py = cy - wy * margin;
+      const f1x = px + a1x * BIG, f1y = py + a1y * BIG; // wake arm 1 (far)
+      const f2x = px + a2x * BIG, f2y = py + a2y * BIG; // wake arm 2 (far)
+      const g1x = f1x + wx * BIG, g1y = f1y + wy * BIG; // pushed forward (BR)
+      const g2x = f2x + wx * BIG, g2y = f2y + wy * BIG;
+      // Pentagon = the region AHEAD of the V chevron (still-dark "water").
+      return `polygon(${px}px ${py}px, ${f1x}px ${f1y}px, ${g1x}px ${g1y}px, ${g2x}px ${g2y}px, ${f2x}px ${f2y}px)`;
     };
 
     const cover = coverRef.current!;
