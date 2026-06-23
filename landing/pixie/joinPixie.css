@@ -209,12 +209,44 @@ body:has(.join-pixie-page) {
   flex: 1 1 0%;
   overflow: hidden;
 }
+/* Mobile: guarantee the stage (and the card filling it) is always tall enough
+   for the intro/waitlist content. Without this the card shrinks to the leftover
+   viewport height — and once the mobile address bar shrinks svh, the card drops
+   below its content and the "Start swiping" button jams against the bottom edge.
+   With a floor height the button keeps its padding; short viewports just scroll
+   (page background is already Pixie-dark, so no white shows). */
+@media (max-width: 639px) {
+  .jp-stage { min-height: 524px; }
+}
 @media (min-width: 640px) {
   .jp-stage {
     height: clamp(400px, 58vh, 500px);
     width: 360px;
     flex: none;
     overflow: visible;
+  }
+  /* Desktop: the swipe stage is a fixed height (good for the draggable poster
+     cards), but the static intro/waitlist forms are taller than that and were
+     getting clipped below the card — the purple card "didn't complete" under
+     the button. When the stage holds a static card (.jp-layer), let it grow to
+     the content height (centered) so the button + gradient + rounded corners
+     finish properly. Swipe cards (.jp-active/.jp-peek) keep the fixed height. */
+  .jp-stage:has(.jp-layer) {
+    height: auto;
+    min-height: clamp(400px, 58vh, 500px);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+  }
+  .jp-stage:has(.jp-layer) .jp-layer {
+    position: relative;
+    inset: auto;
+    width: 100%;
+    height: auto;
+  }
+  .jp-stage:has(.jp-layer) .jp-intro,
+  .jp-stage:has(.jp-layer) .jp-waitlist {
+    height: auto;
   }
 }
 
@@ -553,8 +585,9 @@ body:has(.join-pixie-page) {
   background-image: linear-gradient(to bottom right, #101027, #1b1340, #2a1656);
   padding: 1.5rem;
   /* Extra breathing room below the submit button (+ device safe area) so the
-     CTA is never stuck to the card's bottom edge on mobile. */
-  padding-bottom: calc(clamp(1.5rem, 6svh, 2.75rem) + env(safe-area-inset-bottom));
+     CTA is never stuck to the card's bottom edge — the stage min-height keeps
+     enough room for space-between to seat the button above this padding. */
+  padding-bottom: calc(clamp(28px, 5svh, 44px) + env(safe-area-inset-bottom));
   box-shadow: var(--jp-shadow-card-strong);
 }
 @media (min-width: 640px) {
@@ -562,16 +595,6 @@ body:has(.join-pixie-page) {
     padding: 1.75rem;
     padding-bottom: clamp(1.75rem, 4vh, 2.5rem);
   }
-}
-/* Short phones (e.g. 375×667): the tall card + space-between leaves no slack,
-   jamming the button to the bottom. Top-align the content so the card's
-   bottom padding becomes genuine breathing room below the CTA, and tighten the
-   head a touch. Taller phones keep the balanced space-between layout. */
-@media (max-height: 700px) {
-  .jp-intro { justify-content: flex-start; }
-  .jp-intro__title { margin-top: 0.85rem; font-size: clamp(1.55rem, 6.6vw, 1.95rem); }
-  .jp-intro__sub { margin-top: 0.5rem; }
-  .jp-intro__form { margin-top: 1.25rem; }
 }
 
 .jp-intro__glow--fuchsia {
@@ -654,13 +677,15 @@ body:has(.join-pixie-page) {
   border-radius: 1rem;
   background: #fff;
   padding: 0.875rem 1.25rem;
+  min-height: 52px;
   font-size: 1rem;
   font-weight: 700;
   color: #1b1340;
   cursor: pointer;
   transition: transform 0.15s ease;
-  /* Separate the CTA from the inputs above it. */
-  margin-top: clamp(0.5rem, 2.5svh, 1rem);
+  /* Separate the CTA from the inputs above it; never let it shrink/cut. */
+  margin-top: clamp(0.75rem, 2.5svh, 1.125rem);
+  flex-shrink: 0;
 }
 .jp-submit:active { transform: scale(0.98); }
 .jp-submit__icon { width: 1.25rem; height: 1.25rem; }
