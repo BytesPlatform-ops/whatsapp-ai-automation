@@ -125,10 +125,51 @@ html.pixie-intro-lock body {
   will-change: transform, opacity;
 }
 
-/* ── Mobile: lighter avatar, shorter/softer trail ─────────────────────── */
+/* ── Mobile reveal layers (superhero upward launch) ───────────────────── */
+/* Horizontal mint reveal edge — the light band at the cover's leading edge,
+   moved up with the avatar by GSAP (y). */
+.pli-medge {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 4;
+  width: 100vw;
+  height: 3px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(102, 214, 190, 0.9),
+    rgba(255, 255, 255, 0.45),
+    transparent
+  );
+  filter: blur(8px);
+  opacity: 0;
+  pointer-events: none;
+  will-change: transform, opacity;
+}
+/* Soft vertical mint trail below the avatar (the launch exhaust). */
+.pli-mtrail {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  z-index: 3;
+  width: 26vw;
+  max-width: 130px;
+  height: 200px;
+  background: linear-gradient(to bottom, rgba(102, 214, 190, 0.4), transparent);
+  filter: blur(18px);
+  opacity: 0;
+  pointer-events: none;
+  will-change: transform, opacity;
+}
+
+/* ── Mobile: superhero avatar (portrait), softer diagonal trail unused ─── */
 @media (max-width: 767px) {
+  /* 👇 MOBILE FLYING AVATAR SIZE — yahan se chhota/bada karo.
+     clamp(min, preferred, max): min = sabse chhota, 42vw = screen ke hisaab
+     se, max = sabse bada. Bada karne ke liye teeno numbers barhao. */
   .pli-avatar-wrap {
-    width: clamp(86px, 26vw, 124px);
+    width: clamp(148px, 42vw, 204px);
   }
   .pli-trail {
     width: 30vw;
