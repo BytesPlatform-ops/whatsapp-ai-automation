@@ -15,6 +15,24 @@
 }
 
 /* =========================================================================
+   0. Onboarding page wrapper (/join-pixie)
+   The <main> previously had no background, so it inherited the white <body>
+   and exposed a white strip on mobile scroll / address-bar resize. Keep the
+   whole page Pixie-dark; scope the html/body dark via :has so other routes
+   keep their default light body.
+   ========================================================================= */
+.join-pixie-page {
+  min-height: 100svh;
+  background: #02070a;
+  color: #f8fffb;
+  overflow-x: clip;
+}
+html:has(.join-pixie-page),
+body:has(.join-pixie-page) {
+  background: #02070a;
+}
+
+/* =========================================================================
    1. Trigger button (JoinPixie.tsx)
    ========================================================================= */
 
@@ -534,9 +552,27 @@
   border-radius: var(--jp-radius-card);
   background-image: linear-gradient(to bottom right, #101027, #1b1340, #2a1656);
   padding: 1.5rem;
+  /* Extra breathing room below the submit button (+ device safe area) so the
+     CTA is never stuck to the card's bottom edge on mobile. */
+  padding-bottom: calc(clamp(1.5rem, 6svh, 2.75rem) + env(safe-area-inset-bottom));
   box-shadow: var(--jp-shadow-card-strong);
 }
-@media (min-width: 640px) { .jp-intro { padding: 1.75rem; } }
+@media (min-width: 640px) {
+  .jp-intro {
+    padding: 1.75rem;
+    padding-bottom: clamp(1.75rem, 4vh, 2.5rem);
+  }
+}
+/* Short phones (e.g. 375×667): the tall card + space-between leaves no slack,
+   jamming the button to the bottom. Top-align the content so the card's
+   bottom padding becomes genuine breathing room below the CTA, and tighten the
+   head a touch. Taller phones keep the balanced space-between layout. */
+@media (max-height: 700px) {
+  .jp-intro { justify-content: flex-start; }
+  .jp-intro__title { margin-top: 0.85rem; font-size: clamp(1.55rem, 6.6vw, 1.95rem); }
+  .jp-intro__sub { margin-top: 0.5rem; }
+  .jp-intro__form { margin-top: 1.25rem; }
+}
 
 .jp-intro__glow--fuchsia {
   position: absolute; right: -4rem; top: -5rem; pointer-events: none;
@@ -623,6 +659,8 @@
   color: #1b1340;
   cursor: pointer;
   transition: transform 0.15s ease;
+  /* Separate the CTA from the inputs above it. */
+  margin-top: clamp(0.5rem, 2.5svh, 1rem);
 }
 .jp-submit:active { transform: scale(0.98); }
 .jp-submit__icon { width: 1.25rem; height: 1.25rem; }
