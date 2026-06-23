@@ -23,51 +23,21 @@ html.pixie-intro-lock body {
   contain: strict;
 }
 
-/* ── Gate panels — the dark cover that opens to reveal the website ─────── */
-.pli-curtain {
-  position: absolute;
-  top: -1px;
-  bottom: -1px;
-  width: 51%;
-  background: linear-gradient(135deg, #02070a 0%, #05080c 100%);
-  z-index: 1;
-  will-change: transform;
-}
-.pli-curtain-left {
-  left: 0;
-  box-shadow: 1px 0 0 0 #04080c; /* hide any seam hairline at the centre */
-}
-.pli-curtain-right {
-  right: 0;
-}
-
-/* Soft mint ambience over the gates (top-left), fades at the reveal. */
-.pli-ambient {
+/* ── Progressive reveal cover ──────────────────────────────────────────
+   Dark studio backdrop (+ top-left mint) that fully covers the page, then a
+   diagonal clip-path opens it from top-left → bottom-right behind the flying
+   avatar (GSAP animates clip-path), so the site reveals in real time. */
+.pli-cover {
   position: absolute;
   inset: 0;
   z-index: 2;
+  background:
+    radial-gradient(circle at 12% 12%, rgba(102, 214, 190, 0.16), transparent 34%),
+    linear-gradient(135deg, #02070a 0%, #05080c 100%);
   pointer-events: none;
-  background: radial-gradient(circle at 12% 12%, rgba(102, 214, 190, 0.2), transparent 38%);
-  will-change: opacity;
-}
-
-/* Diagonal reveal/wipe — a soft rotated band that sweeps across the path so the
-   site behind appears to be "cut open" as Pixie travels. GSAP rotates + slides
-   it (xPercent -120 → 180). */
-.pli-wipe {
-  position: absolute;
-  inset: -30%;
-  z-index: 3;
-  background: linear-gradient(
-    90deg,
-    transparent,
-    rgba(102, 214, 190, 0.18),
-    rgba(255, 255, 255, 0.16),
-    transparent
-  );
-  filter: blur(18px);
-  pointer-events: none;
-  will-change: transform;
+  will-change: clip-path, opacity;
+  /* Initial closed state (matches COVER_CLOSED in the component). */
+  clip-path: polygon(-60% 0%, 100% -60%, 160% 100%, 0% 160%);
 }
 
 /* Avatar carrier — GSAP moves this (x / y / scale); xPercent/yPercent -50
@@ -110,20 +80,21 @@ html.pixie-intro-lock body {
   will-change: transform, opacity;
 }
 
-/* Diagonal mint trail behind the avatar (right edge pinned at the avatar,
-   extending back up the path). GSAP rotates it to the flight angle + fades it. */
+/* Diagonal glowing reveal edge — the "cutting" light that trails the avatar
+   along the flight path (right edge pinned at the avatar, extending back up the
+   path). GSAP rotates it to the flight angle + fades it in/out. */
 .pli-trail {
   position: absolute;
   right: 50%;
   top: 50%;
-  width: 34vw;
-  height: 3px;
+  width: 42vw;
+  height: 2px;
   border-radius: 999px;
   background: linear-gradient(
     90deg,
     transparent,
-    rgba(102, 214, 190, 0.65),
-    rgba(255, 255, 255, 0.35),
+    rgba(102, 214, 190, 0.9),
+    rgba(255, 255, 255, 0.55),
     transparent
   );
   filter: blur(8px);
@@ -160,19 +131,15 @@ html.pixie-intro-lock body {
     width: clamp(86px, 26vw, 124px);
   }
   .pli-trail {
-    width: 26vw;
+    width: 30vw;
     height: 2px;
     filter: blur(5px);
   }
-  .pli-wipe {
-    filter: blur(12px);
-  }
 }
 
-/* Reduced motion: the component runs only a quick fade; make sure none of the
-   moving layers are visible. */
+/* Reduced motion: the component runs only a quick fade of the cover; make sure
+   none of the moving flight layers are visible. */
 @media (prefers-reduced-motion: reduce) {
-  .pli-wipe,
   .pli-trail,
   .pli-glow,
   .pli-burst,
