@@ -12,7 +12,9 @@ the response, exactly as it will with a real model.
 
 from __future__ import annotations
 
+import asyncio
 import json
+import os
 import re
 from time import perf_counter
 
@@ -150,6 +152,56 @@ def _generic_site(tenant_id: str, brand: str) -> Site:
     )
 
 
+# --- fake outputs for the parallel HTML flow -------------------------------- #
+
+_KIT_DESIGN = {
+    "restaurant": {
+        "palette": {"primary": "#C24E2A", "accent": "#E8B04B", "bg": "#FBF6EF", "surface": "#FFFFFF", "text": "#2B1B14", "muted": "#6B5848"},
+        "fonts": {"heading": "Fraunces", "body": "Inter"}, "voice": "warm, family-run",
+        "sections": [("hero", "Headline + reserve CTA for the restaurant"), ("menu", "A few signature dishes with prices"),
+                     ("hours", "Opening hours"), ("location", "Where to find us"), ("reserve", "Book a table CTA")],
+    },
+    "trades": {
+        "palette": {"primary": "#1F6FB2", "accent": "#F4A024", "bg": "#0E1A24", "surface": "#16242F", "text": "#EAF2F8", "muted": "#9DB4C4"},
+        "fonts": {"heading": "Sora", "body": "Inter"}, "voice": "reassuring, fast, no jargon",
+        "sections": [("hero", "Emergency hook + call now"), ("services", "What we fix, as cards"),
+                     ("area", "Service area"), ("reviews", "Customer quotes"), ("call", "Call now banner")],
+    },
+    "generic": {
+        "palette": {"primary": "#6d28d9", "accent": "#9AE66E", "bg": "#0B1410", "surface": "#11201A", "text": "#EAF3EC", "muted": "#8FA89A"},
+        "fonts": {"heading": "Clash Display", "body": "Inter"}, "voice": "confident, plain-spoken",
+        "sections": [("hero", "Bold value proposition"), ("features", "What we do, as cards"),
+                     ("about", "Short about"), ("cta", "Get in touch banner")],
+    },
+}
+
+
+def _fake_brief(message: str) -> dict:
+    kind = _detect_kind(message)
+    brand = _guess_brand_name(message, kind)
+    d = _KIT_DESIGN[kind]
+    return {
+        "brand": brand, "business_type": kind, "voice": d["voice"],
+        "palette": d["palette"], "fonts": d["fonts"],
+        "sections": [{"id": sid, "type": sid, "brief": brief} for sid, brief in d["sections"]],
+    }
+
+
+def _fake_section_html(section: dict, design: dict) -> str:
+    t = section.get("type", "custom")
+    brand = design.get("brand", "the brand")
+    if t == "hero":
+        return (f'<section class="hero"><div class="wrap"><div class="eyebrow">{brand}</div>'
+                f'<h1>{section.get("brief", "A bespoke website")}</h1>'
+                f'<p style="color:var(--muted);max-width:48ch;margin:16px 0 28px">Real copy for {brand} would go here.</p>'
+                f'<a class="btn btn-primary" href="#">Get started</a></div></section>')
+    if t in ("menu", "services", "features"):
+        cards = "".join(f'<div class="card"><h3>{t.title()} {i+1}</h3><p style="color:var(--muted)">Detail for {brand}.</p></div>' for i in range(3))
+        return f'<section><div class="wrap"><h2>{t.title()}</h2><div class="grid">{cards}</div></div></section>'
+    return (f'<section><div class="wrap"><h2>{t.title()}</h2>'
+            f'<p style="color:var(--muted);max-width:60ch">{section.get("brief", "")}</p></div></section>')
+
+
 class FakeProvider:
     """Deterministic provider for local dev + tests. Implements `Provider`."""
 
@@ -157,6 +209,28 @@ class FakeProvider:
 
     async def complete(self, req: ModelRequest, *, model: str) -> ModelResult:
         t0 = perf_counter()
+
+        # Optional simulated think-time so the parallel speedup is visible in demos.
+        sim_ms = int(os.getenv("PIXIE_FAKE_LATENCY_MS", "0"))
+        if sim_ms and req.task in ("plan_site", "build_section", "build"):
+            await asyncio.sleep(sim_ms / 1000)
+
+        if req.task == "plan_site":
+            payload = _fake_brief(req.user)
+            text = json.dumps(payload)
+            latency_ms = int((perf_counter() - t0) * 1000)
+            return ModelResult(text=text, model=model, tier=req.tier,
+                               tokens_in=estimate_tokens(req.system + req.user),
+                               tokens_out=estimate_tokens(text), latency_ms=latency_ms)
+
+        if req.task == "build_section":
+            design = req.context.get("design", {})
+            section = req.context.get("section", {})
+            text = _fake_section_html(section, design)
+            latency_ms = int((perf_counter() - t0) * 1000)
+            return ModelResult(text=text, model=model, tier=req.tier,
+                               tokens_in=estimate_tokens(req.system + req.user),
+                               tokens_out=estimate_tokens(text), latency_ms=latency_ms)
 
         if req.task == "build":
             site = _build_kit(req.user, req.context.get("tenant_id", ""))

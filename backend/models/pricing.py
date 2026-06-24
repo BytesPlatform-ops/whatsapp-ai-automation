@@ -13,10 +13,10 @@ PRICING: dict[str, tuple[float, float]] = {
     "fake-small": (0.0, 0.0),
     "fake-large": (0.0, 0.0),
     "fake-embed": (0.0, 0.0),
-    # real placeholders (fill exact values when wiring the provider)
-    "gpt-5.4-nano": (0.05 / 1000, 0.40 / 1000),
-    "gpt-5.4-mini": (0.25 / 1000, 2.00 / 1000),
-    "gpt-5.4": (1.25 / 1000, 10.00 / 1000),
+    # OpenAI (USD per 1K tokens; verify against current pricing before billing)
+    "gpt-4o": (2.50 / 1000, 10.00 / 1000),
+    "gpt-4o-mini": (0.15 / 1000, 0.60 / 1000),
+    "text-embedding-3-small": (0.02 / 1000, 0.0),
 }
 
 
