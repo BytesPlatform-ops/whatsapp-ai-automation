@@ -143,6 +143,27 @@ class TestSchemaBuilder(unittest.TestCase):
         self.assertEqual(block["@type"], "Article")
         self.assertEqual(block.get("headline"), "Big Story")
 
+    def test_ai_usage_is_reported(self):
+        out = enrich_site(
+            {
+                "url": "https://ex.com/p",
+                "content": "We fix HVAC fast and well.",
+                "images": [{"src": "/logo.png"}],
+            },
+            business_type="hvac",
+        )
+        au = out["ai_usage"]
+        self.assertEqual(
+            set(au),
+            {"provider", "model", "estimated_cost", "latency_ms", "calls", "fallback"},
+        )
+        # title + description + alt are generated for this weak page.
+        self.assertGreaterEqual(au["calls"], 1)
+        self.assertIsInstance(au["estimated_cost"], float)
+        # Offline the model layer is absent, so calls fall back to heuristics.
+        self.assertTrue(au["fallback"])
+        self.assertEqual(au["provider"], "heuristic")
+
 
 if __name__ == "__main__":
     unittest.main()

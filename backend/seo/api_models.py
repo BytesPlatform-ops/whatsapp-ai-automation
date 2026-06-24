@@ -79,6 +79,7 @@ class GenerateResponse(BaseModel):
     score_after: Dict[str, Any]
     applied: List[str]
     ai_fallback: bool
+    ai_usage: Dict[str, Any] = Field(default_factory=dict)
     usage: UsageMeta
 
 

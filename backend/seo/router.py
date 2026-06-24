@@ -40,6 +40,7 @@ router = APIRouter(prefix="/api/seo", tags=["seo"])
 _GENERATE_KEYS = (
     "report_id", "tenant_id", "mode", "url", "site",
     "suggested_slug", "score_before", "score_after", "applied", "ai_fallback",
+    "ai_usage",
 )
 
 
@@ -58,12 +59,15 @@ def generate(req: GenerateRequest) -> GenerateResponse:
         "score_after": out["score_after"],
         "applied": out["applied"],
         "ai_fallback": out["ai_fallback"],
+        "ai_usage": out["ai_usage"],
     }
     stored = get_repository().save_report(req.tenant_id, report, req.idempotency_key)
     usage = UsageMeta(
         provider="pixie-seo-mode-a",
+        model=out["ai_usage"].get("model", ""),
+        estimated_cost=out["ai_usage"].get("estimated_cost", 0.0),
         latency_ms=int((time.perf_counter() - start) * 1000),
-        cache_hit=out["ai_fallback"] is False,
+        cache_hit=False,
         request_id=stored["report_id"],
     )
     return GenerateResponse(usage=usage, **{k: stored[k] for k in _GENERATE_KEYS})

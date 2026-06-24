@@ -117,6 +117,17 @@ def enrich_site(
 
     applied: List[str] = []
     fallback_used = False
+    _ai = {"cost": 0.0, "latency": 0, "calls": 0, "provider": "", "model": ""}
+
+    def _track(res) -> None:
+        """Accumulate per-call AI cost/latency/provider for Mode-A usage reporting."""
+        _ai["cost"] += float(getattr(res, "estimated_cost", 0.0) or 0.0)
+        _ai["latency"] += int(getattr(res, "latency_ms", 0) or 0)
+        _ai["calls"] += 1
+        if getattr(res, "provider", ""):
+            _ai["provider"] = res.provider
+        if getattr(res, "model", ""):
+            _ai["model"] = res.model
 
     # 1. Baseline.
     before = analyze(page, Mode.PIXIE)
@@ -139,6 +150,7 @@ def enrich_site(
     if not title:
         res = ai.meta_title(title=title, content=content, brand=brand, business_type=business_type)
         fallback_used = fallback_used or bool(res.fallback)
+        _track(res)
         new_title = _s(res.text)[:_TITLE_MAX].rstrip()
         if new_title:
             enriched["title"] = new_title
@@ -149,6 +161,7 @@ def enrich_site(
     if not description:
         res = ai.meta_description(description=description, content=content, business_type=business_type)
         fallback_used = fallback_used or bool(res.fallback)
+        _track(res)
         new_desc = _s(res.text)[:_DESC_MAX].rstrip()
         if new_desc:
             enriched["meta_description"] = new_desc
@@ -198,6 +211,7 @@ def enrich_site(
             src = _s(img.get("src"))
             res = ai.image_alt(src=src, context=content)
             fallback_used = fallback_used or bool(res.fallback)
+            _track(res)
             new_alt = _s(res.text)
             if new_alt:
                 img["alt"] = new_alt
@@ -232,4 +246,12 @@ def enrich_site(
         "score_after": after.score.to_dict(),
         "applied": applied,
         "ai_fallback": fallback_used,
+        "ai_usage": {
+            "provider": _ai["provider"] or ("heuristic" if fallback_used else ""),
+            "model": _ai["model"],
+            "estimated_cost": round(_ai["cost"], 6),
+            "latency_ms": _ai["latency"],
+            "calls": _ai["calls"],
+            "fallback": fallback_used,
+        },
     }
