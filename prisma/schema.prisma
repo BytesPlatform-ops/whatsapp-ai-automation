@@ -1,0 +1,142 @@
+// Pixie SEO — additive Prisma models for the SEO service.
+//
+// ADDITIVE ONLY: this is a NEW schema file. It does not modify, rename, or
+// remove any existing model, field, or relation. No migration has been run.
+// Every model is tenant-scoped (tenantId) per the multi-tenant rule.
+//
+// NOTE on usage: the Pixie backend is Python/FastAPI, while Prisma is a JS/TS
+// ORM. Consuming these models from Python requires either prisma-client-py or
+// direct Postgres access (supabase-py / asyncpg) — both NEW dependencies that
+// need approval. Until that decision, the API persists through the in-memory
+// repository seam in backend/seo/repository.py, which mirrors these shapes.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum SeoMode {
+  PIXIE
+  EXTERNAL
+  BOTH
+}
+
+enum SeoReportStatus {
+  PENDING
+  COMPLETE
+  FAILED
+}
+
+enum SeoSeverity {
+  CRITICAL
+  HIGH
+  MEDIUM
+  LOW
+  INFO
+}
+
+enum SeoCheckStatus {
+  PASS
+  FAIL
+  WARN
+  NOT_APPLICABLE
+}
+
+model SeoReport {
+  id             String          @id @default(cuid())
+  tenantId       String
+  url            String          @default("")
+  mode           SeoMode         @default(BOTH)
+  status         SeoReportStatus @default(COMPLETE)
+  score          Int             @default(0)
+  scoreDetails   Json?
+  idempotencyKey String?
+  issues         SeoIssue[]
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  @@unique([tenantId, idempotencyKey])
+  @@index([tenantId])
+  @@index([tenantId, url])
+}
+
+model SeoScore {
+  id        String   @id @default(cuid())
+  tenantId  String
+  reportId  String?
+  url       String   @default("")
+  score     Int      @default(0)
+  details   Json?
+  createdAt DateTime @default(now())
+
+  @@index([tenantId])
+  @@index([tenantId, url])
+}
+
+model SeoIssue {
+  id             String         @id @default(cuid())
+  tenantId       String
+  reportId       String
+  report         SeoReport      @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  checkId        String
+  category       String
+  severity       SeoSeverity    @default(INFO)
+  status         SeoCheckStatus @default(WARN)
+  title          String
+  description    String         @default("")
+  recommendation String         @default("")
+  weight         Int            @default(0)
+  evidence       Json?
+  createdAt      DateTime       @default(now())
+
+  @@index([tenantId])
+  @@index([reportId])
+}
+
+model TrackedKeyword {
+  id             String               @id @default(cuid())
+  tenantId       String
+  keyword        String
+  url            String
+  country        String?
+  device         String?
+  targetPosition Int?
+  snapshots      SeoKeywordSnapshot[]
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+
+  @@unique([tenantId, keyword, url])
+  @@index([tenantId])
+}
+
+model SeoKeywordSnapshot {
+  id               String         @id @default(cuid())
+  tenantId         String
+  trackedKeywordId String
+  trackedKeyword   TrackedKeyword @relation(fields: [trackedKeywordId], references: [id], onDelete: Cascade)
+  keyword          String
+  url              String         @default("")
+  position         Int?
+  provider         String         @default("mock")
+  createdAt        DateTime       @default(now())
+
+  @@index([tenantId])
+  @@index([tenantId, trackedKeywordId])
+}
+
+model SeoCompetitorReport {
+  id            String   @id @default(cuid())
+  tenantId      String
+  baseUrl       String
+  competitorUrl String
+  scoreGap      Int?
+  details       Json?
+  createdAt     DateTime @default(now())
+
+  @@index([tenantId])
+  @@index([tenantId, baseUrl])
+}
