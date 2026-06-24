@@ -140,3 +140,185 @@ model SeoCompetitorReport {
   @@index([tenantId])
   @@index([tenantId, baseUrl])
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Pixie Marketing — additive Prisma models for the Marketing AI Agent.
+//
+// ADDITIVE ONLY: these are NEW models. They do not modify, rename, or remove any
+// existing model, field, or relation. NO migration has been run. Every model is
+// tenant-scoped (tenantId) per the multi-tenant rule.
+//
+// Usage note (same as the SEO models above): the backend is Python/FastAPI while
+// Prisma is a JS/TS ORM. Until prisma-client-py / direct Postgres access is
+// approved, the marketing API persists through the in-memory repository seam in
+// backend/marketing/profile/repository.py, which mirrors these shapes. The full
+// model set (campaigns, content, analytics, etc.) lands additively in its wave;
+// Wave 1 seeds only the profile + industry preset.
+// ─────────────────────────────────────────────────────────────────────────────
+
+model MarketingProfile {
+  id                String   @id @default(cuid())
+  tenantId          String
+  businessName      String
+  industry          String   @default("generic")
+  businessType      String   @default("")
+  location          String   @default("")
+  targetAudience    String   @default("")
+  painPoints        Json?
+  products          Json?
+  pricing           String   @default("")
+  brandTone         String   @default("")
+  brandPersonality  String   @default("")
+  usp               String   @default("")
+  competitors       Json?
+  platformsUsed     Json?
+  monthlyGoal       String   @default("")
+  budgetRange       String   @default("")
+  primaryCta        String   @default("")
+  websiteUrl        String   @default("")
+  landingUrl        String   @default("")
+  bookingUrl        String   @default("")
+  contact           String   @default("")
+  funnelStage       String   @default("awareness")
+  contentStyle      String   @default("")
+  restrictedClaims  Json?
+  complianceNotes   String   @default("")
+  language          String   @default("en")
+  approvalRequired  Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@unique([tenantId, businessName])
+  @@index([tenantId])
+  @@index([tenantId, industry])
+}
+
+model MarketingIndustryPreset {
+  id                String   @id @default(cuid())
+  industry          String   @unique
+  displayName       String
+  painPoints        Json?
+  bestCampaignTypes Json?
+  contentFormats    Json?
+  commonOffers      Json?
+  objectionHandling Json?
+  platforms         Json?
+  contentPillars    Json?
+  seasonalLocalIdeas Json?
+  leadMagnets       Json?
+  ctaExamples       Json?
+  complianceWarnings Json?
+  thingsToAvoid     Json?
+  highRisk          Boolean  @default(false)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([industry])
+}
+
+// Wave 2 marketing models — still ADDITIVE, still NO migration run. Tenant-scoped.
+// JSON columns hold the structured lists the in-memory repository round-trips
+// today (schedule, hashtags, etc.); the durable layer maps 1:1 to these.
+
+model MarketingCampaign {
+  id              String   @id @default(cuid())
+  tenantId        String
+  name            String
+  goal            String   @default("")
+  campaignType    String   @default("brand_awareness")
+  audience        String   @default("")
+  platforms       Json?
+  formats         Json?
+  messagingAngle  String   @default("")
+  hooks           Json?
+  cta             String   @default("")
+  schedule        Json?
+  requiredAssets  Json?
+  approvalStatus  String   @default("needs_review")
+  startDate       String?
+  endDate         String?
+  kpiTargets      Json?
+  risks           Json?
+  complianceNotes Json?
+  followUp        String   @default("")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([tenantId])
+  @@index([tenantId, approvalStatus])
+}
+
+model MarketingContentItem {
+  id             String   @id @default(cuid())
+  tenantId       String
+  campaignId     String?
+  platform       String   @default("instagram")
+  contentType    String   @default("post")
+  hook           String   @default("")
+  mainCopy       String   @default("")
+  caption        String   @default("")
+  script         String   @default("")
+  visualDirection String  @default("")
+  shotList       Json?
+  carouselSlides Json?
+  cta            String   @default("")
+  hashtags       Json?
+  tone           String   @default("")
+  targetAudience String   @default("")
+  approvalStatus String   @default("needs_review")
+  riskScore      Int      @default(0)
+  createdByAgent String   @default("content_factory")
+  version        Int      @default(1)
+  scheduledTime  String?
+  notes          String   @default("")
+  createdAt      DateTime @default(now())
+
+  @@index([tenantId])
+  @@index([tenantId, campaignId])
+}
+
+model MarketingCreativeBrief {
+  id            String   @id @default(cuid())
+  tenantId      String
+  contentRefId  String?
+  platform      String   @default("instagram")
+  videoFormat   String   @default("explainer")
+  visualConcept String   @default("")
+  sceneDirection Json?
+  camera        String   @default("")
+  mood          String   @default("")
+  lighting      String   @default("")
+  colors        Json?
+  characters    Json?
+  props         Json?
+  background    String   @default("")
+  onScreenText  Json?
+  voiceover     String   @default("")
+  music         String   @default("")
+  editingPace   String   @default("")
+  aspectRatio   String   @default("9:16")
+  durationSeconds Int    @default(30)
+  hookFrame     String   @default("")
+  endingFrame   String   @default("")
+  ctaFrame      String   @default("")
+  assetChecklist Json?
+  createdAt     DateTime @default(now())
+
+  @@index([tenantId])
+  @@index([tenantId, contentRefId])
+}
+
+model MarketingPlatformConnection {
+  id           String   @id @default(cuid())
+  tenantId     String
+  platform     String
+  supportLevel String   @default("future_placeholder")
+  dryRun       Boolean  @default(true)
+  connected    Boolean  @default(false)
+  accountRef   String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([tenantId, platform])
+  @@index([tenantId])
+}

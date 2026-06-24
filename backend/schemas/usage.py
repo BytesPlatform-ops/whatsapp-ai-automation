@@ -32,6 +32,7 @@ class UsageEventType(str, Enum):
     RAG_QUERY = "rag_query"
     QUALITY = "quality"
     RECEPTION = "reception"
+    CAMPAIGN = "campaign"
 
 
 class ModelTier(str, Enum):

@@ -14,12 +14,14 @@ from pydantic import BaseModel, Field
 
 from orchestrator import Orchestrator
 from receptionist.api import router as receptionist_router
+from receptionist.campaigns.api import router as campaigns_router
 from receptionist.onboarding.api import router as onboarding_router
 from schemas import Request, Site, UsageEvent
 
 app = FastAPI(title="Pixie Backend", version="0.2.0")
 app.include_router(receptionist_router)
 app.include_router(onboarding_router)
+app.include_router(campaigns_router)
 
 
 class UsageSummary(BaseModel):
