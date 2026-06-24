@@ -80,7 +80,13 @@
 <script>
   const $=id=>document.getElementById(id);
   const history=[]; let usedVoice=false;
+  // Which business this receptionist serves — from ?tenant= (set by onboarding).
+  const TENANT = new URLSearchParams(location.search).get('tenant') || 't_demo';
   fetch('/health').then(r=>r.json()).then(d=>{$('mode').textContent='mode: '+(d.model_mode||'?')}).catch(()=>{});
+  if(TENANT!=='t_demo'){
+    fetch('/onboarding/api/tenant/'+encodeURIComponent(TENANT)).then(r=>r.ok?r.json():null)
+      .then(d=>{ if(d&&d.business_name) $('who').textContent=d.business_name; }).catch(()=>{});
+  }
 
   function bubble(text, who){const row=document.createElement('div');row.className='row '+(who==='c'?'c':'r');
     const b=document.createElement('div');b.className='bub';b.textContent=text;row.appendChild(b);$('log').appendChild(row);$('log').scrollTop=1e9;}
@@ -120,7 +126,7 @@
     bubble(v,'c'); history.push({role:'customer',content:v}); showTyping();
     try{
       const r=await fetch('/receptionist/chat',{method:'POST',headers:{'content-type':'application/json'},
-        body:JSON.stringify({tenant_id:'t_demo',message:v,channel:viaVoice?'voice':'chat',history})});
+        body:JSON.stringify({tenant_id:TENANT,message:v,channel:viaVoice?'voice':'chat',history})});
       const d=await r.json();
       hideTyping();
       if(!r.ok){bubble('⚠ '+(d.detail||('HTTP '+r.status)),'r');return;}

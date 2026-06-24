@@ -47,7 +47,14 @@ SAMPLE_TENANT: dict[str, str] = {
 def load_tenant(tenant_id: str) -> dict[str, str]:
     """Return the BUSINESS INFO variable map for a tenant.
 
-    Stub: always returns the sample tenant. Replace with a DB/RAG lookup keyed by
-    `tenant_id` (per-tenant isolation) in step 7.
+    Looks up a real onboarded tenant first (answers compiled into prompt vars);
+    falls back to the built-in sample tenant for the demo / unknown ids.
     """
+    try:
+        from .onboarding.store import build_prompt_vars
+        vars_ = build_prompt_vars(tenant_id)
+        if vars_:
+            return vars_
+    except Exception:
+        pass
     return dict(SAMPLE_TENANT)

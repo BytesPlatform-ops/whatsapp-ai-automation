@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Pixie — Create your AI Receptionist</title>
+<style>
+  :root{--bg:#0a0e17;--panel:#121826;--line:#222c3d;--text:#eaf1ff;--muted:#8a97ad;--accent:#34d399;--accent2:#22d3ee;}
+  *{box-sizing:border-box;margin:0}
+  body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+  header{padding:16px 22px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:10px}
+  .logo{font-weight:800}.logo span{background:linear-gradient(90deg,var(--accent),var(--accent2));-webkit-background-clip:text;background-clip:text;color:transparent}
+  .wrap{max-width:680px;margin:0 auto;padding:32px 20px 80px}
+  h1{font-size:clamp(1.6rem,4vw,2.3rem);font-weight:800;letter-spacing:-.02em;margin-bottom:6px}
+  .sub{color:var(--muted);margin-bottom:26px}
+  label{display:block;font-size:.82rem;color:var(--muted);margin:14px 0 6px}
+  label .req{color:var(--accent)}
+  input,select,textarea{width:100%;background:var(--panel);border:1px solid var(--line);color:var(--text);border-radius:11px;padding:12px 14px;font:inherit;outline:none}
+  input:focus,select:focus,textarea:focus{border-color:var(--accent)}
+  textarea{min-height:70px;resize:vertical}
+  .hint{font-size:.74rem;color:var(--muted);margin-top:4px;opacity:.8}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:18px;margin-bottom:14px;animation:rise .35s cubic-bezier(.22,1,.36,1) both}
+  @keyframes rise{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+  .cat{font-size:.7rem;text-transform:uppercase;letter-spacing:.14em;color:var(--accent);font-weight:700;margin:22px 0 6px}
+  button{border:0;border-radius:12px;font-weight:700;cursor:pointer}
+  .go{height:52px;width:100%;color:#05231a;background:linear-gradient(90deg,var(--accent),var(--accent2));font-size:.98rem;margin-top:22px;transition:transform .12s}
+  .go:hover{transform:translateY(-1px)}.go:disabled{opacity:.5;cursor:wait}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px;margin-top:8px}
+  .ind{padding:14px;border:1px solid var(--line);background:var(--panel);border-radius:12px;cursor:pointer;text-align:left;color:var(--text);transition:border-color .15s,transform .12s}
+  .ind:hover{border-color:var(--accent);transform:translateY(-2px)}
+  .ind.sel{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+  .success{text-align:center;padding:40px 20px;animation:rise .4s both}
+  .check{width:72px;height:72px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;margin:0 auto 18px;font-size:2rem;color:#05231a;animation:pop .5s cubic-bezier(.22,1.4,.4,1) both}
+  @keyframes pop{from{transform:scale(.4);opacity:0}to{transform:scale(1);opacity:1}}
+  a.open{display:inline-block;margin-top:18px;background:var(--accent);color:#05231a;padding:13px 22px;border-radius:999px;font-weight:700;text-decoration:none}
+</style>
+</head>
+<body>
+  <header><div class="logo">✦ <span>Pixie</span> — Create your receptionist</div></header>
+  <div class="wrap" id="root">
+    <h1>Create your AI receptionist</h1>
+    <div class="sub">Pick your industry, answer a few questions, and your receptionist is ready in minutes.</div>
+    <div class="cat">1 · Choose your industry</div>
+    <div class="grid" id="industries"></div>
+    <div id="form"></div>
+  </div>
+
+<script>
+  const $=id=>document.getElementById(id);
+  let selected=null, fields=null;
+
+  fetch('/onboarding/api/industries').then(r=>r.json()).then(d=>{
+    d.industries.forEach(name=>{
+      const b=document.createElement('button');b.className='ind';b.textContent=name;
+      b.onclick=()=>pick(name,b);$('industries').appendChild(b);
+    });
+  });
+
+  function input(f){
+    const t=f.expected_answer_type||f.type;
+    if(t==='long_text') return `<textarea id="f_${f.id||f.key}" placeholder="${f.example_answer||''}"></textarea>`;
+    if(t==='yes_no') return `<select id="f_${f.id||f.key}"><option value="">—</option><option>Yes</option><option>No</option></select>`;
+    if(t==='single_select'&&f.options) return `<select id="f_${f.id||f.key}"><option value="">—</option>${f.options.map(o=>`<option>${o}</option>`).join('')}</select>`;
+    return `<input id="f_${f.id||f.key}" placeholder="${f.example_answer||''}">`;
+  }
+
+  async function pick(name, btn){
+    selected=name;
+    document.querySelectorAll('.ind').forEach(x=>x.classList.remove('sel'));btn.classList.add('sel');
+    const d=await (await fetch('/onboarding/api/questions?industry='+encodeURIComponent(name))).json();
+    fields=d;
+    let html=`<div class="cat">2 · About your business</div>`;
+    d.core_fields.forEach(f=>{
+      html+=`<div class="card"><label>${f.label} ${f.required?'<span class="req">*</span>':''}</label>${input(f)}</div>`;
+    });
+    html+=`<div class="cat">3 · ${name} details</div>`;
+    d.questions.forEach(q=>{
+      html+=`<div class="card"><label>${q.question} ${q.required?'<span class="req">*</span>':''}</label>${input(q)}`+
+        (q.why_it_matters?`<div class="hint">${q.why_it_matters}</div>`:``)+`</div>`;
+    });
+    html+=`<button class="go" id="submit">Create my receptionist →</button><div class="hint" id="err" style="color:#f87171;text-align:center"></div>`;
+    $('form').innerHTML=html;
+    $('submit').onclick=submit;
+    $('form').scrollIntoView({behavior:'smooth'});
+  }
+
+  async function submit(){
+    const core={};
+    fields.core_fields.forEach(f=>{const el=$('f_'+f.key);if(el&&el.value.trim())core[f.key]=el.value.trim();});
+    const answers=fields.questions.map(q=>({id:q.id,value:($('f_'+q.id)||{}).value?.trim()||''})).filter(a=>a.value);
+    const name=core.BUSINESS_NAME;
+    if(!name){$('err').textContent='Business name is required.';return;}
+    $('submit').disabled=true;$('submit').textContent='Creating…';
+    try{
+      const r=await fetch('/onboarding/api/submit',{method:'POST',headers:{'content-type':'application/json'},
+        body:JSON.stringify({business_name:name,industry:selected,core,answers})});
+      const d=await r.json();
+      if(!r.ok)throw new Error(d.detail||('HTTP '+r.status));
+      $('root').innerHTML=`<div class="success"><div class="check">✓</div>
+        <h1>${name}'s receptionist is ready</h1>
+        <div class="sub">It now knows your ${selected.toLowerCase()} details, hours, and rules.</div>
+        <a class="open" href="${d.chat_url}">Open my receptionist →</a></div>`;
+    }catch(e){$('submit').disabled=false;$('submit').textContent='Create my receptionist →';$('err').textContent=e.message;}
+  }
+</script>
+</body>
+</html>
