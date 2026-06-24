@@ -69,6 +69,31 @@ class TestSsrf(unittest.TestCase):
         ok, _ = is_safe_url("https://db.internal/")
         self.assertFalse(ok)
 
+    def test_blocks_obfuscated_numeric_ips(self):
+        # Octal, hex, decimal-integer and short-form encodings of loopback /
+        # cloud-metadata addresses that a libc resolver would honor but
+        # ipaddress.ip_address() rejects as non-dotted-decimal.
+        for url in [
+            "http://2130706433/",            # decimal int -> 127.0.0.1
+            "http://0177.0.0.1/",            # octal -> 127.0.0.1
+            "http://0x7f.0x0.0x0.0x1/",      # hex octets -> 127.0.0.1
+            "http://0x7f000001/",            # hex int -> 127.0.0.1
+            "http://127.1/",                 # short form -> 127.0.0.1
+            "http://2852039166/",            # decimal int -> 169.254.169.254
+        ]:
+            ok, reason = is_safe_url(url)
+            self.assertFalse(ok, "expected BLOCKED: {} (reason={})".format(url, reason))
+
+    def test_allows_public_numeric_and_hostnames(self):
+        # Real public IPs and ordinary hostnames must still pass.
+        for url in [
+            "http://93.184.216.34/",
+            "http://1.2.3.4/",
+            "http://123.example.com/",
+        ]:
+            ok, reason = is_safe_url(url)
+            self.assertTrue(ok, "expected ALLOWED: {} (reason={})".format(url, reason))
+
 
 class TestParser(unittest.TestCase):
     def setUp(self):

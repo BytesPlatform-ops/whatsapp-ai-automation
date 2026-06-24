@@ -56,6 +56,60 @@ def _ip_is_blocked(ip_str) -> bool:
     return False
 
 
+def _decode_numeric_ip(host: str):
+    """Decode an obfuscated IPv4 literal (octal / hex / decimal-integer /
+    short-form) to its canonical dotted-decimal string, or return None when the
+    host is not a numeric IP literal.
+
+    Python's ``ipaddress.ip_address`` only accepts strict dotted-decimal, so
+    forms a C ``inet_aton``-based fetcher WOULD honor — ``2130706433``,
+    ``0177.0.0.1`` (octal), ``0x7f.0x0.0x0.0x1`` (hex), ``127.1`` (short) —
+    otherwise slip past the IP-literal check and reach an internal address.
+    We decode them here using the same inet_aton collapse rules so they can be
+    run through ``_ip_is_blocked``.
+    """
+    if not host:
+        return None
+    # Reject anything containing characters that cannot appear in a numeric
+    # IPv4 literal so real hostnames (which always contain a non-[0-9a-fx.]
+    # char somewhere, e.g. a letter other than a-f or a hyphen) fall through.
+    allowed = set("0123456789abcdefx.")
+    if any(ch not in allowed for ch in host):
+        return None
+    parts = host.split(".")
+    if not parts or len(parts) > 4:
+        return None
+    nums = []
+    for p in parts:
+        if not p:
+            return None
+        try:
+            if p.startswith("0x"):
+                value = int(p, 16)
+            elif p.startswith("0") and len(p) > 1:
+                value = int(p, 8)
+            else:
+                value = int(p, 10)
+        except ValueError:
+            return None
+        nums.append(value)
+    # inet_aton collapse: the final part absorbs the remaining low-order bytes.
+    if len(nums) == 1:
+        packed = nums[0]
+    elif len(nums) == 2:
+        packed = (nums[0] << 24) | nums[1]
+    elif len(nums) == 3:
+        packed = (nums[0] << 24) | (nums[1] << 16) | nums[2]
+    else:
+        packed = (nums[0] << 24) | (nums[1] << 16) | (nums[2] << 8) | nums[3]
+    if packed < 0 or packed > 0xFFFFFFFF:
+        return None
+    try:
+        return str(ipaddress.IPv4Address(packed))
+    except (ipaddress.AddressValueError, ValueError):
+        return None
+
+
 def _strip_host(host: str) -> str:
     """Normalize a URL host: strip brackets from IPv6 literals and any
     trailing dot, lowercase it."""
@@ -103,6 +157,14 @@ def is_safe_url(url: str) -> Tuple[bool, str]:
     if is_ip and _ip_is_blocked(host):
         return False, "blocked ip address: {}".format(host)
 
+    # Not a strict dotted-decimal/IPv6 literal: it may still be an obfuscated
+    # numeric IPv4 (octal / hex / decimal-integer / short form) that a libc
+    # resolver would honor. Decode and re-check fail-closed.
+    if not is_ip:
+        decoded = _decode_numeric_ip(host)
+        if decoded is not None and _ip_is_blocked(decoded):
+            return False, "blocked obfuscated ip address: {} -> {}".format(host, decoded)
+
     return True, "ok"
 
 
@@ -127,6 +189,15 @@ def resolve_and_check(host: str) -> Tuple[bool, str]:
         return True, "ok"
     except ValueError:
         pass
+
+    # Obfuscated numeric IPv4 literal (octal/hex/decimal-int/short form). Decode
+    # and check directly — getaddrinfo mis-parses some of these (e.g. it reads
+    # "0177" as decimal 177, not octal 127), so do not trust it for these.
+    decoded = _decode_numeric_ip(host)
+    if decoded is not None:
+        if _ip_is_blocked(decoded):
+            return False, "blocked obfuscated ip address: {} -> {}".format(host, decoded)
+        return True, "ok"
 
     try:
         infos = socket.getaddrinfo(host, None)
