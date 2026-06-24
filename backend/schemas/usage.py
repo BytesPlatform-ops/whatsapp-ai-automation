@@ -31,6 +31,7 @@ class UsageEventType(str, Enum):
     EMBED = "embed"
     RAG_QUERY = "rag_query"
     QUALITY = "quality"
+    RECEPTION = "reception"
 
 
 class ModelTier(str, Enum):

@@ -7,13 +7,17 @@ per-step events) so cost-per-request is visible from the very first call.
 
 from __future__ import annotations
 
+import os
+
 from fastapi import FastAPI
 from pydantic import BaseModel, Field
 
 from orchestrator import Orchestrator
+from receptionist.api import router as receptionist_router
 from schemas import Request, Site, UsageEvent
 
 app = FastAPI(title="Pixie Backend", version="0.2.0")
+app.include_router(receptionist_router)
 
 
 class UsageSummary(BaseModel):
@@ -32,7 +36,7 @@ class GenerateResponse(BaseModel):
 
 @app.get("/health")
 async def health() -> dict[str, str]:
-    return {"status": "ok"}
+    return {"status": "ok", "model_mode": os.getenv("PIXIE_MODEL_MODE", "fake")}
 
 
 @app.post("/v1/generate", response_model=GenerateResponse)

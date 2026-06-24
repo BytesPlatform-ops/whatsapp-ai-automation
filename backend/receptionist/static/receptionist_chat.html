@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Pixie Receptionist — Test Chat</title>
+<style>
+  :root{--bg:#0a0e17;--panel:#121826;--line:#222c3d;--text:#eaf1ff;--muted:#8a97ad;--accent:#34d399;--cust:#1d4ed8;}
+  *{box-sizing:border-box;margin:0}
+  body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--text);height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:10px}
+  .logo{font-weight:800}.logo span{color:var(--accent)}
+  .who{margin-left:auto;font-size:.75rem;color:var(--muted)}
+  .mode{font-size:.7rem;padding:3px 9px;border-radius:999px;border:1px solid var(--line);color:var(--muted)}
+  main{flex:1;display:grid;grid-template-columns:1fr 320px;min-height:0}
+  @media(max-width:760px){main{grid-template-columns:1fr}.side{display:none}}
+  .chat{display:flex;flex-direction:column;min-height:0}
+  .log{flex:1;overflow:auto;padding:20px;display:flex;flex-direction:column;gap:12px}
+  .row{display:flex}.row.c{justify-content:flex-end}
+  .bub{max-width:78%;padding:11px 14px;border-radius:16px;font-size:.92rem;line-height:1.5}
+  .c .bub{background:var(--cust);color:#fff;border-bottom-right-radius:4px}
+  .r .bub{background:var(--panel);border:1px solid var(--line);border-bottom-left-radius:4px}
+  .composer{display:flex;gap:10px;padding:14px 16px;border-top:1px solid var(--line)}
+  input{flex:1;background:var(--panel);border:1px solid var(--line);color:var(--text);border-radius:12px;padding:12px 14px;font:inherit;outline:none}
+  input:focus{border-color:var(--accent)}
+  button{border:0;border-radius:12px;padding:0 18px;font-weight:700;background:var(--accent);color:#05231a;cursor:pointer}
+  button:disabled{opacity:.5;cursor:wait}
+  .side{border-left:1px solid var(--line);padding:18px;overflow:auto}
+  .side h3{font-size:.72rem;text-transform:uppercase;letter-spacing:.16em;color:var(--muted);margin-bottom:10px}
+  .act{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:10px;font-size:.82rem}
+  .act .t{font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:.05em;font-size:.74rem;margin-bottom:6px}
+  .act .kv{color:var(--muted);margin:2px 0}.act .kv b{color:var(--text);font-weight:600}
+  .human{color:#fbbf24}
+  .usage{font-size:.7rem;color:var(--muted);padding:8px 16px;border-top:1px solid var(--line)}
+</style>
+</head>
+<body>
+  <header>
+    <div class="logo">✦ Pixie <span>Receptionist</span></div>
+    <div class="who" id="who">Glow & Go Salon</div>
+    <div class="mode" id="mode">mode: …</div>
+  </header>
+  <main>
+    <div class="chat">
+      <div class="log" id="log"></div>
+      <div class="usage" id="usage">Type a message to start. Try: "book a haircut Saturday", "how much is bridal makeup?", "I want a refund".</div>
+      <div class="composer">
+        <input id="msg" placeholder="Message the receptionist…" autocomplete="off">
+        <button id="send">Send</button>
+      </div>
+    </div>
+    <div class="side">
+      <h3>Parsed [ACTION] log</h3>
+      <div id="actions"></div>
+    </div>
+  </main>
+<script>
+  const $=id=>document.getElementById(id);
+  const history=[];
+  fetch('/health').then(r=>r.json()).then(d=>{$('mode').textContent='mode: '+(d.model_mode||'?')}).catch(()=>{});
+
+  function bubble(text, who){const row=document.createElement('div');row.className='row '+(who==='c'?'c':'r');
+    const b=document.createElement('div');b.className='bub';b.textContent=text;row.appendChild(b);$('log').appendChild(row);$('log').scrollTop=1e9;}
+  function actionCard(a){const d=document.createElement('div');d.className='act';
+    d.innerHTML=`<div class="t">${a.type}</div>`+
+      `<div class="kv">urgency: <b>${a.urgency}</b></div>`+
+      (a.needs_human?`<div class="kv human">⚑ needs human</div>`:``)+
+      (a.details?`<div class="kv">details: <b>${a.details}</b></div>`:``)+
+      (a.name?`<div class="kv">name: <b>${a.name}</b></div>`:``)+
+      (a.contact?`<div class="kv">contact: <b>${a.contact}</b></div>`:``)+
+      (a.datetime?`<div class="kv">datetime: <b>${a.datetime}</b></div>`:``)+
+      (a.quote_total?`<div class="kv">quote: <b>${a.quote_total}</b></div>`:``);
+    $('actions').prepend(d);}
+
+  async function send(){
+    const v=$('msg').value.trim(); if(!v) return;
+    $('msg').value=''; $('send').disabled=true;
+    bubble(v,'c'); history.push({role:'customer',content:v});
+    try{
+      const r=await fetch('/receptionist/chat',{method:'POST',headers:{'content-type':'application/json'},
+        body:JSON.stringify({tenant_id:'t_demo',message:v,history})});
+      const d=await r.json();
+      if(!r.ok){bubble('⚠ '+(d.detail||('HTTP '+r.status)),'r');return;}
+      bubble(d.reply_text,'r'); history.push({role:'receptionist',content:d.reply_text});
+      actionCard(d.action);
+      const u=d.usage; $('usage').textContent=`model ${u.model} · ${u.tokens_in}+${u.tokens_out} tok · ${u.latency_ms}ms · $${(u.cost_usd||0).toFixed(5)}`;
+    }catch(e){bubble('⚠ '+e.message,'r');}
+    finally{$('send').disabled=false;$('msg').focus();}
+  }
+  $('send').onclick=send;
+  $('msg').addEventListener('keydown',e=>{if(e.key==='Enter')send()});
+</script>
+</body>
+</html>
