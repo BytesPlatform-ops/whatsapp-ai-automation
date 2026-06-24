@@ -29,6 +29,7 @@ from .api_models import (
     TrackResponse,
     UsageMeta,
 )
+from .keywords import analyze_content, research_keywords
 from .mode_external import audit_url as crawl_url
 from .mode_external import build_report
 from .mode_pixie import enrich_site
@@ -115,12 +116,22 @@ def get_score(
 
 
 @router.post("/keywords")
-def keywords(req: KeywordsRequest):
-    """Keyword research — provider abstraction + mock fallback land in Wave 3."""
-    raise HTTPException(
-        status_code=501,
-        detail="Keyword research arrives in Wave 3 (seo.keywords); no provider is wired yet.",
+def keywords(req: KeywordsRequest) -> dict:
+    """Keyword research + optional on-page content analysis.
+
+    Uses an env-gated provider abstraction (DataForSEO etc.) that falls back to
+    a deterministic mock when no API key is configured — so it always responds.
+    """
+    research = research_keywords(req.topic, req.seed_keywords)
+    content_analysis = (
+        analyze_content(req.content, req.seed_keywords) if req.content else None
     )
+    return {
+        "tenant_id": req.tenant_id,
+        "topic": req.topic,
+        "research": research,
+        "content_analysis": content_analysis,
+    }
 
 
 @router.post("/track", response_model=TrackResponse)

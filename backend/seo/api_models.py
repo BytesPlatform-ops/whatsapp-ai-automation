@@ -54,6 +54,7 @@ class KeywordsRequest(BaseModel):
     tenant_id: str = Field(..., min_length=1)
     topic: str = Field(..., min_length=1)
     seed_keywords: List[str] = Field(default_factory=list)
+    content: str = ""
 
 
 class TrackRequest(BaseModel):
