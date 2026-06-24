@@ -9,6 +9,13 @@ Design-Automation-V2/
 
 .claude/
 
+# Share the backend multi-agent system (agents + commands) via git,
+# but keep machine-local settings (settings.local.json, *.lock) ignored.
+!backend/.claude/
+backend/.claude/*
+!backend/.claude/agents/
+!backend/.claude/commands/
+
 # Local smoke-test output from HVAC template
 src/website-gen/templates/hvac/smoke-out/
 
