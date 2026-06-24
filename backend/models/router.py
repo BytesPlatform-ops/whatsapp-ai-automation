@@ -28,10 +28,10 @@ _MODEL_BY_TIER: dict[str, dict[ModelTier, str]] = {
         ModelTier.NONE: "fake-small",
     },
     "openai": {
-        ModelTier.SMALL: "gpt-4o-mini",   # planner / classify
-        ModelTier.LARGE: "gpt-4o",        # section + full builds
+        ModelTier.SMALL: "gpt-5.4-nano",
+        ModelTier.LARGE: "gpt-5.4",
         ModelTier.EMBED: "text-embedding-3-small",
-        ModelTier.NONE: "gpt-4o-mini",
+        ModelTier.NONE: "gpt-5.4-nano",
     },
 }
 
@@ -44,10 +44,8 @@ class ModelRouter:
     def _make_provider(self, mode: str) -> Provider:
         if mode == "fake":
             return FakeProvider()
-        if mode == "openai":
-            from .openai_provider import OpenAIProvider
-            return OpenAIProvider()
-        raise ValueError(f"Unknown PIXIE_MODEL_MODE={mode!r} (have: fake, openai)")
+        # if mode == "openai":  return OpenAIProvider()   # wired in step 5
+        raise ValueError(f"Unknown PIXIE_MODEL_MODE={mode!r} (have: fake)")
 
     def model_for(self, tier: ModelTier) -> str:
         table = _MODEL_BY_TIER.get(self.mode, _MODEL_BY_TIER["fake"])
