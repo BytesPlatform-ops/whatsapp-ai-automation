@@ -30,6 +30,22 @@
   .spk{display:flex;align-items:center;gap:4px;color:var(--muted);font-size:.85rem;cursor:pointer}
   .cal{border-color:var(--accent)!important}
   .cal a{display:inline-block;margin-top:8px;color:#05231a;background:var(--accent);padding:7px 12px;border-radius:8px;font-weight:700;text-decoration:none;font-size:.78rem}
+  /* ── animations ───────────────────────────────────────────── */
+  .bub{animation:bubIn .34s cubic-bezier(.22,1,.36,1) both}
+  .row.c .bub{animation-name:bubInRight}
+  @keyframes bubIn{from{opacity:0;transform:translateY(10px) scale(.97)}to{opacity:1;transform:none}}
+  @keyframes bubInRight{from{opacity:0;transform:translateY(10px) scale(.97)}to{opacity:1;transform:none}}
+  .act{animation:slideIn .34s cubic-bezier(.22,1,.36,1) both}
+  @keyframes slideIn{from{opacity:0;transform:translateX(14px)}to{opacity:1;transform:none}}
+  .cal{animation:slideIn .34s cubic-bezier(.22,1,.36,1) both, glowPulse 1.4s ease-out}
+  @keyframes glowPulse{0%{box-shadow:0 0 0 0 rgba(52,211,153,.5)}100%{box-shadow:0 0 0 14px rgba(52,211,153,0)}}
+  .typing .bub{display:inline-flex;gap:5px;align-items:center;padding:14px 16px}
+  .typing .dot{width:7px;height:7px;border-radius:50%;background:var(--muted);animation:blink 1.2s infinite}
+  .typing .dot:nth-child(2){animation-delay:.2s}.typing .dot:nth-child(3){animation-delay:.4s}
+  @keyframes blink{0%,80%,100%{opacity:.25;transform:translateY(0)}40%{opacity:1;transform:translateY(-3px)}}
+  .logo.speaking{animation:talk .5s ease-in-out infinite}
+  @keyframes talk{0%,100%{transform:scale(1)}50%{transform:scale(1.06)}}
+  #send{transition:transform .12s}#send:active{transform:scale(.95)}
   .side{border-left:1px solid var(--line);padding:18px;overflow:auto}
   .side h3{font-size:.72rem;text-transform:uppercase;letter-spacing:.16em;color:var(--muted);margin-bottom:10px}
   .act{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:10px;font-size:.82rem}
@@ -69,6 +85,12 @@
   function bubble(text, who){const row=document.createElement('div');row.className='row '+(who==='c'?'c':'r');
     const b=document.createElement('div');b.className='bub';b.textContent=text;row.appendChild(b);$('log').appendChild(row);$('log').scrollTop=1e9;}
 
+  let typingEl=null;
+  function showTyping(){const row=document.createElement('div');row.className='row r typing';
+    row.innerHTML='<div class="bub"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>';
+    $('log').appendChild(row);$('log').scrollTop=1e9;typingEl=row;}
+  function hideTyping(){if(typingEl){typingEl.remove();typingEl=null;}}
+
   function actionCard(a, res){const d=document.createElement('div');d.className='act'+((res&&res.created)?' cal':'');
     let html=`<div class="t">${a.type}</div>`+
       `<div class="kv">urgency: <b>${a.urgency}</b></div>`+
@@ -85,23 +107,28 @@
     d.innerHTML=html;$('actions').prepend(d);}
 
   function speak(text){if(!$('speak').checked||!window.speechSynthesis)return;
-    try{speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(text);u.rate=1.02;u.pitch=1;speechSynthesis.speak(u);}catch(e){}}
+    try{speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(text);u.rate=1.02;u.pitch=1;
+      const logo=document.querySelector('.logo');
+      u.onstart=()=>logo&&logo.classList.add('speaking');
+      u.onend=()=>logo&&logo.classList.remove('speaking');
+      speechSynthesis.speak(u);}catch(e){}}
 
   async function send(){
     const v=$('msg').value.trim(); if(!v) return;
     const viaVoice=usedVoice; usedVoice=false;
     $('msg').value=''; $('send').disabled=true;
-    bubble(v,'c'); history.push({role:'customer',content:v});
+    bubble(v,'c'); history.push({role:'customer',content:v}); showTyping();
     try{
       const r=await fetch('/receptionist/chat',{method:'POST',headers:{'content-type':'application/json'},
         body:JSON.stringify({tenant_id:'t_demo',message:v,channel:viaVoice?'voice':'chat',history})});
       const d=await r.json();
+      hideTyping();
       if(!r.ok){bubble('⚠ '+(d.detail||('HTTP '+r.status)),'r');return;}
       bubble(d.reply_text,'r'); history.push({role:'receptionist',content:d.reply_text});
       actionCard(d.action, d.action_result);
       if(viaVoice||$('speak').checked) speak(d.reply_text);
       const u=d.usage; $('usage').textContent=`${viaVoice?'🎤 voice · ':''}model ${u.model} · ${u.tokens_in}+${u.tokens_out} tok · ${u.latency_ms}ms · $${(u.cost_usd||0).toFixed(5)}`;
-    }catch(e){bubble('⚠ '+e.message,'r');}
+    }catch(e){hideTyping();bubble('⚠ '+e.message,'r');}
     finally{$('send').disabled=false;$('msg').focus();}
   }
   $('send').onclick=send;
