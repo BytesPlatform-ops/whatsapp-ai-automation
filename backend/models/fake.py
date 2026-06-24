@@ -150,6 +150,52 @@ def _generic_site(tenant_id: str, brand: str) -> Site:
     )
 
 
+def _action_block(**fields: str) -> str:
+    order = ["type", "name", "contact", "datetime", "department_or_staff",
+             "urgency", "details", "quote_total", "needs_human"]
+    lines = "\n".join(f"{k}: {fields.get(k, '-')}" for k in order)
+    return f"[ACTION]\n{lines}\n[/ACTION]"
+
+
+def _fake_reception(message: str) -> str:
+    """Canned natural reply + one [ACTION] block, intent-detected from the text.
+    Stands in for the real receptionist model so the loop runs keyless."""
+    m = message.lower()
+
+    if any(w in m for w in ("reschedule", "move my", "change my appointment")):
+        reply = "Of course — happy to move your appointment. What day and time work better for you?"
+        block = _action_block(type="reschedule", urgency="normal",
+                              details="Customer wants to reschedule an existing booking", needs_human="no")
+    elif "cancel" in m:
+        reply = "No problem, I can cancel that for you. Could I get the name the booking is under?"
+        block = _action_block(type="cancel", urgency="normal", details="Cancellation request", needs_human="no")
+    elif any(w in m for w in ("book", "appointment", "slot", "schedule", "reserve")):
+        reply = "Lovely! I can set that up. Can I take your name and a contact number, and which day suits you?"
+        block = _action_block(type="booking", urgency="normal",
+                              details="New booking request from web chat", needs_human="no")
+    elif any(w in m for w in ("price", "cost", "how much", "quote", "rate", "charges")):
+        reply = "Happy to help with pricing. Tell me the service you're after and I'll share the details."
+        block = _action_block(type="quote", urgency="normal",
+                              details="Pricing enquiry", quote_total="-", needs_human="no")
+    elif any(w in m for w in ("refund", "complaint", "terrible", "angry", "unhappy", "worst")):
+        reply = "I'm really sorry about that. I've noted your concern and our manager will reach out to make it right."
+        block = _action_block(type="complaint", urgency="high",
+                              details="Customer complaint — needs manager follow-up", needs_human="yes")
+    elif any(w in m for w in ("human", "manager", "real person", "representative", "agent")):
+        reply = "Sure — I'll have a team member follow up with you shortly. May I take your name and contact?"
+        block = _action_block(type="escalation", urgency="normal",
+                              details="Customer requested a human", needs_human="yes")
+    elif any(w in m for w in ("hours", "open", "timing", "where", "location", "address")):
+        reply = "We're open Tue–Sun, 10am–7pm, in Gulberg III, Lahore. Anything else I can help with?"
+        block = _action_block(type="none", urgency="low", details="FAQ: hours/location", needs_human="no")
+    else:
+        reply = "Thanks for reaching out! Could I take your name and contact so the right person can help you?"
+        block = _action_block(type="lead", urgency="normal",
+                              details="General enquiry — capture lead", needs_human="no")
+
+    return f"{reply}\n\n{block}"
+
+
 class FakeProvider:
     """Deterministic provider for local dev + tests. Implements `Provider`."""
 
@@ -157,6 +203,15 @@ class FakeProvider:
 
     async def complete(self, req: ModelRequest, *, model: str) -> ModelResult:
         t0 = perf_counter()
+
+        # Receptionist returns RAW text (natural reply + one [ACTION] block),
+        # not JSON — so it short-circuits the JSON path below.
+        if req.task == "reception":
+            text = _fake_reception(req.user)
+            return ModelResult(text=text, model=model, tier=req.tier,
+                               tokens_in=estimate_tokens(req.system + req.user),
+                               tokens_out=estimate_tokens(text),
+                               latency_ms=int((perf_counter() - t0) * 1000))
 
         if req.task == "build":
             site = _build_kit(req.user, req.context.get("tenant_id", ""))
