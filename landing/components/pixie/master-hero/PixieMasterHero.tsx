@@ -10,8 +10,8 @@ import { RolePanel } from './RolePanel';
 import { RoleProgress } from './RoleProgress';
 import { PremiumNavbar } from './PremiumNavbar';
 import { MobilePinnedRoleExperience } from './mobile/MobilePinnedRoleExperience';
-import { JoinPixie } from '@/pixie/JoinPixie';
 import { PixieFooter } from '@/components/sections/PixieFooter';
+import { JoinPixie } from '@/pixie/JoinPixie';
 import { FLYING_ROLES, INTRO, STUDIO_BG_SRC, NORMAL_FORM, preloadImage } from './roleData';
 import { ANCHORS, anchorPoint, oppositeSide } from './flightPath';
 import { themeFor, INTRO_THEME } from './themeMap';
@@ -228,14 +228,11 @@ export function PixieMasterHero() {
           <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-white/45">{INTRO.eyebrow}</p>
           <h1 className="mt-3 max-w-2xl font-display text-[clamp(2.1rem,4vw,3.25rem)] font-extrabold leading-[1.05] tracking-tight text-[#F4FFF9] text-balance">{INTRO.heading}</h1>
           <p className="mt-4 max-w-xl text-base leading-relaxed text-white/65 sm:text-lg">{INTRO.sub}</p>
-          {/* TEMP: products not live yet — single "Join Pixie" CTA → /join-pixie.
-              Original intro label (INTRO.primaryCta) and the secondary
-              "explore roles" CTA are preserved/commented for later restore. */}
+          {/* Intro uses our animated shimmer "Join Pixie" CTA → /join-pixie
+              waitlist (same button as the footer). Secondary jumps to roles. */}
           <div className="mt-7 flex items-center gap-3">
-            <JoinPixie label="Join Pixie" size="md" />
-            {/* TEMP DISABLED: secondary CTA hidden until products are ready.
+            <JoinPixie label={INTRO.primaryCta} size="md" />
             <a href="#pixie-greeter" className="inline-flex h-[52px] items-center justify-center rounded-full border bg-white/[0.04] px-6 text-sm font-semibold text-white/85 backdrop-blur-md" style={{ borderColor: 'color-mix(in srgb, var(--accent) 28%, transparent)' }}>{INTRO.secondaryCta}</a>
-            */}
           </div>
         </div>
       </section>

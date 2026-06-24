@@ -117,9 +117,11 @@ export const INTRO = {
   eyebrow: 'ONE AI · EVERY ROLE',
   heading: 'One AI. Every role your business needs.',
   sub: 'Pixie builds, markets, answers, audits, and connects your business from one intelligent assistant.',
-  primaryCta: 'Start with Pixie',
+  primaryCta: 'Join Pixie',
   secondaryCta: 'Explore roles',
-  primaryHref: '/ai-receptionist',
+  // Intro "Join Pixie" CTA → our waitlist system (SwipeDeck cards). The six
+  // role avatar CTAs still route to their own service pages (role.href).
+  primaryHref: '/join-pixie',
 };
 
 /** Intro chips orbiting the hub. Angle (deg) sets direction; the distance is a

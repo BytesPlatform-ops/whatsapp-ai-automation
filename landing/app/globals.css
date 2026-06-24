@@ -848,3 +848,40 @@
     background: rgba(37, 211, 102, 0.65);
   }
 }
+
+/* ──────────────────────────────────────────────────────────────────────────
+   Pixie service pages — marquee ticker + accent helpers. Self-contained so the
+   six product pages (/ai-receptionist …) never touch the homepage hero styles.
+   ────────────────────────────────────────────────────────────────────────── */
+@layer utilities {
+  @keyframes pixie-marquee {
+    from { transform: translate3d(0, 0, 0); }
+    to   { transform: translate3d(-50%, 0, 0); }
+  }
+  .pixie-marquee-track {
+    display: inline-flex;
+    flex-wrap: nowrap;
+    white-space: nowrap;
+    will-change: transform;
+    animation: pixie-marquee var(--marquee-duration, 28s) linear infinite;
+  }
+  .pixie-marquee-reverse .pixie-marquee-track {
+    animation-direction: reverse;
+  }
+  .pixie-marquee:hover .pixie-marquee-track {
+    animation-play-state: paused;
+  }
+
+  /* Service page is dark regardless of the global white body. */
+  .pixie-service {
+    background: #070b14;
+    color: #eaf1ff;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .pixie-marquee-track {
+      animation: none;
+      transform: none;
+    }
+  }
+}
