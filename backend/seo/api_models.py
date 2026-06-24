@@ -1,8 +1,8 @@
 """Pydantic request/response models for the SEO API (Mode A + Mode B).
 
-These wrap the framework-agnostic engine (`seo.engine`) at the HTTP boundary and
-are the deferred "Pydantic layer" the engine intentionally avoids. Pydantic v2.
-No secrets ever live in these models.
+These wrap the framework-agnostic engine (`seo.engine`) and the Mode A/B layers
+at the HTTP boundary — the deferred "Pydantic layer" the engine avoids on
+purpose. Pydantic v2. No secrets ever live in these models.
 """
 
 from __future__ import annotations
@@ -13,7 +13,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class UsageMeta(BaseModel):
-    """Cost/latency envelope returned on every SEO response. Never holds secrets."""
+    """Cost/latency envelope returned on SEO responses. Never holds secrets."""
 
     provider: str = "pixie-seo-engine"
     model: str = "deterministic-v1"
@@ -25,18 +25,20 @@ class UsageMeta(BaseModel):
 
 class GenerateRequest(BaseModel):
     """Mode A — enrich a Pixie-controlled page. `page` is a loose, normalized dict
-    handed straight to the tolerant engine normalizer."""
+    handed straight to the tolerant engine normalizer / injector."""
 
     model_config = ConfigDict(extra="ignore")
 
     tenant_id: str = Field(..., min_length=1)
     page: Dict[str, Any] = Field(default_factory=dict)
+    business_type: str = ""
+    brand: str = ""
     idempotency_key: Optional[str] = None
 
 
 class AuditUrlRequest(BaseModel):
-    """Mode B — audit an external page. Provide a pre-normalized `page` to audit now;
-    live URL crawling (SSRF-guarded) arrives in Wave 2 (`seo.mode_external`)."""
+    """Mode B — audit an external page. Supply `url` for a live SSRF-guarded
+    crawl, or a pre-normalized `page` to audit without fetching."""
 
     model_config = ConfigDict(extra="ignore")
 
@@ -63,18 +65,19 @@ class TrackRequest(BaseModel):
     idempotency_key: Optional[str] = None
 
 
-class ReportResponse(BaseModel):
-    """The full SEO result envelope for Mode A and Mode B."""
+class GenerateResponse(BaseModel):
+    """Mode A result — the enriched site plus before/after scores."""
 
     report_id: str
     tenant_id: str
     mode: str
     url: str = ""
-    score: Dict[str, Any]
-    checks: List[Dict[str, Any]]
-    issues: List[Dict[str, Any]]
-    suggestions: List[str]
-    fixes: List[Dict[str, Any]]
+    site: Dict[str, Any]
+    suggested_slug: str = ""
+    score_before: Dict[str, Any]
+    score_after: Dict[str, Any]
+    applied: List[str]
+    ai_fallback: bool
     usage: UsageMeta
 
 

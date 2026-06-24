@@ -5,7 +5,7 @@ engineer adds one `include_router` line manually (see the handoff notes). All
 persisted data is tenant-scoped and `GET /score/{id}` requires tenant context.
 
 Endpoints:
-  POST /api/seo/generate     Mode A — enrich a Pixie page + score it
+  POST /api/seo/generate     Mode A — enrich a Pixie page + before/after score
   POST /api/seo/audit-url    Mode B — audit an external page (never edits it)
   POST /api/seo/keywords     keyword research (provider lands in Wave 3)
   GET  /api/seo/score/{id}   fetch a saved, tenant-scoped report
@@ -22,88 +22,85 @@ from fastapi import APIRouter, Header, HTTPException, Query
 from .api_models import (
     AuditUrlRequest,
     GenerateRequest,
+    GenerateResponse,
     KeywordsRequest,
-    ReportResponse,
     TrackedKeywordOut,
     TrackRequest,
     TrackResponse,
     UsageMeta,
 )
-from .engine import analyze
+from .mode_external import audit_url as crawl_url
+from .mode_external import build_report
+from .mode_pixie import enrich_site
 from .repository import get_repository
-from .schemas import Mode
 
 router = APIRouter(prefix="/api/seo", tags=["seo"])
 
-_REPORT_KEYS = (
-    "report_id", "tenant_id", "mode", "url",
-    "score", "checks", "issues", "suggestions", "fixes",
+_GENERATE_KEYS = (
+    "report_id", "tenant_id", "mode", "url", "site",
+    "suggested_slug", "score_before", "score_after", "applied", "ai_fallback",
 )
 
 
-def _build_report(tenant_id: str, result, mode: Mode) -> dict:
-    d = result.to_dict()
-    return {
-        "tenant_id": tenant_id,
-        "mode": mode.value,
-        "url": d["page"].get("url", ""),
-        "score": d["score"],
-        "checks": d["checks"],
-        "issues": d["issues"],
-        "suggestions": d["suggestions"],
-        "fixes": d["fixes"],
+@router.post("/generate", response_model=GenerateResponse)
+def generate(req: GenerateRequest) -> GenerateResponse:
+    """Mode A — SEO-enrich a Pixie-controlled page and return before/after scores."""
+    start = time.perf_counter()
+    out = enrich_site(req.page, business_type=req.business_type, brand=req.brand)
+    report = {
+        "tenant_id": req.tenant_id,
+        "mode": "pixie",
+        "url": out["site"].get("url", ""),
+        "site": out["site"],
+        "suggested_slug": out["suggested_slug"],
+        "score_before": out["score_before"],
+        "score_after": out["score_after"],
+        "applied": out["applied"],
+        "ai_fallback": out["ai_fallback"],
     }
-
-
-def _as_response(stored: dict, usage: UsageMeta) -> ReportResponse:
-    return ReportResponse(usage=usage, **{k: stored[k] for k in _REPORT_KEYS})
-
-
-@router.post("/generate", response_model=ReportResponse)
-def generate(req: GenerateRequest) -> ReportResponse:
-    """Mode A — SEO-enrich a Pixie-controlled page and score it."""
-    start = time.perf_counter()
-    result = analyze(req.page, Mode.PIXIE)
-    report = _build_report(req.tenant_id, result, Mode.PIXIE)
     stored = get_repository().save_report(req.tenant_id, report, req.idempotency_key)
     usage = UsageMeta(
+        provider="pixie-seo-mode-a",
         latency_ms=int((time.perf_counter() - start) * 1000),
+        cache_hit=out["ai_fallback"] is False,
         request_id=stored["report_id"],
     )
-    return _as_response(stored, usage)
+    return GenerateResponse(usage=usage, **{k: stored[k] for k in _GENERATE_KEYS})
 
 
-@router.post("/audit-url", response_model=ReportResponse)
-def audit_url(req: AuditUrlRequest) -> ReportResponse:
-    """Mode B — audit an external page. Pixie NEVER edits external sites."""
-    if req.page is None:
-        # Live crawling (SSRF-guarded fetch + HTML->SeoPage) lands in Wave 2.
-        raise HTTPException(
-            status_code=501,
-            detail=(
-                "Live URL crawling arrives in Wave 2 (seo.mode_external). "
-                "Submit a normalized 'page' object to audit it now."
-            ),
-        )
+@router.post("/audit-url")
+def audit_url(req: AuditUrlRequest) -> dict:
+    """Mode B — audit an external page. Pixie NEVER edits external sites.
+
+    Supply `page` to audit a pre-normalized object, or `url` for a live,
+    SSRF-guarded crawl. Returns a severity-grouped report with a migration CTA.
+    """
     start = time.perf_counter()
-    result = analyze(req.page, Mode.EXTERNAL)
-    report = _build_report(req.tenant_id, result, Mode.EXTERNAL)
-    if req.url and not report["url"]:
-        report["url"] = req.url
+    if req.page is not None:
+        report = build_report(req.url or req.page.get("url", ""), req.page)
+    elif req.url:
+        report = crawl_url(req.url)  # SSRF guard + fetch + parse + report
+        if report.get("error"):
+            # blocked / fetch_failed — surface as a 400 with the reason.
+            raise HTTPException(status_code=400, detail=report)
+    else:
+        raise HTTPException(status_code=400, detail="provide either 'url' or 'page'")
+
     stored = get_repository().save_report(req.tenant_id, report, req.idempotency_key)
-    usage = UsageMeta(
-        latency_ms=int((time.perf_counter() - start) * 1000),
-        request_id=stored["report_id"],
-    )
-    return _as_response(stored, usage)
+    stored["usage"] = {
+        "provider": "pixie-seo-mode-b",
+        "latency_ms": int((time.perf_counter() - start) * 1000),
+        "request_id": stored["report_id"],
+    }
+    return stored
 
 
-@router.get("/score/{report_id}", response_model=ReportResponse)
+@router.get("/score/{report_id}")
 def get_score(
     report_id: str,
     tenant_id: Optional[str] = Query(default=None),
     x_tenant_id: Optional[str] = Header(default=None),
-) -> ReportResponse:
+) -> dict:
     """Fetch a saved report. Tenant context is REQUIRED and enforced (no cross-tenant reads)."""
     tenant = tenant_id or x_tenant_id
     if not tenant:
@@ -114,7 +111,7 @@ def get_score(
     stored = get_repository().get_report(tenant, report_id)
     if stored is None:
         raise HTTPException(status_code=404, detail="report not found")
-    return _as_response(stored, UsageMeta(cache_hit=True, request_id=report_id))
+    return stored
 
 
 @router.post("/keywords")
@@ -122,9 +119,7 @@ def keywords(req: KeywordsRequest):
     """Keyword research — provider abstraction + mock fallback land in Wave 3."""
     raise HTTPException(
         status_code=501,
-        detail=(
-            "Keyword research arrives in Wave 3 (seo.keywords); no provider is wired yet."
-        ),
+        detail="Keyword research arrives in Wave 3 (seo.keywords); no provider is wired yet.",
     )
 
 
