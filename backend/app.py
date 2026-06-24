@@ -23,8 +23,9 @@ class UsageSummary(BaseModel):
 
 
 class GenerateResponse(BaseModel):
-    """Response envelope — the Site plus what it cost to make it."""
+    """Response envelope — the agent reply, the Site, and what it cost to make it."""
 
+    reply: str = Field(default="", description="One short friendly line from the agent.")
     site: Site
     usage: UsageSummary = Field(..., description="Latency + cost + per-step usage events.")
 
@@ -39,6 +40,7 @@ async def generate(request: Request) -> GenerateResponse:
     """Build (or, later, edit) a site from a plain-language message."""
     outcome = await Orchestrator().handle(request)
     return GenerateResponse(
+        reply=outcome.reply,
         site=outcome.site,
         usage=UsageSummary(
             latency_ms=outcome.latency_ms,
