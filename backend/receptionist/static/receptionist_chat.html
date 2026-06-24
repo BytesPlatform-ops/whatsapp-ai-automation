@@ -24,6 +24,12 @@
   input:focus{border-color:var(--accent)}
   button{border:0;border-radius:12px;padding:0 18px;font-weight:700;background:var(--accent);color:#05231a;cursor:pointer}
   button:disabled{opacity:.5;cursor:wait}
+  #mic{background:var(--panel);border:1px solid var(--line);color:var(--text);font-size:1.05rem;padding:0 14px}
+  #mic.on{background:#ef4444;color:#fff;animation:pulse 1s infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.55}}
+  .spk{display:flex;align-items:center;gap:4px;color:var(--muted);font-size:.85rem;cursor:pointer}
+  .cal{border-color:var(--accent)!important}
+  .cal a{display:inline-block;margin-top:8px;color:#05231a;background:var(--accent);padding:7px 12px;border-radius:8px;font-weight:700;text-decoration:none;font-size:.78rem}
   .side{border-left:1px solid var(--line);padding:18px;overflow:auto}
   .side h3{font-size:.72rem;text-transform:uppercase;letter-spacing:.16em;color:var(--muted);margin-bottom:10px}
   .act{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:10px;font-size:.82rem}
@@ -44,7 +50,9 @@
       <div class="log" id="log"></div>
       <div class="usage" id="usage">Type a message to start. Try: "book a haircut Saturday", "how much is bridal makeup?", "I want a refund".</div>
       <div class="composer">
-        <input id="msg" placeholder="Message the receptionist…" autocomplete="off">
+        <button id="mic" title="Hold-free: click and speak">🎤</button>
+        <input id="msg" placeholder="Message or 🎤 speak to the receptionist…" autocomplete="off">
+        <label class="spk"><input type="checkbox" id="speak" checked> 🔊</label>
         <button id="send">Send</button>
       </div>
     </div>
@@ -55,39 +63,60 @@
   </main>
 <script>
   const $=id=>document.getElementById(id);
-  const history=[];
+  const history=[]; let usedVoice=false;
   fetch('/health').then(r=>r.json()).then(d=>{$('mode').textContent='mode: '+(d.model_mode||'?')}).catch(()=>{});
 
   function bubble(text, who){const row=document.createElement('div');row.className='row '+(who==='c'?'c':'r');
     const b=document.createElement('div');b.className='bub';b.textContent=text;row.appendChild(b);$('log').appendChild(row);$('log').scrollTop=1e9;}
-  function actionCard(a){const d=document.createElement('div');d.className='act';
-    d.innerHTML=`<div class="t">${a.type}</div>`+
+
+  function actionCard(a, res){const d=document.createElement('div');d.className='act'+((res&&res.created)?' cal':'');
+    let html=`<div class="t">${a.type}</div>`+
       `<div class="kv">urgency: <b>${a.urgency}</b></div>`+
       (a.needs_human?`<div class="kv human">⚑ needs human</div>`:``)+
       (a.details?`<div class="kv">details: <b>${a.details}</b></div>`:``)+
       (a.name?`<div class="kv">name: <b>${a.name}</b></div>`:``)+
-      (a.contact?`<div class="kv">contact: <b>${a.contact}</b></div>`:``)+
       (a.datetime?`<div class="kv">datetime: <b>${a.datetime}</b></div>`:``)+
       (a.quote_total?`<div class="kv">quote: <b>${a.quote_total}</b></div>`:``);
-    $('actions').prepend(d);}
+    if(res&&res.created&&res.event){html+=`<div class="kv">📅 <b>calendar event created</b></div>`+
+      `<div class="kv">${res.event.start.replace('T',' ')} → ${res.event.end.slice(11,16)}</div>`+
+      `<a href="${res.google_calendar_url}" target="_blank">＋ Add to Google Calendar</a>`+
+      `<div class="kv" style="margin-top:6px">.ics saved on server</div>`;}
+    else if(res&&res.kind){html+=`<div class="kv">✓ saved to ${res.kind} store</div>`;}
+    d.innerHTML=html;$('actions').prepend(d);}
+
+  function speak(text){if(!$('speak').checked||!window.speechSynthesis)return;
+    try{speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(text);u.rate=1.02;u.pitch=1;speechSynthesis.speak(u);}catch(e){}}
 
   async function send(){
     const v=$('msg').value.trim(); if(!v) return;
+    const viaVoice=usedVoice; usedVoice=false;
     $('msg').value=''; $('send').disabled=true;
     bubble(v,'c'); history.push({role:'customer',content:v});
     try{
       const r=await fetch('/receptionist/chat',{method:'POST',headers:{'content-type':'application/json'},
-        body:JSON.stringify({tenant_id:'t_demo',message:v,history})});
+        body:JSON.stringify({tenant_id:'t_demo',message:v,channel:viaVoice?'voice':'chat',history})});
       const d=await r.json();
       if(!r.ok){bubble('⚠ '+(d.detail||('HTTP '+r.status)),'r');return;}
       bubble(d.reply_text,'r'); history.push({role:'receptionist',content:d.reply_text});
-      actionCard(d.action);
-      const u=d.usage; $('usage').textContent=`model ${u.model} · ${u.tokens_in}+${u.tokens_out} tok · ${u.latency_ms}ms · $${(u.cost_usd||0).toFixed(5)}`;
+      actionCard(d.action, d.action_result);
+      if(viaVoice||$('speak').checked) speak(d.reply_text);
+      const u=d.usage; $('usage').textContent=`${viaVoice?'🎤 voice · ':''}model ${u.model} · ${u.tokens_in}+${u.tokens_out} tok · ${u.latency_ms}ms · $${(u.cost_usd||0).toFixed(5)}`;
     }catch(e){bubble('⚠ '+e.message,'r');}
     finally{$('send').disabled=false;$('msg').focus();}
   }
   $('send').onclick=send;
   $('msg').addEventListener('keydown',e=>{if(e.key==='Enter')send()});
+
+  // Voice input via the browser's built-in Speech API (no keys).
+  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(SR){const rec=new SR();rec.lang='en-US';rec.interimResults=false;rec.maxAlternatives=1;
+    let listening=false;
+    $('mic').onclick=()=>{ if(listening){rec.stop();return;} try{rec.start();}catch(e){} };
+    rec.onstart=()=>{listening=true;$('mic').classList.add('on');};
+    rec.onend=()=>{listening=false;$('mic').classList.remove('on');};
+    rec.onresult=ev=>{const t=ev.results[0][0].transcript;$('msg').value=t;usedVoice=true;send();};
+    rec.onerror=()=>{listening=false;$('mic').classList.remove('on');};
+  } else { $('mic').disabled=true; $('mic').title='Speech not supported in this browser (try Chrome)'; }
 </script>
 </body>
 </html>

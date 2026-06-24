@@ -24,3 +24,6 @@ env/
 
 # Local preview artifacts
 preview/out/
+
+# Receptionist generated stores (calendar events, leads)
+receptionist/data/

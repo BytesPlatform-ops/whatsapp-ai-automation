@@ -19,6 +19,7 @@ from pydantic import BaseModel, Field
 from billing import get_recorder
 from schemas import UsageEvent, UsageEventType
 
+from .actions import run_action
 from .channels import WebChatAdapter
 from .core import ReceptionEngine
 
@@ -30,6 +31,7 @@ _adapter = WebChatAdapter()
 class ChatIn(BaseModel):
     tenant_id: str = "t_demo"
     message: str = Field(..., min_length=1, max_length=8000)
+    channel: str = "chat"  # "chat" | "voice" (browser speech)
     history: list[dict] = Field(default_factory=list)
     customer_id: str | None = None
 
@@ -44,6 +46,9 @@ async def chat(body: ChatIn) -> dict:
     req = _adapter.to_request(body.tenant_id, body.model_dump())
     reply, result = await ReceptionEngine().handle(req)
 
+    # Run the real side-effect for the parsed action (booking → calendar, etc.).
+    action_result = run_action(reply.action, req)
+
     # Bill the model call (model/tokens/latency/cost).
     get_recorder().record(UsageEvent(
         tenant_id=req.tenant_id,
@@ -57,6 +62,7 @@ async def chat(body: ChatIn) -> dict:
     ))
 
     out = _adapter.format_reply(reply)
+    out["action_result"] = action_result
     out["usage"] = {
         "model": result.model,
         "tokens_in": result.tokens_in,

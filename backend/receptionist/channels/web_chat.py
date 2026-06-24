@@ -22,9 +22,15 @@ class WebChatAdapter(ChannelAdapter):
             for t in (payload.get("history") or [])
             if t.get("content")
         ]
+        # Same web surface can run as 'chat' or 'voice' (browser speech); the
+        # engine adapts reply length via {{CHANNEL}}.
+        try:
+            channel = Channel(str(payload.get("channel") or "chat"))
+        except ValueError:
+            channel = Channel.CHAT
         return ReceptionRequest(
             tenant_id=tenant_id,
-            channel=Channel.CHAT,
+            channel=channel,
             customer_id=payload.get("customer_id"),
             message=str(payload.get("message", "")),
             history=history,

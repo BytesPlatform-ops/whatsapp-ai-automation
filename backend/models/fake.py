@@ -150,6 +150,50 @@ def _generic_site(tenant_id: str, brand: str) -> Site:
     )
 
 
+_WEEKDAYS = {"monday": 0, "tuesday": 1, "wednesday": 2, "thursday": 3, "friday": 4, "saturday": 5, "sunday": 6}
+
+
+def _extract_when(m: str) -> str | None:
+    """Light natural-time parse for the demo (weekday/tomorrow/today + time)."""
+    from datetime import datetime, timedelta
+
+    now = datetime.now()
+    hour, minute, had_time = 15, 0, False
+    tm = re.search(r"(\d{1,2})(?::(\d{2}))?\s*(am|pm)", m)
+    if tm:
+        hour = int(tm.group(1)) % 12 + (12 if tm.group(3) == "pm" else 0)
+        minute = int(tm.group(2) or 0)
+        had_time = True
+    else:
+        tm24 = re.search(r"\b(\d{1,2}):(\d{2})\b", m)
+        if tm24:
+            hour, minute, had_time = int(tm24.group(1)), int(tm24.group(2)), True
+
+    target = None
+    for name, idx in _WEEKDAYS.items():
+        if name in m:
+            days = (idx - now.weekday()) % 7 or 7  # next occurrence
+            target = now + timedelta(days=days)
+            break
+    if "tomorrow" in m:
+        target = now + timedelta(days=1)
+    elif "today" in m:
+        target = now
+
+    if target is None and not had_time:
+        return None
+    target = target or now
+    return target.replace(hour=hour, minute=minute, second=0, microsecond=0).isoformat(timespec="minutes")
+
+
+def _extract_name(message: str) -> str | None:
+    mt = re.search(r"\b(?:i'?m|i am|name is|name's|under|this is|for)\s+([A-Z][a-z]+)", message, re.IGNORECASE)
+    if not mt:
+        return None
+    name = mt.group(1)
+    return name[:1].upper() + name[1:]
+
+
 def _action_block(**fields: str) -> str:
     order = ["type", "name", "contact", "datetime", "department_or_staff",
              "urgency", "details", "quote_total", "needs_human"]
@@ -170,9 +214,16 @@ def _fake_reception(message: str) -> str:
         reply = "No problem, I can cancel that for you. Could I get the name the booking is under?"
         block = _action_block(type="cancel", urgency="normal", details="Cancellation request", needs_human="no")
     elif any(w in m for w in ("book", "appointment", "slot", "schedule", "reserve")):
-        reply = "Lovely! I can set that up. Can I take your name and a contact number, and which day suits you?"
-        block = _action_block(type="booking", urgency="normal",
-                              details="New booking request from web chat", needs_human="no")
+        when = _extract_when(m)
+        name = _extract_name(message)
+        if when:
+            nice = when.replace("T", " ")
+            who = f", {name}" if name else ""
+            reply = f"Perfect{who} — I've got you down for {nice}. You'll get a reminder the day before. Anything else?"
+        else:
+            reply = "Lovely! I can set that up. What day and time suit you, and can I take your name and number?"
+        block = _action_block(type="booking", name=name or "unknown", datetime=when or "-",
+                              urgency="normal", details="Haircut booking via receptionist", needs_human="no")
     elif any(w in m for w in ("price", "cost", "how much", "quote", "rate", "charges")):
         reply = "Happy to help with pricing. Tell me the service you're after and I'll share the details."
         block = _action_block(type="quote", urgency="normal",
