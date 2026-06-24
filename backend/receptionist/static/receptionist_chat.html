@@ -134,16 +134,33 @@
   $('send').onclick=send;
   $('msg').addEventListener('keydown',e=>{if(e.key==='Enter')send()});
 
-  // Voice input via the browser's built-in Speech API (no keys).
-  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  // ── Capability check (shown to the user so failures are visible) ──
+  const secure = window.isSecureContext;
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const TTS = 'speechSynthesis' in window;
+  const caps = [];
+  if(!secure) caps.push('⚠ open on http://localhost:8000 (mic needs a secure context — a LAN IP won\'t work)');
+  if(!SR) caps.push('⚠ mic input needs Chrome/Edge/Safari (not Firefox)');
+  if(!TTS) caps.push('⚠ spoken replies not supported in this browser');
+  if(caps.length) $('usage').innerHTML = caps.join('<br>');
+
+  const MIC_ERR = {'not-allowed':'mic permission blocked — allow it in the address bar 🔒','service-not-allowed':'mic blocked by the browser/OS','no-speech':'didn\'t hear anything — try again','audio-capture':'no microphone found','network':'speech network error — check connection'};
+
   if(SR){const rec=new SR();rec.lang='en-US';rec.interimResults=false;rec.maxAlternatives=1;
     let listening=false;
-    $('mic').onclick=()=>{ if(listening){rec.stop();return;} try{rec.start();}catch(e){} };
-    rec.onstart=()=>{listening=true;$('mic').classList.add('on');};
+    $('mic').onclick=()=>{
+      if(!secure){$('usage').textContent='🎤 needs http://localhost:8000 (secure context)';return;}
+      if(listening){rec.stop();return;}
+      try{rec.start();}catch(e){$('usage').textContent='🎤 '+e.message;}
+    };
+    rec.onstart=()=>{listening=true;$('mic').classList.add('on');$('usage').textContent='🎤 listening…';};
     rec.onend=()=>{listening=false;$('mic').classList.remove('on');};
     rec.onresult=ev=>{const t=ev.results[0][0].transcript;$('msg').value=t;usedVoice=true;send();};
-    rec.onerror=()=>{listening=false;$('mic').classList.remove('on');};
-  } else { $('mic').disabled=true; $('mic').title='Speech not supported in this browser (try Chrome)'; }
+    rec.onerror=ev=>{listening=false;$('mic').classList.remove('on');$('usage').textContent='🎤 '+(MIC_ERR[ev.error]||('error: '+ev.error));};
+  } else { $('mic').disabled=true; $('mic').title='Speech recognition not supported — use Chrome/Edge'; }
+
+  // Pre-load TTS voices (some browsers populate them asynchronously).
+  if(TTS){ try{ speechSynthesis.getVoices(); speechSynthesis.onvoiceschanged=()=>speechSynthesis.getVoices(); }catch(e){} }
 </script>
 </body>
 </html>
