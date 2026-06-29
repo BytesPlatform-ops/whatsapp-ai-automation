@@ -2,12 +2,12 @@
 
 import { useEffect, useState } from 'react';
 import { waLink } from '@/lib/config';
+import { NavAuth } from '@/components/auth/NavAuth';
 import { MobileMenu } from './MobileMenu';
 
 const LINKS = [
   { href: '/#how', label: 'How it works' },
   { href: '/#services', label: 'Services' },
-  { href: '/dashboard', label: 'Dashboard' },
   { href: '/examples', label: 'Examples' },
   { href: '/#results', label: 'Results' },
   { href: '/#faq', label: 'FAQ' },
@@ -68,6 +68,9 @@ export function PremiumNavbar() {
 
           {/* CTA (desktop) + hamburger (mobile) */}
           <div className="flex items-center gap-3">
+            <div className="mh-nav-enter hidden items-center gap-2.5 lg:flex" style={{ animationDelay: '340ms' }}>
+              <NavAuth variant="desktop" themed />
+            </div>
             <a
               href={waLink('Hi! I found Pixie and want to know more.')}
               className="mh-nav-enter hidden h-11 items-center justify-center rounded-full px-5 text-sm font-semibold transition-transform hover:-translate-y-0.5 lg:inline-flex"

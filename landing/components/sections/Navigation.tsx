@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { WhatsAppButton } from '@/components/WhatsAppButton';
+import { NavAuth } from '@/components/auth/NavAuth';
 import { siteConfig } from '@/lib/config';
 
 const links = [
@@ -53,6 +54,9 @@ export function Navigation() {
         </nav>
 
         <div className="flex items-center gap-2">
+          <div className="hidden items-center gap-2 md:flex">
+            <NavAuth variant="desktop" />
+          </div>
           <div className="hidden sm:block">
             <WhatsAppButton size="md" label="Chat now" prefill="Hi! I want to build a website for my business." />
           </div>
@@ -83,6 +87,9 @@ export function Navigation() {
               </a>
             ))}
             <div className="pt-2">
+              <NavAuth variant="mobile" />
+            </div>
+            <div className="pt-1">
               <WhatsAppButton size="md" label="Chat on WhatsApp" className="w-full" prefill="Hi! I want to build a website for my business." />
             </div>
           </div>

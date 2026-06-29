@@ -2,11 +2,11 @@
 
 import { useEffect, useRef } from 'react';
 import { waLink } from '@/lib/config';
+import { NavAuth } from '@/components/auth/NavAuth';
 
 const LINKS = [
   { href: '/#how', label: 'How it works' },
   { href: '/#services', label: 'Services' },
-  { href: '/dashboard', label: 'Dashboard' },
   { href: '/examples', label: 'Examples' },
   { href: '/#results', label: 'Results' },
   { href: '/#faq', label: 'FAQ' },
@@ -89,7 +89,8 @@ export function MobileMenu({ open, onClose }: { open: boolean; onClose: () => vo
         ))}
       </nav>
 
-      <div className="container-page pb-12">
+      <div className="container-page space-y-3 pb-12">
+        <NavAuth variant="mobile" themed />
         <a
           href={waLink('Hi! I found Pixie and want to know more.')}
           onClick={onClose}
