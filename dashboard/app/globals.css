@@ -1,0 +1,20 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* Default neutral accent (each service card overrides --accent / --soft). */
+  --accent: #8b7cf6;
+  --soft: #c4b5fd;
+  --button-text: #0a0612;
+}
+
+html,
+body {
+  background: #02070a;
+  color: #ffffff;
+}
+
+* {
+  box-sizing: border-box;
+}
