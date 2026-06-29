@@ -14,7 +14,6 @@ just because providers/cost/quality aren't merged yet.
 from __future__ import annotations
 
 from ..agents.agent_log import AgentLog, get_agent_log_store
-from ..agents.mock_ai import mock_learning
 from ..enums import JobStatus, PipelineStage
 from .gates import require_for_stage
 from .stages import PipelineState, next_stage
@@ -78,37 +77,60 @@ def _h_cost_estimate(state: PipelineState) -> None:
     )
 
 
+def _build_video_prompt(state: PipelineState) -> dict:
+    from ..providers.prompt_builder import build_higgsfield_prompt
+
+    model = state.cost_estimate.get("model", "standard")
+    return build_higgsfield_prompt(
+        identity=state.identity, script=state.script, profile=state.profile, model=model
+    )
+
+
 def _h_video_generation(state: PipelineState) -> None:
     from ..providers.base import get_higgsfield_provider
 
-    prompt = {
-        "identity_ref": state.identity.get("reference_ref", ""),
-        "script": state.script.get("body", ""),
-        "background": "studio-mock",
-        "aspect_ratio": "9:16",
-        "duration_seconds": 15,
-        "negative_prompt": "low quality, distorted",
-    }
+    # Prompt always injects the locked identity (deterministic builder).
+    prompt = _build_video_prompt(state)
     state.video = get_higgsfield_provider().generate(prompt)
 
 
 def _h_quality_check(state: PipelineState) -> None:
-    from ..quality.deterministic import run_deterministic_checks
+    # Deterministic checks + the retry ladder (regenerates via the provider on
+    # failure, escalating up to the cost-estimate's retry budget).
+    from ..providers.base import get_higgsfield_provider
+    from ..quality.retry_ladder import run_quality_with_retries
 
-    state.quality = run_deterministic_checks(state.video, state=state.to_dict())
+    budget = int(state.cost_estimate.get("retry_budget", 2) or 2)
+    prompt = _build_video_prompt(state)
+    result = run_quality_with_retries(
+        prompt, get_higgsfield_provider().generate, state=state.to_dict(), max_retries=budget
+    )
+    state.video = result.get("video", state.video)
+    state.quality = result.get("quality", {})
+    state.quality["retry"] = {
+        "attempts": result.get("attempts", 0),
+        "status": result.get("status"),
+        "manual_review": result.get("manual_review", False),
+        "actions": result.get("actions", []),
+    }
 
 
 def _h_posting(state: PipelineState) -> None:
-    # Wave 1 dry-run stub. TODO(Wave 3): real Meta/Instagram/TikTok publish
-    # adapters replace this stub with scheduled/posted records + platform ids.
-    state.posts.append({"platform": "meta", "status": "dry_run", "dry_run": True})
+    # Dry-run only — schedule_posts uses the placeholder adapters (no live post).
+    from ..integrations.scheduler import schedule_posts
+
+    video_ref = state.video.get("asset_ref", "")
+    state.posts = schedule_posts(state.tenant_id, video_ref, ["meta", "instagram"])
 
 
 def _h_analytics(state: PipelineState) -> None:
-    # Wave 1 stub. TODO(Wave 3): pull real per-platform metrics and feed the
-    # full learning loop instead of an empty-sample mock.
-    state.metrics = {"views": 0, "likes": 0, "comments": 0, "shares": 0, "saves": 0}
-    state.learning = mock_learning([])
+    from ..analytics.learning_loop import LearningLoop
+    from ..analytics.metrics import sync_metrics
+
+    post_refs = [p.get("external_ref", "") for p in state.posts if p.get("external_ref")]
+    metrics = sync_metrics(state.tenant_id, post_refs)
+    state.metrics = {"items": metrics, "synced": len(metrics)}
+    state.learning = LearningLoop().summarize(state.tenant_id, metrics)
 
 
 _HANDLERS = {
