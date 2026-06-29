@@ -16,6 +16,7 @@ from orchestrator import Orchestrator
 from receptionist.api import router as receptionist_router
 from receptionist.campaigns.api import router as campaigns_router
 from receptionist.onboarding.api import router as onboarding_router
+from content_creator.router import router as content_creator_router
 from schemas import Request, Site, UsageEvent
 from seo.router import router as seo_router
 
@@ -24,6 +25,7 @@ app.include_router(receptionist_router)
 app.include_router(onboarding_router)
 app.include_router(campaigns_router)
 app.include_router(seo_router)
+app.include_router(content_creator_router)
 
 
 class UsageSummary(BaseModel):
