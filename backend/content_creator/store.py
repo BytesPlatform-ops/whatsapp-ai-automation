@@ -29,8 +29,13 @@ from .schemas import (
     CreatorProfile,
     Idea,
     InfluencerIdentity,
+    Learning,
+    Metric,
+    Post,
     ProviderConnection,
+    QualityCheck,
     Script,
+    Video,
 )
 from .enums import ApprovalGate, ApprovalStatus, ProviderMode
 
@@ -308,6 +313,104 @@ class InMemoryApprovalRepository:
 
 
 # ---------------------------------------------------------------------------
+# Stage 9 — Video  /  Stage 10 — Quality
+# ---------------------------------------------------------------------------
+class InMemoryVideoRepository:
+    """Tenant-scoped video store (one current video per script)."""
+
+    def __init__(self) -> None:
+        self._videos: Dict[str, Video] = {}
+
+    def save(self, video: Video) -> Tuple[str, Video]:
+        vid = _stable_id("ccvid_", video.tenant_id, video.script_ref or video.asset_ref)
+        self._videos[vid] = video
+        return vid, video
+
+    def get(self, tenant_id: str, video_id: str) -> Optional[Tuple[str, Video]]:
+        v = self._videos.get(video_id)
+        if v is None or v.tenant_id != tenant_id:
+            return None
+        return video_id, v
+
+    def list(self, tenant_id: str) -> List[Tuple[str, Video]]:
+        return [(i, v) for i, v in self._videos.items() if v.tenant_id == tenant_id]
+
+
+class InMemoryQualityRepository:
+    """Tenant-scoped quality-check store, keyed by the video ref."""
+
+    def __init__(self) -> None:
+        self._checks: Dict[str, QualityCheck] = {}
+
+    def save(self, check: QualityCheck) -> Tuple[str, QualityCheck]:
+        cid = _stable_id("ccqc_", check.tenant_id, check.video_ref)
+        self._checks[cid] = check
+        return cid, check
+
+    def get_by_video(self, tenant_id: str, video_ref: str) -> Optional[Tuple[str, QualityCheck]]:
+        cid = _stable_id("ccqc_", tenant_id, video_ref)
+        c = self._checks.get(cid)
+        if c is None or c.tenant_id != tenant_id:
+            return None
+        return cid, c
+
+
+# ---------------------------------------------------------------------------
+# Stage 12 — Posts  /  Stage 13 — Metrics + Learning
+# ---------------------------------------------------------------------------
+class InMemoryPostRepository:
+    """Tenant-scoped post store (one per video+platform)."""
+
+    def __init__(self) -> None:
+        self._posts: Dict[str, Post] = {}
+
+    def save(self, post: Post) -> Tuple[str, Post]:
+        pid = _stable_id("ccpost_", post.tenant_id, post.video_ref, post.platform.value)
+        self._posts[pid] = post
+        return pid, post
+
+    def list(self, tenant_id: str) -> List[Tuple[str, Post]]:
+        return [(i, p) for i, p in self._posts.items() if p.tenant_id == tenant_id]
+
+
+class InMemoryMetricRepository:
+    """Tenant-scoped metric store (one per post)."""
+
+    def __init__(self) -> None:
+        self._metrics: Dict[str, Metric] = {}
+
+    def save(self, metric: Metric) -> Tuple[str, Metric]:
+        mid = _stable_id("ccmetric_", metric.tenant_id, metric.post_ref)
+        self._metrics[mid] = metric
+        return mid, metric
+
+    def list(self, tenant_id: str) -> List[Tuple[str, Metric]]:
+        return [(i, m) for i, m in self._metrics.items() if m.tenant_id == tenant_id]
+
+
+class InMemoryLearningRepository:
+    """Tenant-scoped learning store; get_latest returns the most recent summary."""
+
+    def __init__(self) -> None:
+        self._learnings: Dict[str, Learning] = {}
+        self._latest: Dict[str, str] = {}  # tenant -> id
+        self._counter = 0
+
+    def save(self, learning: Learning) -> Tuple[str, Learning]:
+        self._counter += 1
+        lid = _stable_id("cclearn_", learning.tenant_id, str(self._counter))
+        self._learnings[lid] = learning
+        self._latest[learning.tenant_id] = lid
+        return lid, learning
+
+    def get_latest(self, tenant_id: str) -> Optional[Tuple[str, Learning]]:
+        lid = self._latest.get(tenant_id)
+        if lid is None:
+            return None
+        return lid, self._learnings[lid]
+
+
+# ---------------------------------------------------------------------------
 # Module-level singletons + lazy accessors
 # ---------------------------------------------------------------------------
 _profile_repo: Optional[InMemoryProfileRepository] = None
@@ -358,3 +461,45 @@ def get_approval_repository() -> InMemoryApprovalRepository:
     if _approval_repo is None:
         _approval_repo = InMemoryApprovalRepository()
     return _approval_repo
+
+
+_video_repo: Optional[InMemoryVideoRepository] = None
+_quality_repo: Optional[InMemoryQualityRepository] = None
+_post_repo: Optional[InMemoryPostRepository] = None
+_metric_repo: Optional[InMemoryMetricRepository] = None
+_learning_repo: Optional[InMemoryLearningRepository] = None
+
+
+def get_video_repository() -> InMemoryVideoRepository:
+    global _video_repo
+    if _video_repo is None:
+        _video_repo = InMemoryVideoRepository()
+    return _video_repo
+
+
+def get_quality_repository() -> InMemoryQualityRepository:
+    global _quality_repo
+    if _quality_repo is None:
+        _quality_repo = InMemoryQualityRepository()
+    return _quality_repo
+
+
+def get_post_repository() -> InMemoryPostRepository:
+    global _post_repo
+    if _post_repo is None:
+        _post_repo = InMemoryPostRepository()
+    return _post_repo
+
+
+def get_metric_repository() -> InMemoryMetricRepository:
+    global _metric_repo
+    if _metric_repo is None:
+        _metric_repo = InMemoryMetricRepository()
+    return _metric_repo
+
+
+def get_learning_repository() -> InMemoryLearningRepository:
+    global _learning_repo
+    if _learning_repo is None:
+        _learning_repo = InMemoryLearningRepository()
+    return _learning_repo
