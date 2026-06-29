@@ -7,6 +7,7 @@ import { MobileMenu } from './MobileMenu';
 const LINKS = [
   { href: '/#how', label: 'How it works' },
   { href: '/#services', label: 'Services' },
+  { href: '/dashboard', label: 'Dashboard' },
   { href: '/examples', label: 'Examples' },
   { href: '/#results', label: 'Results' },
   { href: '/#faq', label: 'FAQ' },

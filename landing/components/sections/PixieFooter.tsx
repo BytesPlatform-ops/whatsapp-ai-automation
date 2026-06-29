@@ -14,6 +14,7 @@ import { siteConfig } from '@/lib/config';
  */
 const QUICK_LINKS = [
   { label: 'Home', href: '/' },
+  { label: 'Dashboard', href: '/dashboard' },
   { label: 'AI Receptionist', href: '/ai-receptionist' },
   { label: 'Website Builder', href: '/website-builder' },
   { label: 'Social Media Marketing', href: '/social-media-marketing' },
