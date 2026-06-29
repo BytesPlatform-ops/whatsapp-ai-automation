@@ -14,7 +14,7 @@ just because providers/cost/quality aren't merged yet.
 from __future__ import annotations
 
 from ..agents.agent_log import AgentLog, get_agent_log_store
-from ..agents.mock_ai import mock_ideas, mock_learning, mock_script
+from ..agents.mock_ai import mock_learning
 from ..enums import JobStatus, PipelineStage
 from .gates import require_for_stage
 from .stages import PipelineState, next_stage
@@ -45,9 +45,12 @@ def _h_provider_connection(state: PipelineState) -> None:
 
 
 def _h_idea_generation(state: PipelineState) -> None:
-    topic = state.profile.get("niche") or "your service"
-    brand = state.profile.get("brand", "")
-    state.ideas = mock_ideas(topic, brand)
+    # Real agents (fall back to deterministic mock AI in fake mode).
+    from ..agents.idea_agent import generate_ideas
+    from ..integrations.trends import gather_trends
+
+    trends = gather_trends(state.profile)
+    state.ideas = generate_ideas(state.profile, trends=trends)
 
 
 def _h_gate_passthrough(state: PipelineState) -> None:
@@ -57,10 +60,10 @@ def _h_gate_passthrough(state: PipelineState) -> None:
 
 
 def _h_script_generation(state: PipelineState) -> None:
+    from ..agents.script_agent import generate_script
+
     top_idea = state.ideas[0] if state.ideas else {}
-    tone = state.profile.get("tone", "friendly")
-    language = state.profile.get("language", "en")
-    state.script = mock_script(top_idea, tone=tone, language=language)
+    state.script = generate_script(top_idea, state.profile)
 
 
 def _h_cost_estimate(state: PipelineState) -> None:
