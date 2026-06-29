@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Pixie Content Creator — Demo Console</title>
+<link rel="stylesheet" href="/demo/static/demo.css" />
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <span class="logo">✦</span>
+    <div>
+      <h1>Pixie · Content Creator</h1>
+      <p class="sub">13-stage pipeline · owner-in-the-loop gates</p>
+    </div>
+  </div>
+  <div class="badges">
+    <span class="badge mock" id="mockBadge">DEMO · MOCK MODE</span>
+    <span class="badge soft" id="bannerInfo">loading…</span>
+    <button class="btn primary" id="btnHappy">▶ Run full happy path</button>
+    <button class="btn ghost" id="btnReset">⟳ Reset</button>
+  </div>
+</header>
+
+<!-- 13-stage progress bar -->
+<section class="progress" id="progressBar" aria-label="Pipeline progress"></section>
+
+<main class="layout">
+  <!-- LEFT: controls -->
+  <aside class="col controls">
+    <h2>Stages</h2>
+    <div class="stage-buttons" id="stageButtons"></div>
+
+    <h2>Approval gates</h2>
+    <div class="gate-buttons" id="gateButtons">
+      <button class="btn gate" data-gate="idea">✔ Approve · Gate 1 Idea</button>
+      <button class="btn gate" data-gate="script">✔ Approve · Gate 2 Script</button>
+      <button class="btn gate" data-gate="production">✔ Approve · Gate 3 Production</button>
+      <button class="btn gate" data-gate="publish">✔ Approve · Gate 4 Publish</button>
+    </div>
+
+    <div class="notice" id="notice" hidden></div>
+  </aside>
+
+  <!-- CENTER: artifacts -->
+  <section class="col artifacts">
+    <h2>Artifacts</h2>
+
+    <div class="card" id="videoCard" hidden>
+      <h3>🎬 Mock video</h3>
+      <div class="video-tile">
+        <div class="thumb" id="videoThumb">▶</div>
+        <div class="video-meta">
+          <div><span class="k">asset_ref</span><code id="videoRef">—</code></div>
+          <div><span class="k">status</span><code id="videoStatus">—</code></div>
+          <div><span class="k">duration</span><code id="videoDur">—</code></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" id="qualityCard" hidden>
+      <h3>🔎 Quality flags</h3>
+      <div id="qualityBody" class="flags"></div>
+    </div>
+
+    <div class="card" id="analyticsCard" hidden>
+      <h3>📊 Mock analytics</h3>
+      <div class="metrics" id="metricsGrid"></div>
+    </div>
+
+    <div class="card" id="ideasCard" hidden>
+      <h3>💡 Ideas</h3>
+      <ul id="ideasList" class="ideas"></ul>
+    </div>
+  </section>
+
+  <!-- RIGHT: state + logs -->
+  <section class="col inspect">
+    <div class="panel">
+      <h2>Live state</h2>
+      <pre id="statePanel" class="json">{}</pre>
+    </div>
+    <div class="panel">
+      <h2>Agent log</h2>
+      <div id="logsPanel" class="logs"></div>
+    </div>
+  </section>
+</main>
+
+<script src="/demo/static/demo.js"></script>
+</body>
+</html>
