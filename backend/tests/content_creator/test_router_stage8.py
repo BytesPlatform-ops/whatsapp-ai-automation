@@ -54,6 +54,8 @@ def test_gate3_blocks_video_until_production_approved():
     ok = client.post(f"{B}/videos/generate", json={"tenant_id": t, "script_id": sid})
     assert ok.status_code == 200, ok.text
     assert ok.json()["video"]["aspect_ratio"] == "9:16"
+    # the locked identity is observable on the persisted video record
+    assert ok.json()["video"]["identity_ref"]
 
 
 def test_full_stage8_to_13_with_gate4():

@@ -106,6 +106,7 @@ class Video(_Base):
     status: VideoStatus = VideoStatus.MOCK
     asset_ref: str = ""
     preview_ref: str = ""
+    identity_ref: str = ""  # the locked influencer identity baked into this video
     aspect_ratio: str = "9:16"
     duration_seconds: int = 15
     model: str = ""

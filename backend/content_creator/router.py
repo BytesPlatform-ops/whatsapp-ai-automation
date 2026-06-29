@@ -421,6 +421,7 @@ def videos_generate(body: VideoGenerateBody) -> dict:
         status=VideoStatus.MOCK,
         asset_ref=raw.get("asset_ref", ""),
         preview_ref=raw.get("preview_ref", ""),
+        identity_ref=raw.get("identity_ref", ""),  # surface the locked identity on the record
         aspect_ratio=raw.get("aspect_ratio", "9:16"),
         duration_seconds=int(raw.get("duration_seconds", 15) or 15),
         model=raw.get("model", ""),

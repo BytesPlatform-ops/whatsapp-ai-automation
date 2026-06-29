@@ -526,6 +526,7 @@ model Video {
   status        CcVideoStatus @default(mock)
   assetRef      String        @default("")
   previewRef    String        @default("")
+  identityRef   String        @default("")
   aspectRatio   String        @default("9:16")
   durationSeconds Int         @default(15)
   model         String        @default("")
