@@ -322,3 +322,310 @@ model MarketingPlatformConnection {
   @@unique([tenantId, platform])
   @@index([tenantId])
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Pixie Content Creator — additive Prisma models for the AI Content Creator.
+//
+// ADDITIVE ONLY: these are NEW models. They do not modify, rename, or remove any
+// existing model, field, or relation. NO migration has been run. Every model is
+// tenant-scoped (tenantId) per the multi-tenant rule.
+//
+// Usage note (same as the SEO + Marketing models above): the backend is
+// Python/FastAPI while Prisma is a JS/TS ORM. Until prisma-client-py / direct
+// Postgres access is approved, the content-creator service persists through the
+// in-memory repository seam (mirrors these shapes). Provider tokens are NEVER
+// stored here in cleartext — only a non-secret accountRef placeholder.
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum CcProviderMode {
+  user_account
+  pixie_account
+}
+
+enum CcApprovalStatus {
+  pending
+  approved
+  rejected
+  needs_changes
+}
+
+enum CcIdentitySource {
+  reference_image
+  generated_character
+}
+
+enum CcJobStatus {
+  queued
+  running
+  done
+  failed
+  skipped
+}
+
+enum CcVideoStatus {
+  pending
+  generating
+  ready
+  failed
+  mock
+}
+
+enum CcPostStatus {
+  scheduled
+  dry_run
+  posted
+  failed
+}
+
+enum CcQualityStatus {
+  pass
+  fail
+  needs_retry
+  manual_review
+}
+
+enum CcPlatformType {
+  meta
+  instagram
+  tiktok
+  youtube
+  linkedin
+  x
+}
+
+model CreatorProfile {
+  id               String   @id @default(cuid())
+  tenantId         String
+  businessName     String
+  businessType     String   @default("")
+  productOrService String   @default("")
+  targetAudience   String   @default("")
+  niche            String   @default("")
+  contentGoal      String   @default("")
+  brandTone        String   @default("")
+  language         String   @default("en")
+  sellingPoints    Json?
+  competitors      Json?
+  ctaStyle         String   @default("")
+  complianceNotes  String   @default("")
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@unique([tenantId, businessName])
+  @@index([tenantId])
+}
+
+model InfluencerIdentity {
+  id              String           @id @default(cuid())
+  tenantId        String
+  source          CcIdentitySource
+  active          Boolean          @default(true)
+  locked          Boolean          @default(true)
+  referenceRef    String           @default("")
+  characteristics Json?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  @@index([tenantId])
+  @@index([tenantId, active])
+}
+
+model ProviderConnection {
+  id                    String         @id @default(cuid())
+  tenantId              String
+  mode                  CcProviderMode @default(pixie_account)
+  connectionType        String         @default("mock")
+  connected             Boolean        @default(false)
+  accountRef            String         @default("")
+  estimatedCredits      Int            @default(0)
+  estimatedProviderCost Float          @default(0)
+  pixieMarkup           Float          @default(0)
+  finalPrice            Float          @default(0)
+  createdAt             DateTime       @default(now())
+  updatedAt             DateTime       @updatedAt
+
+  @@unique([tenantId, mode])
+  @@index([tenantId])
+}
+
+model Trend {
+  id        String   @id @default(cuid())
+  tenantId  String
+  source    String
+  topic     String
+  raw       Json?
+  createdAt DateTime @default(now())
+
+  @@index([tenantId])
+  @@index([tenantId, source])
+}
+
+model Idea {
+  id             String           @id @default(cuid())
+  tenantId       String
+  title          String
+  angle          String           @default("")
+  hook           String           @default("")
+  source         String           @default("mock")
+  approvalStatus CcApprovalStatus @default(pending)
+  createdAt      DateTime         @default(now())
+
+  @@index([tenantId])
+  @@index([tenantId, approvalStatus])
+}
+
+model IdeaScore {
+  id        String   @id @default(cuid())
+  tenantId  String
+  ideaId    String
+  score     Int      @default(0)
+  reasons   Json?
+  createdAt DateTime @default(now())
+
+  @@index([tenantId])
+  @@index([tenantId, ideaId])
+}
+
+model Script {
+  id             String           @id @default(cuid())
+  tenantId       String
+  ideaRef        String           @default("")
+  hook           String           @default("")
+  body           String           @default("")
+  cta            String           @default("")
+  wordCount      Int              @default(0)
+  approxSeconds  Int              @default(15)
+  approvalStatus CcApprovalStatus @default(pending)
+  createdAt      DateTime         @default(now())
+
+  @@index([tenantId])
+  @@index([tenantId, approvalStatus])
+}
+
+model CostEstimate {
+  id                    String         @id @default(cuid())
+  tenantId              String
+  scriptRef             String         @default("")
+  providerMode          CcProviderMode @default(pixie_account)
+  model                 String         @default("")
+  estimatedCredits      Int            @default(0)
+  estimatedProviderCost Float          @default(0)
+  pixieMarkup           Float          @default(0)
+  finalUserPrice        Float          @default(0)
+  durationSeconds       Int            @default(15)
+  retryBudget           Int            @default(2)
+  createdAt             DateTime       @default(now())
+
+  @@index([tenantId])
+}
+
+model Video {
+  id            String        @id @default(cuid())
+  tenantId      String
+  scriptRef     String        @default("")
+  status        CcVideoStatus @default(mock)
+  assetRef      String        @default("")
+  previewRef    String        @default("")
+  aspectRatio   String        @default("9:16")
+  durationSeconds Int         @default(15)
+  model         String        @default("")
+  promptVersion String        @default("")
+  createdAt     DateTime      @default(now())
+
+  @@index([tenantId])
+  @@index([tenantId, status])
+}
+
+model QualityCheck {
+  id                 String          @id @default(cuid())
+  tenantId           String
+  videoRef           String          @default("")
+  status             CcQualityStatus @default(pass)
+  deterministicFlags Json?
+  llmFlags           Json?
+  retryCount         Int             @default(0)
+  createdAt          DateTime        @default(now())
+
+  @@index([tenantId])
+  @@index([tenantId, videoRef])
+}
+
+model Post {
+  id            String       @id @default(cuid())
+  tenantId      String
+  videoRef      String        @default("")
+  platform      CcPlatformType @default(meta)
+  status        CcPostStatus  @default(dry_run)
+  scheduledTime String        @default("")
+  dryRun        Boolean       @default(true)
+  externalRef   String        @default("")
+  createdAt     DateTime      @default(now())
+
+  @@index([tenantId])
+  @@index([tenantId, status])
+}
+
+model Metric {
+  id             String   @id @default(cuid())
+  tenantId       String
+  postRef        String   @default("")
+  views          Int      @default(0)
+  likes          Int      @default(0)
+  comments       Int      @default(0)
+  shares         Int      @default(0)
+  saves          Int      @default(0)
+  watchTime      Float    @default(0)
+  completionRate Float    @default(0)
+  clicks         Int      @default(0)
+  follows        Int      @default(0)
+  leads          Int      @default(0)
+  createdAt      DateTime @default(now())
+
+  @@index([tenantId])
+  @@index([tenantId, postRef])
+}
+
+model Learning {
+  id        String   @id @default(cuid())
+  tenantId  String
+  samples   Int      @default(0)
+  insights  Json?
+  nextFocus String   @default("")
+  createdAt DateTime @default(now())
+
+  @@index([tenantId])
+}
+
+model ApprovalRecord {
+  id        String           @id @default(cuid())
+  tenantId  String
+  gate      String
+  targetRef String           @default("")
+  status    CcApprovalStatus @default(pending)
+  note      String           @default("")
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  @@index([tenantId])
+  @@index([tenantId, gate])
+}
+
+model AgentLog {
+  id            String      @id @default(cuid())
+  tenantId      String
+  stage         String
+  status        CcJobStatus @default(done)
+  inputRef      String      @default("")
+  outputRef     String      @default("")
+  model         String      @default("")
+  promptVersion String      @default("")
+  estimatedCost Float       @default(0)
+  actualCost    Float       @default(0)
+  latencyMs     Int         @default(0)
+  retryCount    Int         @default(0)
+  error         String      @default("")
+  createdAt     DateTime    @default(now())
+
+  @@index([tenantId])
+  @@index([tenantId, stage])
+}
