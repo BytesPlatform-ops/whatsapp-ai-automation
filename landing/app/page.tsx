@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { PixieMasterHero } from '@/components/pixie/master-hero';
+import { HomeAuthCorner } from '@/components/auth/HomeAuthCorner';
 import { Hero } from '@/components/sections/Hero';
 import { TrustStrip } from '@/components/sections/TrustStrip';
 import { HowItWorks } from '@/components/sections/HowItWorks';
@@ -29,6 +30,10 @@ const SHOW_LEGACY_WHATSAPP_SECTIONS = false;
 export default function Page() {
   return (
     <>
+      {/* Floating Log in / Sign up (or Dashboard) — the hero's own navbar is
+          temporarily disabled, so this is the homepage's auth entry point. */}
+      <HomeAuthCorner />
+
       {/* Master flying-robot hero — includes its own PremiumNavbar AND the new
           PixieFooter as its final landing. Every Join Pixie CTA now navigates
           to the dedicated /join-pixie onboarding page (no modal/overlay).
