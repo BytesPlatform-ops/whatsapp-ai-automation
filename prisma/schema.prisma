@@ -630,3 +630,98 @@ model AgentLog {
   @@index([tenantId])
   @@index([tenantId, stage])
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Pixie Channels — additive Prisma models for the generic Channels layer.
+//
+// ADDITIVE ONLY: NEW models, no existing model changed/renamed/removed. NO
+// migration run. Every model tenant-scoped. Secrets are NEVER stored here — only
+// an opaque `credentialsRef` into the token vault; `mode`/`enabled` gate go-live.
+// Until prisma-client-py / direct Postgres is approved, the Channels layer
+// persists through the in-memory seam in backend/channels/store.py (same shapes).
+// ─────────────────────────────────────────────────────────────────────────────
+
+model ChannelConnection {
+  id              String   @id @default(cuid())
+  tenantId        String
+  channel         String
+  enabled         Boolean  @default(false)
+  mode            String   @default("mock")   // mock | live
+  supportLevel    String   @default("future_placeholder")
+  credentialsRef  String?                       // opaque token-vault ref, never plaintext
+  credentialsPresent Json?                      // booleans only — which cred keys exist
+  requirementsMet Boolean  @default(false)
+  missing         Json?
+  settings        Json?                         // non-secret settings (from address, phone id…)
+  status          String   @default("idle")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([tenantId, channel])
+  @@index([tenantId])
+}
+
+model ChannelMessage {
+  id             String   @id @default(cuid())
+  tenantId       String
+  channel        String
+  direction      String                          // inbound | outbound
+  senderId       String   @default("")
+  recipientId    String   @default("")
+  threadId       String   @default("")
+  text           String   @default("")
+  media          Json?
+  raw            Json?
+  messageId      String   @default("")
+  idempotencyKey String   @default("")
+  sent           Boolean  @default(false)
+  dryRun         Boolean  @default(true)
+  createdAt      DateTime @default(now())
+
+  @@index([tenantId])
+  @@index([tenantId, channel])
+  @@index([tenantId, idempotencyKey])
+}
+
+model ChannelConsent {
+  id        String   @id @default(cuid())
+  tenantId  String
+  channel   String
+  contact   String                               // phone/email/handle the consent is for
+  optedIn   Boolean  @default(false)
+  scope     String   @default("all")             // all | marketing | transactional
+  source    String   @default("")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([tenantId, channel, contact])
+  @@index([tenantId])
+}
+
+model ChannelWebhookEvent {
+  id        String   @id @default(cuid())
+  tenantId  String
+  channel   String
+  raw       Json?
+  processed Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([tenantId])
+  @@index([tenantId, channel])
+}
+
+model PixieContact {
+  id               String   @id @default(cuid())
+  tenantId         String
+  type             String   @default("email")    // email | phone | whatsapp | telegram | other
+  valueRef         String?                        // token-vault ref, never plaintext
+  valueMasked      String   @default("")
+  verified         Boolean  @default(false)
+  preferredChannel String   @default("email")
+  notifyOn         Json?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@unique([tenantId])
+  @@index([tenantId])
+}

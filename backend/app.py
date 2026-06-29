@@ -12,6 +12,7 @@ import os
 from fastapi import FastAPI
 from pydantic import BaseModel, Field
 
+from channels.api import router as channels_router
 from orchestrator import Orchestrator
 from receptionist.api import router as receptionist_router
 from receptionist.campaigns.api import router as campaigns_router
@@ -26,6 +27,7 @@ app.include_router(onboarding_router)
 app.include_router(campaigns_router)
 app.include_router(seo_router)
 app.include_router(content_creator_router)
+app.include_router(channels_router)  # /api/channels — agent/channel readiness for the dashboard
 
 
 class UsageSummary(BaseModel):
