@@ -1,18 +1,46 @@
 import type { Metadata } from 'next';
-import { ServicesDashboard } from '@/components/pixie/dashboard/ServicesDashboard';
+import { createClient } from '@/lib/supabase/server';
+import { tenantForUser, displayName } from '@/lib/supabase/auth';
+import { DashboardView } from '@/components/dashboard/DashboardView';
 
 export const metadata: Metadata = {
-  title: 'Your Services — Pixie Dashboard',
-  description:
-    'Every Pixie service in one place. Pick a mode — AI receptionist, website builder, social content, SEO audit, and more — and see exactly what Pixie needs from you to start.',
-  alternates: { canonical: 'https://www.pixiebot.co/dashboard' },
+  title: 'Dashboard — Pixie',
+  description: 'Your Pixie command center — every AI service in one place.',
   robots: { index: false, follow: false },
 };
 
-export default function Page({
+// Always render per-request (reads the signed-in user).
+export const dynamic = 'force-dynamic';
+
+function configured() {
+  return Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
+}
+
+export default async function DashboardPage({
   searchParams,
 }: {
   searchParams: { tenant?: string };
 }) {
-  return <ServicesDashboard tenant={searchParams.tenant || 'demo'} />;
+  let user = null;
+  if (configured()) {
+    try {
+      const supabase = createClient();
+      user = (await supabase.auth.getUser()).data.user;
+    } catch {
+      user = null;
+    }
+  }
+
+  // The middleware guards this route once Supabase is configured; the searchParams
+  // tenant override stays available for demos/local use without auth.
+  const tenant = searchParams.tenant || tenantForUser(user);
+
+  return (
+    <DashboardView
+      tenant={tenant}
+      name={displayName(user)}
+      email={user?.email ?? ''}
+      authed={Boolean(user)}
+    />
+  );
 }
