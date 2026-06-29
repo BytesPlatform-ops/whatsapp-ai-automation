@@ -5,6 +5,15 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Pixie Content Creator — Demo Console</title>
 <link rel="stylesheet" href="/demo/static/demo.css" />
+<style>
+  .inputs-form{display:grid;grid-template-columns:1fr 1fr;gap:8px 12px;margin:8px 0}
+  .inputs-form label{display:flex;flex-direction:column;font-size:11px;color:#9aa7c2;gap:3px}
+  .inputs-form input,.inputs-form select{background:#0d1322;border:1px solid #26304a;color:#e8edf7;border-radius:8px;padding:7px 9px;font:inherit;font-size:13px;outline:none}
+  .inputs-form input:focus,.inputs-form select:focus{border-color:#7c5cff}
+  .inputs-form .full{grid-column:1 / -1}
+  .inputs-form hr{grid-column:1 / -1;border:0;border-top:1px solid #26304a;margin:2px 0}
+  #inputsCard .hint{font-size:11px;color:#6b7795;margin:8px 0 0}
+</style>
 </head>
 <body>
 <header class="topbar">
@@ -46,6 +55,26 @@
   <!-- CENTER: artifacts -->
   <section class="col artifacts">
     <h2>Artifacts</h2>
+
+    <div class="card" id="inputsCard">
+      <h3>📝 Your inputs <span style="font-weight:400;color:#6b7795">— optional; blank = mock defaults</span></h3>
+      <div class="inputs-form">
+        <label>Brand<input id="inBrand" placeholder="Aurora Studio"></label>
+        <label>Niche / business type<input id="inNiche" placeholder="boutique coffee roaster"></label>
+        <label>Brand tone<input id="inTone" placeholder="warm"></label>
+        <label>Audience<input id="inAudience" placeholder="local cafe lovers"></label>
+        <label class="full">Content goal<input id="inGoals" placeholder="drive foot traffic"></label>
+        <hr>
+        <label>Influencer mode<select id="inInfMode"><option value="characteristics">Generated character</option><option value="reference">Reference image</option></select></label>
+        <label>Reference ref (if reference)<input id="inRef" placeholder="ref-image-001"></label>
+        <label>Character look<input id="inLook" placeholder="approachable barista"></label>
+        <label>Character style<input id="inStyle" placeholder="cozy minimal"></label>
+        <hr>
+        <label>Provider mode<select id="inProvMode"><option value="pixie_account">Pixie account (markup)</option><option value="user_account">User account</option></select></label>
+        <label>Platforms (comma)<input id="inPlatforms" placeholder="meta, instagram, tiktok"></label>
+      </div>
+      <p class="hint">Feeds Intake / Influencer / Provider / Schedule when you click those stages or "Run full happy path".</p>
+    </div>
 
     <div class="card" id="videoCard" hidden>
       <h3>🎬 Mock video</h3>

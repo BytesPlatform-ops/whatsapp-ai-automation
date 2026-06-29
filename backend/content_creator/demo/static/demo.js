@@ -30,6 +30,11 @@ const GATE_ACTIONS = {
 };
 
 const el = (id) => document.getElementById(id);
+/* read an input field, falling back to a mock default when blank */
+const v = (id, fallback) => {
+  const n = el(id);
+  return (n && n.value && n.value.trim()) || fallback;
+};
 
 /* ---------------- fetch helpers ---------------- */
 
@@ -52,30 +57,36 @@ async function getJSON(path) {
 
 function postProfile() {
   return call("/profile", {
-    brand: "Aurora Studio",
-    niche: "boutique coffee roaster",
-    tone: "warm",
+    brand: v("inBrand", "Aurora Studio"),
+    business_name: v("inBrand", "Aurora Studio"),
+    niche: v("inNiche", "boutique coffee roaster"),
+    tone: v("inTone", "warm"),
+    brand_tone: v("inTone", "warm"),
     language: "en",
-    audience: "local cafe lovers",
-    goals: "drive foot traffic",
+    audience: v("inAudience", "local cafe lovers"),
+    goals: v("inGoals", "drive foot traffic"),
   });
 }
 function postInfluencer() {
+  const mode = (el("inInfMode") && el("inInfMode").value) || "characteristics";
+  if (mode === "reference") {
+    return call("/influencer/reference", { reference_ref: v("inRef", "ref-image-001") });
+  }
   return call("/influencer/characteristics", {
     gender: "female",
     age: "late 20s",
-    look: "approachable barista",
-    style: "cozy minimal",
+    look: v("inLook", "approachable barista"),
+    style: v("inStyle", "cozy minimal"),
   });
 }
 function postProvider() {
-  return call("/provider", { mode: "pixie_account", connection_type: "mock" });
+  const mode = (el("inProvMode") && el("inProvMode").value) || "pixie_account";
+  return call("/provider", { mode, connection_type: "mock" });
 }
 function postSchedule() {
-  return call("/posts/schedule", {
-    platforms: ["meta", "instagram", "tiktok"],
-    scheduled_time: "2026-07-01T09:00:00Z",
-  });
+  const platforms = v("inPlatforms", "meta, instagram, tiktok")
+    .split(",").map((s) => s.trim()).filter(Boolean);
+  return call("/posts/schedule", { platforms, scheduled_time: "2026-07-01T09:00:00Z" });
 }
 
 /* ---------------- notice ---------------- */
