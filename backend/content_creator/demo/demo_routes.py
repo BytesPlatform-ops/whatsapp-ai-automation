@@ -18,7 +18,7 @@ from typing import Dict, Optional
 
 from fastapi import APIRouter, Query
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from ..config import status_banner
 from ..enums import ApprovalGate, ApprovalStatus, PipelineStage
@@ -73,8 +73,7 @@ class ProfileBody(BaseModel):
     audience: str = ""
     goals: str = ""
 
-    class Config:
-        extra = "allow"
+    model_config = ConfigDict(extra="allow")
 
 
 class ReferenceBody(BaseModel):
@@ -88,16 +87,14 @@ class CharacteristicsBody(BaseModel):
     ethnicity: str = ""
     style: str = ""
 
-    class Config:
-        extra = "allow"
+    model_config = ConfigDict(extra="allow")
 
 
 class ProviderBody(BaseModel):
     mode: str = "pixie_account"
     connection_type: str = "mock"
 
-    class Config:
-        extra = "allow"
+    model_config = ConfigDict(extra="allow")
 
 
 class IdeaApproveBody(BaseModel):
