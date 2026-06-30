@@ -1,10 +1,11 @@
 'use client';
 
-import { useMemo, useState, useTransition } from 'react';
+import { useEffect, useMemo, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { Check, Download, RefreshCw, Search, Sparkles, Users, X } from 'lucide-react';
+import { Check, Download, Loader2, RefreshCw, Search, Sparkles, Trash2, Users, X } from 'lucide-react';
 import type { WaitlistRow } from '@/lib/waitlistStore';
 import { SignOutButton } from './SignOutButton';
+import { deleteLead } from './actions';
 
 function fmtDate(iso: string): string {
   const d = new Date(iso);
@@ -58,22 +59,42 @@ export function AdminClient({ leads, adminEmail }: { leads: WaitlistRow[]; admin
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [q, setQ] = useState('');
+  // Local copy so a delete removes the row instantly; re-synced whenever the
+  // server component re-fetches (refresh / revalidatePath).
+  const [rows, setRows] = useState(leads);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  useEffect(() => setRows(leads), [leads]);
 
   const filtered = useMemo(() => {
     const term = q.trim().toLowerCase();
-    if (!term) return leads;
-    return leads.filter((r) =>
+    if (!term) return rows;
+    return rows.filter((r) =>
       [r.name, r.business, r.contact, r.email, ...(r.selected ?? []), ...(r.rejected ?? [])]
         .join(' ')
         .toLowerCase()
         .includes(term),
     );
-  }, [leads, q]);
+  }, [rows, q]);
 
-  const totalPicks = useMemo(() => leads.reduce((n, r) => n + (r.selected?.length ?? 0), 0), [leads]);
+  const totalPicks = useMemo(() => rows.reduce((n, r) => n + (r.selected?.length ?? 0), 0), [rows]);
 
   function refresh() {
     startTransition(() => router.refresh());
+  }
+
+  async function onDelete(r: WaitlistRow) {
+    if (deletingId) return;
+    const who = r.name || r.email;
+    if (!window.confirm(`Delete the waitlist response from ${who}? This can’t be undone.`)) return;
+    setDeletingId(r.id);
+    const prev = rows;
+    setRows((rs) => rs.filter((x) => x.id !== r.id)); // optimistic
+    const res = await deleteLead(r.id);
+    setDeletingId(null);
+    if (!res.ok) {
+      setRows(prev); // restore on failure
+      window.alert('Could not delete: ' + (res.error ?? 'unknown error'));
+    }
   }
 
   function exportCsv() {
@@ -127,7 +148,7 @@ export function AdminClient({ leads, adminEmail }: { leads: WaitlistRow[]; admin
             <Users className="h-4 w-4" strokeWidth={2.2} />
             <span className="text-xs font-medium uppercase tracking-wide">Total leads</span>
           </div>
-          <p className="mt-1 text-2xl font-semibold text-white">{leads.length}</p>
+          <p className="mt-1 text-2xl font-semibold text-white">{rows.length}</p>
         </div>
         <div className="rounded-xl border border-white/10 bg-slate-900/50 p-4">
           <div className="flex items-center gap-2 text-slate-400">
@@ -160,7 +181,7 @@ export function AdminClient({ leads, adminEmail }: { leads: WaitlistRow[]; admin
       {filtered.length === 0 ? (
         <div className="rounded-xl border border-dashed border-white/10 bg-slate-900/30 py-16 text-center">
           <p className="text-sm text-slate-400">
-            {leads.length === 0
+            {rows.length === 0
               ? 'No responses yet. Submit one from /join-pixie — it’ll appear here.'
               : 'No responses match your search.'}
           </p>
@@ -175,6 +196,7 @@ export function AdminClient({ leads, adminEmail }: { leads: WaitlistRow[]; admin
                 <th className="px-4 py-3 font-medium">Contact</th>
                 <th className="px-4 py-3 font-medium">Interested</th>
                 <th className="px-4 py-3 font-medium">Services</th>
+                <th className="px-4 py-3 text-right font-medium">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-white/5">
@@ -206,6 +228,23 @@ export function AdminClient({ leads, adminEmail }: { leads: WaitlistRow[]; admin
                         <span className="text-xs text-slate-500">—</span>
                       )}
                     </div>
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    <button
+                      type="button"
+                      onClick={() => onDelete(r)}
+                      disabled={deletingId === r.id}
+                      title="Delete this response"
+                      aria-label={`Delete ${r.name || r.email}`}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-rose-500/20 bg-rose-500/10 px-2.5 py-1.5 text-xs font-medium text-rose-300 transition hover:bg-rose-500/20 disabled:opacity-50"
+                    >
+                      {deletingId === r.id ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={2.4} />
+                      ) : (
+                        <Trash2 className="h-3.5 w-3.5" strokeWidth={2.4} />
+                      )}
+                      Delete
+                    </button>
                   </td>
                 </tr>
               ))}
