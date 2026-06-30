@@ -1,5 +1,5 @@
-import { request as httpsRequest } from 'node:https';
 import { NextResponse } from 'next/server';
+import { Resend } from 'resend';
 import { rateLimitCheck, getClientIp } from '@/lib/swipeRateLimit';
 
 export const runtime = 'nodejs';
@@ -7,12 +7,15 @@ export const dynamic = 'force-dynamic';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-// Where each Join Pixie waitlist lead is emailed, via FormSubmit (formsubmit.co
-// — no API key needed). Set WAITLIST_LEAD_EMAIL on the app, or edit the fallback.
-//
-// ONE-TIME SETUP: the first time FormSubmit sends to a new address it emails a
-// confirmation link to that address — click it once to activate delivery.
+// Each Join Pixie waitlist lead is emailed here.
 const LEAD_EMAIL = process.env.WAITLIST_LEAD_EMAIL || 'bytesuite@bytesplatform.com';
+
+// Sender. The default onboarding@resend.dev needs NO domain verification, but in
+// Resend test mode it only delivers to YOUR Resend account's own email — which is
+// fine when that account is bytesuite@bytesplatform.com. For other recipients or
+// production volume, verify a domain in Resend and set
+// RESEND_FROM="Pixie <noreply@bytesplatform.com>".
+const FROM = process.env.RESEND_FROM || 'Pixie Waitlist <onboarding@resend.dev>';
 
 interface WaitlistRequest {
   email: string;
@@ -30,91 +33,55 @@ interface Signup {
   contact: string;
 }
 
-/** POST JSON via node:https. Node's fetch()/undici treats Origin & Referer as
- *  forbidden request headers and silently strips them (works on newer local
- *  Node, dropped on Vercel's runtime) — and FormSubmit rejects header-less calls
- *  ("open this page through a web server"). The low-level https client sends the
- *  headers verbatim on every runtime, so delivery works in production. */
-function postFormSubmit(
-  url: string,
-  payload: Record<string, unknown>,
-  origin: string,
-  referer: string,
-): Promise<{ status: number; json: { success?: string; message?: string } | null }> {
-  return new Promise((resolve) => {
-    const data = JSON.stringify(payload);
-    const u = new URL(url);
-    const req = httpsRequest(
-      {
-        hostname: u.hostname,
-        path: u.pathname + u.search,
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Accept: 'application/json',
-          Origin: origin,
-          Referer: referer,
-          'Content-Length': Buffer.byteLength(data),
-        },
-      },
-      (res) => {
-        let raw = '';
-        res.setEncoding('utf8');
-        res.on('data', (c) => (raw += c));
-        res.on('end', () => {
-          let json: { success?: string; message?: string } | null = null;
-          try {
-            json = JSON.parse(raw);
-          } catch {
-            /* non-JSON response */
-          }
-          resolve({ status: res.statusCode ?? 0, json });
-        });
-      },
-    );
-    req.on('error', () => resolve({ status: 0, json: null }));
-    req.write(data);
-    req.end();
-  });
+function esc(v: string): string {
+  return v.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c] as string));
 }
 
-/** Email each waitlist lead to LEAD_EMAIL via FormSubmit's AJAX endpoint. */
-async function notifyAdmin(
-  s: Signup,
-  origin: string,
-  referer: string,
-): Promise<{ ok: boolean; detail: string }> {
-  if (!LEAD_EMAIL || LEAD_EMAIL.includes('example.com')) {
-    console.warn('[waitlist] WAITLIST_LEAD_EMAIL not set — signup logged only');
-    return { ok: false, detail: 'recipient-not-set' };
+/** Email one waitlist lead to LEAD_EMAIL via Resend (works from Vercel — unlike
+ *  FormSubmit, whose CDN 403-blocks datacenter IPs). */
+async function notifyAdmin(s: Signup): Promise<{ ok: boolean; detail: string }> {
+  const key = process.env.RESEND_API_KEY;
+  if (!key) {
+    console.warn('[waitlist] RESEND_API_KEY not set — signup logged only');
+    return { ok: false, detail: 'no-api-key' };
   }
 
-  const { status, json } = await postFormSubmit(
-    `https://formsubmit.co/ajax/${encodeURIComponent(LEAD_EMAIL)}`,
-    {
-      _subject: `🎉 New Pixie waitlist lead — ${s.name || s.email}`,
-      _template: 'table',
-      _captcha: 'false',
-      Name: s.name || '—',
-      Business: s.business || '—',
-      Contact: s.contact || '—',
-      Email: s.email,
-      'Roles picked': `${s.roles} / 6`,
-      Source: 'Join Pixie waitlist',
-    },
-    origin,
-    referer,
-  );
+  const rows: [string, string][] = [
+    ['Name', s.name || '—'],
+    ['Business', s.business || '—'],
+    ['Contact', s.contact || '—'],
+    ['Email', s.email],
+    ['Roles picked', `${s.roles} / 6`],
+  ];
+  const html =
+    `<h2 style="font-family:system-ui">🎉 New Pixie waitlist lead</h2>` +
+    `<table cellpadding="8" style="border-collapse:collapse;font-family:system-ui;font-size:14px">` +
+    rows
+      .map(
+        ([k, v]) =>
+          `<tr><td style="border:1px solid #e2e8f0;background:#f8fafc"><b>${esc(k)}</b></td>` +
+          `<td style="border:1px solid #e2e8f0">${esc(v)}</td></tr>`,
+      )
+      .join('') +
+    `</table><p style="color:#94a3b8;font-family:system-ui;font-size:12px">Source: Join Pixie waitlist</p>`;
 
-  if (status < 200 || status >= 300) {
-    console.error('[waitlist] FormSubmit HTTP error', status);
-    return { ok: false, detail: `http_${status} origin=${origin}` };
+  try {
+    const resend = new Resend(key);
+    const { data, error } = await resend.emails.send({
+      from: FROM,
+      to: [LEAD_EMAIL],
+      subject: `🎉 New Pixie waitlist lead — ${s.name || s.email}`,
+      html,
+    });
+    if (error) {
+      console.error('[waitlist] Resend error', error);
+      return { ok: false, detail: `resend:${error.name || ''} ${error.message || ''}`.trim() };
+    }
+    return { ok: true, detail: data?.id || 'sent' };
+  } catch (err: any) {
+    console.error('[waitlist] Resend threw', err);
+    return { ok: false, detail: `threw:${err?.message ?? 'unknown'}` };
   }
-  if (json?.success !== 'true') {
-    console.error('[waitlist] FormSubmit not delivered', json?.message ?? '(no message)');
-    return { ok: false, detail: `fs:${json?.message ?? 'no-message'} origin=${origin}` };
-  }
-  return { ok: true, detail: 'ok' };
 }
 
 export async function POST(req: Request): Promise<NextResponse> {
@@ -151,18 +118,16 @@ export async function POST(req: Request): Promise<NextResponse> {
 
   console.log('[waitlist] signup', { ...signup, ip });
 
-  const origin = req.headers.get('origin') || new URL(req.url).origin;
-  const referer = req.headers.get('referer') || `${origin}/join-pixie`;
-  const result = await notifyAdmin(signup, origin, referer).catch((err) => {
+  const result = await notifyAdmin(signup).catch((err) => {
     console.error('[waitlist] notifyAdmin threw', err);
     return { ok: false, detail: `threw:${err?.message ?? 'unknown'}` };
   });
 
-  // Surface a real failure instead of faking success when delivery is broken.
-  // `detail` is a temporary diagnostic to pinpoint the production failure.
   if (!result.ok) {
+    // Don't expose internals to visitors; the reason is in the server logs.
+    console.error('[waitlist] delivery failed:', result.detail);
     return NextResponse.json(
-      { error: 'We could not send your signup right now. Please try again shortly.', detail: result.detail },
+      { error: 'We could not send your signup right now. Please try again shortly.' },
       { status: 502 },
     );
   }
