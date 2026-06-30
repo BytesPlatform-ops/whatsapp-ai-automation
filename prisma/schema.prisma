@@ -725,3 +725,112 @@ model PixieContact {
   @@unique([tenantId])
   @@index([tenantId])
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Pixie Lab — additive Prisma models for the authenticated Lab (feed, agents,
+// entitlements). ADDITIVE ONLY: NEW models, nothing existing changed/renamed. NO
+// migration run. Tenant-scoped (tenantId) per the multi-tenant rule. Auth itself
+// is Supabase (not modeled here); `tenantId` derives from the Supabase user id.
+// Until prisma-client-py / direct Postgres is approved, the Lab persists through
+// the in-memory seam in backend/feed/store.py + backend/entitlements (same shapes).
+// ─────────────────────────────────────────────────────────────────────────────
+
+model BusinessProfile {
+  id            String   @id @default(cuid())
+  tenantId      String
+  businessName  String   @default("")
+  industry      String   @default("")
+  whatTheySell  String   @default("")
+  city          String   @default("")
+  websiteUrl    String   @default("")
+  socialLinks   String   @default("")
+  contactChannel String  @default("")
+  mainGoal      String   @default("")
+  onboarded     Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([tenantId])
+  @@index([tenantId])
+}
+
+model AgentEntitlement {
+  id             String   @id @default(cuid())
+  tenantId       String
+  agent          String                          // website | receptionist | seo | marketing | content
+  state          String   @default("locked")     // locked | trial | active | expired
+  plan           String   @default("")
+  trialStartedAt DateTime?
+  trialEndsAt    DateTime?
+  activeStartedAt DateTime?
+  cancelledAt    DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([tenantId, agent])
+  @@index([tenantId])
+}
+
+model FeedCard {
+  id              String   @id @default(cuid())
+  tenantId        String
+  cardKey         String                          // stable rule id (e.g. r_leads_followup)
+  heading         String                          // 5-6 words
+  fullIdea        String   @default("")
+  reason          String   @default("")
+  category        String
+  priority        String   @default("medium")
+  primaryAgent    String
+  supportingAgents Json?
+  sourceSignals   Json?
+  actions         Json?
+  outcome         String   @default("")
+  status          String   @default("new")        // new | viewed | approved | skipped | completed | expired
+  createdAt       DateTime @default(now())
+  expiresAt       DateTime?
+
+  @@index([tenantId])
+  @@index([tenantId, status])
+}
+
+model FeedFeedback {
+  id           String   @id @default(cuid())
+  tenantId     String
+  cardKey      String
+  feedbackType String                             // not_relevant | helpful | remind_later
+  note         String   @default("")
+  createdAt    DateTime @default(now())
+
+  @@index([tenantId])
+}
+
+model ApprovalItem {
+  id          String   @id @default(cuid())
+  tenantId    String
+  agent       String
+  title       String
+  description String   @default("")
+  preview     Json?
+  actionType  String
+  payload     Json?
+  status      String   @default("pending")        // pending | approved | rejected | executed | failed
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([tenantId])
+  @@index([tenantId, status])
+}
+
+model ActivityLog {
+  id        String   @id @default(cuid())
+  tenantId  String
+  agent     String   @default("")
+  type      String                                // feed_card_approved | trial_started | agent_unlocked | ...
+  title     String   @default("")
+  details   String   @default("")
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  @@index([tenantId])
+  @@index([tenantId, type])
+}

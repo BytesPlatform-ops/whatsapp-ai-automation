@@ -12,7 +12,11 @@ import os
 from fastapi import FastAPI
 from pydantic import BaseModel, Field
 
+from activity.router import router as activity_router
+from approvals.router import router as approvals_router
 from channels.api import router as channels_router
+from entitlements.router import router as entitlements_router
+from feed.router import router as feed_router
 from orchestrator import Orchestrator
 from receptionist.api import router as receptionist_router
 from receptionist.campaigns.api import router as campaigns_router
@@ -28,6 +32,10 @@ app.include_router(campaigns_router)
 app.include_router(seo_router)
 app.include_router(content_creator_router)
 app.include_router(channels_router)  # /api/channels — agent/channel readiness for the dashboard
+app.include_router(feed_router)  # /api/feed — Pixie Lab proactive recommendation feed
+app.include_router(entitlements_router)  # /api/entitlements — agent trial/purchase gating
+app.include_router(approvals_router)  # /api/approvals — risky-action approval gate
+app.include_router(activity_router)  # /api/activity — tenant activity log
 
 
 class UsageSummary(BaseModel):
