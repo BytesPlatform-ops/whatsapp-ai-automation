@@ -1,0 +1,38 @@
+// Documented data model for the Pixie landing database (Supabase Postgres).
+//
+// Runtime reads/writes go through @supabase/supabase-js with the service-role
+// key (see landing/lib/waitlistStore.ts) — no Postgres connection string needed.
+// This schema is the source of truth for the table shape. If you later add a
+// DATABASE_URL (Supabase → Project Settings → Database → Connection string), you
+// can drive migrations from it instead of the raw SQL:
+//   cd landing && npx prisma db push
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+/// One Join Pixie waitlist signup, with the per-service swipe decisions.
+model WaitlistResponse {
+  id        String   @id @default(uuid()) @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  name      String   @default("")
+  business  String   @default("")
+  contact   String   @default("")
+  email     String
+  roles     Int      @default(0)
+  /// Services the visitor swiped right on (interested).
+  selected  String[] @default([])
+  /// Services the visitor swiped left on (not interested).
+  rejected  String[] @default([])
+  ip        String?
+  source    String   @default("join-pixie")
+
+  @@index([createdAt])
+  @@map("waitlist_responses")
+}

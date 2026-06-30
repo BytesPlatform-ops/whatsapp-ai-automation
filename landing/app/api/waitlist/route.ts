@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { Resend } from 'resend';
 import { rateLimitCheck, getClientIp } from '@/lib/swipeRateLimit';
+import { storeLead } from '@/lib/waitlistStore';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -147,10 +148,20 @@ export async function POST(req: Request): Promise<NextResponse> {
 
   console.log('[waitlist] signup', { ...signup, ip });
 
-  const result = await notifyAdmin(signup).catch((err) => {
-    console.error('[waitlist] notifyAdmin threw', err);
-    return { ok: false, detail: `threw:${err?.message ?? 'unknown'}` };
-  });
+  // Email (primary) and Supabase storage (best-effort, for the admin panel) run
+  // together. A storage failure (e.g. table not created yet) must NOT fail the
+  // signup — only the email gates the response.
+  const [result] = await Promise.all([
+    notifyAdmin(signup).catch((err) => {
+      console.error('[waitlist] notifyAdmin threw', err);
+      return { ok: false, detail: `threw:${err?.message ?? 'unknown'}` };
+    }),
+    storeLead({ ...signup, ip })
+      .then((r) => {
+        if (!r.ok) console.error('[waitlist] store failed:', r.detail);
+      })
+      .catch((err) => console.error('[waitlist] store threw', err)),
+  ]);
 
   if (!result.ok) {
     // Don't expose internals to visitors; the reason is in the server logs.
