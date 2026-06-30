@@ -79,10 +79,14 @@ function postFormSubmit(
 }
 
 /** Email each waitlist lead to LEAD_EMAIL via FormSubmit's AJAX endpoint. */
-async function notifyAdmin(s: Signup, origin: string, referer: string): Promise<boolean> {
+async function notifyAdmin(
+  s: Signup,
+  origin: string,
+  referer: string,
+): Promise<{ ok: boolean; detail: string }> {
   if (!LEAD_EMAIL || LEAD_EMAIL.includes('example.com')) {
     console.warn('[waitlist] WAITLIST_LEAD_EMAIL not set — signup logged only');
-    return false;
+    return { ok: false, detail: 'recipient-not-set' };
   }
 
   const { status, json } = await postFormSubmit(
@@ -104,16 +108,16 @@ async function notifyAdmin(s: Signup, origin: string, referer: string): Promise<
 
   if (status < 200 || status >= 300) {
     console.error('[waitlist] FormSubmit HTTP error', status);
-    return false;
+    return { ok: false, detail: `http_${status} origin=${origin}` };
   }
   if (json?.success !== 'true') {
     console.error('[waitlist] FormSubmit not delivered', json?.message ?? '(no message)');
-    return false;
+    return { ok: false, detail: `fs:${json?.message ?? 'no-message'} origin=${origin}` };
   }
-  return true;
+  return { ok: true, detail: 'ok' };
 }
 
-export async function POST(req: Request): Promise<NextResponse<{ ok: true } | { error: string }>> {
+export async function POST(req: Request): Promise<NextResponse> {
   const ip = getClientIp(req);
   const limit = rateLimitCheck(ip);
   if (!limit.ok) {
@@ -149,15 +153,16 @@ export async function POST(req: Request): Promise<NextResponse<{ ok: true } | { 
 
   const origin = req.headers.get('origin') || new URL(req.url).origin;
   const referer = req.headers.get('referer') || `${origin}/join-pixie`;
-  const delivered = await notifyAdmin(signup, origin, referer).catch((err) => {
+  const result = await notifyAdmin(signup, origin, referer).catch((err) => {
     console.error('[waitlist] notifyAdmin threw', err);
-    return false;
+    return { ok: false, detail: `threw:${err?.message ?? 'unknown'}` };
   });
 
   // Surface a real failure instead of faking success when delivery is broken.
-  if (!delivered) {
+  // `detail` is a temporary diagnostic to pinpoint the production failure.
+  if (!result.ok) {
     return NextResponse.json(
-      { error: 'We could not send your signup right now. Please try again shortly.' },
+      { error: 'We could not send your signup right now. Please try again shortly.', detail: result.detail },
       { status: 502 },
     );
   }
