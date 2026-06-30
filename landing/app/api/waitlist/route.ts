@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { Resend } from 'resend';
 import { rateLimitCheck, getClientIp } from '@/lib/swipeRateLimit';
-import { storeLead } from '@/lib/waitlistStore';
+import { storeLead, fetchLeadCount } from '@/lib/waitlistStore';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -108,6 +108,18 @@ async function notifyAdmin(s: Signup): Promise<{ ok: boolean; detail: string }> 
     console.error('[waitlist] Resend threw', err);
     return { ok: false, detail: `threw:${err?.message ?? 'unknown'}` };
   }
+}
+
+/** Live count of stored waitlist signups — powers the "seats left" counter on
+ *  the Join Pixie card. Returns `{ count }`; the client turns that into seats
+ *  left using SEAT_CAP. Never errors hard: a null count (no Supabase / failure)
+ *  reports as 0 so the client falls back to its static number. */
+export async function GET(): Promise<NextResponse> {
+  const count = await fetchLeadCount().catch(() => null);
+  return NextResponse.json(
+    { count: count ?? 0, live: count !== null },
+    { headers: { 'Cache-Control': 'no-store' } },
+  );
 }
 
 export async function POST(req: Request): Promise<NextResponse> {

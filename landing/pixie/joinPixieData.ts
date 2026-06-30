@@ -108,6 +108,14 @@ export const PROBLEM_CARDS: ProblemCard[] = [
   },
 ];
 
-/** Waitlist seat counter — counts down from this to `SEATS_LEFT` on reveal. */
+/** Waitlist seat counter — counts down from this to the live remaining count. */
 export const SEATS_START = 10000;
+/**
+ * Total early-access seats. The live "seats left" number on the waitlist card is
+ * `SEAT_CAP − (real signups)`, fetched from `GET /api/waitlist`. It never drops
+ * below `SEATS_FLOOR` so the counter keeps a hint of scarcity even once full.
+ */
+export const SEAT_CAP = 100;
+export const SEATS_FLOOR = 3;
+/** Fallback shown if the live count can't be fetched. */
 export const SEATS_LEFT = 98;

@@ -13,8 +13,9 @@ function fmtDate(iso: string): string {
   return d.toLocaleString(undefined, {
     month: 'short',
     day: 'numeric',
-    hour: '2-digit',
+    hour: 'numeric',
     minute: '2-digit',
+    hour12: true,
   });
 }
 
@@ -191,6 +192,7 @@ export function AdminClient({ leads, adminEmail }: { leads: WaitlistRow[]; admin
           <table className="min-w-full divide-y divide-white/10 text-sm">
             <thead className="bg-slate-900/70 text-left text-xs uppercase tracking-wide text-slate-400">
               <tr>
+                <th className="px-4 py-3 font-medium">#</th>
                 <th className="px-4 py-3 font-medium">When</th>
                 <th className="px-4 py-3 font-medium">Lead</th>
                 <th className="px-4 py-3 font-medium">Contact</th>
@@ -200,8 +202,9 @@ export function AdminClient({ leads, adminEmail }: { leads: WaitlistRow[]; admin
               </tr>
             </thead>
             <tbody className="divide-y divide-white/5">
-              {filtered.map((r) => (
+              {filtered.map((r, i) => (
                 <tr key={r.id} className="align-top transition hover:bg-white/[0.03]">
+                  <td className="whitespace-nowrap px-4 py-3 font-mono text-xs text-slate-500">{i + 1}</td>
                   <td className="whitespace-nowrap px-4 py-3 text-slate-400">{fmtDate(r.created_at)}</td>
                   <td className="px-4 py-3">
                     <div className="font-medium text-white">{r.name || '—'}</div>

@@ -63,3 +63,23 @@ export async function fetchLeads(limit = 500): Promise<WaitlistRow[]> {
   }
   return (data ?? []) as WaitlistRow[];
 }
+
+/**
+ * Exact count of stored waitlist responses. Powers the live "seats left"
+ * counter on the Join Pixie card. Returns null when Supabase isn't configured
+ * or the query fails so callers can fall back to a static number.
+ */
+export async function fetchLeadCount(): Promise<number | null> {
+  const supabase = createAdminClient();
+  if (!supabase) return null;
+
+  const { count, error } = await supabase
+    .from(TABLE)
+    .select('*', { count: 'exact', head: true });
+
+  if (error) {
+    console.error('[waitlist] fetchLeadCount failed:', error.message);
+    return null;
+  }
+  return count ?? 0;
+}

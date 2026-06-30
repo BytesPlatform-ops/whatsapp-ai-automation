@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { motion } from 'framer-motion';
 import { ArrowRight, Check, Loader2, PartyPopper, Sparkles } from 'lucide-react';
 import { ConfettiBurst } from '@/components/thankYou/ConfettiBurst';
-import { SEATS_START, SEATS_LEFT } from './joinPixieData';
+import { SEATS_START, SEATS_LEFT, SEAT_CAP, SEATS_FLOOR } from './joinPixieData';
 
 interface WaitlistCardProps {
   /** How many of the 6 roles the visitor swiped "yes" on. */
@@ -19,9 +19,15 @@ interface WaitlistCardProps {
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+/** Live seats left = cap − real signups, never below the floor. */
+function seatsLeftFromCount(count: number): number {
+  return Math.max(SEATS_FLOOR, SEAT_CAP - count);
+}
+
 /**
  * Terminal card of the swipe deck: counts the remaining seats down from
- * SEATS_START → SEATS_LEFT, then captures an email for the waitlist.
+ * SEATS_START → the live remaining count (cap − real signups, fetched from
+ * `GET /api/waitlist`), then captures an email for the waitlist.
  * Styled via joinPixie.css.
  */
 export function WaitlistCard({ picked, name, business, contact, selected, rejected }: WaitlistCardProps) {
@@ -31,22 +37,49 @@ export function WaitlistCard({ picked, name, business, contact, selected, reject
   const [error, setError] = useState('');
   const [claimed, setClaimed] = useState(false);
   const claimedRef = useRef(false);
+  // Live target the counter animates down to. Starts at the static fallback and
+  // is replaced once the real signup count arrives; the rAF tick reads the ref
+  // so an in-flight animation retargets without restarting.
+  const targetRef = useRef(SEATS_LEFT);
+  const settledRef = useRef(false);
+
+  // Fetch the real seats-left from Supabase-backed count and retarget the counter.
+  useEffect(() => {
+    let alive = true;
+    fetch('/api/waitlist', { headers: { accept: 'application/json' } })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (!alive || !data?.live || typeof data.count !== 'number') return;
+        const next = seatsLeftFromCount(data.count);
+        targetRef.current = next;
+        // If the intro animation already settled (and the seat isn't claimed),
+        // snap the displayed number to the freshly-fetched target.
+        if (settledRef.current && !claimedRef.current) setSeats(next);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   useEffect(() => {
     const DURATION = 2200;
     let raf = 0;
     let startTs = 0;
-    const span = SEATS_START - SEATS_LEFT;
 
     const tick = (ts: number) => {
       if (!startTs) startTs = ts;
       const t = Math.min(1, (ts - startTs) / DURATION);
       const eased = 1 - Math.pow(1 - t, 3); // easeOutCubic
-      const floor = claimedRef.current ? SEATS_LEFT - 1 : SEATS_LEFT;
-      const value = Math.round(SEATS_START - span * eased);
+      const target = targetRef.current;
+      const floor = claimedRef.current ? target - 1 : target;
+      const value = Math.round(SEATS_START - (SEATS_START - target) * eased);
       setSeats(Math.max(floor, Math.min(SEATS_START, value)));
       if (t < 1) raf = requestAnimationFrame(tick);
-      else setSeats(floor);
+      else {
+        settledRef.current = true;
+        setSeats(floor);
+      }
     };
 
     raf = requestAnimationFrame(tick);
@@ -56,7 +89,7 @@ export function WaitlistCard({ picked, name, business, contact, selected, reject
   function claimSeat() {
     claimedRef.current = true;
     setClaimed(true);
-    setSeats(SEATS_LEFT - 1);
+    setSeats(Math.max(0, targetRef.current - 1));
   }
 
   async function handleSubmit(e: FormEvent) {
