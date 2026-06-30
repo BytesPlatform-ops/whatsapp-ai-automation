@@ -10,7 +10,6 @@ import { NORMAL_FORM, INTRO } from '../roleData';
 import { INTRO_THEME } from '../themeMap';
 import { MobileTopBar } from './MobileTopBar';
 import { MobileMenuOverlay } from './MobileMenuOverlay';
-import { MobileProgressRail } from './MobileProgressRail';
 import { PixieFooter } from '@/components/sections/PixieFooter';
 
 // First/main mobile screen — mirrors the desktop intro: the NORMAL Pixie avatar
@@ -58,9 +57,8 @@ export function MobilePinnedRoleExperience({ reducedMotion }: { reducedMotion: b
   const [activeIndex, setActiveIndex] = useState(0);
   const [scrolled, setScrolled] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
-  const [railVisible, setRailVisible] = useState(true);
 
-  // ── Theme (mirrored to :root so the top bar / menu / rail inherit it) ────
+  // ── Theme (mirrored to :root so the top bar / menu inherit it) ───────────
   const proxy = useRef({ p: 0 });
   const tween = useRef<ReturnType<typeof gsap.to> | null>(null);
   const curRef = useRef(SCENES[0]);
@@ -148,26 +146,17 @@ export function MobilePinnedRoleExperience({ reducedMotion }: { reducedMotion: b
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [N, reducedMotion]);
 
-  // Top-bar frosted state + hide the fixed rail once we scroll past the pinned
-  // section into the footer.
+  // Top-bar frosted state once we scroll past the top of the pinned section.
   useEffect(() => {
     const onScroll = () => {
       const y = window.scrollY;
       setScrolled(y > 40);
-      const root = rootRef.current;
-      if (root) setRailVisible(y < root.offsetTop + root.offsetHeight - window.innerHeight - 8);
     };
     onScroll();
     window.addEventListener('scroll', onScroll, { passive: true });
     return () => window.removeEventListener('scroll', onScroll);
   }, []);
 
-  const scrollToIndex = (i: number) => {
-    const root = rootRef.current;
-    if (!root) return;
-    const target = root.offsetTop + (i / (N - 1)) * (root.offsetHeight - window.innerHeight);
-    window.scrollTo({ top: target, behavior: reducedMotion ? 'auto' : 'smooth' });
-  };
 
   const role = SCENES[activeIndex];
   const dir = DIRS[activeIndex];
@@ -260,7 +249,6 @@ export function MobilePinnedRoleExperience({ reducedMotion }: { reducedMotion: b
       </div>
       </div>
 
-      {railVisible && <MobileProgressRail items={SCENES} activeIndex={activeIndex} onSelect={scrollToIndex} />}
 
       {/* Footer landing — mobile uses the static normal Pixie. */}
       <PixieFooter />
