@@ -30,7 +30,7 @@ interface Signup {
 }
 
 /** Email each waitlist lead to LEAD_EMAIL via FormSubmit's AJAX endpoint. */
-async function notifyAdmin(s: Signup): Promise<boolean> {
+async function notifyAdmin(s: Signup, origin: string, referer: string): Promise<boolean> {
   if (!LEAD_EMAIL || LEAD_EMAIL.includes('example.com')) {
     console.warn('[waitlist] WAITLIST_LEAD_EMAIL not set — signup logged only');
     return false;
@@ -38,7 +38,14 @@ async function notifyAdmin(s: Signup): Promise<boolean> {
 
   const res = await fetch(`https://formsubmit.co/ajax/${encodeURIComponent(LEAD_EMAIL)}`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      // FormSubmit rejects header-less server-to-server calls ("open this page
+      // through a web server"); forward the site's origin so it accepts them.
+      Origin: origin,
+      Referer: referer,
+    },
     body: JSON.stringify({
       _subject: `🎉 New Pixie waitlist lead — ${s.name || s.email}`,
       _template: 'table',
@@ -97,10 +104,21 @@ export async function POST(req: Request): Promise<NextResponse<{ ok: true } | { 
   };
 
   console.log('[waitlist] signup', { ...signup, ip });
-  await notifyAdmin(signup).catch((err) => {
+
+  const origin = req.headers.get('origin') || new URL(req.url).origin;
+  const referer = req.headers.get('referer') || `${origin}/join-pixie`;
+  const delivered = await notifyAdmin(signup, origin, referer).catch((err) => {
     console.error('[waitlist] notifyAdmin threw', err);
     return false;
   });
+
+  // Surface a real failure instead of faking success when delivery is broken.
+  if (!delivered) {
+    return NextResponse.json(
+      { error: 'We could not send your signup right now. Please try again shortly.' },
+      { status: 502 },
+    );
+  }
 
   return NextResponse.json({ ok: true });
 }
