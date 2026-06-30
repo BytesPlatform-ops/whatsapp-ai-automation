@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { motion } from 'framer-motion';
 import { MailCheck, Loader2, RefreshCw } from 'lucide-react';
 import { createClient, supabaseConfigured } from '@/lib/supabase/client';
-import { agentKeyFromSlug, agentLabelFromSlug } from '@/lib/agents/agentRouting';
+import { getAgentBySlug } from '@/lib/agents';
 
 /**
  * VerifyEmailCard — the calm "check your inbox" screen after signup. Supabase
@@ -17,9 +17,8 @@ import { agentKeyFromSlug, agentLabelFromSlug } from '@/lib/agents/agentRouting'
 export function VerifyEmailCard() {
   const params = useSearchParams();
   const email = params.get('email') || '';
-  const agentSlug = params.get('agent');
-  const agentKey = agentKeyFromSlug(agentSlug);
-  const agentLabel = agentLabelFromSlug(agentSlug);
+  const agent = getAgentBySlug(params.get('agent'));
+  const agentLabel = agent?.name ?? 'Pixie';
 
   const [busy, setBusy] = useState(false);
   const [sent, setSent] = useState(false);
@@ -36,7 +35,7 @@ export function VerifyEmailCard() {
       const { error } = await createClient().auth.resend({
         type: 'signup',
         email,
-        options: { emailRedirectTo: `${window.location.origin}/auth/callback${agentKey ? `?next=/dashboard?agent=${agentKey}` : ''}` },
+        options: { emailRedirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(agent?.dashboardPath ?? '/app/dashboard')}` },
       });
       if (error) throw error;
       setSent(true);
@@ -61,7 +60,7 @@ export function VerifyEmailCard() {
         <h1 className="mt-5 font-display text-2xl font-extrabold tracking-tight">Verify your email to unlock your dashboard</h1>
         <p className="mt-3 text-[14.5px] leading-relaxed text-white/55">
           We sent a secure link{email ? <> to <span className="font-semibold text-white/80">{email}</span></> : ' to your inbox'}. Once verified,
-          Pixie will prepare your workspace{agentKey ? <> and continue your <span className="font-semibold text-white/80">{agentLabel}</span> setup</> : ''}.
+          Pixie will prepare your workspace{agent ? <> and continue your <span className="font-semibold text-white/80">{agentLabel}</span> setup</> : ''}.
         </p>
 
         <div className="mt-6 flex flex-col gap-2.5">

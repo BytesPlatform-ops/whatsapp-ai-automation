@@ -17,6 +17,7 @@ from approvals.router import router as approvals_router
 from channels.api import router as channels_router
 from entitlements.router import router as entitlements_router
 from feed.router import router as feed_router
+from pixie_units.router import router as pixie_units_router
 from orchestrator import Orchestrator
 from receptionist.api import router as receptionist_router
 from receptionist.campaigns.api import router as campaigns_router
@@ -36,6 +37,7 @@ app.include_router(feed_router)  # /api/feed — Pixie Lab proactive recommendat
 app.include_router(entitlements_router)  # /api/entitlements — agent trial/purchase gating
 app.include_router(approvals_router)  # /api/approvals — risky-action approval gate
 app.include_router(activity_router)  # /api/activity — tenant activity log
+app.include_router(pixie_units_router)  # /api/agents/{slug}/trial + /api/omni/trial
 
 
 class UsageSummary(BaseModel):

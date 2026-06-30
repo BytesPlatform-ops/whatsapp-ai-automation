@@ -11,6 +11,7 @@ import {
 import { createClient, supabaseConfigured } from '@/lib/supabase/client';
 import { useEntitlements } from '@/lib/pixie-lab/useEntitlements';
 import { AddAgentModal } from '@/components/agents/AddAgentModal';
+import { getAgentBySlug, getAgentByBackendKey } from '@/lib/agents';
 import type { FeedAgent } from '@/lib/pixie-lab/feed';
 
 /**
@@ -76,7 +77,11 @@ export function DashboardView({
   const [modalAgent, setModalAgent] = useState<AgentDef | null>(null);
   const activatedRef = useRef(false);
 
-  const spotlight = (params.get('agent') || intendedAgent || '') as FeedAgent | '';
+  // The intended agent arrives as a canonical slug (intended_agent / ?agent);
+  // resolve it to a backend key through the registry so activation can never miss.
+  const raw = params.get('agent') || intendedAgent || '';
+  const spotlight = (getAgentBySlug(raw)?.backendKey
+    ?? (AGENTS.some((a) => a.key === raw) ? raw : '')) as FeedAgent | '';
 
   // Activate the agent the user came in for (signup / CTA), once, free.
   useEffect(() => {
@@ -148,7 +153,7 @@ export function DashboardView({
             <Grid>
               {owned.map((a, i) => (
                 <SpotifyCard key={a.key} def={a} state={stateOf(a.key)} spotlight={spotlight === a.key} index={i} reduce={reduce}
-                  onClick={() => router.push(`/pixie-lab/agents/${a.key}`)} />
+                  onClick={() => router.push(getAgentByBackendKey(a.key)?.dashboardPath ?? '/app/dashboard')} />
               ))}
             </Grid>
           )}

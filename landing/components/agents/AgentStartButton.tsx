@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowRight, Loader2 } from 'lucide-react';
 import { createClient, supabaseConfigured } from '@/lib/supabase/client';
-import { agentDashboardPath } from '@/lib/agents/agentRouting';
+import { getAgentDashboardPath } from '@/lib/agents';
 
 /**
  * AgentStartButton — the public agent-page CTA. On click it routes by auth state:
@@ -31,7 +31,7 @@ export function AgentStartButton({
 
   async function onClick() {
     setBusy(true);
-    const redirect = agentDashboardPath(agentSlug);
+    const redirect = getAgentDashboardPath(agentSlug);
     try {
       if (!supabaseConfigured()) {
         router.push(`/signup?agent=${encodeURIComponent(agentSlug)}&redirect=${encodeURIComponent(redirect)}`);

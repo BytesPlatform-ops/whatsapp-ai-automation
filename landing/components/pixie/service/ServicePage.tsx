@@ -4,7 +4,7 @@ import { useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import type { ServiceConfig } from '@/lib/pixieServices';
 import { createClient, supabaseConfigured } from '@/lib/supabase/client';
-import { agentDashboardPath } from '@/lib/agents/agentRouting';
+import { getAgentByPublicPath } from '@/lib/agents';
 import { ServicePageLayout } from './ServicePageLayout';
 import { ServiceHero } from './ServiceHero';
 import { BigTextReveal } from './BigTextReveal';
@@ -27,15 +27,19 @@ export function ServicePage({ config }: { config: ServiceConfig }) {
   // Primary CTA → the Pixie account journey, preserving this agent.
   // Not signed in → /signup?agent=…  ·  unverified → /verify-email  ·  verified → dashboard.
   const startAgent = useCallback(async () => {
-    const slug = config.slug;
-    const redirect = agentDashboardPath(slug);
-    const toSignup = () => router.push(`/signup?agent=${encodeURIComponent(slug)}&redirect=${encodeURIComponent(redirect)}`);
+    // Resolve the agent from THIS marketing page's path via the central registry —
+    // no hand-built slugs, so the funnel can't mismatch the backend key.
+    const agent = getAgentByPublicPath(config.slug);
+    const canonical = agent?.slug ?? '';
+    const redirect = agent?.dashboardPath ?? '/app/dashboard';
+    const agentQ = canonical ? `agent=${encodeURIComponent(canonical)}&` : '';
+    const toSignup = () => router.push(`/signup?${agentQ}redirect=${encodeURIComponent(redirect)}`);
     if (!supabaseConfigured()) return toSignup();
     try {
       const { data } = await createClient().auth.getUser();
       const user = data.user;
       if (!user) toSignup();
-      else if (!user.email_confirmed_at) router.push(`/verify-email?agent=${encodeURIComponent(slug)}`);
+      else if (!user.email_confirmed_at) router.push(`/verify-email?${agentQ}email=`);
       else router.push(redirect);
     } catch {
       toSignup();

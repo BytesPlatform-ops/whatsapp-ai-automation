@@ -9,5 +9,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/dashboard/:path*', '/dashboard', '/login', '/register', '/pixie-lab/:path*'],
+  matcher: ['/dashboard/:path*', '/dashboard', '/login', '/register', '/pixie-lab/:path*', '/app/:path*'],
 };

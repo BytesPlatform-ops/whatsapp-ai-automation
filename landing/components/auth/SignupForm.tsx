@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Loader2, Mail, Lock, User as UserIcon, Building2, Link2, AlertCircle, type LucideIcon } from 'lucide-react';
 import { createClient, supabaseConfigured } from '@/lib/supabase/client';
-import { agentKeyFromSlug, agentLabelFromSlug } from '@/lib/agents/agentRouting';
+import { getAgentBySlug } from '@/lib/agents';
 
 const SAFE = (n: string | null, fb: string) => (n && n.startsWith('/') && !n.startsWith('//') ? n : fb);
 
@@ -18,10 +18,9 @@ const SAFE = (n: string | null, fb: string) => (n && n.startsWith('/') && !n.sta
 export function SignupForm() {
   const router = useRouter();
   const params = useSearchParams();
-  const agentSlug = params.get('agent');
-  const agentKey = agentKeyFromSlug(agentSlug);
-  const agentLabel = agentLabelFromSlug(agentSlug);
-  const redirect = SAFE(params.get('redirect'), agentKey ? `/dashboard?agent=${agentKey}` : '/dashboard');
+  const agent = getAgentBySlug(params.get('agent'));
+  const agentLabel = agent?.name ?? 'Pixie';
+  const redirect = SAFE(params.get('redirect'), agent?.dashboardPath ?? '/app/dashboard');
 
   const [f, setF] = useState({ name: '', email: '', password: '', business_name: '', website_or_social: '', short_note: '' });
   const [busy, setBusy] = useState(false);
@@ -49,7 +48,7 @@ export function SignupForm() {
             business_name: f.business_name,
             website_or_social: f.website_or_social,
             short_note: f.short_note,
-            intended_agent: agentKey ?? '',
+            intended_agent: agent?.slug ?? '',
             intended_redirect: redirect,
             onboarded: false,
           },
@@ -59,7 +58,7 @@ export function SignupForm() {
       if (error) throw error;
       // Email-confirmation ON (default) → no session yet → go wait for the email.
       if (!data.session) {
-        router.push(`/verify-email?email=${encodeURIComponent(f.email)}${agentSlug ? `&agent=${encodeURIComponent(agentSlug)}` : ''}`);
+        router.push(`/verify-email?email=${encodeURIComponent(f.email)}${agent ? `&agent=${encodeURIComponent(agent.slug)}` : ''}`);
       } else {
         router.replace(redirect);
         router.refresh();
@@ -74,11 +73,11 @@ export function SignupForm() {
 
   const inputCls =
     'w-full rounded-xl border border-white/12 bg-white/[0.04] py-2.5 pl-10 pr-3 text-[15px] text-white placeholder-white/30 outline-none focus:border-[#25D366]/45';
-  const btnLabel = agentKey === 'receptionist' ? 'Create Account & Start AI Receptionist' : agentKey ? `Create Account & Start ${agentLabel}` : 'Create My Pixie Account';
+  const btnLabel = agent ? `Create Account & Start ${agentLabel}` : 'Create My Pixie Account';
 
   return (
     <form onSubmit={onSubmit} className="space-y-3.5">
-      {agentKey && (
+      {agent && (
         <div className="rounded-xl border border-[#25D366]/20 bg-[#25D366]/[0.07] px-4 py-3 text-[13px] text-[#bff3d0]">
           Start your Pixie setup — create your account to continue with <b className="font-semibold text-white">{agentLabel}</b>.
           <span className="text-[#7ef0a8]"> No payment required right now.</span>

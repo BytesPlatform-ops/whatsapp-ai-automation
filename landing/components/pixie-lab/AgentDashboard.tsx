@@ -7,6 +7,8 @@ import { Globe, Headset, Search, Megaphone, Clapperboard, ArrowUpRight, Send, Ac
 import { PairedFeed } from './PairedFeed';
 import { TrialBadge } from './TrialBadge';
 import { useEntitlements } from '@/lib/pixie-lab/useEntitlements';
+import { OpenFullServiceButton } from '@/components/pixie/OpenFullServiceButton';
+import { getAgentByBackendKey } from '@/lib/agents';
 import {
   feedForAgent, AGENT_META,
   type FeedAgent, type FeedCard as FeedCardType, type FeedCardAction,
@@ -102,10 +104,8 @@ export function AgentDashboard({ agent, tenant = 'demo', nowMs }: { agent: FeedA
             </div>
             <div className="ml-1"><TrialBadge state={state} trialEndsAt={trialEndsAt} nowMs={nowMs} /></div>
           </div>
-          {meta.slug && (
-            <Link href={`/${meta.slug}`} className="inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-bold" style={{ background: accent, color: '#02070a' }}>
-              Open full service <ArrowUpRight size={15} />
-            </Link>
+          {getAgentByBackendKey(agent) && (
+            <OpenFullServiceButton slug={getAgentByBackendKey(agent)!.slug} accent={accent} />
           )}
         </div>
 

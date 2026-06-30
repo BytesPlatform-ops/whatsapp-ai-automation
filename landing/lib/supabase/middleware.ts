@@ -2,7 +2,7 @@ import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 
 /** Routes that require a signed-in user. */
-const PROTECTED = ['/dashboard', '/pixie-lab'];
+const PROTECTED = ['/dashboard', '/pixie-lab', '/app'];
 /** Auth routes a signed-in user should be bounced away from. */
 const AUTH_ROUTES = ['/login', '/register'];
 
