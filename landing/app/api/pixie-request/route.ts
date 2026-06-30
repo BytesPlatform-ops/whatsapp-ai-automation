@@ -28,7 +28,12 @@ interface PixieRequestBody {
 }
 
 /** Email one setup request to LEAD_EMAIL via FormSubmit's AJAX endpoint. */
-async function notifyAdmin(payload: Record<string, string>, subject: string): Promise<boolean> {
+async function notifyAdmin(
+  payload: Record<string, string>,
+  subject: string,
+  origin: string,
+  referer: string,
+): Promise<boolean> {
   if (!LEAD_EMAIL || LEAD_EMAIL.includes('example.com')) {
     console.warn('[pixie-request] recipient not set — request logged only');
     return false;
@@ -36,7 +41,14 @@ async function notifyAdmin(payload: Record<string, string>, subject: string): Pr
 
   const res = await fetch(`https://formsubmit.co/ajax/${encodeURIComponent(LEAD_EMAIL)}`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      // FormSubmit rejects header-less server-to-server calls ("open this page
+      // through a web server"); forward the site's origin so it accepts them.
+      Origin: origin,
+      Referer: referer,
+    },
     body: JSON.stringify({
       _subject: subject,
       _template: 'table',
@@ -109,7 +121,9 @@ export async function POST(req: Request): Promise<NextResponse<{ ok: true } | { 
 
   console.log('[pixie-request] request', { ...payload, ip });
 
-  const delivered = await notifyAdmin(payload, subject).catch((err) => {
+  const origin = req.headers.get('origin') || new URL(req.url).origin;
+  const referer = req.headers.get('referer') || origin;
+  const delivered = await notifyAdmin(payload, subject, origin, referer).catch((err) => {
     console.error('[pixie-request] notifyAdmin threw', err);
     return false;
   });
