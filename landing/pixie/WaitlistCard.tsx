@@ -12,6 +12,9 @@ interface WaitlistCardProps {
   name?: string;
   business?: string;
   contact?: string;
+  /** Service labels the visitor swiped right (interested) / left (passed). */
+  selected?: string[];
+  rejected?: string[];
 }
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -21,7 +24,7 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
  * SEATS_START → SEATS_LEFT, then captures an email for the waitlist.
  * Styled via joinPixie.css.
  */
-export function WaitlistCard({ picked, name, business, contact }: WaitlistCardProps) {
+export function WaitlistCard({ picked, name, business, contact, selected, rejected }: WaitlistCardProps) {
   const [seats, setSeats] = useState(SEATS_START);
   const [email, setEmail] = useState('');
   const [status, setStatus] = useState<'idle' | 'loading' | 'done' | 'error'>('idle');
@@ -76,6 +79,8 @@ export function WaitlistCard({ picked, name, business, contact }: WaitlistCardPr
           name: name ?? '',
           business: business ?? '',
           contact: contact ?? '',
+          selected: selected ?? [],
+          rejected: rejected ?? [],
         }),
       });
       if (!res.ok) throw new Error('failed');

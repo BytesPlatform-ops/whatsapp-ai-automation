@@ -23,6 +23,8 @@ interface WaitlistRequest {
   name?: string;
   business?: string;
   contact?: string;
+  selected?: string[];
+  rejected?: string[];
 }
 
 interface Signup {
@@ -31,6 +33,8 @@ interface Signup {
   name: string;
   business: string;
   contact: string;
+  selected: string[];
+  rejected: string[];
 }
 
 function esc(v: string): string {
@@ -51,8 +55,27 @@ async function notifyAdmin(s: Signup): Promise<{ ok: boolean; detail: string }> 
     ['Business', s.business || '—'],
     ['Contact', s.contact || '—'],
     ['Email', s.email],
-    ['Roles picked', `${s.roles} / 6`],
+    ['Interested in', `${s.selected.length} of 6 services`],
   ];
+
+  // Per-service decision table: swiped right = interested, left = not interested.
+  const serviceRow = (label: string, interested: boolean) =>
+    `<tr><td style="border:1px solid #e2e8f0;padding:8px">${esc(label)}</td>` +
+    `<td style="border:1px solid #e2e8f0;padding:8px;color:${interested ? '#16a34a' : '#94a3b8'};font-weight:600">` +
+    `${interested ? '✅ Interested' : '✕ Not interested'}</td></tr>`;
+  const serviceRows = [
+    ...s.selected.map((l) => serviceRow(l, true)),
+    ...s.rejected.map((l) => serviceRow(l, false)),
+  ].join('');
+  const servicesTable = serviceRows
+    ? `<h3 style="font-family:system-ui;margin:20px 0 8px">Services</h3>` +
+      `<table cellpadding="8" style="border-collapse:collapse;font-family:system-ui;font-size:14px;min-width:340px">` +
+      `<tr><th style="border:1px solid #e2e8f0;background:#f8fafc;text-align:left;padding:8px">Service</th>` +
+      `<th style="border:1px solid #e2e8f0;background:#f8fafc;text-align:left;padding:8px">Decision</th></tr>` +
+      serviceRows +
+      `</table>`
+    : '';
+
   const html =
     `<h2 style="font-family:system-ui">🎉 New Pixie waitlist lead</h2>` +
     `<table cellpadding="8" style="border-collapse:collapse;font-family:system-ui;font-size:14px">` +
@@ -63,7 +86,9 @@ async function notifyAdmin(s: Signup): Promise<{ ok: boolean; detail: string }> 
           `<td style="border:1px solid #e2e8f0">${esc(v)}</td></tr>`,
       )
       .join('') +
-    `</table><p style="color:#94a3b8;font-family:system-ui;font-size:12px">Source: Join Pixie waitlist</p>`;
+    `</table>` +
+    servicesTable +
+    `<p style="color:#94a3b8;font-family:system-ui;font-size:12px">Source: Join Pixie waitlist</p>`;
 
   try {
     const resend = new Resend(key);
@@ -108,12 +133,16 @@ export async function POST(req: Request): Promise<NextResponse> {
 
   const roles = Number.isFinite(body?.roles) ? Math.max(0, Math.min(6, Number(body.roles))) : 0;
   const clip = (v: unknown) => String(v ?? '').trim().slice(0, 120);
+  const clipList = (arr: unknown) =>
+    Array.isArray(arr) ? arr.map((x) => clip(x)).filter(Boolean).slice(0, 6) : [];
   const signup: Signup = {
     email,
     roles,
     name: clip(body?.name),
     business: clip(body?.business),
     contact: clip(body?.contact),
+    selected: clipList(body?.selected),
+    rejected: clipList(body?.rejected),
   };
 
   console.log('[waitlist] signup', { ...signup, ip });

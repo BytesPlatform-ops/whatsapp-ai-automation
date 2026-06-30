@@ -22,6 +22,16 @@ const SWIPE_DISTANCE = 100;
 const SWIPE_VELOCITY = 450;
 const FLY_OUT = 700;
 
+/** Friendly service name per problem-card id — used in the waitlist lead email. */
+const SERVICE_LABEL: Record<string, string> = {
+  leads: 'AI Receptionist',
+  website: 'Website Builder',
+  content: 'Social Media Content',
+  'ai-video': 'AI Influencer Video',
+  growth: 'SEO Growth',
+  channels: 'Omnichannel Inbox',
+};
+
 /**
  * The swipe game: intro (collect name/business/contact) → six problem cards
  * (swipe right = yes, left = no) → terminal waitlist card. Styled via
@@ -34,7 +44,18 @@ export function SwipeDeck() {
   const [contact, setContact] = useState('');
   const [index, setIndex] = useState(0);
   const [picked, setPicked] = useState(0);
+  const [decisions, setDecisions] = useState<{ selected: string[]; rejected: string[] }>({
+    selected: [],
+    rejected: [],
+  });
   const [hint, setHint] = useState(false);
+
+  // Mirror `index` into a ref so flyOut (which doesn't depend on index) can read
+  // the card currently being swiped.
+  const idxRef = useRef(0);
+  useEffect(() => {
+    idxRef.current = index;
+  }, [index]);
 
   const x = useMotionValue(0);
   const rotate = useTransform(x, [-260, 260], [-12, 12]);
@@ -54,7 +75,14 @@ export function SwipeDeck() {
     (dir: Dir) => {
       if (animatingRef.current || !started || finished) return;
       animatingRef.current = true;
-      if (dir === 1) setPicked((p) => p + 1);
+      const card = PROBLEM_CARDS[idxRef.current];
+      const label = card ? SERVICE_LABEL[card.id] || card.badge : '';
+      if (dir === 1) {
+        setPicked((p) => p + 1);
+        if (label) setDecisions((d) => ({ ...d, selected: [...d.selected, label] }));
+      } else if (label) {
+        setDecisions((d) => ({ ...d, rejected: [...d.rejected, label] }));
+      }
       animate(x, dir * FLY_OUT, {
         duration: 0.32,
         ease: [0.4, 0, 1, 1],
@@ -171,7 +199,14 @@ export function SwipeDeck() {
             transition={{ duration: 0.4, ease: 'easeOut' }}
             className="jp-layer"
           >
-            <WaitlistCard picked={picked} name={name} business={business} contact={contact} />
+            <WaitlistCard
+              picked={picked}
+              name={name}
+              business={business}
+              contact={contact}
+              selected={decisions.selected}
+              rejected={decisions.rejected}
+            />
           </motion.div>
         )}
 
