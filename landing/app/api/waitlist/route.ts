@@ -1,3 +1,4 @@
+import { request as httpsRequest } from 'node:https';
 import { NextResponse } from 'next/server';
 import { rateLimitCheck, getClientIp } from '@/lib/swipeRateLimit';
 
@@ -29,6 +30,54 @@ interface Signup {
   contact: string;
 }
 
+/** POST JSON via node:https. Node's fetch()/undici treats Origin & Referer as
+ *  forbidden request headers and silently strips them (works on newer local
+ *  Node, dropped on Vercel's runtime) — and FormSubmit rejects header-less calls
+ *  ("open this page through a web server"). The low-level https client sends the
+ *  headers verbatim on every runtime, so delivery works in production. */
+function postFormSubmit(
+  url: string,
+  payload: Record<string, unknown>,
+  origin: string,
+  referer: string,
+): Promise<{ status: number; json: { success?: string; message?: string } | null }> {
+  return new Promise((resolve) => {
+    const data = JSON.stringify(payload);
+    const u = new URL(url);
+    const req = httpsRequest(
+      {
+        hostname: u.hostname,
+        path: u.pathname + u.search,
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+          Origin: origin,
+          Referer: referer,
+          'Content-Length': Buffer.byteLength(data),
+        },
+      },
+      (res) => {
+        let raw = '';
+        res.setEncoding('utf8');
+        res.on('data', (c) => (raw += c));
+        res.on('end', () => {
+          let json: { success?: string; message?: string } | null = null;
+          try {
+            json = JSON.parse(raw);
+          } catch {
+            /* non-JSON response */
+          }
+          resolve({ status: res.statusCode ?? 0, json });
+        });
+      },
+    );
+    req.on('error', () => resolve({ status: 0, json: null }));
+    req.write(data);
+    req.end();
+  });
+}
+
 /** Email each waitlist lead to LEAD_EMAIL via FormSubmit's AJAX endpoint. */
 async function notifyAdmin(s: Signup, origin: string, referer: string): Promise<boolean> {
   if (!LEAD_EMAIL || LEAD_EMAIL.includes('example.com')) {
@@ -36,17 +85,9 @@ async function notifyAdmin(s: Signup, origin: string, referer: string): Promise<
     return false;
   }
 
-  const res = await fetch(`https://formsubmit.co/ajax/${encodeURIComponent(LEAD_EMAIL)}`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Accept: 'application/json',
-      // FormSubmit rejects header-less server-to-server calls ("open this page
-      // through a web server"); forward the site's origin so it accepts them.
-      Origin: origin,
-      Referer: referer,
-    },
-    body: JSON.stringify({
+  const { status, json } = await postFormSubmit(
+    `https://formsubmit.co/ajax/${encodeURIComponent(LEAD_EMAIL)}`,
+    {
       _subject: `🎉 New Pixie waitlist lead — ${s.name || s.email}`,
       _template: 'table',
       _captcha: 'false',
@@ -56,16 +97,17 @@ async function notifyAdmin(s: Signup, origin: string, referer: string): Promise<
       Email: s.email,
       'Roles picked': `${s.roles} / 6`,
       Source: 'Join Pixie waitlist',
-    }),
-  });
+    },
+    origin,
+    referer,
+  );
 
-  if (!res.ok) {
-    console.error('[waitlist] FormSubmit error', res.status, await res.text().catch(() => ''));
+  if (status < 200 || status >= 300) {
+    console.error('[waitlist] FormSubmit HTTP error', status);
     return false;
   }
-  const data = (await res.json().catch(() => null)) as { success?: string; message?: string } | null;
-  if (data?.success !== 'true') {
-    console.error('[waitlist] FormSubmit not delivered', data?.message ?? '(no message)');
+  if (json?.success !== 'true') {
+    console.error('[waitlist] FormSubmit not delivered', json?.message ?? '(no message)');
     return false;
   }
   return true;
