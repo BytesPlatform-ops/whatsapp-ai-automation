@@ -31,7 +31,7 @@ export function ServicePage({ config }: { config: ServiceConfig }) {
     // no hand-built slugs, so the funnel can't mismatch the backend key.
     const agent = getAgentByPublicPath(config.slug);
     const canonical = agent?.slug ?? '';
-    const redirect = agent?.dashboardPath ?? '/app/dashboard';
+    const redirect = agent?.dashboardPath ?? '/pixie-lab/dashboard';
     const agentQ = canonical ? `agent=${encodeURIComponent(canonical)}&` : '';
     const toSignup = () => router.push(`/signup?${agentQ}redirect=${encodeURIComponent(redirect)}`);
     if (!supabaseConfigured()) return toSignup();

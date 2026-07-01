@@ -35,7 +35,7 @@ export function VerifyEmailCard() {
       const { error } = await createClient().auth.resend({
         type: 'signup',
         email,
-        options: { emailRedirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(agent?.dashboardPath ?? '/app/dashboard')}` },
+        options: { emailRedirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(agent?.dashboardPath ?? '/pixie-lab/dashboard')}` },
       });
       if (error) throw error;
       setSent(true);

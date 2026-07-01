@@ -20,7 +20,7 @@ export function SignupForm() {
   const params = useSearchParams();
   const agent = getAgentBySlug(params.get('agent'));
   const agentLabel = agent?.name ?? 'Pixie';
-  const redirect = SAFE(params.get('redirect'), agent?.dashboardPath ?? '/app/dashboard');
+  const redirect = SAFE(params.get('redirect'), agent?.dashboardPath ?? '/pixie-lab/dashboard');
 
   const [f, setF] = useState({ name: '', email: '', password: '', business_name: '', website_or_social: '', short_note: '' });
   const [busy, setBusy] = useState(false);

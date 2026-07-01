@@ -123,8 +123,8 @@ export function DashboardView({
           </p>
 
           <div className="mt-4 flex flex-wrap gap-2">
-            <HeaderAction primary icon={Globe} label="New Website" onClick={() => router.push(getAgentByBackendKey('website')?.dashboardPath ?? '/pixie-lab/agents/website')} />
-            <HeaderAction icon={Headset} label="Open Receptionist" onClick={() => router.push(getAgentByBackendKey('receptionist')?.dashboardPath ?? '/pixie-lab/agents/receptionist')} />
+            <HeaderAction primary icon={Globe} label="New Website" onClick={() => router.push(getAgentByBackendKey('website')?.dashboardPath ?? '/pixie-lab/website')} />
+            <HeaderAction icon={Headset} label="Open Receptionist" onClick={() => router.push(getAgentByBackendKey('receptionist')?.dashboardPath ?? '/pixie-lab/receptionist')} />
             <HeaderAction icon={ActivityIcon} label="View Activity" onClick={() => router.push('/pixie-lab/activity')} />
           </div>
         </motion.div>
@@ -306,10 +306,10 @@ function HeaderAction({ icon: Icon, label, onClick, primary }: { icon: LucideIco
 }
 
 const QUICK_ACTIONS: { icon: LucideIcon; label: string; href: string; accent: string }[] = [
-  { icon: Globe, label: 'Create a website', href: '/pixie-lab/agents/website', accent: '#3B82F6' },
+  { icon: Globe, label: 'Create a website', href: '/pixie-lab/website', accent: '#3B82F6' },
   { icon: ShieldCheck, label: 'Review approvals', href: '/pixie-lab/approvals', accent: '#22C55E' },
   { icon: BookOpen, label: 'Add business knowledge', href: '/quick-setup', accent: '#14B8A6' },
-  { icon: Clapperboard, label: 'Generate content', href: '/pixie-lab/agents/content', accent: '#D4AF37' },
+  { icon: Clapperboard, label: 'Generate content', href: '/pixie-lab/content', accent: '#D4AF37' },
   { icon: ActivityIcon, label: 'Check activity', href: '/pixie-lab/activity', accent: '#EC4899' },
 ];
 

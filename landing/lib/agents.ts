@@ -25,32 +25,32 @@ export interface PixieUnit {
 export const AGENTS = {
   'ai-receptionist': {
     type: 'agent', slug: 'ai-receptionist', backendKey: 'receptionist', name: 'AI Receptionist',
-    publicPath: '/ai-receptionist', dashboardPath: '/app/agents/ai-receptionist', fullServicePath: '/app/agents/ai-receptionist/full-service',
+    publicPath: '/ai-receptionist', dashboardPath: '/pixie-lab/receptionist', fullServicePath: '/pixie-lab/receptionist/full-service',
     trialEnabled: true, accent: '#E6B45A', icon: 'headset',
     description: 'Handle calls, bookings, FAQs, quotes, customer questions, and lead follow-ups.',
   },
   'website-builder': {
     type: 'agent', slug: 'website-builder', backendKey: 'website', name: 'Website Builder',
-    publicPath: '/website-builder', dashboardPath: '/app/agents/website-builder', fullServicePath: '/app/agents/website-builder/full-service',
+    publicPath: '/website-builder', dashboardPath: '/pixie-lab/website', fullServicePath: '/pixie-lab/website/full-service',
     trialEnabled: true, accent: '#3B82F6', icon: 'globe',
     description: 'Build, edit, publish, and improve business websites from conversation.',
   },
   'seo-agent': {
     type: 'agent', slug: 'seo-agent', backendKey: 'seo', name: 'SEO Agent',
-    publicPath: '/seo-audit', dashboardPath: '/app/agents/seo-agent', fullServicePath: '/app/agents/seo-agent/full-service',
+    publicPath: '/seo-audit', dashboardPath: '/pixie-lab/seo', fullServicePath: '/pixie-lab/seo/full-service',
     trialEnabled: true, accent: '#14B8A6', icon: 'search',
     description: 'Audit websites, detect SEO issues, and prepare ranking improvements.',
   },
   'marketing-agent': {
     type: 'agent', slug: 'marketing-agent', backendKey: 'marketing', name: 'Marketing',
-    publicPath: '/social-media-marketing', dashboardPath: '/app/agents/marketing-agent', fullServicePath: '/app/agents/marketing-agent/full-service',
+    publicPath: '/social-media-marketing', dashboardPath: '/pixie-lab/marketing', fullServicePath: '/pixie-lab/marketing/full-service',
     trialEnabled: true, accent: '#EC4899', icon: 'megaphone',
     description: 'Plan campaigns, offers, content, and reactivation workflows.',
   },
   'content-creator': {
     type: 'agent', slug: 'content-creator', backendKey: 'content', name: 'Content Creator',
     // live marketing page is /ai-influencer (alias ai-content-creator handled in normalize)
-    publicPath: '/ai-influencer', dashboardPath: '/app/agents/content-creator', fullServicePath: '/app/agents/content-creator/full-service',
+    publicPath: '/ai-influencer', dashboardPath: '/pixie-lab/content', fullServicePath: '/pixie-lab/content/full-service',
     trialEnabled: true, accent: '#D4AF37', icon: 'clapperboard',
     description: 'Create posts, reels, scripts, captions, carousels, and campaign content.',
   },
@@ -115,10 +115,10 @@ export function getAgentByBackendKey(key: string | null | undefined): PixieUnit 
 
 // ── path helpers (never hand-build a route) ─────────────────────────────────────
 export function getDashboardPath(slug: string | null | undefined): string {
-  return getPixieUnitBySlug(slug)?.dashboardPath ?? '/app/dashboard';
+  return getPixieUnitBySlug(slug)?.dashboardPath ?? '/pixie-lab/dashboard';
 }
 export function getFullServicePath(slug: string | null | undefined): string {
-  return getPixieUnitBySlug(slug)?.fullServicePath ?? '/app/dashboard';
+  return getPixieUnitBySlug(slug)?.fullServicePath ?? '/pixie-lab/dashboard';
 }
 /** @deprecated use getDashboardPath */
 export const getAgentDashboardPath = getDashboardPath;
