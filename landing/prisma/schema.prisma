@@ -1,0 +1,189 @@
+// Pixie Lab application data — Prisma ORM over the Supabase Postgres database.
+// Auth itself stays in Supabase (auth.users); these tables live in `public` and
+// are accessed ONLY from server routes/actions via the Prisma client (they are
+// not exposed to the browser), so RLS is not relied on for them.
+//
+// Connection: DATABASE_URL = transaction pooler (pgbouncer, port 6543) for the
+// app; DIRECT_URL = session pooler (port 5432) for migrations. Both live in
+// landing/.env (see .env.example). The Supabase DB password is required.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ── Enums ─────────────────────────────────────────────────────────────────────
+enum WorkspaceRole {
+  owner
+  admin
+  manager
+  member
+  viewer
+}
+
+enum MemberStatus {
+  active
+  invited
+  suspended
+}
+
+enum InvitationStatus {
+  pending
+  accepted
+  expired
+  revoked
+}
+
+// ── Profile ───────────────────────────────────────────────────────────────────
+// One row per Supabase auth user (id == auth.users.id).
+model Profile {
+  id        String   @id @db.Uuid
+  email     String   @unique
+  fullName  String?  @map("full_name")
+  avatarUrl String?  @map("avatar_url")
+  roleTitle String?  @map("role_title")
+  phone     String?
+  timezone  String?
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("profiles")
+}
+
+// ── Active sessions ───────────────────────────────────────────────────────────
+model UserSession {
+  id          String    @id @default(uuid()) @db.Uuid
+  userId      String    @map("user_id") @db.Uuid
+  sessionId   String    @map("session_id")
+  userAgent   String?   @map("user_agent")
+  ipHash      String?   @map("ip_hash")
+  deviceLabel String?   @map("device_label")
+  lastSeenAt  DateTime  @default(now()) @map("last_seen_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  revokedAt   DateTime? @map("revoked_at")
+
+  @@unique([userId, sessionId])
+  @@index([userId])
+  @@map("user_sessions")
+}
+
+// ── Workspaces + RBAC ─────────────────────────────────────────────────────────
+model Workspace {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String
+  slug      String   @unique
+  ownerId   String   @map("owner_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  members       WorkspaceMember[]
+  invitations   WorkspaceInvitation[]
+  subscriptions Subscription[]
+
+  @@map("workspaces")
+}
+
+model WorkspaceMember {
+  id          String       @id @default(uuid()) @db.Uuid
+  workspaceId String       @map("workspace_id") @db.Uuid
+  userId      String       @map("user_id") @db.Uuid
+  role        WorkspaceRole @default(member)
+  permissions Json         @default("[]")
+  status      MemberStatus  @default(active)
+  invitedBy   String?      @map("invited_by") @db.Uuid
+  joinedAt    DateTime?    @map("joined_at")
+  createdAt   DateTime     @default(now()) @map("created_at")
+  updatedAt   DateTime     @updatedAt @map("updated_at")
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, userId])
+  @@index([userId])
+  @@map("workspace_members")
+}
+
+model WorkspaceInvitation {
+  id          String           @id @default(uuid()) @db.Uuid
+  workspaceId String           @map("workspace_id") @db.Uuid
+  email       String
+  role        WorkspaceRole    @default(member)
+  permissions Json             @default("[]")
+  tokenHash   String           @unique @map("token_hash")
+  status      InvitationStatus @default(pending)
+  invitedBy   String           @map("invited_by") @db.Uuid
+  expiresAt   DateTime         @map("expires_at")
+  acceptedAt  DateTime?        @map("accepted_at")
+  createdAt   DateTime         @default(now()) @map("created_at")
+  updatedAt   DateTime         @updatedAt @map("updated_at")
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([email])
+  @@map("workspace_invitations")
+}
+
+// ── Billing (Stripe) ──────────────────────────────────────────────────────────
+model BillingCustomer {
+  id               String   @id @default(uuid()) @db.Uuid
+  userId           String?  @map("user_id") @db.Uuid
+  workspaceId      String?  @map("workspace_id") @db.Uuid
+  stripeCustomerId String   @unique @map("stripe_customer_id")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  @@index([workspaceId])
+  @@map("billing_customers")
+}
+
+model Subscription {
+  id                   String    @id @default(uuid()) @db.Uuid
+  workspaceId          String    @map("workspace_id") @db.Uuid
+  stripeSubscriptionId String    @unique @map("stripe_subscription_id")
+  stripeCustomerId     String    @map("stripe_customer_id")
+  planKey              String    @map("plan_key")
+  status               String
+  currentPeriodStart   DateTime? @map("current_period_start")
+  currentPeriodEnd     DateTime? @map("current_period_end")
+  cancelAtPeriodEnd    Boolean   @default(false) @map("cancel_at_period_end")
+  createdAt            DateTime  @default(now()) @map("created_at")
+  updatedAt            DateTime  @updatedAt @map("updated_at")
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@map("subscriptions")
+}
+
+model BillingEvent {
+  id            String   @id @default(uuid()) @db.Uuid
+  stripeEventId String   @unique @map("stripe_event_id")
+  type          String
+  payload       Json
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@map("billing_events")
+}
+
+// ── Notification preferences ──────────────────────────────────────────────────
+model NotificationPreference {
+  id             String   @id @default(uuid()) @db.Uuid
+  userId         String   @map("user_id") @db.Uuid
+  workspaceId    String?  @map("workspace_id") @db.Uuid
+  emailLeads     Boolean  @default(true) @map("email_leads")
+  emailApprovals Boolean  @default(true) @map("email_approvals")
+  emailBilling   Boolean  @default(true) @map("email_billing")
+  emailSecurity  Boolean  @default(true) @map("email_security")
+  productUpdates Boolean  @default(false) @map("product_updates")
+  weeklySummary  Boolean  @default(true) @map("weekly_summary")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  @@unique([userId])
+  @@map("notification_preferences")
+}
