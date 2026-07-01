@@ -4,9 +4,11 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import Image from 'next/image';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { motion, useReducedMotion } from 'framer-motion';
+import Link from 'next/link';
 import {
-  Sparkles, ArrowUpRight, Lock, Check, Plus, MousePointerClick,
-  MessageCircleHeart, X,
+  Sparkles, ArrowUpRight, ArrowRight, Lock, Check, Plus, MousePointerClick,
+  MessageCircleHeart, X, Globe, Headset, Activity as ActivityIcon, ShieldCheck,
+  BookOpen, Clapperboard, TrendingUp, type LucideIcon,
 } from 'lucide-react';
 import { supabaseConfigured } from '@/lib/supabase/client';
 import { useEntitlements } from '@/lib/pixie-lab/useEntitlements';
@@ -75,6 +77,10 @@ export function DashboardView({
   const { entitlements, stateOf, activate } = useEntitlements(tenant);
   const [modalAgent, setModalAgent] = useState<AgentDef | null>(null);
   const activatedRef = useRef(false);
+  // The demo banner depends on client-only env detection; gate it behind mount
+  // so SSR and the first client render always agree (no hydration mismatch).
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
 
   const raw = params.get('agent') || intendedAgent || '';
   const spotlight = (getAgentBySlug(raw)?.backendKey
@@ -115,46 +121,64 @@ export function DashboardView({
             Pick an agent to put on the job — each one automates a slice of your daily work.
             {email ? <span className="ml-1 opacity-70">· {email}</span> : null}
           </p>
+
+          <div className="mt-4 flex flex-wrap gap-2">
+            <HeaderAction primary icon={Globe} label="New Website" onClick={() => router.push(getAgentByBackendKey('website')?.dashboardPath ?? '/pixie-lab/agents/website')} />
+            <HeaderAction icon={Headset} label="Open Receptionist" onClick={() => router.push(getAgentByBackendKey('receptionist')?.dashboardPath ?? '/pixie-lab/agents/receptionist')} />
+            <HeaderAction icon={ActivityIcon} label="View Activity" onClick={() => router.push('/pixie-lab/activity')} />
+          </div>
         </motion.div>
 
-        {!authed && !supabaseConfigured() && (
+        {mounted && !authed && !supabaseConfigured() && (
           <div className="mt-5 rounded-2xl border border-amber-400/30 bg-amber-400/10 px-4 py-3 text-[13px] font-medium text-amber-600 dark:text-amber-200">
             Demo mode — add your Supabase keys to enable real accounts.
           </div>
         )}
 
-        <GetStartedGuide reduce={reduce} ownedCount={owned.length} />
+        <div className="mt-8 grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
+          {/* left column */}
+          <div className="min-w-0">
+            <GetStartedGuide reduce={reduce} ownedCount={owned.length} />
 
-        <Section
-          title="Your agents"
-          subtitle="Agents switched on for your workspace — tap one to start working."
-          count={owned.length ? `${owned.length} active` : undefined}
-        >
-          {owned.length === 0 ? (
-            <EmptyState onBrowse={() => document.getElementById('recommended')?.scrollIntoView({ behavior: 'smooth' })} />
-          ) : (
-            <Grid>
-              {owned.map((a, i) => (
-                <AgentCard key={a.key} def={a} state={stateOf(a.key)} spotlight={spotlight === a.key} index={i} reduce={reduce}
-                  onClick={() => router.push(getAgentByBackendKey(a.key)?.dashboardPath ?? '/pixie-lab/dashboard')} />
-              ))}
-            </Grid>
-          )}
-        </Section>
+            <QuickActions />
 
-        {recommended.length > 0 && (
-          <Section
-            id="recommended"
-            title="Recommended ways to grow"
-            subtitle="Add more Pixie agents to handle marketing, content, SEO, and website growth — all free to switch on."
-          >
-            <Grid>
-              {recommended.map((a, i) => (
-                <AgentCard key={a.key} def={a} state="locked" index={i} reduce={reduce} onClick={() => setModalAgent(a)} />
-              ))}
-            </Grid>
-          </Section>
-        )}
+            <Section
+              title="Your agents"
+              subtitle="Agents switched on for your workspace — tap one to start working."
+              count={owned.length ? `${owned.length} active` : undefined}
+            >
+              {owned.length === 0 ? (
+                <EmptyState onBrowse={() => document.getElementById('recommended')?.scrollIntoView({ behavior: 'smooth' })} />
+              ) : (
+                <Grid>
+                  {owned.map((a, i) => (
+                    <AgentCard key={a.key} def={a} state={stateOf(a.key)} spotlight={spotlight === a.key} index={i} reduce={reduce}
+                      onClick={() => router.push(getAgentByBackendKey(a.key)?.dashboardPath ?? '/pixie-lab/dashboard')} />
+                  ))}
+                </Grid>
+              )}
+            </Section>
+
+            {recommended.length > 0 && (
+              <Section
+                id="recommended"
+                title="Recommended ways to grow"
+                subtitle="Add more Pixie agents to handle marketing, content, SEO, and website growth — all free to switch on."
+              >
+                <Grid>
+                  {recommended.map((a, i) => (
+                    <AgentCard key={a.key} def={a} state="locked" index={i} reduce={reduce} onClick={() => setModalAgent(a)} />
+                  ))}
+                </Grid>
+              </Section>
+            )}
+          </div>
+
+          {/* right insight panel — desktop only, fills the horizontal space */}
+          <aside className="sticky top-[76px] hidden xl:block">
+            <InsightPanel tenant={tenant} ownedCount={owned.length} total={AGENTS.length} />
+          </aside>
+        </div>
       </main>
 
       <AddAgentModal
@@ -264,6 +288,129 @@ function Section({ id, title, subtitle, count, children }: { id?: string; title:
 
 function Grid({ children }: { children: React.ReactNode }) {
   return <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(288px, 1fr))' }}>{children}</div>;
+}
+
+function HeaderAction({ icon: Icon, label, onClick, primary }: { icon: LucideIcon; label: string; onClick: () => void; primary?: boolean }) {
+  if (primary) {
+    return (
+      <button onClick={onClick} className="inline-flex cursor-pointer items-center gap-1.5 rounded-full bg-gradient-to-r from-[#22C55E] to-[#0EA5A3] px-3.5 py-2 text-[13px] font-bold text-white shadow-[0_10px_26px_-12px_rgba(34,197,94,0.8)] transition hover:brightness-110">
+        <Icon size={15} /> {label}
+      </button>
+    );
+  }
+  return (
+    <button onClick={onClick} className="inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-[var(--pl-border)] bg-[var(--pl-surface)] px-3.5 py-2 text-[13px] font-semibold text-[var(--pl-text-soft)] transition hover:border-[var(--pl-border-strong)] hover:text-[var(--pl-text)]">
+      <Icon size={15} className="text-[var(--pl-text-muted)]" /> {label}
+    </button>
+  );
+}
+
+const QUICK_ACTIONS: { icon: LucideIcon; label: string; href: string; accent: string }[] = [
+  { icon: Globe, label: 'Create a website', href: '/pixie-lab/agents/website', accent: '#3B82F6' },
+  { icon: ShieldCheck, label: 'Review approvals', href: '/pixie-lab/approvals', accent: '#22C55E' },
+  { icon: BookOpen, label: 'Add business knowledge', href: '/quick-setup', accent: '#14B8A6' },
+  { icon: Clapperboard, label: 'Generate content', href: '/pixie-lab/agents/content', accent: '#D4AF37' },
+  { icon: ActivityIcon, label: 'Check activity', href: '/pixie-lab/activity', accent: '#EC4899' },
+];
+
+function QuickActions() {
+  return (
+    <section className="mt-9">
+      <h2 className="font-display text-xl font-extrabold tracking-tight">Quick actions</h2>
+      <p className="mt-1 text-[13.5px] text-[var(--pl-text-muted)]">Jump straight into the things you do most.</p>
+      <div className="mt-5 grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(190px, 1fr))' }}>
+        {QUICK_ACTIONS.map((q) => {
+          const Icon = q.icon;
+          return (
+            <Link
+              key={q.label}
+              href={q.href}
+              className="group flex items-center gap-3 rounded-2xl border border-[var(--pl-border)] bg-[var(--pl-surface)] px-4 py-3.5 shadow-[var(--pl-shadow-sm)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[var(--pl-shadow)]"
+              style={{ ['--qa' as string]: q.accent }}
+            >
+              <span className="grid h-9 w-9 flex-none place-items-center rounded-xl border border-[var(--pl-border)]" style={{ background: `color-mix(in srgb, ${q.accent} 14%, var(--pl-surface))`, color: q.accent }}>
+                <Icon size={17} strokeWidth={2.1} />
+              </span>
+              <span className="text-[13.5px] font-semibold text-[var(--pl-text)]">{q.label}</span>
+              <ArrowRight size={15} className="ml-auto text-[var(--pl-text-muted)] transition-transform duration-200 group-hover:translate-x-0.5" />
+            </Link>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+interface ActivityEvent { id: string; title: string; type: string; created_at: string }
+
+/** InsightPanel — desktop-only right rail: workspace health, quick stats and a
+ *  recent-activity peek. Health/stats are derived from live entitlements;
+ *  recent activity is a best-effort fetch (empty state if none/unavailable). */
+function InsightPanel({ tenant, ownedCount, total }: { tenant: string; ownedCount: number; total: number }) {
+  const [events, setEvents] = useState<ActivityEvent[]>([]);
+  useEffect(() => {
+    let alive = true;
+    fetch(`/api/lab/activity?tenant_id=${encodeURIComponent(tenant)}`, { cache: 'no-store' })
+      .then((r) => r.json())
+      .then((d) => { if (alive && Array.isArray(d.events)) setEvents(d.events.slice(0, 4)); })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [tenant]);
+
+  const health = Math.round((ownedCount / Math.max(1, total)) * 100);
+  const stats = [
+    { label: 'Agents active', value: `${ownedCount}/${total}`, icon: Sparkles },
+    { label: 'Pending approvals', value: '0', icon: ShieldCheck },
+    { label: 'Setup complete', value: `${health}%`, icon: TrendingUp },
+  ];
+
+  return (
+    <div className="space-y-4">
+      {/* Workspace health */}
+      <div className="rounded-3xl border border-[var(--pl-border)] bg-[var(--pl-surface)] p-5 shadow-[var(--pl-shadow-sm)]">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--pl-text-muted)]">Workspace health</p>
+        <div className="mt-3 flex items-end gap-2">
+          <span className="font-display text-3xl font-extrabold text-[var(--pl-green)]">{health}%</span>
+          <span className="pb-1 text-[12px] text-[var(--pl-text-muted)]">ready</span>
+        </div>
+        <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-[var(--pl-surface-soft)]">
+          <div className="h-full rounded-full bg-gradient-to-r from-[#22C55E] to-[#0EA5A3] transition-[width] duration-500" style={{ width: `${Math.max(6, health)}%` }} />
+        </div>
+        <div className="mt-4 space-y-2.5">
+          {stats.map((s) => {
+            const Icon = s.icon;
+            return (
+              <div key={s.label} className="flex items-center gap-2.5">
+                <span className="grid h-7 w-7 place-items-center rounded-lg bg-[var(--pl-surface-soft)] text-[var(--pl-green)]"><Icon size={14} /></span>
+                <span className="text-[13px] text-[var(--pl-text-muted)]">{s.label}</span>
+                <span className="ml-auto text-[13px] font-bold text-[var(--pl-text)]">{s.value}</span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Recent activity */}
+      <div className="rounded-3xl border border-[var(--pl-border)] bg-[var(--pl-surface)] p-5 shadow-[var(--pl-shadow-sm)]">
+        <div className="flex items-center justify-between">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--pl-text-muted)]">Recent activity</p>
+          <Link href="/pixie-lab/activity" className="text-[12px] font-semibold text-[var(--pl-green)]">View all</Link>
+        </div>
+        {events.length === 0 ? (
+          <p className="mt-3 text-[13px] text-[var(--pl-text-muted)]">Nothing yet — actions you and Pixie take will show up here.</p>
+        ) : (
+          <ul className="mt-3 space-y-3">
+            {events.map((e) => (
+              <li key={e.id} className="flex items-start gap-2.5">
+                <span className="mt-1 h-1.5 w-1.5 flex-none rounded-full bg-[var(--pl-green)]" />
+                <span className="text-[13px] leading-snug text-[var(--pl-text-soft)]">{e.title}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </div>
+  );
 }
 
 function AgentCard({ def, state, spotlight, index, reduce, onClick }: {
