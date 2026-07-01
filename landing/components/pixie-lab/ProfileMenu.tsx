@@ -12,12 +12,12 @@ import {
 
 const ITEMS: { label: string; href: string; icon: LucideIcon }[] = [
   { label: 'View Profile', href: '/pixie-lab/profile', icon: User },
-  { label: 'Account Settings', href: '/pixie-lab/profile#account', icon: Settings },
-  { label: 'Change Password', href: '/pixie-lab/profile#password', icon: KeyRound },
-  { label: 'Billing / Plan', href: '/pixie-lab/profile#billing', icon: CreditCard },
-  { label: 'Workspace Settings', href: '/pixie-lab/profile#workspace', icon: Building2 },
-  { label: 'Notifications', href: '/pixie-lab/profile#notifications', icon: Bell },
-  { label: 'Help / Support', href: '/pixie-lab/profile#help', icon: LifeBuoy },
+  { label: 'Account Settings', href: '/pixie-lab/settings', icon: Settings },
+  { label: 'Change Password', href: '/pixie-lab/security', icon: KeyRound },
+  { label: 'Billing / Plan', href: '/pixie-lab/billing', icon: CreditCard },
+  { label: 'Workspace Settings', href: '/pixie-lab/workspace-settings', icon: Building2 },
+  { label: 'Notifications', href: '/pixie-lab/notifications', icon: Bell },
+  { label: 'Help / Support', href: '/pixie-lab/support', icon: LifeBuoy },
 ];
 
 export function ProfileMenu({ name, tenant, onSignOut }: { name: string; tenant: string; onSignOut: () => void }) {

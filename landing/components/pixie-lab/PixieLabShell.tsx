@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { usePathname, useRouter } from 'next/navigation';
 import {
   Sparkles, LayoutGrid, LayoutDashboard, Globe, Headset, Search, Megaphone, Clapperboard,
@@ -55,17 +56,16 @@ export function PixieLabShell({
     router.refresh();
   }
 
+  // One canonical URL per service; ServiceView branches locked vs active so the
+  // link is stable regardless of entitlement state (and stays in the shell).
   function agentHref(agent: FeedAgent): string {
-    const st = stateFor(agent);
-    return st === 'locked' ? `/pixie-lab/trial/${agent}` : `/pixie-lab/agents/${agent}`;
+    return `/pixie-lab/${agent}`;
   }
 
   const Rail = (
     <div className="flex h-full flex-col">
       <Link href="/pixie-lab/dashboard" className="flex items-center gap-2.5 px-5 py-5 font-display text-base font-extrabold tracking-tight text-[var(--pl-text)]">
-        <span className="grid h-9 w-9 place-items-center rounded-2xl bg-gradient-to-br from-[#22C55E] to-[#0EA5A3] text-white shadow-[0_8px_20px_-6px_rgba(34,197,94,0.55)] ring-1 ring-white/25">
-          <Sparkles size={17} strokeWidth={2.5} />
-        </span>
+        <PixieAvatar />
         Pixie Lab
       </Link>
 
@@ -78,7 +78,7 @@ export function PixieLabShell({
           const st = stateFor(agent);
           const Icon = AGENT_ICON[agent];
           const accent = AGENT_ACCENT[agent];
-          const active = pathname === `/pixie-lab/agents/${agent}`;
+          const active = pathname === `/pixie-lab/${agent}`;
           return (
             <Link
               key={agent}
@@ -165,6 +165,29 @@ export function PixieLabShell({
         </div>
       </div>
     </div>
+  );
+}
+
+/** Sidebar brand avatar — the normal Pixie mascot, premium in both themes,
+ *  with a Sparkles fallback if the image fails to load. */
+function PixieAvatar() {
+  const [ok, setOk] = useState(true);
+  return (
+    <span className="relative grid h-10 w-10 flex-none place-items-center overflow-hidden rounded-2xl bg-gradient-to-br from-[#22C55E] to-[#0EA5A3] shadow-[0_8px_22px_-6px_rgba(34,197,94,0.6)] ring-1 ring-white/25">
+      {ok ? (
+        <Image
+          src="/images/pixie/forms/normal.png"
+          alt="Pixie"
+          width={40}
+          height={40}
+          className="h-full w-full object-contain p-0.5 drop-shadow"
+          onError={() => setOk(false)}
+          priority
+        />
+      ) : (
+        <Sparkles size={18} strokeWidth={2.5} className="text-white" />
+      )}
+    </span>
   );
 }
 

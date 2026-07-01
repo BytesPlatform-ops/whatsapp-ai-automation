@@ -1,17 +1,2 @@
-import { createClient } from '@/lib/supabase/server';
-import { tenantForUser } from '@/lib/supabase/auth';
-import { AgentDashboard } from '@/components/pixie-lab/AgentDashboard';
-
-export const dynamic = 'force-dynamic';
-
-function configured() {
-  return Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
-}
-
-export default async function ReceptionistAgentPage() {
-  let user = null;
-  if (configured()) {
-    try { user = (await createClient().auth.getUser()).data.user; } catch { user = null; }
-  }
-  return <AgentDashboard agent="receptionist" tenant={tenantForUser(user)} nowMs={Date.now()} />;
-}
+import { redirect } from 'next/navigation';
+export default function Page() { redirect('/pixie-lab/receptionist'); }

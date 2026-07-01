@@ -164,7 +164,7 @@ export function ForYou({ name, tenant = 'demo', nowMs }: { name: string; tenant?
           <UpsellTicker
             lockedAgents={locked}
             onStartTrial={(a) => { startTrial(a); flash(`Started free trial · ${a}`); }}
-            onUnlock={(a) => { window.location.href = `/pixie-lab/trial/${a}`; }}
+            onUnlock={(a) => { window.location.href = `/pixie-lab/billing?plan=${a}`; }}
           />
         </div>
 

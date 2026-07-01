@@ -51,7 +51,7 @@ export function TrialUnlock({ agent, tenant = 'demo' }: { agent: FeedAgent; tena
     } catch { /* ignore */ }
     setBusy(null);
     setNote('Free trial started — opening your workspace…');
-    setTimeout(() => router.push(`/pixie-lab/agents/${agent}`), 700);
+    setTimeout(() => router.push(`/pixie-lab/${agent}`), 700);
   }
 
   async function unlock() {
