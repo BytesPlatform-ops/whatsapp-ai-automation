@@ -18,6 +18,9 @@ from channels.api import router as channels_router
 from entitlements.router import router as entitlements_router
 from feed.router import router as feed_router
 from pixie_units.router import router as pixie_units_router
+from runtime.mode import mode_banner
+from runtime.router import router as mode_router
+from omni import router as omni_router
 from orchestrator import Orchestrator
 from receptionist.api import router as receptionist_router
 from receptionist.campaigns.api import router as campaigns_router
@@ -38,6 +41,8 @@ app.include_router(entitlements_router)  # /api/entitlements — agent trial/pur
 app.include_router(approvals_router)  # /api/approvals — risky-action approval gate
 app.include_router(activity_router)  # /api/activity — tenant activity log
 app.include_router(pixie_units_router)  # /api/agents/{slug}/trial + /api/omni/trial
+app.include_router(mode_router)  # /api/mode — global test/execution mode + safety banner
+app.include_router(omni_router)  # /api/omni — signal routing brain (Test Lab)
 
 
 class UsageSummary(BaseModel):
@@ -55,8 +60,8 @@ class GenerateResponse(BaseModel):
 
 
 @app.get("/health")
-async def health() -> dict[str, str]:
-    return {"status": "ok", "model_mode": os.getenv("PIXIE_MODEL_MODE", "fake")}
+async def health() -> dict:
+    return {"status": "ok", "model_mode": os.getenv("PIXIE_MODEL_MODE", "fake"), "mode": mode_banner()}
 
 
 @app.post("/v1/generate", response_model=GenerateResponse)
