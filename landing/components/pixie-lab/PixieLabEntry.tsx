@@ -12,7 +12,7 @@ import { Sparkles, ArrowRight } from 'lucide-react';
 export function PixieLabEntry() {
   return (
     <Link
-      href="/pixie-lab/for-you"
+      href="/pixie-lab/dashboard"
       aria-label="Enter Pixie Lab"
       className="group fixed bottom-5 right-5 z-[80] inline-flex items-center gap-2 rounded-full border border-white/15 bg-[#02070a]/70 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-black/40 backdrop-blur-md transition-transform hover:-translate-y-0.5 sm:bottom-6 sm:right-6"
       style={{ boxShadow: '0 14px 40px color-mix(in srgb, var(--accent) 26%, transparent)' }}

@@ -99,7 +99,7 @@ export function ForYou({ name, tenant = 'demo', nowMs }: { name: string; tenant?
   }
 
   return (
-    <div className="relative min-h-screen bg-[#02070a] text-white">
+    <div className="relative min-h-screen bg-[#0C1512] text-white">
       <div
         className="pointer-events-none fixed inset-x-0 top-0 h-[460px]"
         style={{ background: 'radial-gradient(80% 100% at 50% 0%, rgba(37,211,102,0.10), transparent 62%)' }}
@@ -188,7 +188,7 @@ export function ForYou({ name, tenant = 'demo', nowMs }: { name: string; tenant?
         <motion.div
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
-          className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-full border border-white/12 bg-[#0a0e16] px-4 py-2.5 text-[13px] text-white shadow-2xl"
+          className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-full border border-white/12 bg-[#15211C] px-4 py-2.5 text-[13px] text-white shadow-2xl"
         >
           {toast}
         </motion.div>

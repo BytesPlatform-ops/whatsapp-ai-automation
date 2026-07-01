@@ -49,7 +49,7 @@ export function AddAgentModal({
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.96 }}
             onClick={(e) => e.stopPropagation()}
-            className="relative w-full max-w-md rounded-3xl border border-white/12 bg-[#0a0e16] p-7"
+            className="relative w-full max-w-md rounded-3xl border border-white/12 bg-[#15211C] p-7"
             style={{ ['--accent' as string]: accent }}
           >
             <button onClick={onClose} className="absolute right-4 top-4 text-white/40 hover:text-white"><X size={18} /></button>

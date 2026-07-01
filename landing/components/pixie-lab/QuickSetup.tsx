@@ -51,12 +51,12 @@ export function QuickSetup() {
     } catch {
       /* ignore — still proceed to the Lab */
     }
-    router.push('/pixie-lab/for-you');
+    router.push('/pixie-lab/dashboard');
     router.refresh();
   }
 
   return (
-    <div className="relative min-h-screen bg-[#02070a] text-white">
+    <div className="relative min-h-screen bg-[#0C1512] text-white">
       <div className="pointer-events-none fixed inset-x-0 top-0 h-[420px]" style={{ background: 'radial-gradient(80% 100% at 50% 0%, rgba(37,211,102,0.12), transparent 60%)' }} />
       <main className="relative mx-auto max-w-xl px-5 py-14">
         <motion.div initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }}>
@@ -124,7 +124,7 @@ function Select({ label, value, onChange, options }: { label: string; value: str
         className="w-full rounded-xl border border-white/12 bg-white/[0.04] px-3.5 py-2.5 text-[15px] text-white outline-none focus:border-[#25D366]/40"
       >
         {options.map((o) => (
-          <option key={o} value={o} className="bg-[#0a0e16]">{o}</option>
+          <option key={o} value={o} className="bg-[#15211C]">{o}</option>
         ))}
       </select>
     </label>

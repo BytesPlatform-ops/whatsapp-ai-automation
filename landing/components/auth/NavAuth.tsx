@@ -44,7 +44,7 @@ export function NavAuth({
   if (variant === 'mobile') {
     return authed ? (
       <Link
-        href="/dashboard"
+        href="/pixie-lab/dashboard"
         className={`flex items-center justify-center gap-2 rounded-full py-3.5 text-base font-bold ${primaryCls}`}
         style={primaryStyle}
       >
@@ -71,7 +71,7 @@ export function NavAuth({
 
   return authed ? (
     <Link
-      href="/dashboard"
+      href="/pixie-lab/dashboard"
       className={`inline-flex h-11 items-center gap-1.5 rounded-full px-5 text-sm font-semibold transition-transform hover:-translate-y-0.5 ${primaryCls}`}
       style={primaryStyle}
     >

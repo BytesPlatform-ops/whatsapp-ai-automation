@@ -4,7 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import {
-  Sparkles, LayoutGrid, Globe, Headset, Search, Megaphone, Clapperboard,
+  Sparkles, LayoutGrid, LayoutDashboard, Globe, Headset, Search, Megaphone, Clapperboard,
   Lock, ChevronDown, LogOut, Menu, X, ShieldCheck, Activity, type LucideIcon,
 } from 'lucide-react';
 import { AGENT_META, type FeedAgent, type AgentState } from '@/lib/pixie-lab/feed';
@@ -61,7 +61,7 @@ export function PixieLabShell({
 
   const Rail = (
     <div className="flex h-full flex-col">
-      <Link href="/pixie-lab/for-you" className="flex items-center gap-2.5 px-5 py-5 font-display text-base font-extrabold tracking-tight">
+      <Link href="/pixie-lab/dashboard" className="flex items-center gap-2.5 px-5 py-5 font-display text-base font-extrabold tracking-tight">
         <span className="grid h-8 w-8 place-items-center rounded-lg bg-gradient-to-br from-[#25D366] to-[#22d3ee] text-[#02070a]">
           <Sparkles size={16} strokeWidth={2.5} />
         </span>
@@ -69,6 +69,7 @@ export function PixieLabShell({
       </Link>
 
       <nav className="flex-1 space-y-1 px-3">
+        <NavItem href="/pixie-lab/dashboard" icon={LayoutDashboard} label="Dashboard" active={pathname === '/pixie-lab/dashboard'} />
         <NavItem href="/pixie-lab/for-you" icon={LayoutGrid} label="For You" active={pathname === '/pixie-lab/for-you'} />
 
         <p className="px-3 pb-1 pt-4 text-[10px] font-bold uppercase tracking-wider text-white/30">Agents</p>
@@ -115,7 +116,7 @@ export function PixieLabShell({
   );
 
   return (
-    <div className="min-h-screen bg-[#02070a] text-white">
+    <div className="min-h-screen bg-[#0C1512] text-white">
       <div className="mx-auto flex max-w-[1400px]">
         {/* Desktop rail */}
         <aside className="sticky top-0 hidden h-screen w-60 flex-none border-r border-white/[0.06] bg-white/[0.015] lg:block">
@@ -126,7 +127,7 @@ export function PixieLabShell({
         {mobileOpen && (
           <div className="fixed inset-0 z-50 lg:hidden">
             <div className="absolute inset-0 bg-black/60" onClick={() => setMobileOpen(false)} />
-            <aside className="absolute left-0 top-0 h-full w-64 border-r border-white/10 bg-[#080b12]">
+            <aside className="absolute left-0 top-0 h-full w-64 border-r border-white/10 bg-[#15211C]">
               <button onClick={() => setMobileOpen(false)} className="absolute right-3 top-4 text-white/50"><X size={20} /></button>
               {Rail}
             </aside>
@@ -135,7 +136,7 @@ export function PixieLabShell({
 
         <div className="min-w-0 flex-1">
           {/* Topbar */}
-          <header className="sticky top-0 z-30 flex items-center justify-between gap-3 border-b border-white/[0.06] bg-[#02070a]/80 px-5 py-3 backdrop-blur-xl">
+          <header className="sticky top-0 z-30 flex items-center justify-between gap-3 border-b border-white/[0.06] bg-[#0C1512]/80 px-5 py-3 backdrop-blur-xl">
             <button onClick={() => setMobileOpen(true)} className="text-white/70 lg:hidden"><Menu size={20} /></button>
 
             {/* Agent Switcher */}
@@ -147,7 +148,7 @@ export function PixieLabShell({
                 Switch workspace <ChevronDown size={14} className={switcherOpen ? 'rotate-180 transition' : 'transition'} />
               </button>
               {switcherOpen && (
-                <div className="absolute left-0 top-[calc(100%+6px)] z-40 w-64 rounded-xl border border-white/12 bg-[#0a0e16] p-1.5 shadow-2xl">
+                <div className="absolute left-0 top-[calc(100%+6px)] z-40 w-64 rounded-xl border border-white/12 bg-[#15211C] p-1.5 shadow-2xl">
                   {AGENTS_ORDER.map((agent) => {
                     const st = stateFor(agent);
                     const Icon = AGENT_ICON[agent];

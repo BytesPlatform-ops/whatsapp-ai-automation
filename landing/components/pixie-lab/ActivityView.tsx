@@ -68,7 +68,7 @@ export function ActivityView({ tenant = 'demo' }: { tenant?: string }) {
               const Icon = TYPE_ICON[e.type] ?? Activity;
               return (
                 <li key={e.id} className="relative py-2.5">
-                  <span className="absolute -left-[27px] grid h-5 w-5 place-items-center rounded-full border border-white/15 bg-[#0a0e16] text-[#25D366]">
+                  <span className="absolute -left-[27px] grid h-5 w-5 place-items-center rounded-full border border-white/15 bg-[#15211C] text-[#25D366]">
                     <Icon size={11} />
                   </span>
                   <div className="flex items-baseline gap-2">

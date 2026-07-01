@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
 
-/** /app/dashboard → the enhanced Spotify dashboard at /dashboard (single home). */
+/** /app/dashboard → the Pixie Lab dashboard (single home). */
 export default function AppDashboardRedirect() {
-  redirect('/dashboard');
+  redirect('/pixie-lab/dashboard');
 }

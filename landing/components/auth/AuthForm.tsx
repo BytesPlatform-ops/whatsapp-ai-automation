@@ -8,7 +8,7 @@ import { createClient, supabaseConfigured } from '@/lib/supabase/client';
 
 type Mode = 'login' | 'register';
 
-const SAFE_NEXT = (n: string | null) => (n && n.startsWith('/') && !n.startsWith('//') ? n : '/dashboard');
+const SAFE_NEXT = (n: string | null) => (n && n.startsWith('/') && !n.startsWith('//') ? n : '/pixie-lab/dashboard');
 
 export function AuthForm({ mode }: { mode: Mode }) {
   const router = useRouter();
