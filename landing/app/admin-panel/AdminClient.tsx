@@ -117,9 +117,9 @@ export function AdminClient({ leads, adminEmail }: { leads: WaitlistRow[]; admin
             <Sparkles className="h-5 w-5 text-indigo-400" strokeWidth={2.2} />
             Waitlist responses
           </h1>
-          <p className="mt-0.5 text-sm text-slate-400">Signed in as {adminEmail}</p>
+          <p className="mt-0.5 break-all text-sm text-slate-400">Signed in as {adminEmail}</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
             onClick={refresh}
@@ -188,7 +188,61 @@ export function AdminClient({ leads, adminEmail }: { leads: WaitlistRow[]; admin
           </p>
         </div>
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-white/10">
+        <>
+          {/* Mobile: stacked cards (the wide table doesn't fit small screens). */}
+          <ul className="space-y-3 md:hidden">
+            {filtered.map((r, i) => (
+              <li key={r.id} className="rounded-xl border border-white/10 bg-slate-900/50 p-4">
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 text-xs text-slate-400">
+                    <span className="font-mono text-slate-500">#{i + 1}</span>
+                    <span>{fmtDate(r.created_at)}</span>
+                  </div>
+                  <span className="whitespace-nowrap rounded-full bg-indigo-500/15 px-2 py-0.5 text-xs font-semibold text-indigo-300 ring-1 ring-indigo-400/20">
+                    {r.selected?.length ?? 0} / 6
+                  </span>
+                </div>
+
+                <div className="font-medium text-white">{r.name || '—'}</div>
+                {r.business && <div className="text-xs text-slate-400">{r.business}</div>}
+
+                <div className="mt-2 break-all text-sm text-slate-200">{r.email}</div>
+                {r.contact && <div className="break-all text-xs text-slate-400">{r.contact}</div>}
+
+                {(r.selected?.length || r.rejected?.length) ? (
+                  <div className="mt-3 flex flex-wrap gap-1.5">
+                    {(r.selected ?? []).map((s) => (
+                      <Chip key={'y' + s} label={s} kind="yes" />
+                    ))}
+                    {(r.rejected ?? []).map((s) => (
+                      <Chip key={'n' + s} label={s} kind="no" />
+                    ))}
+                  </div>
+                ) : null}
+
+                <div className="mt-3 flex justify-end">
+                  <button
+                    type="button"
+                    onClick={() => onDelete(r)}
+                    disabled={deletingId === r.id}
+                    title="Delete this response"
+                    aria-label={`Delete ${r.name || r.email}`}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-rose-500/20 bg-rose-500/10 px-2.5 py-1.5 text-xs font-medium text-rose-300 transition hover:bg-rose-500/20 disabled:opacity-50"
+                  >
+                    {deletingId === r.id ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={2.4} />
+                    ) : (
+                      <Trash2 className="h-3.5 w-3.5" strokeWidth={2.4} />
+                    )}
+                    Delete
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+
+          {/* Desktop / tablet: full table. */}
+          <div className="hidden overflow-x-auto rounded-xl border border-white/10 md:block">
           <table className="min-w-full divide-y divide-white/10 text-sm">
             <thead className="bg-slate-900/70 text-left text-xs uppercase tracking-wide text-slate-400">
               <tr>
@@ -253,7 +307,8 @@ export function AdminClient({ leads, adminEmail }: { leads: WaitlistRow[]; admin
               ))}
             </tbody>
           </table>
-        </div>
+          </div>
+        </>
       )}
     </main>
   );
