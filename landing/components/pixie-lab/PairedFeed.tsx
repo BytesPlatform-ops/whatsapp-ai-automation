@@ -57,7 +57,7 @@ function PairCard({
       animate={{ opacity: done ? 0 : 1, scale: done ? 0.97 : 1 }}
       transition={{ duration: 0.35 }}
       style={{ flexGrow: grow, flexBasis: 0, ['--accent' as string]: theme.accent }}
-      className="group relative min-w-0 cursor-pointer overflow-hidden rounded-2xl border border-white/[0.08] bg-white/[0.035] backdrop-blur-md transition-[flex-grow,border-color,background-color] duration-300 ease-out hover:border-white/20 hover:bg-white/[0.05]"
+      className="group relative min-w-0 cursor-pointer overflow-hidden rounded-2xl border border-[var(--pl-border)] bg-[var(--pl-surface)] backdrop-blur-md transition-[flex-grow,border-color,background-color] duration-300 ease-out hover:border-[var(--pl-border-strong)] hover:bg-[var(--pl-surface-hover)]"
     >
       {/* accent rail */}
       <div className="absolute left-0 top-0 h-full w-1" style={{ background: theme.accent }} />
@@ -71,17 +71,17 @@ function PairCard({
             {theme.label}
           </span>
           {card.primary_agent !== 'pixie' && (
-            <span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[10px] font-medium text-white/55">{agent.label}</span>
+            <span className="rounded-full border border-[var(--pl-border)] bg-[var(--pl-surface-soft)] px-2 py-0.5 text-[10px] font-medium text-[var(--pl-text-muted)]">{agent.label}</span>
           )}
-          <span className="ml-auto flex items-center gap-1 text-[9px] uppercase tracking-wider text-white/35">
+          <span className="ml-auto flex items-center gap-1 text-[9px] uppercase tracking-wider text-[var(--pl-text-muted)]">
             <span className="h-1.5 w-1.5 rounded-full" style={{ background: PRIORITY_DOT[card.priority] }} />
             {card.priority}
           </span>
         </div>
 
-        <h3 className="mt-2.5 font-display text-[15px] font-bold leading-snug tracking-tight text-white">{card.heading}</h3>
+        <h3 className="mt-2.5 font-display text-[15px] font-bold leading-snug tracking-tight text-[var(--pl-text)]">{card.heading}</h3>
 
-        <p className={`mt-1.5 text-[12.5px] leading-relaxed text-white/60 ${expanded ? '' : 'line-clamp-2'} max-sm:line-clamp-none`}>
+        <p className={`mt-1.5 text-[12.5px] leading-relaxed text-[var(--pl-text-soft)] ${expanded ? '' : 'line-clamp-2'} max-sm:line-clamp-none`}>
           {card.full_idea}
         </p>
 
@@ -89,7 +89,7 @@ function PairCard({
         <div className={`mt-2 transition-opacity duration-300 ${expanded ? 'opacity-100' : 'opacity-0'} max-sm:opacity-100`}>
           <div className="flex items-start gap-1.5">
             <Sparkles size={12} className="mt-0.5 flex-none" style={{ color: theme.accent }} />
-            <p className="text-[11.5px] leading-snug text-white/45 line-clamp-2">{card.reason}</p>
+            <p className="text-[11.5px] leading-snug text-[var(--pl-text-muted)] line-clamp-2">{card.reason}</p>
           </div>
           {card.outcome && <p className="mt-1.5 text-[12px] font-medium" style={{ color: theme.accent }}>→ {card.outcome}</p>}
         </div>
@@ -104,7 +104,7 @@ function PairCard({
               key={a.id}
               onClick={() => handle(a)}
               className="inline-flex items-center gap-1 whitespace-nowrap rounded-full px-3 py-1.5 text-[12px] font-semibold transition-transform active:scale-[0.97]"
-              style={i === 0 ? { background: theme.accent, color: '#02070a' } : { background: 'rgba(255,255,255,0.05)', color: 'rgba(255,255,255,0.7)', border: '1px solid rgba(255,255,255,0.1)' }}
+              style={i === 0 ? { background: theme.accent, color: '#02070a' } : { background: 'var(--pl-surface-soft)', color: 'var(--pl-text-soft)', border: '1px solid var(--pl-border)' }}
             >
               {a.label}
               {i === 0 && <ChevronRight size={13} />}
@@ -116,7 +116,7 @@ function PairCard({
       <AnimatePresence>
         {done && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="absolute inset-0 grid place-items-center" style={{ background: `${theme.accent}14` }}>
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1.5 text-[13px] font-semibold text-white">
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--pl-border)] bg-[var(--pl-surface)] px-3 py-1.5 text-[13px] font-semibold text-[var(--pl-text)]">
               <Check size={15} style={{ color: theme.accent }} /> Done
             </span>
           </motion.div>

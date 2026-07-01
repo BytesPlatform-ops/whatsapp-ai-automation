@@ -99,38 +99,38 @@ export function ForYou({ name, tenant = 'demo', nowMs }: { name: string; tenant?
   }
 
   return (
-    <div className="relative min-h-screen bg-[#0C1512] text-white">
+    <div className="relative min-h-screen text-[var(--pl-text)]">
       <div
-        className="pointer-events-none fixed inset-x-0 top-0 h-[460px]"
-        style={{ background: 'radial-gradient(80% 100% at 50% 0%, rgba(37,211,102,0.10), transparent 62%)' }}
+        className="pointer-events-none absolute inset-x-0 top-0 h-[440px]"
+        style={{ background: 'radial-gradient(70% 100% at 50% 0%, rgba(var(--pl-green-rgb), calc(var(--pl-glow) * 0.9)), transparent 62%)' }}
       />
 
-      <main className="relative mx-auto max-w-6xl px-5 py-10 sm:px-8">
+      <main className="relative mx-auto w-full px-[clamp(20px,4vw,52px)] py-9">
         {/* greeting + health */}
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-white/40">For you</p>
-            <h1 className="mt-2 font-display text-[2.1rem] font-extrabold leading-tight tracking-tight">
-              Good day, <span className="bg-gradient-to-r from-[#25D366] to-[#7dd3fc] bg-clip-text text-transparent">{name}</span> —
+            <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[var(--pl-text-muted)]">For you</p>
+            <h1 className="mt-2 font-display text-[clamp(1.8rem,3vw,2.1rem)] font-extrabold leading-tight tracking-tight">
+              Good day, <span className="bg-gradient-to-r from-[var(--pl-green)] to-[#0EA5A3] bg-clip-text text-transparent">{name}</span> —
               <br className="hidden sm:block" /> Pixie found {cards.length} things to move your business forward.
             </h1>
           </div>
-          <div className="rounded-2xl border border-white/[0.08] bg-white/[0.03] px-4 py-3 text-center">
-            <div className="font-display text-2xl font-extrabold text-[#25D366]">{health}%</div>
-            <div className="text-[11px] uppercase tracking-wider text-white/40">Business health</div>
-            <div className="mt-1.5 h-1.5 w-28 overflow-hidden rounded-full bg-white/10">
-              <div className="h-full rounded-full bg-gradient-to-r from-[#25D366] to-[#22d3ee]" style={{ width: `${health}%` }} />
+          <div className="rounded-2xl border border-[var(--pl-border)] bg-[var(--pl-surface)] px-4 py-3 text-center shadow-[var(--pl-shadow-sm)]">
+            <div className="font-display text-2xl font-extrabold text-[var(--pl-green)]">{health}%</div>
+            <div className="text-[11px] uppercase tracking-wider text-[var(--pl-text-muted)]">Business health</div>
+            <div className="mt-1.5 h-1.5 w-28 overflow-hidden rounded-full bg-[var(--pl-surface-soft)]">
+              <div className="h-full rounded-full bg-gradient-to-r from-[#22C55E] to-[#0EA5A3]" style={{ width: `${health}%` }} />
             </div>
           </div>
         </div>
 
         {/* Ask Pixie bar */}
         <div className="mt-7">
-          <div className="flex items-center gap-3 rounded-2xl border border-white/[0.1] bg-white/[0.04] px-4 py-3 transition-colors focus-within:border-[#25D366]/40">
-            <Sparkles size={18} className="text-[#25D366]" />
+          <div className="flex items-center gap-3 rounded-2xl border border-[var(--pl-border)] bg-[var(--pl-surface)] px-4 py-3 shadow-[var(--pl-shadow-sm)] transition-colors focus-within:border-[var(--pl-green)]">
+            <Sparkles size={18} className="text-[var(--pl-green)]" />
             <input
               placeholder="Ask Pixie what you want done…"
-              className="flex-1 bg-transparent text-[15px] text-white placeholder-white/35 outline-none"
+              className="flex-1 bg-transparent text-[15px] text-[var(--pl-text)] placeholder-[var(--pl-text-muted)] outline-none"
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && (e.target as HTMLInputElement).value.trim()) {
                   flash('Pixie is thinking about that…');
@@ -138,7 +138,7 @@ export function ForYou({ name, tenant = 'demo', nowMs }: { name: string; tenant?
                 }
               }}
             />
-            <button className="hidden items-center gap-1.5 rounded-full bg-[#25D366] px-4 py-2 text-[13px] font-bold text-[#02070a] sm:inline-flex">
+            <button className="hidden items-center gap-1.5 rounded-full bg-gradient-to-r from-[#22C55E] to-[#0EA5A3] px-4 py-2 text-[13px] font-bold text-white sm:inline-flex">
               Ask Pixie <ArrowRight size={14} />
             </button>
           </div>
@@ -147,7 +147,7 @@ export function ForYou({ name, tenant = 'demo', nowMs }: { name: string; tenant?
               <button
                 key={ex}
                 onClick={() => flash(`Pixie: “${ex}”`)}
-                className="rounded-full border border-white/[0.08] bg-white/[0.02] px-3 py-1 text-[12px] text-white/45 transition hover:text-white/80"
+                className="rounded-full border border-[var(--pl-border)] bg-[var(--pl-surface)] px-3 py-1 text-[12px] text-[var(--pl-text-muted)] transition hover:text-[var(--pl-text)] hover:border-[var(--pl-border-strong)]"
               >
                 {ex}
               </button>
@@ -158,7 +158,7 @@ export function ForYou({ name, tenant = 'demo', nowMs }: { name: string; tenant?
         {/* upsell ticker */}
         <div className="mt-8">
           <div className="mb-2.5 flex items-center justify-between">
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-white/40">See what else Pixie can do</p>
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--pl-text-muted)]">See what else Pixie can do</p>
             {trialAgent && <TrialBadge state="trial" trialEndsAt={trialAgent.trialEndsAt} nowMs={nowMs} />}
           </div>
           <UpsellTicker
@@ -174,9 +174,9 @@ export function ForYou({ name, tenant = 'demo', nowMs }: { name: string; tenant?
             cards={cards}
             onAction={onAction}
             emptyState={
-              <div className="rounded-2xl border border-dashed border-white/10 bg-white/[0.02] py-16 text-center">
-                <p className="font-display text-lg font-bold text-white">You’re all caught up ✨</p>
-                <p className="mt-1 text-sm text-white/50">Pixie will surface new actions as your business grows.</p>
+              <div className="rounded-2xl border border-dashed border-[var(--pl-border-strong)] bg-[var(--pl-surface)] py-16 text-center">
+                <p className="font-display text-lg font-bold text-[var(--pl-text)]">You’re all caught up ✨</p>
+                <p className="mt-1 text-sm text-[var(--pl-text-muted)]">Pixie will surface new actions as your business grows.</p>
               </div>
             }
           />
@@ -188,7 +188,7 @@ export function ForYou({ name, tenant = 'demo', nowMs }: { name: string; tenant?
         <motion.div
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
-          className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-full border border-white/12 bg-[#15211C] px-4 py-2.5 text-[13px] text-white shadow-2xl"
+          className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-full border border-[var(--pl-border)] bg-[var(--pl-surface)] px-4 py-2.5 text-[13px] text-[var(--pl-text)] shadow-[var(--pl-shadow)]"
         >
           {toast}
         </motion.div>

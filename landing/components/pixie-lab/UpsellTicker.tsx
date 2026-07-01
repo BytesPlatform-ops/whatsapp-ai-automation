@@ -48,7 +48,7 @@ function TickerItem({
   // A self-contained mini-card (the ticker scrolls a row of these).
   return (
     <div
-      className="group/card relative w-[290px] flex-none overflow-hidden rounded-2xl border border-white/[0.08] bg-white/[0.035] p-4 backdrop-blur-md transition-colors hover:border-white/20"
+      className="group/card relative w-[290px] flex-none overflow-hidden rounded-2xl border border-[var(--pl-border)] bg-[var(--pl-surface)] p-4 backdrop-blur-md transition-colors hover:border-[var(--pl-border-strong)]"
       style={{ ['--a' as string]: accent }}
     >
       <div className="absolute left-0 top-0 h-full w-1" style={{ background: accent }} />
@@ -59,17 +59,17 @@ function TickerItem({
           <Icon size={18} />
         </span>
         <div className="min-w-0">
-          <p className="truncate font-display text-[14px] font-bold text-white">{meta.label} Builder</p>
-          <p className="truncate text-[11.5px] text-white/45">Locked · try it free</p>
+          <p className="truncate font-display text-[14px] font-bold text-[var(--pl-text)]">{meta.label} Builder</p>
+          <p className="truncate text-[11.5px] text-[var(--pl-text-muted)]">Locked · try it free</p>
         </div>
       </div>
 
-      <p className="mt-2.5 line-clamp-2 text-[12px] leading-relaxed text-white/60">{copy.does}</p>
+      <p className="mt-2.5 line-clamp-2 text-[12px] leading-relaxed text-[var(--pl-text-soft)]">{copy.does}</p>
 
       <div className="mt-3 flex gap-2">
         <button
           onClick={() => onStartTrial?.(agent)}
-          className="flex-1 rounded-full border border-white/12 bg-white/[0.05] px-3 py-1.5 text-[11.5px] font-semibold text-white/80 transition hover:text-white"
+          className="flex-1 rounded-full border border-[var(--pl-border)] bg-[var(--pl-surface-soft)] px-3 py-1.5 text-[11.5px] font-semibold text-[var(--pl-text-soft)] transition hover:text-[var(--pl-text)]"
         >
           Free trial
         </button>
@@ -96,8 +96,8 @@ export function UpsellTicker({
 }) {
   if (!lockedAgents.length) {
     return (
-      <div className="inline-flex items-center gap-2 rounded-full border border-[#25D366]/25 bg-[#25D366]/10 px-3.5 py-1.5 text-[12.5px] font-medium text-[#7ef0a8]">
-        <span className="h-1.5 w-1.5 rounded-full bg-[#25D366]" /> All Pixie agents active
+      <div className="inline-flex items-center gap-2 rounded-full border border-[#25D366]/25 bg-[var(--pl-green)]/10 px-3.5 py-1.5 text-[12.5px] font-medium text-[#7ef0a8]">
+        <span className="h-1.5 w-1.5 rounded-full bg-[var(--pl-green)]" /> All Pixie agents active
       </div>
     );
   }
@@ -113,8 +113,8 @@ export function UpsellTicker({
         @media (prefers-reduced-motion: reduce) { .pl-marquee { animation: none; } }
       `}</style>
       {/* edge fades */}
-      <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-12 bg-gradient-to-r from-[#02070a] to-transparent" />
-      <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-12 bg-gradient-to-l from-[#02070a] to-transparent" />
+      <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-12 bg-gradient-to-r from-[var(--pl-bg)] to-transparent" />
+      <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-12 bg-gradient-to-l from-[var(--pl-bg)] to-transparent" />
       <div className="flex w-max gap-3 pl-marquee group-hover:[animation-play-state:paused]">
         {track.map((a, i) => (
           <TickerItem key={`${a}-${i}`} agent={a} onStartTrial={onStartTrial} onUnlock={onUnlock} />

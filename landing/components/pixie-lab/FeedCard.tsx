@@ -50,7 +50,7 @@ export function FeedCard({
       onMouseLeave={() => setHovered(false)}
       onClick={() => setPinned((p) => !p)}
       style={{ ['--accent' as string]: theme.accent }}
-      className="group relative cursor-pointer overflow-hidden rounded-2xl border border-white/[0.08] bg-white/[0.03] backdrop-blur-md transition-colors hover:border-white/15"
+      className="group relative cursor-pointer overflow-hidden rounded-2xl border border-[var(--pl-border)] bg-[var(--pl-surface)] shadow-[var(--pl-shadow-sm)] transition-colors hover:border-[var(--pl-border-strong)]"
     >
       {/* accent top bar */}
       <div className="h-1 w-full" style={{ background: theme.accent }} />
@@ -72,18 +72,18 @@ export function FeedCard({
             {theme.label}
           </span>
           {card.primary_agent !== 'pixie' && (
-            <span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[10.5px] font-medium text-white/55">
+            <span className="rounded-full border border-[var(--pl-border)] bg-[var(--pl-surface-soft)] px-2 py-0.5 text-[10.5px] font-medium text-[var(--pl-text-muted)]">
               {agent.label}
             </span>
           )}
-          <span className="ml-auto flex items-center gap-1 text-[10px] uppercase tracking-wider text-white/35">
+          <span className="ml-auto flex items-center gap-1 text-[10px] uppercase tracking-wider text-[var(--pl-text-muted)]">
             <span className="h-1.5 w-1.5 rounded-full" style={{ background: PRIORITY_DOT[card.priority] }} />
             {card.priority}
           </span>
         </div>
 
         {/* heading (always visible) */}
-        <h3 className="font-display text-[15px] font-bold leading-snug tracking-tight text-white">
+        <h3 className="font-display text-[15px] font-bold leading-snug tracking-tight text-[var(--pl-text)]">
           {card.heading}
         </h3>
 
@@ -98,11 +98,11 @@ export function FeedCard({
               transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
               className="overflow-hidden"
             >
-              <p className="mt-2 text-[13px] leading-relaxed text-white/70">{card.full_idea}</p>
+              <p className="mt-2 text-[13px] leading-relaxed text-[var(--pl-text-soft)]">{card.full_idea}</p>
 
-              <div className="mt-3 flex items-start gap-2 rounded-lg border border-white/[0.06] bg-white/[0.02] p-2.5">
+              <div className="mt-3 flex items-start gap-2 rounded-lg border border-[var(--pl-border)] bg-[var(--pl-surface-soft)] p-2.5">
                 <Sparkles size={13} className="mt-0.5 flex-none" style={{ color: theme.accent }} />
-                <p className="text-[12px] leading-relaxed text-white/55">{card.reason}</p>
+                <p className="text-[12px] leading-relaxed text-[var(--pl-text-muted)]">{card.reason}</p>
               </div>
 
               {card.outcome && (
@@ -122,8 +122,8 @@ export function FeedCard({
                       className="inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-[12px] font-semibold transition-transform active:scale-[0.97]"
                       style={
                         primary
-                          ? { background: theme.accent, color: '#02070a' }
-                          : { background: 'rgba(255,255,255,0.05)', color: 'rgba(255,255,255,0.7)', border: '1px solid rgba(255,255,255,0.1)' }
+                          ? { background: theme.accent, color: '#0A0A0A' }
+                          : { background: 'var(--pl-surface-soft)', color: 'var(--pl-text-soft)', border: '1px solid var(--pl-border)' }
                       }
                     >
                       {a.label}
@@ -146,7 +146,7 @@ export function FeedCard({
             className="absolute inset-0 grid place-items-center"
             style={{ background: `${theme.accent}14` }}
           >
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1.5 text-[13px] font-semibold text-white">
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--pl-border)] bg-[var(--pl-surface)] px-3 py-1.5 text-[13px] font-semibold text-[var(--pl-text)]">
               <Check size={15} style={{ color: theme.accent }} /> Done
             </span>
           </motion.div>

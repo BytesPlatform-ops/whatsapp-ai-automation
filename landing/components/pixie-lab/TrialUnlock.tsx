@@ -77,50 +77,50 @@ export function TrialUnlock({ agent, tenant = 'demo' }: { agent: FeedAgent; tena
 
       <motion.div initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} className="relative">
         <div className="flex items-center gap-3">
-          <span className="grid h-14 w-14 place-items-center rounded-2xl border border-white/10" style={{ background: `${accent}1a`, color: accent }}>
+          <span className="grid h-14 w-14 place-items-center rounded-2xl border border-[var(--pl-border)]" style={{ background: `${accent}1a`, color: accent }}>
             <Icon size={26} />
           </span>
           <div>
-            <span className="inline-flex items-center gap-1 rounded-full border border-white/12 bg-white/[0.04] px-2 py-0.5 text-[11px] font-semibold text-white/55">
+            <span className="inline-flex items-center gap-1 rounded-full border border-[var(--pl-border)] bg-[var(--pl-surface-soft)] px-2 py-0.5 text-[11px] font-semibold text-[var(--pl-text-muted)]">
               <Lock size={11} /> Locked
             </span>
             <h1 className="mt-1 font-display text-2xl font-extrabold tracking-tight">{meta.label} Builder</h1>
           </div>
         </div>
 
-        <p className="mt-4 text-[15px] leading-relaxed text-white/65">{copy.does}</p>
+        <p className="mt-4 text-[15px] leading-relaxed text-[var(--pl-text-soft)]">{copy.does}</p>
         <p className="mt-1.5 text-[14px] font-medium" style={{ color: accent }}>→ {copy.outcome}</p>
 
-        <div className="mt-6 rounded-2xl border border-white/[0.08] bg-white/[0.03] p-5">
-          <p className="text-[11px] font-semibold uppercase tracking-wider text-white/40">What’s included</p>
+        <div className="mt-6 rounded-2xl border border-[var(--pl-border)] bg-[var(--pl-surface)] p-5">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--pl-text-muted)]">What’s included</p>
           <ul className="mt-3 grid gap-2.5 sm:grid-cols-2">
             {(FEATURES[agent] ?? []).map((f) => (
-              <li key={f} className="flex items-center gap-2 text-[14px] text-white/80">
+              <li key={f} className="flex items-center gap-2 text-[14px] text-[var(--pl-text-soft)]">
                 <Check size={15} style={{ color: accent }} /> {f}
               </li>
             ))}
           </ul>
-          <div className="mt-5 flex items-center justify-between border-t border-white/[0.06] pt-4">
+          <div className="mt-5 flex items-center justify-between border-t border-[var(--pl-border)] pt-4">
             <div>
               <span className="font-display text-2xl font-extrabold">{PRICE[agent] ?? '$29/mo'}</span>
-              <span className="ml-1.5 text-[13px] text-white/40">· cancel anytime</span>
+              <span className="ml-1.5 text-[13px] text-[var(--pl-text-muted)]">· cancel anytime</span>
             </div>
             <span className="rounded-full border border-violet-400/30 bg-violet-400/10 px-2.5 py-1 text-[11px] font-semibold text-violet-200">7-day free trial</span>
           </div>
 
           <div className="mt-5 flex flex-col gap-2.5 sm:flex-row">
-            <button onClick={startTrial} disabled={!!busy} className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl border border-white/12 bg-white/[0.05] px-4 py-3 text-[14px] font-semibold text-white transition hover:bg-white/[0.08] disabled:opacity-60">
+            <button onClick={startTrial} disabled={!!busy} className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl border border-[var(--pl-border)] bg-[var(--pl-surface-soft)] px-4 py-3 text-[14px] font-semibold text-[var(--pl-text)] transition hover:bg-[var(--pl-surface-hover)] disabled:opacity-60">
               {busy === 'trial' ? <Loader2 size={16} className="animate-spin" /> : 'Start free trial'}
             </button>
             <button onClick={unlock} disabled={!!busy} className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl px-4 py-3 text-[14px] font-bold disabled:opacity-60" style={{ background: accent, color: '#02070a' }}>
               {busy === 'unlock' ? <Loader2 size={16} className="animate-spin" /> : `Unlock ${meta.label}`}
             </button>
           </div>
-          <p className="mt-3 text-center text-[11.5px] text-white/35">No charge until you confirm checkout. Trials are clearly marked and never auto-bill.</p>
+          <p className="mt-3 text-center text-[11.5px] text-[var(--pl-text-muted)]">No charge until you confirm checkout. Trials are clearly marked and never auto-bill.</p>
         </div>
 
         {note && (
-          <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mt-4 rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-center text-[13px] text-white/70">
+          <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mt-4 rounded-xl border border-[var(--pl-border)] bg-[var(--pl-surface-soft)] px-4 py-3 text-center text-[13px] text-[var(--pl-text-soft)]">
             {note}
           </motion.p>
         )}

@@ -95,12 +95,12 @@ export function AgentDashboard({ agent, tenant = 'demo', nowMs }: { agent: FeedA
         {/* header */}
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-3.5">
-            <span className="grid h-12 w-12 place-items-center rounded-2xl border border-white/10" style={{ background: `${accent}1a`, color: accent }}>
+            <span className="grid h-12 w-12 place-items-center rounded-2xl border border-[var(--pl-border)]" style={{ background: `${accent}1a`, color: accent }}>
               <Icon size={22} />
             </span>
             <div>
               <h1 className="font-display text-2xl font-extrabold tracking-tight">{meta.label}</h1>
-              <p className="text-[13px] text-white/45">{cards.length} recommendation{cards.length === 1 ? '' : 's'} for you</p>
+              <p className="text-[13px] text-[var(--pl-text-muted)]">{cards.length} recommendation{cards.length === 1 ? '' : 's'} for you</p>
             </div>
             <div className="ml-1"><TrialBadge state={state} trialEndsAt={trialEndsAt} nowMs={nowMs} /></div>
           </div>
@@ -110,10 +110,10 @@ export function AgentDashboard({ agent, tenant = 'demo', nowMs }: { agent: FeedA
         </div>
 
         {/* talk-to-agent bar */}
-        <div className="mt-6 flex items-center gap-3 rounded-2xl border border-white/[0.1] bg-white/[0.04] px-4 py-3 focus-within:border-white/25">
+        <div className="mt-6 flex items-center gap-3 rounded-2xl border border-[var(--pl-border)] bg-[var(--pl-surface-soft)] px-4 py-3 focus-within:border-[var(--pl-border-strong)]">
           <input
             placeholder={`Ask ${meta.label} to do something…`}
-            className="flex-1 bg-transparent text-[15px] text-white placeholder-white/35 outline-none"
+            className="flex-1 bg-transparent text-[15px] text-[var(--pl-text)] placeholder-[var(--pl-text-muted)] outline-none"
             onKeyDown={(e) => { if (e.key === 'Enter' && (e.target as HTMLInputElement).value.trim()) { flash(`${meta.label} is on it…`); (e.target as HTMLInputElement).value = ''; } }}
           />
           <Send size={17} style={{ color: accent }} />
@@ -122,14 +122,14 @@ export function AgentDashboard({ agent, tenant = 'demo', nowMs }: { agent: FeedA
         <div className="mt-7 grid gap-6 lg:grid-cols-[1fr_260px]">
           {/* agent-scoped feed */}
           <div>
-            <p className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-white/40">What {meta.label} suggests</p>
+            <p className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-[var(--pl-text-muted)]">What {meta.label} suggests</p>
             <PairedFeed
               cards={cards}
               onAction={onAction}
               emptyState={
-                <div className="rounded-2xl border border-dashed border-white/10 bg-white/[0.02] py-14 text-center">
-                  <p className="font-display font-bold text-white">All caught up ✨</p>
-                  <p className="mt-1 text-sm text-white/50">No pending actions for this agent.</p>
+                <div className="rounded-2xl border border-dashed border-[var(--pl-border)] bg-[var(--pl-surface)] py-14 text-center">
+                  <p className="font-display font-bold text-[var(--pl-text)]">All caught up ✨</p>
+                  <p className="mt-1 text-sm text-[var(--pl-text-muted)]">No pending actions for this agent.</p>
                 </div>
               }
             />
@@ -137,13 +137,13 @@ export function AgentDashboard({ agent, tenant = 'demo', nowMs }: { agent: FeedA
 
           {/* recent activity */}
           <aside className="space-y-3">
-            <div className="rounded-2xl border border-white/[0.08] bg-white/[0.03] p-4">
-              <p className="mb-3 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-white/40">
+            <div className="rounded-2xl border border-[var(--pl-border)] bg-[var(--pl-surface)] p-4">
+              <p className="mb-3 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-[var(--pl-text-muted)]">
                 <Activity size={13} /> Recent activity
               </p>
               <ul className="space-y-2.5">
                 {(MOCK_ACTIVITY[agent] ?? ['No activity yet']).map((a, i) => (
-                  <li key={i} className="flex items-start gap-2 text-[13px] text-white/65">
+                  <li key={i} className="flex items-start gap-2 text-[13px] text-[var(--pl-text-soft)]">
                     <span className="mt-1.5 h-1.5 w-1.5 flex-none rounded-full" style={{ background: accent }} />
                     {a}
                   </li>
@@ -155,7 +155,7 @@ export function AgentDashboard({ agent, tenant = 'demo', nowMs }: { agent: FeedA
       </main>
 
       {toast && (
-        <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-full border border-white/12 bg-[#0a0e16] px-4 py-2.5 text-[13px] text-white shadow-2xl">
+        <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-full border border-[var(--pl-border)] bg-[#0a0e16] px-4 py-2.5 text-[13px] text-[var(--pl-text)] shadow-2xl">
           {toast}
         </motion.div>
       )}

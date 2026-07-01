@@ -47,34 +47,34 @@ export function ActivityView({ tenant = 'demo' }: { tenant?: string }) {
   }, [tenant]);
 
   return (
-    <main className="mx-auto max-w-3xl px-5 py-9 sm:px-8">
+    <main className="mx-auto w-full max-w-3xl px-[clamp(20px,4vw,52px)] py-9 text-[var(--pl-text)]">
       <div className="flex items-center gap-2.5">
-        <Activity size={22} className="text-[#25D366]" />
+        <Activity size={22} className="text-[var(--pl-green)]" />
         <h1 className="font-display text-2xl font-extrabold tracking-tight">Activity</h1>
       </div>
-      <p className="mt-1.5 text-[14px] text-white/50">Everything Pixie and you have done recently.</p>
+      <p className="mt-1.5 text-[14px] text-[var(--pl-text-muted)]">Everything Pixie and you have done recently.</p>
 
       <div className="mt-7">
         {loading ? (
-          <div className="space-y-2">{Array.from({ length: 5 }).map((_, i) => <div key={i} className="h-12 animate-pulse rounded-xl border border-white/[0.06] bg-white/[0.03]" />)}</div>
+          <div className="space-y-2">{Array.from({ length: 5 }).map((_, i) => <div key={i} className="h-12 animate-pulse rounded-xl border border-[var(--pl-border)] bg-[var(--pl-surface)]" />)}</div>
         ) : events.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-white/10 bg-white/[0.02] py-16 text-center">
-            <p className="font-display text-lg font-bold text-white">No activity yet</p>
-            <p className="mt-1 text-sm text-white/50">Approve or skip a card and it’ll show up here.</p>
+          <div className="rounded-2xl border border-dashed border-[var(--pl-border-strong)] bg-[var(--pl-surface)] py-16 text-center">
+            <p className="font-display text-lg font-bold text-[var(--pl-text)]">No activity yet</p>
+            <p className="mt-1 text-sm text-[var(--pl-text-muted)]">Approve or skip a card and it’ll show up here.</p>
           </div>
         ) : (
-          <ol className="relative space-y-1 border-l border-white/[0.08] pl-5">
+          <ol className="relative space-y-1 border-l border-[var(--pl-border)] pl-5">
             {events.map((e) => {
               const Icon = TYPE_ICON[e.type] ?? Activity;
               return (
                 <li key={e.id} className="relative py-2.5">
-                  <span className="absolute -left-[27px] grid h-5 w-5 place-items-center rounded-full border border-white/15 bg-[#15211C] text-[#25D366]">
+                  <span className="absolute -left-[27px] grid h-5 w-5 place-items-center rounded-full border border-[var(--pl-border-strong)] bg-[var(--pl-surface)] text-[var(--pl-green)]">
                     <Icon size={11} />
                   </span>
                   <div className="flex items-baseline gap-2">
-                    <span className="text-[11px] font-semibold uppercase tracking-wider text-white/40">{TYPE_LABEL[e.type] ?? e.type}</span>
+                    <span className="text-[11px] font-semibold uppercase tracking-wider text-[var(--pl-text-muted)]">{TYPE_LABEL[e.type] ?? e.type}</span>
                   </div>
-                  <p className="text-[14px] text-white/80">{e.title}</p>
+                  <p className="text-[14px] text-[var(--pl-text-soft)]">{e.title}</p>
                 </li>
               );
             })}

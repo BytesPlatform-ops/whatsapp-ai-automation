@@ -21,15 +21,15 @@ export function TrialBadge({
 }) {
   if (state === 'active') {
     return (
-      <span className="inline-flex items-center gap-1.5 rounded-full border border-[#25D366]/30 bg-[#25D366]/10 px-2.5 py-1 text-[11px] font-semibold text-[#7ef0a8]">
-        <span className="h-1.5 w-1.5 rounded-full bg-[#25D366]" /> Active
+      <span className="inline-flex items-center gap-1.5 rounded-full border border-[#25D366]/30 bg-[var(--pl-green)]/10 px-2.5 py-1 text-[11px] font-semibold text-[#7ef0a8]">
+        <span className="h-1.5 w-1.5 rounded-full bg-[var(--pl-green)]" /> Active
       </span>
     );
   }
 
   if (state === 'locked') {
     return (
-      <span className="inline-flex items-center gap-1.5 rounded-full border border-white/12 bg-white/[0.04] px-2.5 py-1 text-[11px] font-semibold text-white/55">
+      <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--pl-border)] bg-[var(--pl-surface-soft)] px-2.5 py-1 text-[11px] font-semibold text-[var(--pl-text-muted)]">
         Locked
       </span>
     );

@@ -34,7 +34,7 @@ export function MasonryGrid<T>({
           ) : (
             <div
               key={i}
-              className="mb-4 break-inside-avoid animate-pulse rounded-2xl border border-white/[0.06] bg-white/[0.03]"
+              className="mb-4 break-inside-avoid animate-pulse rounded-2xl border border-[var(--pl-border)] bg-[var(--pl-surface)]"
               style={{ height: 90 + ((i * 37) % 90) }}
             />
           ),

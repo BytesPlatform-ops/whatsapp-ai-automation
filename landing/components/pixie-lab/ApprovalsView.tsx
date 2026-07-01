@@ -53,18 +53,18 @@ export function ApprovalsView({ tenant = 'demo' }: { tenant?: string }) {
   return (
     <main className="mx-auto max-w-3xl px-5 py-9 sm:px-8">
       <div className="flex items-center gap-2.5">
-        <ShieldCheck size={22} className="text-[#25D366]" />
+        <ShieldCheck size={22} className="text-[var(--pl-green)]" />
         <h1 className="font-display text-2xl font-extrabold tracking-tight">Approvals</h1>
       </div>
-      <p className="mt-1.5 text-[14px] text-white/50">Risky actions wait here for your explicit go-ahead. Nothing runs until you approve it.</p>
+      <p className="mt-1.5 text-[14px] text-[var(--pl-text-muted)]">Risky actions wait here for your explicit go-ahead. Nothing runs until you approve it.</p>
 
       <div className="mt-7 space-y-3">
         {loading ? (
-          Array.from({ length: 3 }).map((_, i) => <div key={i} className="h-20 animate-pulse rounded-2xl border border-white/[0.06] bg-white/[0.03]" />)
+          Array.from({ length: 3 }).map((_, i) => <div key={i} className="h-20 animate-pulse rounded-2xl border border-[var(--pl-border)] bg-[var(--pl-surface)]" />)
         ) : pending.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-white/10 bg-white/[0.02] py-16 text-center">
-            <p className="font-display text-lg font-bold text-white">Nothing to approve ✨</p>
-            <p className="mt-1 text-sm text-white/50">Approve a risky card in your feed and it’ll appear here.</p>
+          <div className="rounded-2xl border border-dashed border-[var(--pl-border)] bg-[var(--pl-surface)] py-16 text-center">
+            <p className="font-display text-lg font-bold text-[var(--pl-text)]">Nothing to approve ✨</p>
+            <p className="mt-1 text-sm text-[var(--pl-text-muted)]">Approve a risky card in your feed and it’ll appear here.</p>
           </div>
         ) : (
           <AnimatePresence>
@@ -75,21 +75,21 @@ export function ApprovalsView({ tenant = 'demo' }: { tenant?: string }) {
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.97 }}
-                className="flex items-center gap-4 rounded-2xl border border-white/[0.08] bg-white/[0.03] p-4"
+                className="flex items-center gap-4 rounded-2xl border border-[var(--pl-border)] bg-[var(--pl-surface)] p-4"
               >
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
-                    <span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[10.5px] font-medium text-white/55">
+                    <span className="rounded-full border border-[var(--pl-border)] bg-[var(--pl-surface-soft)] px-2 py-0.5 text-[10.5px] font-medium text-[var(--pl-text-muted)]">
                       {AGENT_META[it.agent as FeedAgent]?.label ?? it.agent}
                     </span>
                     <span className="rounded-full bg-amber-400/10 px-2 py-0.5 text-[10.5px] font-semibold text-amber-200">{it.action_type}</span>
                   </div>
-                  <p className="mt-1.5 truncate font-display text-[15px] font-bold text-white">{it.title}</p>
+                  <p className="mt-1.5 truncate font-display text-[15px] font-bold text-[var(--pl-text)]">{it.title}</p>
                 </div>
-                <button onClick={() => resolve(it.id, 'reject')} disabled={busy === it.id} className="grid h-9 w-9 place-items-center rounded-lg border border-white/12 bg-white/[0.04] text-white/60 transition hover:text-white disabled:opacity-50">
+                <button onClick={() => resolve(it.id, 'reject')} disabled={busy === it.id} className="grid h-9 w-9 place-items-center rounded-lg border border-[var(--pl-border)] bg-[var(--pl-surface-soft)] text-[var(--pl-text-soft)] transition hover:text-[var(--pl-text)] disabled:opacity-50">
                   <X size={16} />
                 </button>
-                <button onClick={() => resolve(it.id, 'approve')} disabled={busy === it.id} className="inline-flex items-center gap-1.5 rounded-lg bg-[#25D366] px-3.5 py-2 text-[13px] font-bold text-[#02070a] disabled:opacity-50">
+                <button onClick={() => resolve(it.id, 'approve')} disabled={busy === it.id} className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--pl-green)] px-3.5 py-2 text-[13px] font-bold text-[#02070a] disabled:opacity-50">
                   {busy === it.id ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />} Approve
                 </button>
               </motion.div>
