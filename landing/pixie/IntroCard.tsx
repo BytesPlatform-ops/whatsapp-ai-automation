@@ -3,6 +3,7 @@
 import { useState, type FormEvent } from 'react';
 import { motion } from 'framer-motion';
 import { ArrowRight, Sparkles } from 'lucide-react';
+import { PhoneField } from './PhoneField';
 
 interface IntroCardProps {
   /** Fired when the visitor starts. Any field may be empty. */
@@ -42,7 +43,7 @@ export function IntroCard({ onStart }: IntroCardProps) {
       <div className="jp-intro__form">
         <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="Your name (e.g. Ali)" aria-label="Your name" autoFocus className="jp-input" />
         <input type="text" value={business} onChange={(e) => setBusiness(e.target.value)} placeholder="Business name" aria-label="Business name" className="jp-input" />
-        <input type="tel" inputMode="tel" value={contact} onChange={(e) => setContact(e.target.value)} placeholder="Contact number" aria-label="Contact number" autoComplete="tel" className="jp-input" />
+        <PhoneField onChange={setContact} />
 
         <motion.button type="submit" whileTap={{ scale: 0.98 }} className="jp-submit">
           {name.trim() ? `Let's go, ${name.trim().split(' ')[0]}` : 'Start swiping'}
