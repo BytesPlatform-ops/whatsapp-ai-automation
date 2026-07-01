@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { displayName, tenantForUser } from '@/lib/supabase/auth';
 import { PixieLabShell } from '@/components/pixie-lab/PixieLabShell';
+import { ThemeProvider, themeInitScript } from '@/components/pixie-lab/theme/ThemeProvider';
 
 export const dynamic = 'force-dynamic';
 
@@ -25,8 +26,14 @@ export default async function PixieLabLayout({ children }: { children: React.Rea
     }
   }
   return (
-    <PixieLabShell name={displayName(user)} tenant={tenantForUser(user)}>
-      {children}
-    </PixieLabShell>
+    <>
+      {/* Set the theme on <html> before paint so there's no light→dark flash. */}
+      <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
+      <ThemeProvider>
+        <PixieLabShell name={displayName(user)} tenant={tenantForUser(user)}>
+          {children}
+        </PixieLabShell>
+      </ThemeProvider>
+    </>
   );
 }

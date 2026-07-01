@@ -29,6 +29,54 @@
     --core-glow-opacity: 0;
     --accent-glow: color-mix(in srgb, var(--accent) 45%, transparent);
     --accent-glow-soft: color-mix(in srgb, var(--accent-soft) 30%, transparent);
+
+    /* ── Pixie Lab theme tokens ──────────────────────────────────────────
+       Consumed ONLY by /pixie-lab surfaces via `var(--pl-*)` classes, so
+       defining them globally is inert for the marketing site. Default here =
+       LIGHT (soft mint SaaS). The pre-hydration script in the Lab layout flips
+       `html[data-pl-theme]` before paint; ThemeProvider toggles it at runtime. */
+    --pl-bg: #F6FBF7;
+    --pl-bg-grad: radial-gradient(120% 90% at 50% 0%, #ECF7F0 0%, #F6FBF7 55%);
+    --pl-surface: #FFFFFF;
+    --pl-surface-soft: #EEF8F1;
+    --pl-surface-hover: #F3FBF6;
+    --pl-border: #DDEBE2;
+    --pl-border-strong: #C7DED2;
+    --pl-text: #102018;
+    --pl-text-soft: #35473C;
+    --pl-text-muted: #65756B;
+    --pl-green: #16A34A;
+    --pl-green-dark: #15803D;
+    --pl-green-soft: #DCFCE7;
+    --pl-green-rgb: 22 163 74;
+    --pl-shadow: 0 14px 44px -22px rgba(16, 32, 24, 0.28);
+    --pl-shadow-sm: 0 8px 24px -16px rgba(16, 32, 24, 0.22);
+    --pl-glow: 0.12;
+  }
+
+  html[data-pl-theme='dark'] {
+    --pl-bg: #06120C;
+    --pl-bg-grad: radial-gradient(120% 90% at 50% 0%, rgba(52, 211, 153, 0.10), transparent 60%), #0C1512;
+    --pl-surface: #0F1D16;
+    --pl-surface-soft: #0C1712;
+    --pl-surface-hover: #14231B;
+    --pl-border: rgba(255, 255, 255, 0.09);
+    --pl-border-strong: rgba(255, 255, 255, 0.16);
+    --pl-text: #F3FFF6;
+    --pl-text-soft: rgba(243, 255, 246, 0.82);
+    --pl-text-muted: #9DB3A6;
+    --pl-green: #34D399;
+    --pl-green-dark: #34D399;
+    --pl-green-soft: rgba(52, 211, 153, 0.14);
+    --pl-green-rgb: 52 211 153;
+    --pl-shadow: 0 18px 46px -22px rgba(0, 0, 0, 0.66);
+    --pl-shadow-sm: 0 10px 30px -18px rgba(0, 0, 0, 0.6);
+    --pl-glow: 0.4;
+  }
+
+  /* Smooth the flip between themes on Lab surfaces. */
+  .pl-themed, .pl-themed * {
+    transition: background-color 200ms ease, border-color 200ms ease, color 160ms ease;
   }
 
   html {

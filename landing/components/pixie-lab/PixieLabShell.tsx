@@ -10,19 +10,23 @@ import {
 import { AGENT_META, type FeedAgent, type AgentState } from '@/lib/pixie-lab/feed';
 import { useEntitlements } from '@/lib/pixie-lab/useEntitlements';
 import { createClient, supabaseConfigured } from '@/lib/supabase/client';
+import { ThemeToggle } from './theme/ThemeToggle';
+import { ServiceSwitcher } from './ServiceSwitcher';
+import { ProfileMenu } from './ProfileMenu';
 
 /**
- * PixieLabShell — the authenticated Lab chrome: a left rail (For You + owned
- * agents + Agent Switcher) and a topbar (logo, tenant, user). Wraps every
- * /pixie-lab/* page. Agent status comes from entitlements (mock now → Supabase
- * later). Locked agents route to their trial/purchase page.
+ * PixieLabShell — the authenticated Lab chrome: a left rail (Dashboard, For You,
+ * owned agents, workspace) and a topbar (service switcher, theme toggle, profile
+ * menu). Wraps every /pixie-lab/* page and is fully theme-aware via the --pl-*
+ * design tokens (default light / soft mint, dark optional). Agent status comes
+ * from entitlements; locked agents route to their trial/purchase page.
  */
 
 const AGENT_ICON: Record<FeedAgent, LucideIcon> = {
   website: Globe, receptionist: Headset, seo: Search, marketing: Megaphone, content: Clapperboard, pixie: Sparkles,
 };
 const AGENT_ACCENT: Record<FeedAgent, string> = {
-  website: '#3B82F6', receptionist: '#E6B45A', seo: '#14B8A6', marketing: '#EC4899', content: '#D4AF37', pixie: '#25D366',
+  website: '#3B82F6', receptionist: '#E6B45A', seo: '#14B8A6', marketing: '#EC4899', content: '#D4AF37', pixie: '#22C55E',
 };
 const STATE_LABEL: Record<AgentState, string> = { active: 'Active', trial: 'Trial', locked: 'Locked' };
 
@@ -40,11 +44,8 @@ export function PixieLabShell({
   const pathname = usePathname();
   const router = useRouter();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [switcherOpen, setSwitcherOpen] = useState(false);
   const { stateOf } = useEntitlements(tenant);
   const stateFor = stateOf;
-
-  const initial = (name || 'P').charAt(0).toUpperCase();
 
   async function signOut() {
     try {
@@ -61,9 +62,9 @@ export function PixieLabShell({
 
   const Rail = (
     <div className="flex h-full flex-col">
-      <Link href="/pixie-lab/dashboard" className="flex items-center gap-2.5 px-5 py-5 font-display text-base font-extrabold tracking-tight">
-        <span className="grid h-8 w-8 place-items-center rounded-lg bg-gradient-to-br from-[#25D366] to-[#22d3ee] text-[#02070a]">
-          <Sparkles size={16} strokeWidth={2.5} />
+      <Link href="/pixie-lab/dashboard" className="flex items-center gap-2.5 px-5 py-5 font-display text-base font-extrabold tracking-tight text-[var(--pl-text)]">
+        <span className="grid h-9 w-9 place-items-center rounded-2xl bg-gradient-to-br from-[#22C55E] to-[#0EA5A3] text-white shadow-[0_8px_20px_-6px_rgba(34,197,94,0.55)] ring-1 ring-white/25">
+          <Sparkles size={17} strokeWidth={2.5} />
         </span>
         Pixie Lab
       </Link>
@@ -72,7 +73,7 @@ export function PixieLabShell({
         <NavItem href="/pixie-lab/dashboard" icon={LayoutDashboard} label="Dashboard" active={pathname === '/pixie-lab/dashboard'} />
         <NavItem href="/pixie-lab/for-you" icon={LayoutGrid} label="For You" active={pathname === '/pixie-lab/for-you'} />
 
-        <p className="px-3 pb-1 pt-4 text-[10px] font-bold uppercase tracking-wider text-white/30">Agents</p>
+        <p className="px-3 pb-1 pt-4 text-[10px] font-bold uppercase tracking-wider text-[var(--pl-text-muted)]">Agents</p>
         {AGENTS_ORDER.map((agent) => {
           const st = stateFor(agent);
           const Icon = AGENT_ICON[agent];
@@ -83,17 +84,20 @@ export function PixieLabShell({
               key={agent}
               href={agentHref(agent)}
               onClick={() => setMobileOpen(false)}
-              className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors"
-              style={{ background: active ? `${accent}1f` : 'transparent', color: active ? '#fff' : 'rgba(255,255,255,0.6)' }}
+              className="flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium transition-colors"
+              style={{
+                background: active ? `color-mix(in srgb, ${accent} 15%, transparent)` : 'transparent',
+                color: active ? 'var(--pl-text)' : 'var(--pl-text-muted)',
+              }}
             >
-              <Icon size={16} style={{ color: st === 'locked' ? 'rgba(255,255,255,0.35)' : accent }} />
-              <span className={st === 'locked' ? 'text-white/45' : ''}>{AGENT_META[agent].label}</span>
+              <Icon size={16} style={{ color: st === 'locked' ? 'var(--pl-text-muted)' : accent }} />
+              <span>{AGENT_META[agent].label}</span>
               {st === 'locked' ? (
-                <Lock size={12} className="ml-auto text-white/30" />
+                <Lock size={12} className="ml-auto text-[var(--pl-text-muted)]" />
               ) : (
                 <span
                   className="ml-auto rounded-full px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide"
-                  style={{ background: st === 'trial' ? 'rgba(139,92,246,0.18)' : `${accent}22`, color: st === 'trial' ? '#c4b5fd' : accent }}
+                  style={{ background: st === 'trial' ? 'rgba(139,92,246,0.18)' : `color-mix(in srgb, ${accent} 16%, transparent)`, color: st === 'trial' ? '#8b5cf6' : accent }}
                 >
                   {STATE_LABEL[st]}
                 </span>
@@ -104,31 +108,31 @@ export function PixieLabShell({
       </nav>
 
       <div className="space-y-1 px-3 pb-2">
-        <p className="px-3 pb-1 pt-2 text-[10px] font-bold uppercase tracking-wider text-white/30">Workspace</p>
+        <p className="px-3 pb-1 pt-2 text-[10px] font-bold uppercase tracking-wider text-[var(--pl-text-muted)]">Workspace</p>
         <NavItem href="/pixie-lab/approvals" icon={ShieldCheck} label="Approvals" active={pathname === '/pixie-lab/approvals'} />
         <NavItem href="/pixie-lab/activity" icon={Activity} label="Activity" active={pathname === '/pixie-lab/activity'} />
       </div>
 
-      <button onClick={signOut} className="m-3 flex items-center gap-2 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-white/60 transition hover:text-white">
+      <button onClick={signOut} className="m-3 flex items-center gap-2 rounded-xl border border-[var(--pl-border)] bg-[var(--pl-surface-soft)] px-3 py-2 text-sm font-medium text-[var(--pl-text-muted)] transition hover:text-[var(--pl-text)] hover:border-[var(--pl-border-strong)]">
         <LogOut size={15} /> Sign out
       </button>
     </div>
   );
 
   return (
-    <div className="min-h-screen bg-[#0C1512] text-white">
-      <div className="mx-auto flex max-w-[1400px]">
+    <div className="pl-themed min-h-screen text-[var(--pl-text)]" style={{ background: 'var(--pl-bg-grad)' }}>
+      <div className="mx-auto flex max-w-[1600px]">
         {/* Desktop rail */}
-        <aside className="sticky top-0 hidden h-screen w-60 flex-none border-r border-white/[0.06] bg-white/[0.015] lg:block">
+        <aside className="sticky top-0 hidden h-screen w-60 flex-none border-r border-[var(--pl-border)] bg-[var(--pl-surface)] lg:block">
           {Rail}
         </aside>
 
         {/* Mobile drawer */}
         {mobileOpen && (
           <div className="fixed inset-0 z-50 lg:hidden">
-            <div className="absolute inset-0 bg-black/60" onClick={() => setMobileOpen(false)} />
-            <aside className="absolute left-0 top-0 h-full w-64 border-r border-white/10 bg-[#15211C]">
-              <button onClick={() => setMobileOpen(false)} className="absolute right-3 top-4 text-white/50"><X size={20} /></button>
+            <div className="absolute inset-0 bg-black/50" onClick={() => setMobileOpen(false)} />
+            <aside className="absolute left-0 top-0 h-full w-64 border-r border-[var(--pl-border)] bg-[var(--pl-surface)]">
+              <button onClick={() => setMobileOpen(false)} className="absolute right-3 top-4 text-[var(--pl-text-muted)]"><X size={20} /></button>
               {Rail}
             </aside>
           </div>
@@ -136,46 +140,24 @@ export function PixieLabShell({
 
         <div className="min-w-0 flex-1">
           {/* Topbar */}
-          <header className="sticky top-0 z-30 flex items-center justify-between gap-3 border-b border-white/[0.06] bg-[#0C1512]/80 px-5 py-3 backdrop-blur-xl">
-            <button onClick={() => setMobileOpen(true)} className="text-white/70 lg:hidden"><Menu size={20} /></button>
-
-            {/* Agent Switcher */}
-            <div className="relative">
-              <button
-                onClick={() => setSwitcherOpen((s) => !s)}
-                className="flex items-center gap-2 rounded-lg border border-white/10 bg-white/[0.04] px-3 py-1.5 text-sm text-white/80 hover:text-white"
-              >
-                Switch workspace <ChevronDown size={14} className={switcherOpen ? 'rotate-180 transition' : 'transition'} />
-              </button>
-              {switcherOpen && (
-                <div className="absolute left-0 top-[calc(100%+6px)] z-40 w-64 rounded-xl border border-white/12 bg-[#15211C] p-1.5 shadow-2xl">
-                  {AGENTS_ORDER.map((agent) => {
-                    const st = stateFor(agent);
-                    const Icon = AGENT_ICON[agent];
-                    const accent = AGENT_ACCENT[agent];
-                    return (
-                      <Link
-                        key={agent}
-                        href={agentHref(agent)}
-                        onClick={() => setSwitcherOpen(false)}
-                        className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm text-white/75 hover:bg-white/[0.05]"
-                      >
-                        <Icon size={15} style={{ color: st === 'locked' ? 'rgba(255,255,255,0.35)' : accent }} />
-                        {AGENT_META[agent].label}
-                        <span className="ml-auto text-[10px] uppercase tracking-wide text-white/40">{STATE_LABEL[st]}</span>
-                      </Link>
-                    );
-                  })}
-                  <Link href="/pixie-lab/for-you" onClick={() => setSwitcherOpen(false)} className="mt-1 flex items-center gap-2 rounded-lg border-t border-white/10 px-2.5 py-2 text-sm text-[#25D366]">
-                    <Sparkles size={14} /> Explore all agents
-                  </Link>
-                </div>
-              )}
+          <header className="sticky top-0 z-30 flex items-center justify-between gap-3 border-b border-[var(--pl-border)] px-4 py-2.5 backdrop-blur-xl sm:px-5" style={{ background: 'color-mix(in srgb, var(--pl-bg) 82%, transparent)' }}>
+            <div className="flex min-w-0 items-center gap-3">
+              <button onClick={() => setMobileOpen(true)} className="text-[var(--pl-text-muted)] lg:hidden"><Menu size={20} /></button>
+              {/* Desktop: capsule switcher. Mobile: dropdown (inside ServiceSwitcher). */}
+              <ServiceSwitcher
+                agents={AGENTS_ORDER}
+                icons={AGENT_ICON}
+                accents={AGENT_ACCENT}
+                labels={Object.fromEntries(AGENTS_ORDER.map((a) => [a, AGENT_META[a].label])) as Record<FeedAgent, string>}
+                stateOf={stateFor}
+                agentHref={agentHref}
+              />
             </div>
 
-            <div className="ml-auto flex items-center gap-2.5">
-              <span className="hidden rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs text-white/50 sm:inline">{tenant}</span>
-              <span className="grid h-8 w-8 place-items-center rounded-full bg-gradient-to-br from-[#25D366]/80 to-[#22d3ee]/80 text-sm font-bold text-[#02070a]">{initial}</span>
+            <div className="ml-auto flex items-center gap-2">
+              <span className="hidden rounded-full border border-[var(--pl-border)] bg-[var(--pl-surface)] px-3 py-1.5 text-xs font-medium text-[var(--pl-text-muted)] sm:inline">{tenant}</span>
+              <ThemeToggle />
+              <ProfileMenu name={name} tenant={tenant} onSignOut={signOut} />
             </div>
           </header>
 
@@ -190,10 +172,13 @@ function NavItem({ href, icon: Icon, label, active }: { href: string; icon: Luci
   return (
     <Link
       href={href}
-      className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors"
-      style={{ background: active ? 'rgba(37,211,102,0.14)' : 'transparent', color: active ? '#fff' : 'rgba(255,255,255,0.6)' }}
+      className="flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium transition-colors"
+      style={{
+        background: active ? 'color-mix(in srgb, var(--pl-green) 14%, transparent)' : 'transparent',
+        color: active ? 'var(--pl-text)' : 'var(--pl-text-muted)',
+      }}
     >
-      <Icon size={16} className={active ? 'text-[#25D366]' : ''} /> {label}
+      <Icon size={16} style={{ color: active ? 'var(--pl-green)' : undefined }} /> {label}
     </Link>
   );
 }
