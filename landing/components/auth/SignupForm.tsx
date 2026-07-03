@@ -25,26 +25,36 @@ export function SignupForm() {
   const [f, setF] = useState({ name: '', email: '', password: '', business_name: '', website_or_social: '', short_note: '' });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [existing, setExisting] = useState(false);
 
-  const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
+  const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    if (k === 'email' && existing) setExisting(false);
     setF((p) => ({ ...p, [k]: e.target.value }));
+  };
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError('');
+    setExisting(false);
     if (!supabaseConfigured()) {
       setError('Authentication isn’t configured yet. Add your Supabase keys to enable signup.');
       return;
     }
     setBusy(true);
     try {
-      // Layered email validation (format, domain MX/A, disposable) before signup.
-      const vr = await fetch('/api/auth/validate-email', {
+      // Server precheck: validate email (format/domain/disposable) + detect an
+      // existing account. Prevents duplicates without leaking account existence.
+      const pc = await fetch('/api/auth/signup-precheck', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: f.email }),
-      }).then((r) => r.json()).catch(() => ({ canProceed: true }));
-      if (!vr.canProceed) {
-        setError(vr.reason || 'Please enter a valid email address.');
+      }).then((r) => r.json()).catch(() => ({ status: 'ok' }));
+      if (pc.status === 'invalid') {
+        setError(pc.reason || 'Please enter a valid email address.');
+        setBusy(false);
+        return;
+      }
+      if (pc.status === 'exists') {
+        setExisting(true);
         setBusy(false);
         return;
       }
@@ -103,13 +113,23 @@ export function SignupForm() {
       <Field icon={Building2}><input className={inputCls} placeholder="Business name (optional)" value={f.business_name} onChange={set('business_name')} /></Field>
       <Field icon={Link2}><input className={inputCls} placeholder="Website or social link (optional)" value={f.website_or_social} onChange={set('website_or_social')} /></Field>
 
+      {existing && (
+        <div className="rounded-xl border border-[#22d3ee]/25 bg-[#22d3ee]/[0.07] px-4 py-3 text-[13px] text-[#bfeefb]">
+          If an account exists for this email, you can continue by signing in or resetting your password.
+          <div className="mt-2 flex flex-wrap gap-2">
+            <a href={`/login?email=${encodeURIComponent(f.email)}`} className="rounded-lg bg-white/10 px-3 py-1.5 text-[12.5px] font-semibold text-white transition hover:bg-white/15">Sign in</a>
+            <a href="/login?reset=1" className="rounded-lg border border-white/12 px-3 py-1.5 text-[12.5px] font-semibold text-white/70 transition hover:text-white">Reset password</a>
+          </div>
+        </div>
+      )}
+
       {error && (
         <p className="flex items-center gap-1.5 text-[13px] text-rose-300"><AlertCircle size={14} /> {error}</p>
       )}
 
       <button
         type="submit"
-        disabled={busy}
+        disabled={busy || existing}
         className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#25D366] to-[#22d3ee] py-3 text-[15px] font-bold text-[#02070a] transition-transform active:scale-[0.99] disabled:opacity-70"
       >
         {busy ? <Loader2 size={17} className="animate-spin" /> : btnLabel}
