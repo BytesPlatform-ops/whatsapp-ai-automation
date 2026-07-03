@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { Prisma } from '@prisma/client';
 import { createClient } from '@/lib/supabase/server';
 import { prisma } from '@/lib/prisma';
 
@@ -19,6 +20,28 @@ function clip(v: unknown, max = 160): string | null {
   return s ? s.slice(0, max) : null;
 }
 
+/**
+ * Concurrency-safe profile upsert. Prisma's upsert is a non-atomic
+ * find-then-create, so two first-load requests for the same user can both miss
+ * the row and race to create it — the loser throws P2002 on `id`. When that
+ * happens the row now exists, so we fall back to a plain update. Returns the
+ * profile either way.
+ */
+async function upsertProfile(
+  where: Prisma.ProfileWhereUniqueInput,
+  create: Prisma.ProfileCreateInput,
+  update: Prisma.ProfileUpdateInput,
+) {
+  try {
+    return await prisma.profile.upsert({ where, create, update });
+  } catch (e) {
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
+      return prisma.profile.update({ where, data: update });
+    }
+    throw e;
+  }
+}
+
 async function currentUser() {
   try {
     const { data } = await createClient().auth.getUser();
@@ -35,11 +58,11 @@ export async function GET() {
   const meta = (user.user_metadata || {}) as Record<string, unknown>;
   const seedName = (typeof meta.full_name === 'string' && meta.full_name) || (typeof meta.name === 'string' && meta.name) || null;
 
-  const profile = await prisma.profile.upsert({
-    where: { id: user.id },
-    create: { id: user.id, email: user.email ?? `${user.id}@no-email.local`, fullName: seedName },
-    update: {},
-  });
+  const profile = await upsertProfile(
+    { id: user.id },
+    { id: user.id, email: user.email ?? `${user.id}@no-email.local`, fullName: seedName },
+    {},
+  );
   return NextResponse.json({ profile });
 }
 
@@ -58,11 +81,11 @@ export async function PATCH(req: Request) {
     avatarUrl: clip(body.avatarUrl, 500),
   };
 
-  const profile = await prisma.profile.upsert({
-    where: { id: user.id },
-    create: { id: user.id, email: user.email ?? `${user.id}@no-email.local`, ...fields },
-    update: fields,
-  });
+  const profile = await upsertProfile(
+    { id: user.id },
+    { id: user.id, email: user.email ?? `${user.id}@no-email.local`, ...fields },
+    fields,
+  );
 
   // Mirror the display name into auth metadata (used by the dashboard greeting).
   if (fields.fullName) {
