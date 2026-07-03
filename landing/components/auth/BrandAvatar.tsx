@@ -10,7 +10,7 @@ import { Sparkles } from 'lucide-react';
  * glow. Reads as a designed SaaS brand mark rather than a pasted image. Falls
  * back to a Sparkles glyph if the mascot image fails to load.
  */
-export function BrandAvatar({ size = 56 }: { size?: number }) {
+export function BrandAvatar({ size = 64 }: { size?: number }) {
   const [ok, setOk] = useState(true);
   return (
     <span className="relative flex-none" style={{ height: size, width: size }}>
@@ -29,7 +29,7 @@ export function BrandAvatar({ size = 56 }: { size?: number }) {
             alt="Pixie"
             width={size}
             height={size}
-            className="h-full w-full object-contain p-1.5 drop-shadow-[0_2px_10px_rgba(34,197,94,0.35)]"
+            className="h-full w-full scale-110 object-contain p-1 drop-shadow-[0_2px_10px_rgba(34,197,94,0.35)]"
             onError={() => setOk(false)}
             priority
           />

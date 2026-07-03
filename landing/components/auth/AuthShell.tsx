@@ -49,12 +49,12 @@ export function AuthShell({
 
         {/* Brand lockup */}
         <Link href="/" className="group relative z-10 inline-flex items-center gap-4">
-          <BrandAvatar size={56} />
+          <BrandAvatar size={64} />
           <span className="flex flex-col leading-none">
-            <span className="font-display text-[1.7rem] font-extrabold tracking-[-0.02em] text-white [text-shadow:0_1px_20px_rgba(37,211,102,0.25)]">
+            <span className="font-display text-[2rem] font-extrabold tracking-[-0.02em] text-white [text-shadow:0_1px_20px_rgba(37,211,102,0.25)]">
               Pixie
             </span>
-            <span className="mt-1.5 text-[11.5px] font-medium uppercase tracking-[0.22em] text-white/45">
+            <span className="mt-1.5 text-[12px] font-medium uppercase tracking-[0.22em] text-white/45">
               AI workspace
             </span>
           </span>
@@ -106,7 +106,7 @@ export function AuthShell({
         <div className="relative w-full max-w-[420px]">
           {/* mobile brand */}
           <Link href="/" className="mb-8 inline-flex items-center gap-3 lg:hidden">
-            <BrandAvatar size={44} />
+            <BrandAvatar size={50} />
             <span className="flex flex-col leading-none">
               <span className="font-display text-[1.35rem] font-extrabold tracking-[-0.02em]">Pixie</span>
               <span className="mt-1 text-[10.5px] font-medium uppercase tracking-[0.22em] text-white/45">
