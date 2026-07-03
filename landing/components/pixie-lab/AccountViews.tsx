@@ -1,10 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import {
   Settings, KeyRound, CreditCard, Building2, Bell, LifeBuoy, ShieldCheck, Mail,
-  Sun, Moon, Monitor, Check, Loader2, MessageCircle, FileWarning, BookOpen, Users, Shield,
+  Sun, Moon, Monitor, Check, Loader2, MessageCircle, FileWarning, BookOpen, Users, Shield, LogOut,
 } from 'lucide-react';
 import { createClient, supabaseConfigured } from '@/lib/supabase/client';
 import { useTheme } from './theme/ThemeProvider';
@@ -71,11 +72,8 @@ export function SecurityView() {
       <SettingsCard icon={ShieldCheck} title="Two-factor authentication" subtitle="Add an extra layer of protection with an authenticator app.">
         <TwoFactorSetup />
       </SettingsCard>
-      <SettingsCard icon={Monitor} title="Active sessions" subtitle="Devices currently signed in.">
-        <div className="rounded-2xl border border-[var(--pl-border)] bg-[var(--pl-surface-soft)] p-4 text-[13.5px] text-[var(--pl-text-muted)]">
-          This device · active now. <span className="opacity-70">Full session management is coming soon.</span>
-        </div>
-        {/* TODO: list real sessions via supabase */}
+      <SettingsCard icon={Monitor} title="Active sessions" subtitle="Devices signed in to your account.">
+        <ActiveSessions />
       </SettingsCard>
     </PageContainer>
   );
@@ -118,6 +116,65 @@ function ChangePassword() {
         {status && <span className={`inline-flex items-center gap-1.5 text-[13px] font-semibold ${status.ok ? 'text-[var(--pl-green-dark)]' : 'text-[#ef4444]'}`}>{status.ok && <Check size={14} />} {status.msg}</span>}
       </div>
     </form>
+  );
+}
+
+interface SessionRow { id: string; deviceLabel: string | null; lastSeenAt: string; current: boolean }
+
+function timeAgo(iso: string): string {
+  const s = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 1000));
+  if (s < 60) return 'active now';
+  if (s < 3600) return `${Math.floor(s / 60)}m ago`;
+  if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
+  return `${Math.floor(s / 86400)}d ago`;
+}
+
+function ActiveSessions() {
+  const router = useRouter();
+  const [sessions, setSessions] = useState<SessionRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState<string | null>(null);
+
+  async function load() {
+    try {
+      const r = await fetch('/api/sessions', { cache: 'no-store' });
+      if (r.ok) { const d = await r.json(); setSessions(d.sessions ?? []); }
+    } catch { /* */ } finally { setLoading(false); }
+  }
+  useEffect(() => { load(); }, []);
+
+  async function revoke(id: string, current: boolean) {
+    setBusy(id);
+    try {
+      const r = await fetch('/api/sessions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sessionId: id }) });
+      if (r.ok && current) { router.replace('/login'); router.refresh(); return; }
+      await load();
+    } catch { /* */ } finally { setBusy(null); }
+  }
+
+  if (loading) return <div className="flex items-center gap-2 rounded-2xl border border-[var(--pl-border)] bg-[var(--pl-surface-soft)] p-4 text-[13.5px] text-[var(--pl-text-muted)]"><Loader2 size={15} className="animate-spin" /> Loading sessions…</div>;
+  if (sessions.length === 0) return <div className="rounded-2xl border border-[var(--pl-border)] bg-[var(--pl-surface-soft)] p-4 text-[13.5px] text-[var(--pl-text-muted)]">No active sessions recorded yet.</div>;
+
+  return (
+    <div className="divide-y divide-[var(--pl-border)]">
+      {sessions.map((s) => (
+        <div key={s.id} className="flex items-center justify-between gap-4 py-3 first:pt-0 last:pb-0">
+          <div className="flex items-center gap-3">
+            <span className="grid h-9 w-9 flex-none place-items-center rounded-xl bg-[var(--pl-surface-soft)] text-[var(--pl-text-muted)]"><Monitor size={16} /></span>
+            <div>
+              <p className="flex items-center gap-2 text-[14px] font-semibold text-[var(--pl-text)]">
+                {s.deviceLabel || 'Unknown device'}
+                {s.current && <span className="rounded-full border border-[color-mix(in_srgb,var(--pl-green)_30%,var(--pl-border))] bg-[var(--pl-green-soft)] px-2 py-0.5 text-[10.5px] font-bold text-[var(--pl-green-dark)]">This device</span>}
+              </p>
+              <p className="text-[12.5px] text-[var(--pl-text-muted)]">{timeAgo(s.lastSeenAt)}</p>
+            </div>
+          </div>
+          <button onClick={() => revoke(s.id, s.current)} disabled={busy === s.id} className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--pl-border)] bg-[var(--pl-surface)] px-3 py-1.5 text-[12.5px] font-semibold text-[var(--pl-text-muted)] transition hover:text-[var(--pl-text)] disabled:opacity-60">
+            {busy === s.id ? <Loader2 size={13} className="animate-spin" /> : <LogOut size={13} />} {s.current ? 'Sign out' : 'Revoke'}
+          </button>
+        </div>
+      ))}
+    </div>
   );
 }
 
