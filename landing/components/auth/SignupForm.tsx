@@ -125,7 +125,7 @@ export function SignupForm() {
           If an account exists for this email, you can continue by signing in or resetting your password.
           <div className="mt-2 flex flex-wrap gap-2">
             <a href={`/login?email=${encodeURIComponent(f.email)}`} className="rounded-lg bg-white/10 px-3 py-1.5 text-[12.5px] font-semibold text-white transition hover:bg-white/15">Sign in</a>
-            <a href="/login?reset=1" className="rounded-lg border border-white/12 px-3 py-1.5 text-[12.5px] font-semibold text-white/70 transition hover:text-white">Reset password</a>
+            <a href="/forgot-password" className="rounded-lg border border-white/12 px-3 py-1.5 text-[12.5px] font-semibold text-white/70 transition hover:text-white">Reset password</a>
           </div>
         </div>
       )}

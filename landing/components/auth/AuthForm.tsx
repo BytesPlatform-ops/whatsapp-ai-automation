@@ -149,7 +149,9 @@ export function AuthForm({ mode }: { mode: Mode }) {
       </form>
 
       {mode === 'login' && (
-        <p className="mt-3 text-right text-xs text-white/40">Forgot password? Reset coming soon.</p>
+        <p className="mt-3 text-right text-xs text-white/40">
+          <a href="/forgot-password" className="font-semibold text-white/60 transition hover:text-white">Forgot password?</a>
+        </p>
       )}
     </motion.div>
   );
