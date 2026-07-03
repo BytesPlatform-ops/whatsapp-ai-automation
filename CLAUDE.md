@@ -92,3 +92,74 @@ Admin-managed settings live in the `admin_settings` Supabase table, cached in-pr
 - [test/README.md](test/README.md) — fixture format and how to add a regression test from a real tester transcript.
 - [DOMAIN_FLOW_PLAN.md](DOMAIN_FLOW_PLAN.md), [DOMAIN_RENEWAL_PLAN.md](DOMAIN_RENEWAL_PLAN.md) — domain purchase + DNS specifics.
 - [knowledge/](knowledge/) — markdown corpus loaded into pgvector via `npm run embed` and queried by [src/knowledge/retriever.js](src/knowledge/retriever.js) for FAQ-style answers.
+
+---
+
+# Multi-Agent Claude Code Workspace
+
+This repo ships a specialist agent team in [.claude/agents/](.claude/agents) and reusable commands in [.claude/commands/](.claude/commands). Give one task and delegate the parts to the right specialist.
+
+## 1. Project Overview (auto-detected)
+
+Multi-service monorepo for **Pixie**:
+- **Root — Node/Express bot** (`src/`, CommonJS). WhatsApp/Messenger/Instagram conversation engine. Entry `src/index.js`. See the architecture sections above and [FLOW.md](FLOW.md).
+- **`landing/` — Next.js 14 (App Router) + TypeScript + Tailwind 3.4 + Supabase (`@supabase/ssr`) + Framer Motion.** The authenticated **Pixie Lab** UI (`app/pixie-lab/*`) is theme-aware via `--pl-*` design tokens (light default / dark) in `landing/app/globals.css`.
+- **`backend/` — Python FastAPI services** (orchestrator + seo/content/marketing/receptionist/approvals/billing/entitlements/feed/generation/preview). Has its own [backend/CLAUDE.md](backend/CLAUDE.md).
+- **Database — Supabase Postgres (+pgvector)** via `supabase-js` and the Python layer. A `prisma/schema.prisma` exists but **Prisma is not installed/used at runtime** — treat it as reference only.
+
+## 2. Core Working Rules
+
+- Never delete existing functionality.
+- Never change database schema unless explicitly approved.
+- Never change API contracts unless the task requires it (check callers first).
+- Always inspect related files before editing.
+- Always preserve business logic when doing UI work.
+- Always run available lint/build/tests after implementation when possible (`node --check`, `npm run test:replay`; `cd landing && tsc --noEmit`, `npm run build`, `npm run lint`; `pytest` in `backend/`).
+- Always summarize changed files, risks, and testing status.
+
+## 3. Multi-Agent Workflow
+
+Use the specialist agents in [.claude/agents/](.claude/agents) by task type:
+- **lead-engineer** — planning, task breakdown, coordination, final delivery summaries.
+- **frontend-ui** — UI, React/Next.js, Tailwind, Framer Motion, responsiveness, Pixie Lab surfaces.
+- **backend-api** — Express bot logic + FastAPI services, controllers/handlers, auth, validation, server bugs.
+- **database-prisma** — Supabase/Postgres queries, relations, migrations, data integrity (Prisma schema is reference-only).
+- **qa-tester** — regression + bug testing, build/lint/typecheck/test runs.
+- **code-reviewer** — strict final review.
+- **devops-git** — Git, env, builds, deployment (Vercel/Render/Docker), CI/CD.
+- **product-analyst** — requirements, flows, UX, missing features, acceptance criteria.
+
+## 4. Safety Rules
+
+- Check `git status` before changes; warn before working on already-dirty files.
+- Avoid two agents editing the same file at the same time — sequence overlapping work.
+- Make small, focused changes.
+- Ask before destructive commands, deleting files, schema migrations, or dependency upgrades.
+- Do not expose secrets from `.env` files (reference names, never print values).
+- Do not commit or push unless explicitly asked.
+- Don't run `next build` while a `next dev` server shares the same `.next` dir (cache corruption).
+
+## 5. Final Response Format
+
+Every implementation task should end with:
+- **Summary**
+- **Files changed**
+- **What was fixed/added**
+- **Commands run**
+- **Testing result**
+- **Remaining risks**
+- **Recommended next step**
+
+## 6. Commands
+
+- `/agent-team-task <task>` — run a big task through the full team (lead → specialists → QA → review).
+- `/safe-implementation <task>` — minimal, behavior-preserving implementation with validation.
+- `/review-changes` — read-only review of the current git diff (code-reviewer + qa-tester), findings by severity.
+
+## 7. Experimental Agent Teams flag
+
+`.claude/settings.local.json` sets `env.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`. The `env` block is a supported Claude Code settings mechanism (it exports the variable for the session); the flag itself is a **best-effort experimental toggle** and may be a no-op depending on your Claude Code version. **The specialist agents above work regardless** — Claude invokes them via the Task/subagent mechanism (or the `/agent-team-task` command). To enable manually, ensure this exists in `.claude/settings.local.json`:
+
+```json
+{ "env": { "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1" } }
+```
