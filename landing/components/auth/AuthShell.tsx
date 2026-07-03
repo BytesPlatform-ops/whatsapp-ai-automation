@@ -47,10 +47,17 @@ export function AuthShell({
         <div className="pointer-events-none absolute -left-24 top-1/3 h-72 w-72 rounded-full bg-[#25D366]/15 blur-[130px]" />
         <div className="pointer-events-none absolute bottom-0 right-0 h-64 w-64 rounded-full bg-cyan-400/10 blur-[130px]" />
 
-        {/* Brand */}
-        <Link href="/" className="relative z-10 inline-flex items-center gap-3">
-          <BrandAvatar size={44} />
-          <span className="font-display text-[1.35rem] font-extrabold tracking-tight">Pixie</span>
+        {/* Brand lockup */}
+        <Link href="/" className="group relative z-10 inline-flex items-center gap-4">
+          <BrandAvatar size={56} />
+          <span className="flex flex-col leading-none">
+            <span className="font-display text-[1.7rem] font-extrabold tracking-[-0.02em] text-white [text-shadow:0_1px_20px_rgba(37,211,102,0.25)]">
+              Pixie
+            </span>
+            <span className="mt-1.5 text-[11.5px] font-medium uppercase tracking-[0.22em] text-white/45">
+              AI workspace
+            </span>
+          </span>
         </Link>
 
         {/* Hero copy + features */}
@@ -98,9 +105,14 @@ export function AuthShell({
         <div className="pointer-events-none absolute inset-0 lg:hidden" style={{ background: 'radial-gradient(100% 60% at 50% 0%, rgba(37,211,102,0.12), transparent 60%)' }} />
         <div className="relative w-full max-w-[420px]">
           {/* mobile brand */}
-          <Link href="/" className="mb-8 inline-flex items-center gap-2.5 lg:hidden">
-            <BrandAvatar size={36} />
-            <span className="font-display text-lg font-extrabold tracking-tight">Pixie</span>
+          <Link href="/" className="mb-8 inline-flex items-center gap-3 lg:hidden">
+            <BrandAvatar size={44} />
+            <span className="flex flex-col leading-none">
+              <span className="font-display text-[1.35rem] font-extrabold tracking-[-0.02em]">Pixie</span>
+              <span className="mt-1 text-[10.5px] font-medium uppercase tracking-[0.22em] text-white/45">
+                AI workspace
+              </span>
+            </span>
           </Link>
 
           <p className="text-[13px] font-semibold uppercase tracking-[0.16em] text-[#25D366]">{eyebrow}</p>
