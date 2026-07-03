@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { Loader2, Mail, Lock, User as UserIcon, Building2, Link2, AlertCircle, type LucideIcon } from 'lucide-react';
 import { createClient, supabaseConfigured } from '@/lib/supabase/client';
 import { getAgentBySlug } from '@/lib/agents';
+import { GoogleButton } from './GoogleButton';
 
 const SAFE = (n: string | null, fb: string) => (n && n.startsWith('/') && !n.startsWith('//') ? n : fb);
 
@@ -99,7 +100,13 @@ export function SignupForm() {
   const btnLabel = agent ? `Create Account & Start ${agentLabel}` : 'Create My Pixie Account';
 
   return (
-    <form onSubmit={onSubmit} className="space-y-3.5">
+    <div className="space-y-4">
+      <GoogleButton next={redirect} onError={setError} label="Sign up with Google" />
+      <div className="flex items-center gap-3 text-xs text-white/30">
+        <span className="h-px flex-1 bg-white/10" /> or sign up with email <span className="h-px flex-1 bg-white/10" />
+      </div>
+
+      <form onSubmit={onSubmit} className="space-y-3.5">
       {agent && (
         <div className="rounded-xl border border-[#25D366]/20 bg-[#25D366]/[0.07] px-4 py-3 text-[13px] text-[#bff3d0]">
           Start your Pixie setup — create your account to continue with <b className="font-semibold text-white">{agentLabel}</b>.
@@ -135,7 +142,8 @@ export function SignupForm() {
         {busy ? <Loader2 size={17} className="animate-spin" /> : btnLabel}
       </button>
       <p className="text-center text-[12px] text-white/40">No payment required — this only starts your setup.</p>
-    </form>
+      </form>
+    </div>
   );
 }
 
