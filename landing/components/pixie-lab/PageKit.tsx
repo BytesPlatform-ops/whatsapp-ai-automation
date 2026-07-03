@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { ArrowLeft, Sparkles, type LucideIcon } from 'lucide-react';
+import { ArrowLeft, Sparkles, Lock, type LucideIcon } from 'lucide-react';
 
 /**
  * PageKit — shared building blocks so every Pixie Lab page uses the same shell
@@ -72,6 +72,25 @@ export function BackToDashboard({ label = 'Back to Dashboard', href = '/pixie-la
     >
       <ArrowLeft size={15} /> {label}
     </Link>
+  );
+}
+
+/** In-shell "access restricted" page (RBAC) — never a 404. */
+export function AccessRestricted({ what = 'this page' }: { what?: string }) {
+  return (
+    <PageContainer narrow>
+      <PageHeader eyebrow="Restricted" title="Access restricted" />
+      <div className="mt-6 rounded-3xl border border-[var(--pl-border)] bg-[var(--pl-surface)] p-8 text-center shadow-[var(--pl-shadow-sm)]">
+        <span className="mx-auto grid h-16 w-16 place-items-center rounded-2xl bg-[var(--pl-surface-soft)] text-[var(--pl-text-muted)]">
+          <Lock size={28} />
+        </span>
+        <h2 className="mt-4 font-display text-xl font-extrabold tracking-tight">You don&apos;t have access to {what}</h2>
+        <p className="mx-auto mt-2 max-w-md text-[14px] leading-relaxed text-[var(--pl-text-muted)]">
+          Ask a workspace admin to grant you permission, or head back to your dashboard.
+        </p>
+        <div className="mt-6 flex justify-center"><BackToDashboard /></div>
+      </div>
+    </PageContainer>
   );
 }
 

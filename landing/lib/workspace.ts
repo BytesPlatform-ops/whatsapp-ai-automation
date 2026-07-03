@@ -46,3 +46,17 @@ export async function getCurrentMembership(): Promise<{ user: { id: string; emai
 export function can(membership: Pick<Membership, 'role' | 'permissions'>, perm: Permission): boolean {
   return hasPermission(membership.role, membership.permissions, perm);
 }
+
+function supabaseConfigured(): boolean {
+  return Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
+}
+
+/** Server-side route guard for a page. Allows demo mode (no Supabase) so local
+ *  preview still works; otherwise requires the permission on the caller's
+ *  membership. Returns { ok } — the page renders <AccessRestricted /> when false. */
+export async function guardPermission(perm: Permission): Promise<{ ok: boolean; membership: Membership | null }> {
+  if (!supabaseConfigured()) return { ok: true, membership: null };
+  const ctx = await getCurrentMembership();
+  if (!ctx) return { ok: false, membership: null };
+  return { ok: can(ctx.membership, perm), membership: ctx.membership };
+}
