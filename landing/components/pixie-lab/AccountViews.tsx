@@ -179,25 +179,110 @@ function ActiveSessions() {
 }
 
 /* ── Billing ──────────────────────────────────────────────────────────────── */
+interface BillingApi {
+  state: { planKey: string; status: string; trialDaysLeft: number; cancelAtPeriodEnd: boolean; hasSubscription: boolean };
+  canManage: boolean;
+  stripeReady: boolean;
+  plans: { key: string; name: string; blurb: string; price: string; features: string[] }[];
+  workspace: string;
+}
+
 export function BillingView() {
+  const [data, setData] = useState<BillingApi | null>(null);
+  const [forbidden, setForbidden] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [err, setErr] = useState('');
+
+  useEffect(() => {
+    fetch('/api/billing/state', { cache: 'no-store' })
+      .then(async (r) => { if (r.status === 403) { setForbidden(true); return null; } return r.ok ? r.json() : null; })
+      .then((d) => d && setData(d))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  async function checkout(plan: string) {
+    setBusy(plan); setErr('');
+    try {
+      const r = await fetch('/api/billing/create-checkout-session', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ plan }) });
+      const d = await r.json();
+      if (r.ok && d.url) { window.location.href = d.url; return; }
+      setErr(d.error || 'Could not start checkout.');
+    } catch { setErr('Could not start checkout.'); } finally { setBusy(null); }
+  }
+  async function portal() {
+    setBusy('portal'); setErr('');
+    try {
+      const r = await fetch('/api/billing/create-portal-session', { method: 'POST' });
+      const d = await r.json();
+      if (r.ok && d.url) { window.location.href = d.url; return; }
+      setErr(d.error || 'Could not open the billing portal.');
+    } catch { setErr('Could not open the billing portal.'); } finally { setBusy(null); }
+  }
+
   return (
     <PageContainer narrow>
       <PageHeader eyebrow="Account" title="Billing & plan" description="Your current plan, trial and invoices." />
-      <SettingsCard icon={CreditCard} title="Current plan"
-        action={<span className="rounded-full border border-[color-mix(in_srgb,var(--pl-green)_30%,var(--pl-border))] bg-[var(--pl-green-soft)] px-2.5 py-1 text-[11.5px] font-bold text-[var(--pl-green-dark)]">Early access</span>}
-      >
-        <div className="flex flex-col gap-3 rounded-2xl border border-[var(--pl-border)] bg-[var(--pl-surface-soft)] p-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="font-display text-[15px] font-bold">Free — Pixie Lab</p>
-            <p className="mt-0.5 text-[13px] text-[var(--pl-text-muted)]">All agents free to switch on during early access · 14 trial days left.</p>
+
+      {forbidden ? (
+        <SettingsCard icon={CreditCard} title="Billing">
+          <div className="rounded-2xl border border-[var(--pl-border)] bg-[var(--pl-surface-soft)] p-4 text-[13.5px] text-[var(--pl-text-muted)]">
+            You don&apos;t have permission to view billing. Ask a workspace admin for access.
           </div>
-          <button className="rounded-xl bg-gradient-to-r from-[#22C55E] to-[#0EA5A3] px-4 py-2.5 text-[13.5px] font-bold text-white transition hover:brightness-110" title="Upgrade coming soon">Upgrade plan</button>
-        </div>
-        {/* TODO: wire to billing provider when plans launch */}
-      </SettingsCard>
-      <SettingsCard icon={FileWarning} title="Billing history" subtitle="Invoices and receipts.">
-        <div className="rounded-2xl border border-dashed border-[var(--pl-border-strong)] bg-[var(--pl-surface-soft)] p-6 text-center text-[13.5px] text-[var(--pl-text-muted)]">No invoices yet — you&apos;re on the free early-access plan.</div>
-      </SettingsCard>
+        </SettingsCard>
+      ) : (
+        <>
+          <SettingsCard icon={CreditCard} title="Current plan"
+            action={data && <span className="rounded-full border border-[color-mix(in_srgb,var(--pl-green)_30%,var(--pl-border))] bg-[var(--pl-green-soft)] px-2.5 py-1 text-[11.5px] font-bold uppercase text-[var(--pl-green-dark)]">{data.state.status}</span>}
+          >
+            <div className="flex flex-col gap-3 rounded-2xl border border-[var(--pl-border)] bg-[var(--pl-surface-soft)] p-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="font-display text-[15px] font-bold capitalize">{loading ? 'Loading…' : `${data?.state.planKey ?? 'free'} plan`}</p>
+                <p className="mt-0.5 text-[13px] text-[var(--pl-text-muted)]">
+                  {data?.state.hasSubscription
+                    ? (data.state.cancelAtPeriodEnd ? 'Cancels at period end.' : 'Active subscription.')
+                    : `${data?.state.trialDaysLeft ?? 0} trial days left · all agents free during early access.`}
+                </p>
+              </div>
+              {data?.canManage && data.state.hasSubscription && (
+                <button onClick={portal} disabled={busy === 'portal'} className="inline-flex items-center justify-center gap-2 rounded-xl border border-[var(--pl-border)] bg-[var(--pl-surface)] px-4 py-2.5 text-[13.5px] font-semibold text-[var(--pl-text)] transition hover:border-[var(--pl-border-strong)] disabled:opacity-60">
+                  {busy === 'portal' ? <Loader2 size={15} className="animate-spin" /> : <CreditCard size={15} />} Manage billing
+                </button>
+              )}
+            </div>
+            {data && !data.stripeReady && <p className="mt-3 text-[12.5px] text-[var(--pl-text-muted)]">Billing isn&apos;t fully configured on the server yet (Stripe keys/prices). Checkout will activate once it is.</p>}
+            {!data?.canManage && !loading && <p className="mt-3 text-[12.5px] text-[var(--pl-text-muted)]">You can view billing but not manage it. Ask a workspace admin to change plans.</p>}
+            {err && <p className="mt-3 text-[13px] font-semibold text-[#ef4444]">{err}</p>}
+          </SettingsCard>
+
+          {data?.canManage && !data.state.hasSubscription && (
+            <SettingsCard icon={CreditCard} title="Upgrade" subtitle="Pick a plan to unlock more.">
+              <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))' }}>
+                {data.plans.map((p) => (
+                  <div key={p.key} className="flex flex-col rounded-2xl border border-[var(--pl-border)] bg-[var(--pl-surface-soft)] p-4">
+                    <p className="font-display text-[15px] font-extrabold">{p.name}</p>
+                    <p className="text-[13px] font-bold text-[var(--pl-green-dark)]">{p.price}</p>
+                    <p className="mt-1 text-[12.5px] text-[var(--pl-text-muted)]">{p.blurb}</p>
+                    <ul className="mt-2 flex-1 space-y-1">
+                      {p.features.map((f) => <li key={f} className="flex items-center gap-1.5 text-[12px] text-[var(--pl-text-soft)]"><Check size={12} className="text-[var(--pl-green)]" /> {f}</li>)}
+                    </ul>
+                    <button onClick={() => checkout(p.key)} disabled={!data.stripeReady || busy === p.key} className="mt-3 inline-flex items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-[#22C55E] to-[#0EA5A3] px-3 py-2 text-[13px] font-bold text-white transition hover:brightness-110 disabled:opacity-50" title={!data.stripeReady ? 'Billing not configured yet' : undefined}>
+                      {busy === p.key ? <Loader2 size={14} className="animate-spin" /> : null} Choose {p.name}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </SettingsCard>
+          )}
+
+          <SettingsCard icon={FileWarning} title="Billing history" subtitle="Invoices and receipts.">
+            <div className="rounded-2xl border border-dashed border-[var(--pl-border-strong)] bg-[var(--pl-surface-soft)] p-6 text-center text-[13.5px] text-[var(--pl-text-muted)]">
+              {data?.state.hasSubscription ? 'Open “Manage billing” to view invoices and receipts.' : 'No invoices yet.'}
+            </div>
+          </SettingsCard>
+        </>
+      )}
     </PageContainer>
   );
 }
