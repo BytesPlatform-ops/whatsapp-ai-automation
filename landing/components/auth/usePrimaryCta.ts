@@ -3,12 +3,19 @@
 import { useEffect, useState } from 'react';
 import { createClient, supabaseConfigured } from '@/lib/supabase/client';
 
-export type PrimaryCta = { label: string; href: string; authed: boolean };
+export type PrimaryCta = {
+  label: string;
+  href: string;
+  variant: 'lab' | 'join';
+  showArrow: boolean;
+  authed: boolean;
+};
 
 /**
  * Single source of truth for the landing page's primary Pixie CTA.
  *   signed in  → "Enter Pixie Lab" → /pixie-lab/for-you
- *   signed out → "Join Pixie"      → /join-pixie
+ *   signed out → "Join Pixie"      → /login  (NOT the waitlist — this is the
+ *                                             direct sign-in / auth entry point)
  * Reacts to auth state live and defaults to the signed-out CTA while resolving
  * (no flash for the common visitor). Use this everywhere on the landing page so
  * the label + route never diverge or duplicate.
@@ -29,6 +36,6 @@ export function usePrimaryCta(): PrimaryCta {
   }, []);
 
   return authed
-    ? { label: 'Enter Pixie Lab', href: '/pixie-lab/for-you', authed }
-    : { label: 'Join Pixie', href: '/join-pixie', authed };
+    ? { label: 'Enter Pixie Lab', href: '/pixie-lab/for-you', variant: 'lab', showArrow: true, authed }
+    : { label: 'Join Pixie', href: '/login', variant: 'join', showArrow: true, authed };
 }
