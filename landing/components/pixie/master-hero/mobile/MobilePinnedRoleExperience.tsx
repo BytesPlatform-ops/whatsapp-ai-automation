@@ -38,7 +38,8 @@ const SCENES: MobileRole[] = [INTRO_SCENE, ...MOBILE_ROLES];
 // Avatar entry direction per scene: intro arrives centre (0); roles then
 // strictly alternate left/right (greeter left … core right).
 const DIRS = [0, -1, 1, -1, 1, -1, 1];
-const EASE = [0.65, 0, 0.35, 1] as const;
+// Silky expo-out settle for the avatar cross-transition (premium, not springy).
+const EASE = [0.16, 1, 0.3, 1] as const;
 
 /**
  * MobilePinnedRoleExperience (<lg) — ONE pinned screen. The user scrolls but the
@@ -181,12 +182,17 @@ export function MobilePinnedRoleExperience({ reducedMotion }: { reducedMotion: b
   const avatarV: Variants = reducedMotion
     ? { enter: { opacity: 0 }, center: { opacity: 1 }, exit: { opacity: 0 } }
     : {
+        // Incoming avatar glides in from the alternating side and focuses in;
+        // outgoing softly defocuses out. Gentler travel + blur = VIP feel.
         enter: (d: number) =>
           d === 0
-            ? { y: 60, opacity: 0, scale: 0.84, rotate: 0 }
-            : { x: d * 120, opacity: 0, scale: 0.9, rotate: d * 6 },
-        center: { x: 0, y: 0, opacity: 1, scale: 1, rotate: 0 },
-        exit: (d: number) => (d === 0 ? { y: -40, opacity: 0, scale: 0.94 } : { x: -d * 120, opacity: 0, scale: 0.94 }),
+            ? { y: 54, opacity: 0, scale: 0.86, rotate: 0, filter: 'blur(10px)' }
+            : { x: d * 96, opacity: 0, scale: 0.92, rotate: d * 4, filter: 'blur(9px)' },
+        center: { x: 0, y: 0, opacity: 1, scale: 1, rotate: 0, filter: 'blur(0px)' },
+        exit: (d: number) =>
+          d === 0
+            ? { y: -36, opacity: 0, scale: 0.94, filter: 'blur(8px)' }
+            : { x: -d * 96, opacity: 0, scale: 0.94, rotate: -d * 3, filter: 'blur(8px)' },
       };
 
   const panelV: Variants = { hidden: {}, show: { transition: { staggerChildren: 0.06, delayChildren: 0.12 } } };
@@ -231,7 +237,7 @@ export function MobilePinnedRoleExperience({ reducedMotion }: { reducedMotion: b
                   initial="enter"
                   animate="center"
                   exit="exit"
-                  transition={{ duration: 0.72, ease: EASE }}
+                  transition={{ duration: 0.9, ease: EASE, opacity: { duration: 0.65, ease: 'easeInOut' } }}
                   className="absolute inset-0 m-auto h-full w-full select-none object-contain drop-shadow-[0_26px_50px_rgba(0,0,0,0.5)]"
                   draggable={false}
                 />
