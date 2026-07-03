@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { motion, AnimatePresence, type Variants } from 'framer-motion';
+import { ArrowRight } from 'lucide-react';
 import { hexToRgbString, getReadableButtonText, interpolateColor } from '../../mascot-role-hero/colorUtils';
 import { MOBILE_ROLES, type MobileRole } from './mobileContent';
 import { NORMAL_FORM, INTRO } from '../roleData';
@@ -249,15 +250,22 @@ export function MobilePinnedRoleExperience({ reducedMotion }: { reducedMotion: b
             </h2>
 
             {/* The intro (landing) scene shows the single auth-aware Pixie CTA
-                — "Enter Pixie Lab" when signed in, "Join Pixie" when not. The
-                role scenes keep their own service-page CTA. */}
+                — "Enter Pixie Lab →" when signed in, "Join Pixie →" when not
+                (→ /login, never the waitlist). The role scenes keep their own
+                service-page CTA. */}
             <motion.div className="m-cta-stack w-full" variants={itemV}>
-              <a
-                href={activeIndex === 0 ? primaryCta.href : role.href}
-                className="m-primary-cta"
-              >
-                {activeIndex === 0 ? primaryCta.label : role.primaryCta}
-              </a>
+              {activeIndex === 0 ? (
+                <a
+                  href={primaryCta.href}
+                  data-testid="mobile-primary-cta"
+                  className="m-primary-cta group"
+                >
+                  <span>{primaryCta.label}</span>
+                  {primaryCta.showArrow && <ArrowRight className="m-cta-arrow h-4 w-4" />}
+                </a>
+              ) : (
+                <a href={role.href} className="m-primary-cta">{role.primaryCta}</a>
+              )}
             </motion.div>
 
             <motion.ul className="m-chips flex-nowrap" variants={itemV}>
