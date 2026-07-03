@@ -298,14 +298,123 @@ export function WorkspaceSettingsView({ tenant }: { tenant: string }) {
           <Field label="Workspace ID" value={tenant} readOnly />
         </div>
       </SettingsCard>
-      <SettingsCard icon={Users} title="Members" subtitle="People with access to this workspace.">
-        <div className="rounded-2xl border border-[var(--pl-border)] bg-[var(--pl-surface-soft)] p-4 text-[13.5px] text-[var(--pl-text-muted)]">You&apos;re the only member. <span className="opacity-70">Inviting teammates is coming soon.</span></div>
-        {/* TODO: members list + invite flow */}
-      </SettingsCard>
-      <SettingsCard icon={Shield} title="Permissions" subtitle="Control what members can do.">
-        <div className="rounded-2xl border border-[var(--pl-border)] bg-[var(--pl-surface-soft)] p-4 text-[13.5px] text-[var(--pl-text-muted)]">Role-based permissions will appear here once team members are supported.</div>
+      <SettingsCard icon={Users} title="Team members" subtitle="People with access to this workspace and their roles.">
+        <MembersManager />
       </SettingsCard>
     </PageContainer>
+  );
+}
+
+interface Member { id: string; role: string; status: string; email: string | null; name: string | null; isSelf: boolean }
+interface Invite { id: string; email: string; role: string; expiresAt: string }
+interface MembersApi { me: { role: string; canInvite: boolean; canRemove: boolean; canUpdateRole: boolean }; members: Member[]; invitations: Invite[]; roles: string[] }
+
+function MembersManager() {
+  const [data, setData] = useState<MembersApi | null>(null);
+  const [forbidden, setForbidden] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [email, setEmail] = useState('');
+  const [role, setRole] = useState('member');
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<{ ok: boolean; msg: string } | null>(null);
+
+  async function load() {
+    try {
+      const r = await fetch('/api/workspace/members', { cache: 'no-store' });
+      if (r.status === 403) { setForbidden(true); return; }
+      if (r.ok) { const d = await r.json(); setData(d); if (d.roles?.[0]) setRole((prev) => prev || d.roles[0]); }
+    } catch { /* */ } finally { setLoading(false); }
+  }
+  useEffect(() => { load(); }, []);
+
+  async function invite(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true); setNote(null);
+    try {
+      const r = await fetch('/api/workspace/members', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, role }) });
+      const d = await r.json();
+      if (!r.ok) { setNote({ ok: false, msg: d.error || 'Could not send invite.' }); return; }
+      setNote({ ok: true, msg: d.emailed ? 'Invitation sent.' : 'Invitation created (email not configured).' });
+      setEmail('');
+      await load();
+    } catch { setNote({ ok: false, msg: 'Could not send invite.' }); } finally { setBusy(false); }
+  }
+
+  async function updateRole(memberId: string, newRole: string) {
+    setNote(null);
+    try {
+      const r = await fetch('/api/workspace/members', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ memberId, role: newRole }) });
+      if (!r.ok) { const d = await r.json(); setNote({ ok: false, msg: d.error || 'Could not update role.' }); }
+      await load();
+    } catch { setNote({ ok: false, msg: 'Could not update role.' }); }
+  }
+
+  async function remove(kind: 'member' | 'invite', id: string) {
+    setNote(null);
+    try {
+      const r = await fetch('/api/workspace/members', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ kind, id }) });
+      if (!r.ok) { const d = await r.json(); setNote({ ok: false, msg: d.error || 'Could not remove.' }); }
+      await load();
+    } catch { setNote({ ok: false, msg: 'Could not remove.' }); }
+  }
+
+  if (loading) return <div className="flex items-center gap-2 rounded-2xl border border-[var(--pl-border)] bg-[var(--pl-surface-soft)] p-4 text-[13.5px] text-[var(--pl-text-muted)]"><Loader2 size={15} className="animate-spin" /> Loading team…</div>;
+  if (forbidden || !data) return <div className="rounded-2xl border border-[var(--pl-border)] bg-[var(--pl-surface-soft)] p-4 text-[13.5px] text-[var(--pl-text-muted)]">You don&apos;t have permission to view team members. Ask a workspace admin.</div>;
+
+  const canOwnerEdit = data.me.canUpdateRole;
+  return (
+    <div className="space-y-4">
+      {data.me.canInvite && (
+        <form onSubmit={invite} className="flex flex-col gap-2 rounded-2xl border border-[var(--pl-border)] bg-[var(--pl-surface-soft)] p-3 sm:flex-row">
+          <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="teammate@company.com" className="flex-1 rounded-xl border border-[var(--pl-border)] bg-[var(--pl-surface)] px-3.5 py-2.5 text-[14px] text-[var(--pl-text)] outline-none focus:border-[var(--pl-green)]" />
+          <select value={role} onChange={(e) => setRole(e.target.value)} className="rounded-xl border border-[var(--pl-border)] bg-[var(--pl-surface)] px-3 py-2.5 text-[14px] capitalize text-[var(--pl-text)] outline-none">
+            {data.roles.map((r) => <option key={r} value={r}>{r}</option>)}
+          </select>
+          <button type="submit" disabled={busy} className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-[#22C55E] to-[#0EA5A3] px-4 py-2.5 text-[13.5px] font-bold text-white transition hover:brightness-110 disabled:opacity-60">{busy ? <Loader2 size={14} className="animate-spin" /> : null} Invite</button>
+        </form>
+      )}
+      {note && <p className={`text-[13px] font-semibold ${note.ok ? 'text-[var(--pl-green-dark)]' : 'text-[#ef4444]'}`}>{note.msg}</p>}
+
+      <div className="divide-y divide-[var(--pl-border)] rounded-2xl border border-[var(--pl-border)]">
+        {data.members.map((m) => (
+          <div key={m.id} className="flex items-center justify-between gap-3 p-3">
+            <div className="min-w-0">
+              <p className="truncate text-[14px] font-semibold text-[var(--pl-text)]">{m.name || m.email || 'Member'} {m.isSelf && <span className="text-[11px] font-normal text-[var(--pl-text-muted)]">(you)</span>}</p>
+              <p className="truncate text-[12.5px] text-[var(--pl-text-muted)]">{m.email}</p>
+            </div>
+            <div className="flex flex-none items-center gap-2">
+              {canOwnerEdit && m.role !== 'owner' && !m.isSelf ? (
+                <select value={m.role} onChange={(e) => updateRole(m.id, e.target.value)} className="rounded-lg border border-[var(--pl-border)] bg-[var(--pl-surface)] px-2 py-1 text-[12.5px] capitalize text-[var(--pl-text)]">
+                  {data.roles.map((r) => <option key={r} value={r}>{r}</option>)}
+                </select>
+              ) : (
+                <span className="rounded-full border border-[var(--pl-border)] bg-[var(--pl-surface-soft)] px-2.5 py-1 text-[11.5px] font-bold capitalize text-[var(--pl-text-muted)]">{m.role}</span>
+              )}
+              {data.me.canRemove && m.role !== 'owner' && !m.isSelf && (
+                <button onClick={() => remove('member', m.id)} className="rounded-lg border border-[var(--pl-border)] px-2 py-1 text-[12px] font-semibold text-[#ef4444] transition hover:bg-[color-mix(in_srgb,#ef4444_10%,transparent)]">Remove</button>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {data.invitations.length > 0 && (
+        <div>
+          <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-[var(--pl-text-muted)]">Pending invitations</p>
+          <div className="divide-y divide-[var(--pl-border)] rounded-2xl border border-[var(--pl-border)]">
+            {data.invitations.map((i) => (
+              <div key={i.id} className="flex items-center justify-between gap-3 p-3">
+                <div className="min-w-0">
+                  <p className="truncate text-[14px] font-semibold text-[var(--pl-text)]">{i.email}</p>
+                  <p className="text-[12.5px] capitalize text-[var(--pl-text-muted)]">{i.role} · invited</p>
+                </div>
+                {data.me.canInvite && <button onClick={() => remove('invite', i.id)} className="flex-none rounded-lg border border-[var(--pl-border)] px-2 py-1 text-[12px] font-semibold text-[var(--pl-text-muted)] transition hover:text-[var(--pl-text)]">Cancel</button>}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 
