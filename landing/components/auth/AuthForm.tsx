@@ -60,7 +60,7 @@ export function AuthForm({ mode }: { mode: Mode }) {
         router.refresh();
       }
     } catch (err: any) {
-      setError(err?.message || 'Something went wrong. Please try again.');
+      setError(await loginErrorMessage(err, mode, email));
     } finally {
       setBusy(false);
     }
@@ -155,6 +155,33 @@ export function AuthForm({ mode }: { mode: Mode }) {
       )}
     </motion.div>
   );
+}
+
+/**
+ * Turns a Supabase auth error into a human message. Supabase returns the same
+ * generic "Invalid login credentials" for both a wrong password and an email
+ * that has no account, so on that specific error we ask the server whether the
+ * account exists and tailor the message accordingly.
+ */
+async function loginErrorMessage(err: any, mode: Mode, email: string): Promise<string> {
+  const raw = String(err?.message || '');
+  if (mode === 'login' && /invalid login credentials/i.test(raw)) {
+    try {
+      const res = await fetch('/api/auth/login-precheck', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      });
+      const data = (await res.json()) as { exists?: boolean };
+      if (data?.exists === false) {
+        return 'No account exists for this email. Create one to get started.';
+      }
+      return 'Incorrect password. Please try again or reset your password.';
+    } catch {
+      return 'Incorrect email or password. Please try again.';
+    }
+  }
+  return raw || 'Something went wrong. Please try again.';
 }
 
 function Field({ icon, children }: { icon: React.ReactNode; children: React.ReactNode }) {

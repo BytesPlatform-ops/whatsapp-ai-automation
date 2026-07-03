@@ -37,9 +37,18 @@ export function ForgotPasswordForm() {
   if (sent) {
     return (
       <div className="space-y-4">
-        <div className="flex items-start gap-2.5 rounded-xl border border-[#25D366]/25 bg-[#25D366]/[0.07] px-4 py-3 text-[13.5px] text-[#bff3d0]">
-          <CheckCircle2 size={16} className="mt-0.5 flex-none text-[#7ef0a8]" />
-          If an account exists for <b className="font-semibold text-white">{email}</b>, we’ve sent a link to reset your password. It expires in an hour.
+        <div className="rounded-xl border border-[#25D366]/25 bg-[#25D366]/[0.07] px-4 py-4">
+          <div className="flex items-center gap-2.5">
+            <CheckCircle2 size={18} className="flex-none text-[#7ef0a8]" />
+            <p className="text-[15px] font-semibold text-white">Check your inbox</p>
+          </div>
+          <p className="mt-2 text-[13.5px] leading-relaxed text-[#bff3d0]">
+            If an account exists for this email, we’ve sent a link to reset your password.
+          </p>
+          <p className="mt-2 break-all rounded-lg bg-black/20 px-3 py-2 text-[13px] font-medium text-white/90">
+            {email}
+          </p>
+          <p className="mt-2 text-[12.5px] text-[#bff3d0]/70">The link expires in an hour.</p>
         </div>
         <a href="/login" className="inline-flex w-full items-center justify-center rounded-xl border border-white/12 bg-white/[0.04] py-3 text-[15px] font-semibold text-white/85 transition hover:bg-white/[0.07]">Back to sign in</a>
       </div>
