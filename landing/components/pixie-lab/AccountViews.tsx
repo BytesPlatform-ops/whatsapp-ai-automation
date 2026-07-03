@@ -9,6 +9,7 @@ import {
 import { createClient, supabaseConfigured } from '@/lib/supabase/client';
 import { useTheme } from './theme/ThemeProvider';
 import { PageContainer, PageHeader, SettingsCard, Field } from './PageKit';
+import { TwoFactorSetup } from './TwoFactorSetup';
 
 /* ── Account Settings ─────────────────────────────────────────────────────── */
 export function SettingsView({ name, email, tenant }: { name: string; email: string; tenant: string }) {
@@ -67,12 +68,8 @@ export function SecurityView() {
       <SettingsCard icon={KeyRound} title="Change password" subtitle="Update the password you use to sign in.">
         <ChangePassword />
       </SettingsCard>
-      <SettingsCard icon={ShieldCheck} title="Two-factor authentication" subtitle="Add an extra layer of protection.">
-        <div className="flex flex-col gap-3 rounded-2xl border border-[var(--pl-border)] bg-[var(--pl-surface-soft)] p-4 sm:flex-row sm:items-center sm:justify-between">
-          <p className="text-[13.5px] text-[var(--pl-text-soft)]">2FA is not enabled on your account yet.</p>
-          <button disabled className="rounded-xl border border-[var(--pl-border)] bg-[var(--pl-surface)] px-4 py-2.5 text-[13px] font-semibold text-[var(--pl-text-muted)]" title="Coming soon">Enable 2FA (soon)</button>
-        </div>
-        {/* TODO: wire 2FA when auth supports it */}
+      <SettingsCard icon={ShieldCheck} title="Two-factor authentication" subtitle="Add an extra layer of protection with an authenticator app.">
+        <TwoFactorSetup />
       </SettingsCard>
       <SettingsCard icon={Monitor} title="Active sessions" subtitle="Devices currently signed in.">
         <div className="rounded-2xl border border-[var(--pl-border)] bg-[var(--pl-surface-soft)] p-4 text-[13.5px] text-[var(--pl-text-muted)]">
@@ -93,6 +90,7 @@ function ChangePassword() {
     e.preventDefault();
     setStatus(null);
     if (pw.length < 8) return setStatus({ ok: false, msg: 'Use at least 8 characters.' });
+    if (!/[a-zA-Z]/.test(pw) || !/[0-9]/.test(pw)) return setStatus({ ok: false, msg: 'Use at least one letter and one number.' });
     if (pw !== confirm) return setStatus({ ok: false, msg: 'Passwords do not match.' });
     if (!supabaseConfigured()) return setStatus({ ok: false, msg: 'Sign-in is not configured in this environment.' });
     setBusy(true);
