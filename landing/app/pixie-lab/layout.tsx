@@ -18,10 +18,11 @@ export default async function PixieLabLayout({ children }: { children: React.Rea
     } catch {
       user = null;
     }
-    // Returning users who haven't completed Quick Setup go there first. (When
-    // Supabase isn't configured — local/demo — we skip the gate so the Lab is
-    // still browsable.)
-    if (user && (user.user_metadata as Record<string, unknown> | undefined)?.onboarded !== true) {
+    // Send users to Quick Setup only when they explicitly started the email
+    // signup flow (which sets onboarded:false). OAuth/social sign-ins (Google)
+    // have no onboarded flag → they go straight to the dashboard. (Supabase not
+    // configured — local/demo — skips the gate so the Lab stays browsable.)
+    if (user && (user.user_metadata as Record<string, unknown> | undefined)?.onboarded === false) {
       redirect('/quick-setup');
     }
   }
