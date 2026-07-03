@@ -2,7 +2,6 @@
 
 import { useEffect, useRef } from 'react';
 import { ArrowRight } from 'lucide-react';
-import { JoinPixie } from '@/pixie/JoinPixie';
 import { usePrimaryCta } from '@/components/auth/usePrimaryCta';
 
 const LINKS = [
@@ -62,22 +61,18 @@ export function MobileMenuOverlay({ open, onClose }: { open: boolean; onClose: (
         ))}
       </nav>
       <div className="m-menu-cta-wrap">
-        {/* One auth-aware CTA — the same source of truth as the hero. Signed in
-            → "Enter Pixie Lab"; signed out → the shimmer "Join Pixie" onboarding
-            button plus a quiet "Log in" for returning users. */}
-        {primaryCta.authed ? (
-          <a href={primaryCta.href} onClick={onClose} className="m-primary-cta w-full">
-            {primaryCta.label}
-            <ArrowRight size={17} className="ml-1.5" />
-          </a>
-        ) : (
-          <>
-            <JoinPixie label="Join Pixie" size="lg" className="w-full" />
-            <a href="/login" onClick={onClose} className="mt-3 block text-center text-sm font-medium text-white/55">
-              Already have an account? <span className="text-white/80">Log in</span>
-            </a>
-          </>
-        )}
+        {/* One auth-aware CTA — the exact same source of truth as the hero.
+            Signed in → "Enter Pixie Lab" → /pixie-lab/for-you; signed out →
+            "Join Pixie" → /login (NO waitlist). */}
+        <a
+          href={primaryCta.href}
+          onClick={onClose}
+          data-testid="mobile-menu-primary-cta"
+          className="m-primary-cta group w-full"
+        >
+          <span>{primaryCta.label}</span>
+          {primaryCta.showArrow && <ArrowRight className="m-cta-arrow h-4 w-4" />}
+        </a>
       </div>
     </div>
   );
