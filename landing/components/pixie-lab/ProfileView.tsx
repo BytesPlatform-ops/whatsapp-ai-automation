@@ -9,10 +9,9 @@ import {
 import { createClient, supabaseConfigured } from '@/lib/supabase/client';
 
 /**
- * ProfileView — the in-Lab account/settings surface. Sections are anchored to
- * match the ProfileMenu links (#account, #password, #billing, #workspace,
- * #notifications, #help). Change-password is wired to Supabase when configured;
- * other surfaces are clean UI with TODOs where a backend isn't wired yet.
+ * ProfileView — the in-Lab account overview. Account name/details persist via
+ * /api/profile; change-password uses Supabase; billing / workspace / notifications
+ * link out to their dedicated (fully wired) pages.
  */
 export function ProfileView({ name, email, tenant, role }: { name: string; email: string; tenant: string; role: string }) {
   const initial = (name || 'P').charAt(0).toUpperCase();
@@ -45,15 +44,9 @@ export function ProfileView({ name, email, tenant, role }: { name: string; email
 
       <Section id="billing" icon={CreditCard} title="Billing / Plan" subtitle="Your current plan and usage.">
         <div className="flex flex-col gap-3 rounded-2xl border border-[var(--pl-border)] bg-[var(--pl-surface-soft)] p-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="font-display text-[15px] font-bold">Free — Pixie Lab</p>
-            <p className="mt-0.5 text-[13px] text-[var(--pl-text-muted)]">All agents free to switch on while in early access.</p>
-          </div>
-          <button className="inline-flex items-center justify-center rounded-xl border border-[var(--pl-border)] bg-[var(--pl-surface)] px-4 py-2.5 text-[13.5px] font-semibold text-[var(--pl-text-muted)]" disabled title="Billing coming soon">
-            Manage plan (soon)
-          </button>
+          <p className="text-[13.5px] text-[var(--pl-text-soft)]">Manage your plan, invoices and payment method on the billing page.</p>
+          <a href="/pixie-lab/billing" className="inline-flex items-center justify-center rounded-xl bg-gradient-to-r from-[#22C55E] to-[#0EA5A3] px-4 py-2.5 text-[13.5px] font-bold text-white transition hover:brightness-110">Open billing</a>
         </div>
-        {/* TODO: wire to billing provider when plans launch. */}
       </Section>
 
       <Section id="workspace" icon={Building2} title="Workspace settings" subtitle="Your connected workspace.">
@@ -61,10 +54,14 @@ export function ProfileView({ name, email, tenant, role }: { name: string; email
           <Field label="Workspace" defaultValue={tenant} />
           <Field label="Role" defaultValue={role} />
         </div>
+        <a href="/pixie-lab/workspace-settings" className="mt-3 inline-flex items-center gap-1.5 text-[13px] font-semibold text-[var(--pl-green-dark)]">Manage team &amp; permissions →</a>
       </Section>
 
       <Section id="notifications" icon={Bell} title="Notifications" subtitle="Choose what Pixie emails you about.">
-        <Toggles />
+        <div className="flex flex-col gap-3 rounded-2xl border border-[var(--pl-border)] bg-[var(--pl-surface-soft)] p-4 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-[13.5px] text-[var(--pl-text-soft)]">Set which emails Pixie sends you.</p>
+          <a href="/pixie-lab/notifications" className="inline-flex items-center justify-center rounded-xl border border-[var(--pl-border)] bg-[var(--pl-surface)] px-4 py-2.5 text-[13.5px] font-semibold text-[var(--pl-text)] transition hover:border-[var(--pl-border-strong)]">Manage notifications</a>
+        </div>
       </Section>
 
       <Section id="help" icon={LifeBuoy} title="Help &amp; support" subtitle="We're here if you need a hand.">
@@ -245,36 +242,3 @@ function ChangePassword() {
   );
 }
 
-const PREFS = [
-  { key: 'leads', label: 'New leads & messages', desc: 'When a customer reaches out or a lead comes in.' },
-  { key: 'approvals', label: 'Approvals waiting', desc: 'When Pixie needs your sign-off on something.' },
-  { key: 'weekly', label: 'Weekly summary', desc: 'A digest of what Pixie did for your business.' },
-  { key: 'product', label: 'Product updates', desc: 'New agents and features as they launch.' },
-];
-
-function Toggles() {
-  // Local-only for now. TODO: persist to user preferences when the API exists.
-  const [on, setOn] = useState<Record<string, boolean>>({ leads: true, approvals: true, weekly: true, product: false });
-  return (
-    <div className="divide-y divide-[var(--pl-border)]">
-      {PREFS.map((p) => (
-        <div key={p.key} className="flex items-center justify-between gap-4 py-3 first:pt-0 last:pb-0">
-          <div>
-            <p className="text-[14px] font-semibold text-[var(--pl-text)]">{p.label}</p>
-            <p className="text-[12.5px] text-[var(--pl-text-muted)]">{p.desc}</p>
-          </div>
-          <button
-            type="button"
-            role="switch"
-            aria-checked={on[p.key]}
-            onClick={() => setOn((s) => ({ ...s, [p.key]: !s[p.key] }))}
-            className="relative h-6 w-11 flex-none rounded-full transition-colors"
-            style={{ background: on[p.key] ? 'var(--pl-green)' : 'var(--pl-border-strong)' }}
-          >
-            <span className="absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-[left]" style={{ left: on[p.key] ? '22px' : '2px' }} />
-          </button>
-        </div>
-      ))}
-    </div>
-  );
-}

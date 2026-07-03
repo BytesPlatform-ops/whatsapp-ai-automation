@@ -19,12 +19,13 @@ export function SettingsView({ name, email, tenant }: { name: string; email: str
     <PageContainer narrow>
       <PageHeader eyebrow="Account" title="Settings" description="Manage your general account and workspace preferences." />
 
-      <SettingsCard icon={Settings} title="General" subtitle="Your basic profile details.">
+      <SettingsCard icon={Settings} title="General" subtitle="Your basic profile details."
+        action={<Link href="/pixie-lab/profile" className="rounded-xl border border-[var(--pl-border)] bg-[var(--pl-surface-soft)] px-3.5 py-2 text-[13px] font-semibold text-[var(--pl-text-soft)] transition hover:text-[var(--pl-text)]">Edit profile</Link>}
+      >
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Full name" value={name} />
-          <Field label="Email" value={email} type="email" hint="Contact support to change your sign-in email." />
+          <Field label="Full name" value={name} readOnly />
+          <Field label="Email" value={email} type="email" readOnly hint="Edit your name on the Profile page." />
         </div>
-        {/* TODO: persist via supabase.auth.updateUser({ data: { name } }) */}
       </SettingsCard>
 
       <SettingsCard icon={Sun} title="Theme preference" subtitle="Choose how Pixie Lab looks. Saved automatically.">
