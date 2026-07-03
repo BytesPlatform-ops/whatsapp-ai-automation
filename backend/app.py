@@ -23,6 +23,12 @@ from runtime.router import router as mode_router
 from omni import router as omni_router
 from orchestrator import Orchestrator
 from receptionist.api import router as receptionist_router
+from receptionist.agent_api import agent_router as ai_receptionist_router
+from receptionist.agent_api import integrations_router
+from integrations.oauth_routes import router as google_oauth_router
+from meta.oauth_routes import router as meta_connect_router
+from meta.routes import agent_router as meta_agent_router
+from meta.routes import meta_data_router
 from receptionist.campaigns.api import router as campaigns_router
 from receptionist.onboarding.api import router as onboarding_router
 from content_creator.router import router as content_creator_router
@@ -31,6 +37,12 @@ from seo.router import router as seo_router
 
 app = FastAPI(title="Pixie Backend", version="0.2.0")
 app.include_router(receptionist_router)
+app.include_router(ai_receptionist_router)  # /api/agents/ai-receptionist — real OpenAI + approval slice
+app.include_router(integrations_router)  # /api/integrations/status — capability readiness
+app.include_router(google_oauth_router)  # /api/integrations/google/* — real Gmail/Calendar OAuth connect
+app.include_router(meta_connect_router)  # /api/meta/connect|assets|status — Meta OAuth + asset discovery
+app.include_router(meta_agent_router)  # /api/agents/marketing/meta/* — Meta Marketing Agent
+app.include_router(meta_data_router)  # /api/meta/analytics|ads|webhooks — Meta insights (read-only)
 app.include_router(onboarding_router)
 app.include_router(campaigns_router)
 app.include_router(seo_router)

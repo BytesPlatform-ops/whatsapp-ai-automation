@@ -31,3 +31,6 @@ scripts/flows/.keys/
 
 # local test artifact (form screenshot)
 form.jpeg
+
+# Pixie backend — OAuth token store (contains Google tokens)
+backend/.integrations_store.json

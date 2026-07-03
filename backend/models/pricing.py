@@ -17,6 +17,11 @@ PRICING: dict[str, tuple[float, float]] = {
     "gpt-5.4-nano": (0.05 / 1000, 0.40 / 1000),
     "gpt-5.4-mini": (0.25 / 1000, 2.00 / 1000),
     "gpt-5.4": (1.25 / 1000, 10.00 / 1000),
+    # OpenAI production models (USD per 1M ÷ 1000 = per 1K). The real AI brain.
+    "gpt-4o-mini": (0.15 / 1000, 0.60 / 1000),
+    "gpt-4.1-mini": (0.40 / 1000, 1.60 / 1000),
+    "gpt-4o": (2.50 / 1000, 10.00 / 1000),
+    "text-embedding-3-small": (0.02 / 1000, 0.0),
 }
 
 

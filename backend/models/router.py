@@ -19,6 +19,22 @@ from .pricing import cost_for
 
 logger = logging.getLogger("pixie.models")
 
+# Real OpenAI model id (used for every tier in openai mode — receptionist replies
+# are short, so one cheap model is plenty; override with OPENAI_MODEL).
+_DEFAULT_OPENAI_MODEL = "gpt-4o-mini"
+_OPENAI_EMBED_MODEL = "text-embedding-3-small"
+
+
+def _resolve_mode(raw: str | None) -> str:
+    """Map the spec's PIXIE_LLM_PROVIDER vocabulary onto the internal modes.
+
+    Precedence: explicit arg → PIXIE_LLM_PROVIDER → PIXIE_MODEL_MODE → 'fake'.
+    'mock' is an alias for the built-in FakeProvider.
+    """
+    mode = (raw or os.getenv("PIXIE_LLM_PROVIDER") or os.getenv("PIXIE_MODEL_MODE") or "fake")
+    mode = mode.strip().lower()
+    return "fake" if mode == "mock" else mode
+
 # Concrete model id per tier, per mode.
 _MODEL_BY_TIER: dict[str, dict[ModelTier, str]] = {
     "fake": {
@@ -38,16 +54,23 @@ _MODEL_BY_TIER: dict[str, dict[ModelTier, str]] = {
 
 class ModelRouter:
     def __init__(self, mode: str | None = None) -> None:
-        self.mode = mode or os.getenv("PIXIE_MODEL_MODE", "fake")
+        self.mode = _resolve_mode(mode)
         self._provider: Provider = self._make_provider(self.mode)
 
     def _make_provider(self, mode: str) -> Provider:
         if mode == "fake":
             return FakeProvider()
-        # if mode == "openai":  return OpenAIProvider()   # wired in step 5
-        raise ValueError(f"Unknown PIXIE_MODEL_MODE={mode!r} (have: fake)")
+        if mode == "openai":
+            from .openai import OpenAIProvider  # local import: no key needed for fake mode
+
+            return OpenAIProvider()
+        raise ValueError(f"Unknown LLM provider mode={mode!r} (have: fake, mock, openai)")
 
     def model_for(self, tier: ModelTier) -> str:
+        if self.mode == "openai":
+            if tier is ModelTier.EMBED:
+                return os.getenv("OPENAI_EMBED_MODEL", _OPENAI_EMBED_MODEL)
+            return os.getenv("OPENAI_MODEL", _DEFAULT_OPENAI_MODEL)
         table = _MODEL_BY_TIER.get(self.mode, _MODEL_BY_TIER["fake"])
         return table[tier]
 

@@ -3,6 +3,9 @@ fastapi>=0.115,<1.0
 uvicorn[standard]>=0.30,<1.0
 pydantic>=2.7,<3.0
 
+# Real AI brain — OpenAI provider (models/openai.py). Server-side only.
+openai>=1.40,<3.0
+
 # dev / test
 httpx>=0.27,<1.0
 pytest>=8.0,<9.0

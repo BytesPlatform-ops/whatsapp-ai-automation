@@ -69,10 +69,24 @@ _store: Optional[_Store] = None
 # in test mode (it consults runtime.real_execution_allowed()).
 _executor: Optional[Callable[["ApprovalItem"], dict]] = None
 
+# Per-agent executors. When an item's `agent` matches a registered key its
+# executor runs; otherwise we fall back to the single global `_executor` above.
+# This lets multiple services (Omni, AI Receptionist) each own their execution
+# path without clobbering one another (the hook used to be a single global).
+_executors_by_agent: dict[str, Callable[["ApprovalItem"], dict]] = {}
+
 
 def register_executor(fn: Callable[["ApprovalItem"], dict]) -> None:
     global _executor
     _executor = fn
+
+
+def register_executor_for(agent: str, fn: Callable[["ApprovalItem"], dict]) -> None:
+    _executors_by_agent[agent] = fn
+
+
+def _executor_for(item: "ApprovalItem") -> Optional[Callable[["ApprovalItem"], dict]]:
+    return _executors_by_agent.get(item.agent, _executor)
 
 
 def get_approvals_store() -> _Store:
@@ -119,9 +133,10 @@ def _resolve(approval_id: str, body: ResolveBody, status: str, event: str) -> Ap
     # On approval, run the registered executor (if any) FIRST — it stays
     # mock/preview in test mode — then log the resolve event last so the
     # "completed" event remains the newest entry in the activity feed.
-    if status == "executed" and _executor is not None:
+    executor = _executor_for(item)
+    if status == "executed" and executor is not None:
         try:
-            item.execution_result = _executor(item)
+            item.execution_result = executor(item)
         except Exception as exc:  # never let an executor error 500 the approve call
             item.execution_result = {"ok": False, "error": str(exc)}
         log_activity(
