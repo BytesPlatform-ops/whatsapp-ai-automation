@@ -11,7 +11,7 @@ import { NavAuth } from '@/components/auth/NavAuth';
  */
 export function HomeAuthCorner() {
   return (
-    <div className="fixed right-3 top-3 z-[80] flex items-center gap-1.5 rounded-full border border-white/10 bg-[#02070a]/55 px-2.5 py-1.5 shadow-lg shadow-black/30 backdrop-blur-md sm:right-6 sm:top-5">
+    <div className="fixed right-6 top-5 z-[80] hidden items-center gap-1.5 rounded-full border border-white/10 bg-[#02070a]/55 px-2.5 py-1.5 shadow-lg shadow-black/30 backdrop-blur-md lg:flex">
       <NavAuth variant="desktop" themed />
     </div>
   );

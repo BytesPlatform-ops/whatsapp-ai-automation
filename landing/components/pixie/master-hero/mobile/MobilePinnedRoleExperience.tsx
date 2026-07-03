@@ -12,6 +12,7 @@ import { MobileTopBar } from './MobileTopBar';
 import { MobileMenuOverlay } from './MobileMenuOverlay';
 import { MobileProgressRail } from './MobileProgressRail';
 import { PixieFooter } from '@/components/sections/PixieFooter';
+import { usePrimaryCta } from '@/components/auth/usePrimaryCta';
 
 // First/main mobile screen — mirrors the desktop intro: the NORMAL Pixie avatar
 // + the headline hero. After it, the role-changing flow begins (greeter → …).
@@ -59,6 +60,9 @@ export function MobilePinnedRoleExperience({ reducedMotion }: { reducedMotion: b
   const [scrolled, setScrolled] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [railVisible, setRailVisible] = useState(true);
+
+  // Single source of truth for the landing CTA (Enter Pixie Lab / Join Pixie).
+  const primaryCta = usePrimaryCta();
 
   // ── Theme (mirrored to :root so the top bar / menu / rail inherit it) ────
   const proxy = useRef({ p: 0 });
@@ -205,7 +209,7 @@ export function MobilePinnedRoleExperience({ reducedMotion }: { reducedMotion: b
         <div aria-hidden className="m-scene-grad" />
 
         {/* pt clears the fixed top bar (60px) + the top progress indicators. */}
-        <div className="relative z-10 mx-auto flex h-[100svh] w-full max-w-md flex-col items-center px-6 pb-[max(env(safe-area-inset-bottom),22px)] pt-[104px] text-center">
+        <div className="relative z-10 mx-auto flex h-[100svh] w-full max-w-md flex-col items-center px-6 pb-[max(env(safe-area-inset-bottom),22px)] pt-[calc(104px+env(safe-area-inset-top))] text-center">
           {/* Badge */}
           <motion.div key={`b-${activeIndex}`} className="flex shrink-0 justify-center pt-1" variants={panelV} initial="hidden" animate="show">
             <motion.span className="m-badge" variants={itemV}>{role.badge}</motion.span>
@@ -244,9 +248,16 @@ export function MobilePinnedRoleExperience({ reducedMotion }: { reducedMotion: b
               ))}
             </h2>
 
-            {/* Products are live — each scene routes to its service page. */}
+            {/* The intro (landing) scene shows the single auth-aware Pixie CTA
+                — "Enter Pixie Lab" when signed in, "Join Pixie" when not. The
+                role scenes keep their own service-page CTA. */}
             <motion.div className="m-cta-stack w-full" variants={itemV}>
-              <a href={role.href} className="m-primary-cta">{role.primaryCta}</a>
+              <a
+                href={activeIndex === 0 ? primaryCta.href : role.href}
+                className="m-primary-cta"
+              >
+                {activeIndex === 0 ? primaryCta.label : role.primaryCta}
+              </a>
             </motion.div>
 
             <motion.ul className="m-chips flex-nowrap" variants={itemV}>
