@@ -13,7 +13,7 @@ export function BrandAvatar({ size = 44 }: { size?: number }) {
   const [ok, setOk] = useState(true);
   return (
     <span
-      className="relative grid flex-none place-items-center overflow-hidden rounded-2xl bg-gradient-to-br from-[#22C55E] to-[#0EA5A3] shadow-[0_10px_30px_-8px_rgba(34,197,94,0.65)] ring-1 ring-white/25"
+      className="relative grid flex-none place-items-center"
       style={{ height: size, width: size }}
     >
       {ok ? (
@@ -22,12 +22,12 @@ export function BrandAvatar({ size = 44 }: { size?: number }) {
           alt="Pixie"
           width={size}
           height={size}
-          className="h-full w-full object-contain p-[3px] drop-shadow"
+          className="h-full w-full object-contain drop-shadow-[0_4px_16px_rgba(34,197,94,0.35)]"
           onError={() => setOk(false)}
           priority
         />
       ) : (
-        <Sparkles size={Math.round(size * 0.42)} strokeWidth={2.5} className="text-white" />
+        <Sparkles size={Math.round(size * 0.6)} strokeWidth={2.5} className="text-[#25D366]" />
       )}
     </span>
   );
