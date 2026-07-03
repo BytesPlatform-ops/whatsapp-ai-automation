@@ -1,73 +1,79 @@
 import { NextResponse } from 'next/server';
+import { prisma } from '@/lib/prisma';
+import { getCurrentMembership, can } from '@/lib/workspace';
+import type { Permission } from '@/lib/permissions';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 /**
- * Entitlements proxy — same-origin bridge to the Python entitlements service.
- *   GET  ?tenant_id=            → all agents' states
- *   POST { action: 'start_trial' | 'checkout', tenant_id, agent }
- * Degrades to backendUp:false when the engine is down (UI falls back to mock).
+ * Service entitlements — workspace-scoped, backed by the workspace_services table
+ * (Prisma). The workspace is resolved SERVER-SIDE from the session (never a
+ * client-supplied tenant), so one account can never see or change another's
+ * services. A missing row = locked, so a fresh workspace starts clean. Replaces
+ * the old external-service proxy + global mock that leaked state across users.
+ *
+ *   GET                                   → this workspace's 5 service states
+ *   POST { action:'activate'|'start_trial'|'checkout', agent }
+ * Activating/trialing requires the caller to have `<service>.manage` permission.
  */
 
-const BACKEND = process.env.PIXIE_BACKEND_URL || 'http://localhost:8000';
+const SERVICES = ['website', 'receptionist', 'seo', 'marketing', 'content'] as const;
+type Service = (typeof SERVICES)[number];
 
-async function withTimeout<T>(fn: (signal: AbortSignal) => Promise<T>, ms = 2500): Promise<T> {
-  const c = new AbortController();
-  const t = setTimeout(() => c.abort(), ms);
-  try {
-    return await fn(c.signal);
-  } finally {
-    clearTimeout(t);
-  }
+function lockedAll() {
+  return SERVICES.map((agent) => ({ agent, state: 'locked' as const, trial_ends_at: null }));
 }
 
-export async function GET(req: Request) {
-  const tenant = new URL(req.url).searchParams.get('tenant_id') || 'demo';
-  try {
-    return await withTimeout(async (signal) => {
-      const res = await fetch(`${BACKEND}/api/entitlements?tenant_id=${encodeURIComponent(tenant)}`, {
-        signal,
-        cache: 'no-store',
-        headers: { Accept: 'application/json' },
-      });
-      if (!res.ok) return NextResponse.json({ backendUp: false }, { status: 200 });
-      return NextResponse.json({ backendUp: true, entitlements: await res.json() }, { headers: { 'Cache-Control': 'no-store' } });
-    });
-  } catch {
-    return NextResponse.json({ backendUp: false }, { status: 200 });
-  }
+export async function GET() {
+  const ctx = await getCurrentMembership();
+  if (!ctx) return NextResponse.json({ backendUp: true, entitlements: lockedAll() });
+
+  const rows = await prisma.workspaceService.findMany({ where: { workspaceId: ctx.membership.workspaceId } });
+  const byKey = new Map(rows.map((r) => [r.serviceKey, r]));
+  const entitlements = SERVICES.map((agent) => {
+    const r = byKey.get(agent);
+    return { agent, state: r?.status ?? 'locked', trial_ends_at: r?.trialEndsAt?.toISOString() ?? null };
+  });
+  return NextResponse.json({ backendUp: true, entitlements }, { headers: { 'Cache-Control': 'no-store' } });
 }
 
 export async function POST(req: Request) {
-  const body = (await req.json().catch(() => ({}))) as Record<string, string>;
-  const { action, tenant_id = 'demo', agent } = body;
-  if (!agent) return NextResponse.json({ ok: false, error: 'agent required' }, { status: 400 });
+  const ctx = await getCurrentMembership();
+  if (!ctx) return NextResponse.json({ ok: false, error: 'Not signed in' }, { status: 401 });
 
-  const path =
-    action === 'checkout' ? '/api/entitlements/create-checkout'
-    : action === 'activate' ? '/api/entitlements/activate'
-    : '/api/entitlements/start-trial';
-  // start-trial passes deterministic ISO timestamps from the client (backend avoids time.*).
-  const now = new Date();
-  const ends = new Date(now.getTime() + 7 * 86_400_000);
-  const payload =
-    action === 'checkout' ? { tenant_id, agent }
-    : action === 'activate' ? { tenant_id, agent, source: 'signup_flow' }
-    : { tenant_id, agent, now: now.toISOString(), ends: ends.toISOString() };
+  const body = (await req.json().catch(() => ({}))) as { action?: string; agent?: string };
+  const agent = body.agent as Service;
+  if (!SERVICES.includes(agent)) return NextResponse.json({ ok: false, error: 'unknown service' }, { status: 400 });
 
-  try {
-    return await withTimeout(async (signal) => {
-      const res = await fetch(`${BACKEND}${path}`, {
-        method: 'POST',
-        signal,
-        cache: 'no-store',
-        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      return NextResponse.json(await res.json(), { status: res.ok ? 200 : res.status });
-    });
-  } catch {
-    return NextResponse.json({ ok: false, backendUp: false }, { status: 200 });
+  // Managing a service (activate / start trial) requires the manage permission.
+  if (!can(ctx.membership, `${agent}.manage` as Permission)) {
+    return NextResponse.json({ ok: false, error: 'You do not have permission to manage this service.' }, { status: 403 });
   }
+
+  const workspaceId = ctx.membership.workspaceId;
+
+  if (body.action === 'checkout') {
+    // Paid unlock flows go through billing (in-shell), never a global backend.
+    return NextResponse.json({ ok: true, checkout_url: `/pixie-lab/billing?plan=${agent}` });
+  }
+
+  if (body.action === 'start_trial') {
+    const now = new Date();
+    const ends = new Date(now.getTime() + 7 * 86_400_000);
+    await prisma.workspaceService.upsert({
+      where: { workspaceId_serviceKey: { workspaceId, serviceKey: agent } },
+      create: { workspaceId, serviceKey: agent, status: 'trial', trialStartedAt: now, trialEndsAt: ends, activatedBy: ctx.user.id },
+      update: { status: 'trial', trialStartedAt: now, trialEndsAt: ends, activatedBy: ctx.user.id },
+    });
+    return NextResponse.json({ ok: true, state: 'trial' });
+  }
+
+  // default: activate
+  await prisma.workspaceService.upsert({
+    where: { workspaceId_serviceKey: { workspaceId, serviceKey: agent } },
+    create: { workspaceId, serviceKey: agent, status: 'active', activatedBy: ctx.user.id },
+    update: { status: 'active', activatedBy: ctx.user.id },
+  });
+  return NextResponse.json({ ok: true, state: 'active' });
 }

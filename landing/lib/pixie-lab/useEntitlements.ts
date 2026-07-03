@@ -1,16 +1,22 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { MOCK_ENTITLEMENTS, type AgentEntitlement, type AgentState, type FeedAgent } from './feed';
+import { type AgentEntitlement, type AgentState, type FeedAgent } from './feed';
 
 /**
- * useEntitlements — shared client hook for live agent access state. Fetches the
- * entitlements engine via the same-origin proxy and falls back to MOCK_ENTITLEMENTS
- * when the backend is down, so the Lab still renders. Exposes startTrial() which
- * hits the engine and refreshes.
+ * useEntitlements — client hook for the CURRENT workspace's service access state.
+ * The server (/api/lab/entitlements) resolves the workspace from the session and
+ * returns only that workspace's services, so state can never leak across
+ * accounts. There is NO global mock fallback: until the fetch resolves (and if it
+ * fails), everything is locked — a fresh workspace inherits nothing.
  */
+
+// Everything locked by default — a new/unknown workspace starts clean.
+const LOCKED_ENTITLEMENTS: AgentEntitlement[] = (['website', 'receptionist', 'seo', 'marketing', 'content'] as FeedAgent[])
+  .map((agent) => ({ agent, state: 'locked' as AgentState }));
+
 export function useEntitlements(tenant: string) {
-  const [entitlements, setEntitlements] = useState<AgentEntitlement[]>(MOCK_ENTITLEMENTS);
+  const [entitlements, setEntitlements] = useState<AgentEntitlement[]>(LOCKED_ENTITLEMENTS);
   const [live, setLive] = useState(false);
 
   const load = useCallback(async () => {
