@@ -1,9 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   User, Settings, KeyRound, CreditCard, Building2, Bell, LifeBuoy, Check, Loader2,
-  Mail, ShieldCheck, type LucideIcon,
+  Mail, ShieldCheck, Save, type LucideIcon,
 } from 'lucide-react';
 import { createClient, supabaseConfigured } from '@/lib/supabase/client';
 
@@ -35,12 +36,7 @@ export function ProfileView({ name, email, tenant, role }: { name: string; email
       </div>
 
       <Section id="account" icon={Settings} title="Account settings" subtitle="Your basic profile details.">
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Full name" defaultValue={name} />
-          <Field label="Email" defaultValue={email} type="email" hint="Contact support to change your sign-in email." />
-        </div>
-        {/* TODO: persist name via supabase.auth.updateUser({ data: { name } }). */}
-        <p className="mt-3 text-[12.5px] text-[var(--pl-text-muted)]">Profile edits will sync to your workspace. (Saving is not wired yet.)</p>
+        <AccountForm email={email} />
       </Section>
 
       <Section id="password" icon={KeyRound} title="Change password" subtitle="Update the password you use to sign in.">
@@ -94,6 +90,94 @@ function Section({ id, icon: Icon, title, subtitle, children }: { id: string; ic
       </div>
       <div className="mt-5">{children}</div>
     </section>
+  );
+}
+
+const fieldCls = 'mt-1.5 w-full rounded-xl border border-[var(--pl-border)] bg-[var(--pl-surface-soft)] px-3.5 py-2.5 text-[14px] text-[var(--pl-text)] outline-none transition read-only:opacity-70 disabled:opacity-60 focus:border-[var(--pl-green)]';
+
+/** Editable, persisted account form (profiles table via /api/profile). */
+function AccountForm({ email }: { email: string }) {
+  const router = useRouter();
+  const [form, setForm] = useState({ fullName: '', roleTitle: '', phone: '', timezone: '' });
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [toast, setToast] = useState<{ ok: boolean; msg: string } | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    fetch('/api/profile', { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (alive && d?.profile) setForm({
+          fullName: d.profile.fullName ?? '', roleTitle: d.profile.roleTitle ?? '',
+          phone: d.profile.phone ?? '', timezone: d.profile.timezone ?? '',
+        });
+      })
+      .catch(() => {})
+      .finally(() => { if (alive) setLoading(false); });
+    return () => { alive = false; };
+  }, []);
+
+  const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) => {
+    setToast(null);
+    setForm((f) => ({ ...f, [k]: e.target.value }));
+  };
+
+  async function save(e: React.FormEvent) {
+    e.preventDefault();
+    setToast(null);
+    if (!form.fullName.trim()) { setToast({ ok: false, msg: 'Please enter your name.' }); return; }
+    setBusy(true);
+    try {
+      const r = await fetch('/api/profile', {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form),
+      });
+      if (!r.ok) throw new Error(String(r.status));
+      setToast({ ok: true, msg: 'Profile saved.' });
+      router.refresh(); // re-fetch server data so the header greeting updates
+    } catch {
+      setToast({ ok: false, msg: 'Could not save right now. Please try again.' });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <form onSubmit={save}>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <label className="block">
+          <span className="text-[12.5px] font-semibold text-[var(--pl-text-muted)]">Full name</span>
+          <input value={form.fullName} onChange={set('fullName')} disabled={loading} placeholder="Your name" className={fieldCls} />
+        </label>
+        <label className="block">
+          <span className="text-[12.5px] font-semibold text-[var(--pl-text-muted)]">Email</span>
+          <input value={email} readOnly className={fieldCls} />
+          <span className="mt-1 block text-[12px] text-[var(--pl-text-muted)]">Contact support to change your sign-in email.</span>
+        </label>
+        <label className="block">
+          <span className="text-[12.5px] font-semibold text-[var(--pl-text-muted)]">Role / title</span>
+          <input value={form.roleTitle} onChange={set('roleTitle')} disabled={loading} placeholder="e.g. Owner, Marketing Lead" className={fieldCls} />
+        </label>
+        <label className="block">
+          <span className="text-[12.5px] font-semibold text-[var(--pl-text-muted)]">Phone</span>
+          <input value={form.phone} onChange={set('phone')} disabled={loading} placeholder="Optional" className={fieldCls} />
+        </label>
+        <label className="block sm:col-span-2">
+          <span className="text-[12.5px] font-semibold text-[var(--pl-text-muted)]">Timezone</span>
+          <input value={form.timezone} onChange={set('timezone')} disabled={loading} placeholder="e.g. America/New_York" className={fieldCls} />
+        </label>
+      </div>
+      <div className="mt-4 flex items-center gap-3">
+        <button type="submit" disabled={busy || loading} className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#22C55E] to-[#0EA5A3] px-4 py-2.5 text-[13.5px] font-bold text-white transition hover:brightness-110 disabled:opacity-60">
+          {busy ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />} Save changes
+        </button>
+        {toast && (
+          <span className={`inline-flex items-center gap-1.5 text-[13px] font-semibold ${toast.ok ? 'text-[var(--pl-green-dark)]' : 'text-[#ef4444]'}`}>
+            {toast.ok && <Check size={14} />} {toast.msg}
+          </span>
+        )}
+      </div>
+    </form>
   );
 }
 
