@@ -38,6 +38,17 @@ export function SignupForm() {
     }
     setBusy(true);
     try {
+      // Layered email validation (format, domain MX/A, disposable) before signup.
+      const vr = await fetch('/api/auth/validate-email', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: f.email }),
+      }).then((r) => r.json()).catch(() => ({ canProceed: true }));
+      if (!vr.canProceed) {
+        setError(vr.reason || 'Please enter a valid email address.');
+        setBusy(false);
+        return;
+      }
+
       const supabase = createClient();
       const { data, error } = await supabase.auth.signUp({
         email: f.email,
