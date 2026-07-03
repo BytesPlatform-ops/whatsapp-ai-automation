@@ -56,9 +56,11 @@ export function SignupForm() {
         },
       });
       if (error) throw error;
-      // Email-confirmation ON (default) → no session yet → go wait for the email.
+      // Email-confirmation ON → no session yet → verify via 6-digit OTP.
       if (!data.session) {
-        router.push(`/verify-email?email=${encodeURIComponent(f.email)}${agent ? `&agent=${encodeURIComponent(agent.slug)}` : ''}`);
+        const q = new URLSearchParams({ email: f.email, next: redirect });
+        if (agent) q.set('agent', agent.slug);
+        router.push(`/auth/verify-otp?${q.toString()}`);
       } else {
         router.replace(redirect);
         router.refresh();
