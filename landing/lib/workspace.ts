@@ -11,27 +11,41 @@ import { permissionsForRole, hasPermission, type Permission, type Role } from '@
  */
 export interface Membership { workspaceId: string; userId: string; role: Role; permissions: string[]; workspaceName: string }
 
-export async function ensureWorkspace(user: { id: string; email?: string | null }): Promise<Membership> {
-  const existing = await prisma.workspaceMember.findFirst({
-    where: { userId: user.id },
+async function membershipOf(userId: string): Promise<Membership | null> {
+  const m = await prisma.workspaceMember.findFirst({
+    where: { userId },
     orderBy: { createdAt: 'asc' },
     include: { workspace: true },
   });
-  if (existing) {
-    return { workspaceId: existing.workspaceId, userId: user.id, role: existing.role as Role, permissions: (existing.permissions as string[]) ?? [], workspaceName: existing.workspace.name };
-  }
+  return m ? { workspaceId: m.workspaceId, userId, role: m.role as Role, permissions: (m.permissions as string[]) ?? [], workspaceName: m.workspace.name } : null;
+}
+
+export async function ensureWorkspace(user: { id: string; email?: string | null }): Promise<Membership> {
+  const existing = await membershipOf(user.id);
+  if (existing) return existing;
+
+  // Deterministic slug per user, so concurrent first-load requests collide on the
+  // unique slug instead of creating duplicate workspaces.
   const base = (user.email?.split('@')[0] || 'My').replace(/[^a-z0-9]/gi, '') || 'workspace';
   const slug = `${base.toLowerCase()}-${user.id.slice(0, 8)}`;
-  const ws = await prisma.workspace.create({
-    data: {
-      name: `${user.email?.split('@')[0] || 'My'}'s workspace`,
-      slug,
-      ownerId: user.id,
-      members: { create: { userId: user.id, role: 'owner', permissions: permissionsForRole('owner'), status: 'active', joinedAt: new Date() } },
-    },
-    include: { members: true },
-  });
-  return { workspaceId: ws.id, userId: user.id, role: 'owner', permissions: (ws.members[0].permissions as string[]) ?? [], workspaceName: ws.name };
+  try {
+    const ws = await prisma.workspace.create({
+      data: {
+        name: `${user.email?.split('@')[0] || 'My'}'s workspace`,
+        slug,
+        ownerId: user.id,
+        members: { create: { userId: user.id, role: 'owner', permissions: permissionsForRole('owner'), status: 'active', joinedAt: new Date() } },
+      },
+      include: { members: true },
+    });
+    return { workspaceId: ws.id, userId: user.id, role: 'owner', permissions: (ws.members[0].permissions as string[]) ?? [], workspaceName: ws.name };
+  } catch (e) {
+    // Race: a concurrent request already created this user's workspace
+    // (unique slug / workspace_members constraint). Return the existing one.
+    const again = await membershipOf(user.id);
+    if (again) return again;
+    throw e;
+  }
 }
 
 /** The signed-in user + their primary workspace membership (creates one if none). */

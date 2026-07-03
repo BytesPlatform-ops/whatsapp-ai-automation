@@ -26,16 +26,22 @@ function lockedAll() {
 }
 
 export async function GET() {
-  const ctx = await getCurrentMembership();
-  if (!ctx) return NextResponse.json({ backendUp: true, entitlements: lockedAll() });
+  try {
+    const ctx = await getCurrentMembership();
+    if (!ctx) return NextResponse.json({ backendUp: true, entitlements: lockedAll() });
 
-  const rows = await prisma.workspaceService.findMany({ where: { workspaceId: ctx.membership.workspaceId } });
-  const byKey = new Map(rows.map((r) => [r.serviceKey, r]));
-  const entitlements = SERVICES.map((agent) => {
-    const r = byKey.get(agent);
-    return { agent, state: r?.status ?? 'locked', trial_ends_at: r?.trialEndsAt?.toISOString() ?? null };
-  });
-  return NextResponse.json({ backendUp: true, entitlements }, { headers: { 'Cache-Control': 'no-store' } });
+    const rows = await prisma.workspaceService.findMany({ where: { workspaceId: ctx.membership.workspaceId } });
+    const byKey = new Map(rows.map((r) => [r.serviceKey, r]));
+    const entitlements = SERVICES.map((agent) => {
+      const r = byKey.get(agent);
+      return { agent, state: r?.status ?? 'locked', trial_ends_at: r?.trialEndsAt?.toISOString() ?? null };
+    });
+    return NextResponse.json({ backendUp: true, entitlements }, { headers: { 'Cache-Control': 'no-store' } });
+  } catch (e: any) {
+    // Never crash the dashboard — degrade to all-locked (safe) and log for ops.
+    console.error('[entitlements] GET failed:', e?.message);
+    return NextResponse.json({ backendUp: true, entitlements: lockedAll() }, { headers: { 'Cache-Control': 'no-store' } });
+  }
 }
 
 export async function POST(req: Request) {
