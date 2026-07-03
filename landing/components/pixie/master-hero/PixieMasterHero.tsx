@@ -217,7 +217,7 @@ export function PixieMasterHero() {
         activeId={activeId === 'intro' ? 'normal' : activeId}
         scanKey={scanKey}
         idle={!reducedMotion}
-        className="pointer-events-none absolute left-0 top-0 z-30 will-change-transform"
+        className="mh-robot-initial pointer-events-none absolute left-0 top-0 z-30 will-change-transform"
       />
 
       {/* Intro section — copy sits in a clear zone BELOW the robot (robot flies

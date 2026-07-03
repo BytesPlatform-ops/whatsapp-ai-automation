@@ -301,6 +301,14 @@
   .mh-robot-bob {
     animation: mhBob 3s ease-in-out infinite;
   }
+  /* Initial (pre-flight) resting position for the persistent robot — matches the
+     intro anchor (x 50%, y 31vh, scale 1.12) in VIEWPORT units, so the robot is
+     centered on every screen size from first paint and never flashes in the
+     top-left corner on reload while images preload. GSAP's inline transform
+     overrides this the moment the scroll-flight timeline initialises. */
+  .mh-robot-initial {
+    transform: translate(calc(50vw - 50%), calc(31vh - 50%)) scale(1.12);
+  }
   .mh-ring-shimmer {
     animation: mhRingShimmer 4s ease-in-out 0.6s infinite alternate;
   }
