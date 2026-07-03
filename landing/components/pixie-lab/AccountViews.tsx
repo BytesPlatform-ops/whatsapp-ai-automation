@@ -225,36 +225,78 @@ export function WorkspaceSettingsView({ tenant }: { tenant: string }) {
 }
 
 /* ── Notifications ────────────────────────────────────────────────────────── */
-const PREFS = [
-  { key: 'leads', label: 'New leads & messages', desc: 'When a customer reaches out or a lead comes in.' },
-  { key: 'approvals', label: 'Approvals waiting', desc: 'When Pixie needs your sign-off on something.' },
-  { key: 'weekly', label: 'Weekly summary', desc: 'A digest of what Pixie did for your business.' },
-  { key: 'product', label: 'Product updates', desc: 'New agents and features as they launch.' },
+const PREFS: { key: string; label: string; desc: string; locked?: boolean }[] = [
+  { key: 'emailLeads', label: 'New leads & messages', desc: 'When a customer reaches out or a lead comes in.' },
+  { key: 'emailApprovals', label: 'Approvals waiting', desc: 'When Pixie needs your sign-off on something.' },
+  { key: 'emailBilling', label: 'Billing alerts', desc: 'Payment receipts, failures and plan changes.' },
+  { key: 'weeklySummary', label: 'Weekly summary', desc: 'A digest of what Pixie did for your business.' },
+  { key: 'productUpdates', label: 'Product updates', desc: 'New agents and features as they launch.' },
+  { key: 'emailSecurity', label: 'Security alerts', desc: 'Sign-ins, password and 2FA changes. Always on.', locked: true },
 ];
+
 export function NotificationsView() {
-  const [on, setOn] = useState<Record<string, boolean>>({ leads: true, approvals: true, weekly: true, product: false });
+  const [on, setOn] = useState<Record<string, boolean>>({ emailLeads: true, emailApprovals: true, emailBilling: true, weeklySummary: true, productUpdates: false, emailSecurity: true });
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [toast, setToast] = useState<{ ok: boolean; msg: string } | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    fetch('/api/notifications', { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (alive && d?.prefs) setOn((s) => ({ ...s, ...pick(d.prefs) })); })
+      .catch(() => {})
+      .finally(() => { if (alive) setLoading(false); });
+    return () => { alive = false; };
+  }, []);
+
+  async function toggle(key: string, locked?: boolean) {
+    if (locked || busy) return;
+    const next = { ...on, [key]: !on[key] };
+    setOn(next);
+    setBusy(true);
+    setToast(null);
+    try {
+      const r = await fetch('/api/notifications', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(next) });
+      if (!r.ok) throw new Error();
+      setToast({ ok: true, msg: 'Saved.' });
+    } catch {
+      setOn(on); // revert
+      setToast({ ok: false, msg: 'Could not save. Try again.' });
+    } finally { setBusy(false); }
+  }
+
   return (
     <PageContainer narrow>
       <PageHeader eyebrow="Account" title="Notifications" description="Choose what Pixie emails you about." />
-      <SettingsCard icon={Bell} title="Email preferences">
-        <div className="divide-y divide-[var(--pl-border)]">
+      <SettingsCard icon={Bell} title="Email preferences"
+        action={toast && <span className={`text-[12.5px] font-semibold ${toast.ok ? 'text-[var(--pl-green-dark)]' : 'text-[#ef4444]'}`}>{toast.msg}</span>}
+      >
+        <div className={`divide-y divide-[var(--pl-border)] ${loading ? 'opacity-60' : ''}`}>
           {PREFS.map((p) => (
             <div key={p.key} className="flex items-center justify-between gap-4 py-3 first:pt-0 last:pb-0">
               <div>
                 <p className="text-[14px] font-semibold text-[var(--pl-text)]">{p.label}</p>
                 <p className="text-[12.5px] text-[var(--pl-text-muted)]">{p.desc}</p>
               </div>
-              <button type="button" role="switch" aria-checked={on[p.key]} onClick={() => setOn((s) => ({ ...s, [p.key]: !s[p.key] }))}
-                className="relative h-6 w-11 flex-none rounded-full transition-colors" style={{ background: on[p.key] ? 'var(--pl-green)' : 'var(--pl-border-strong)' }}>
+              <button type="button" role="switch" aria-checked={on[p.key]} disabled={p.locked || loading || busy} onClick={() => toggle(p.key, p.locked)}
+                className="relative h-6 w-11 flex-none rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-70" style={{ background: on[p.key] ? 'var(--pl-green)' : 'var(--pl-border-strong)' }}>
                 <span className="absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-[left]" style={{ left: on[p.key] ? '22px' : '2px' }} />
               </button>
             </div>
           ))}
         </div>
-        {/* TODO: persist preferences when a notifications API exists */}
       </SettingsCard>
     </PageContainer>
   );
+}
+
+function pick(prefs: Record<string, unknown>): Record<string, boolean> {
+  const out: Record<string, boolean> = {};
+  for (const k of ['emailLeads', 'emailApprovals', 'emailBilling', 'weeklySummary', 'productUpdates', 'emailSecurity']) {
+    if (typeof prefs[k] === 'boolean') out[k] = prefs[k] as boolean;
+  }
+  return out;
 }
 
 /* ── Support ──────────────────────────────────────────────────────────────── */
