@@ -39,6 +39,12 @@ enum InvitationStatus {
   revoked
 }
 
+enum ServiceStatus {
+  locked
+  trial
+  active
+}
+
 // ── Profile ───────────────────────────────────────────────────────────────────
 // One row per Supabase auth user (id == auth.users.id).
 model Profile {
@@ -84,8 +90,31 @@ model Workspace {
   members       WorkspaceMember[]
   invitations   WorkspaceInvitation[]
   subscriptions Subscription[]
+  services      WorkspaceService[]
 
   @@map("workspaces")
+}
+
+// ── Service activation (fixes cross-user leakage) ─────────────────────────────
+// One row per (workspace, service). A missing row means the service is locked
+// for that workspace, so a fresh workspace inherits nothing. Scoped strictly to
+// workspace_id; never global.
+model WorkspaceService {
+  id             String        @id @default(uuid()) @db.Uuid
+  workspaceId    String        @map("workspace_id") @db.Uuid
+  serviceKey     String        @map("service_key")
+  status         ServiceStatus @default(locked)
+  trialStartedAt DateTime?     @map("trial_started_at")
+  trialEndsAt    DateTime?     @map("trial_ends_at")
+  activatedBy    String?       @map("activated_by") @db.Uuid
+  createdAt      DateTime      @default(now()) @map("created_at")
+  updatedAt      DateTime      @updatedAt @map("updated_at")
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, serviceKey])
+  @@index([workspaceId])
+  @@map("workspace_services")
 }
 
 model WorkspaceMember {
