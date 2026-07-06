@@ -98,19 +98,43 @@ Fill these in the matching `.env` (copy from the committed `.env.example`).
   by hand — the Prisma migration supersedes it (and is idempotent, so it is safe
   on a DB where the SQL was already applied).
 
-### Prisma commands (run from `landing/`)
+### Applying `0003` to the database
 
+**Heads-up about this repo's history:** `npx prisma migrate status` against the
+live Supabase DB reports **0 migrations applied**, even though the app tables
+already exist. In other words the existing tables were created with
+`prisma db push` (history-less), not tracked `migrate deploy`. So a plain
+`migrate deploy` would try to re-create `workspaces` etc. and fail. Pick ONE of:
+
+**Option 1 — quickest, matches the repo's `db push` workflow (adds the new
+tables; does NOT apply RLS):**
 ```bash
-npm run db:generate     # prisma generate — regenerate the client (offline)
-npm run db:migrate      # prisma migrate deploy — apply pending migrations (prod-safe, never resets)
-npx prisma migrate status   # show applied vs pending migrations
-npx prisma migrate dev --name <change>   # LOCAL dev only: author a new migration against a dev DB
+cd landing
+npm run db:push          # prisma db push — additive, non-destructive; creates the 11 new tables
+```
+Then apply RLS once (Prisma can't model Postgres RLS) — paste the
+`ALTER TABLE … ENABLE ROW LEVEL SECURITY;` block from
+`prisma/migrations/0003_service_integrations/migration.sql` into the Supabase SQL
+editor. This is the ONLY remaining manual SQL, and only because RLS isn't
+expressible in Prisma.
+
+**Option 2 — adopt migration history (recommended long-term; applies RLS too):**
+```bash
+cd landing
+# Baseline the already-existing tables as applied WITHOUT running their DDL:
+npx prisma migrate resolve --applied 0001_pixie_lab_init
+npx prisma migrate resolve --applied 0002_workspace_services
+# Apply only 0003 — it is idempotent (CREATE TABLE IF NOT EXISTS) and includes RLS:
+npm run db:migrate       # prisma migrate deploy
 ```
 
-> Apply the new tables with **`npm run db:migrate`** once `DATABASE_URL` /
-> `DIRECT_URL` point at your Supabase DB. `migrate deploy` only applies pending
-> migration files and never resets data. Use `migrate dev` **only** against a
-> disposable local DB (it can reset) — not against the shared Supabase DB.
+Other useful commands:
+```bash
+npm run db:generate          # prisma generate — regenerate the client (offline)
+npx prisma migrate status    # show applied vs pending migrations
+```
+> Never run `prisma migrate dev` against the shared Supabase DB — it can reset.
+> Use it only on a disposable local database.
 
 ---
 
@@ -214,9 +238,11 @@ it as its own service and point `PIXIE_BACKEND_URL` at it.
 
 ## 8. Known TODOs
 
-- **Apply migration `0003` to the live DB:** run `cd landing && npm run db:migrate`
-  once `DATABASE_URL`/`DIRECT_URL` are set (couldn't be run from the dev
-  environment — no DB credentials/network here).
+- **Apply the new tables to the live DB:** follow §3 (Option 1 `npm run db:push`
+  + RLS snippet, or Option 2 baseline + `npm run db:migrate`). Not run here on
+  purpose — the shared Supabase DB has no Prisma migration history recorded
+  (`migrate status` = 0 applied), so an unbaselined `migrate deploy` would fail
+  on the pre-existing app tables. Verify with `npx prisma migrate status` after.
 - **`/api/seo/*` (Mode A/B) uses an in-memory repo** (`backend/seo/repository.py`)
   — not durable across restarts. The audit agent under `/api/agents/seo/*` (the
   one wired into the UI) uses the durable `persistence.py`.
