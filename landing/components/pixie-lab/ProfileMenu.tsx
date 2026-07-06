@@ -20,7 +20,7 @@ const ITEMS: { label: string; href: string; icon: LucideIcon }[] = [
   { label: 'Help / Support', href: '/pixie-lab/support', icon: LifeBuoy },
 ];
 
-export function ProfileMenu({ name, tenant, onSignOut }: { name: string; tenant: string; onSignOut: () => void }) {
+export function ProfileMenu({ name, tenant, workspaceName, onSignOut }: { name: string; tenant: string; workspaceName?: string; onSignOut: () => void }) {
   const [open, setOpen] = useState(false);
   const initial = (name || 'P').charAt(0).toUpperCase();
 
@@ -50,7 +50,7 @@ export function ProfileMenu({ name, tenant, onSignOut }: { name: string; tenant:
                 <span className="grid h-9 w-9 place-items-center rounded-full bg-gradient-to-br from-[#22C55E] to-[#0EA5A3] text-sm font-bold text-white">{initial}</span>
                 <div className="min-w-0">
                   <p className="truncate text-[13px] font-bold text-[var(--pl-text)]">{name || 'Your account'}</p>
-                  <p className="truncate text-[11.5px] text-[var(--pl-text-muted)]">{tenant}</p>
+                  <p className="truncate text-[11.5px] text-[var(--pl-text-muted)]">{workspaceName || 'Pixie Workspace'}</p>
                 </div>
               </div>
 

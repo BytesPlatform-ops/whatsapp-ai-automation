@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { displayName, tenantForUser } from '@/lib/supabase/auth';
+import { getCurrentMembership } from '@/lib/workspace';
 import { PixieLabShell } from '@/components/pixie-lab/PixieLabShell';
 import { ThemeProvider, themeInitScript } from '@/components/pixie-lab/theme/ThemeProvider';
 
@@ -26,12 +27,25 @@ export default async function PixieLabLayout({ children }: { children: React.Rea
       redirect('/quick-setup');
     }
   }
+
+  // A clean, human-readable workspace label for the topbar chip (never the raw
+  // t_*/ws_* tenant id). Falls back gracefully in demo mode.
+  let workspaceName = '';
+  if (configured() && user) {
+    try {
+      const ctx = await getCurrentMembership();
+      workspaceName = ctx?.membership.workspaceName ?? '';
+    } catch {
+      workspaceName = '';
+    }
+  }
+
   return (
     <>
       {/* Set the theme on <html> before paint so there's no light→dark flash. */}
       <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
       <ThemeProvider>
-        <PixieLabShell name={displayName(user)} tenant={tenantForUser(user)}>
+        <PixieLabShell name={displayName(user)} tenant={tenantForUser(user)} workspaceName={workspaceName}>
           {children}
         </PixieLabShell>
       </ThemeProvider>

@@ -56,12 +56,16 @@ const SERVICE_SUBNAV: Partial<Record<FeedAgent, { label: string; href: string }[
 export function PixieLabShell({
   name,
   tenant,
+  workspaceName,
   children,
 }: {
   name: string;
   tenant: string;
+  workspaceName?: string;
   children: React.ReactNode;
 }) {
+  // Clean, human-readable label for the topbar chip — never the raw tenant id.
+  const workspaceLabel = (workspaceName && workspaceName.trim()) || (name && name !== 'there' ? `${name}'s workspace` : '') || 'Pixie Workspace';
   const pathname = usePathname();
   const router = useRouter();
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -201,9 +205,9 @@ export function PixieLabShell({
             </div>
 
             <div className="ml-auto flex items-center gap-2">
-              <span className="hidden rounded-full border border-[var(--pl-border)] bg-[var(--pl-surface)] px-3 py-1.5 text-xs font-medium text-[var(--pl-text-muted)] sm:inline">{tenant}</span>
+              <span className="hidden max-w-[180px] truncate rounded-full border border-[var(--pl-border)] bg-[var(--pl-surface)] px-3 py-1.5 text-xs font-medium text-[var(--pl-text-muted)] sm:inline" title={workspaceLabel}>{workspaceLabel}</span>
               <ThemeToggle />
-              <ProfileMenu name={name} tenant={tenant} onSignOut={signOut} />
+              <ProfileMenu name={name} tenant={tenant} workspaceName={workspaceLabel} onSignOut={signOut} />
             </div>
           </header>
 
