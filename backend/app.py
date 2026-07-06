@@ -63,6 +63,36 @@ from schemas import Request, Site, UsageEvent
 from seo.router import router as seo_router
 
 app = FastAPI(title="Pixie Backend", version="0.2.0")
+
+# ── Internal shared-secret hardening ─────────────────────────────────────────
+# The backend has no user auth of its own; in production it must only be reachable
+# by the trusted Next.js proxy. When PIXIE_INTERNAL_API_SECRET is set, every
+# request must carry a matching `X-Pixie-Internal-Secret` header — EXCEPT the
+# public endpoints below, which browsers / Meta / Google call directly (a browser
+# redirect can't attach the header). When the secret is unset the check is a
+# no-op, so local dev works without it; SET IT IN PRODUCTION.
+from starlette.responses import JSONResponse  # noqa: E402
+
+_INTERNAL_SECRET = os.getenv("PIXIE_INTERNAL_API_SECRET", "").strip()
+_PUBLIC_PATHS = {
+    "/", "/health", "/docs", "/openapi.json", "/redoc",
+    "/api/meta/connect/start", "/api/meta/connect/callback", "/api/meta/webhooks",
+    "/api/integrations/google/connect", "/api/integrations/google/callback",
+}
+
+
+def _is_public(path: str) -> bool:
+    return path in _PUBLIC_PATHS or path.startswith("/docs") or path.startswith("/redoc")
+
+
+@app.middleware("http")
+async def _require_internal_secret(request, call_next):
+    if _INTERNAL_SECRET and not _is_public(request.url.path):
+        if request.headers.get("x-pixie-internal-secret", "") != _INTERNAL_SECRET:
+            return JSONResponse({"detail": "unauthorized: missing/invalid internal secret"}, status_code=401)
+    return await call_next(request)
+
+
 app.include_router(receptionist_router)
 app.include_router(ai_receptionist_router)  # /api/agents/ai-receptionist — real OpenAI + approval slice
 app.include_router(integrations_router)  # /api/integrations/status — capability readiness

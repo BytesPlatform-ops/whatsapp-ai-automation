@@ -17,6 +17,8 @@ export const dynamic = 'force-dynamic';
  * the dashboard shows their static requirements only.
  */
 
+import { internalHeaders } from '@/lib/pixie-lab/backend';
+
 const BACKEND_URL = process.env.PIXIE_BACKEND_URL || 'http://localhost:8000';
 
 // frontend service slug → backend agent name (channels/agents.py registry).
@@ -49,7 +51,7 @@ interface ServiceReadiness {
 
 async function fetchAgent(agent: string, tenant: string, signal: AbortSignal): Promise<ServiceReadiness | null> {
   const url = `${BACKEND_URL}/api/channels/agents/${encodeURIComponent(agent)}?tenant_id=${encodeURIComponent(tenant)}`;
-  const res = await fetch(url, { signal, headers: { Accept: 'application/json' }, cache: 'no-store' });
+  const res = await fetch(url, { signal, headers: { Accept: 'application/json', ...internalHeaders() }, cache: 'no-store' });
   if (!res.ok) return null;
   const data = (await res.json()) as { channel_statuses?: ChannelStatus[] };
   const statuses = Array.isArray(data.channel_statuses) ? data.channel_statuses : [];

@@ -16,6 +16,17 @@ import type { Permission } from '@/lib/permissions';
 
 export const BACKEND = process.env.PIXIE_BACKEND_URL || 'http://localhost:8000';
 
+/**
+ * Shared-secret header proving this request comes from the trusted Next.js
+ * server (not a public client). Sent on every server→FastAPI call. Only added
+ * when PIXIE_INTERNAL_API_SECRET is set (server-only env), so local dev without
+ * it still works. NEVER import/use this from client components.
+ */
+export function internalHeaders(): Record<string, string> {
+  const secret = process.env.PIXIE_INTERNAL_API_SECRET;
+  return secret ? { 'X-Pixie-Internal-Secret': secret } : {};
+}
+
 function supabaseConfigured(): boolean {
   return Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
 }
@@ -101,7 +112,7 @@ export interface BackendResult<T = unknown> {
 export async function backendGet<T = unknown>(path: string, tenant: string, params?: Record<string, string | number | boolean | undefined>, ms = 6000): Promise<BackendResult<T>> {
   const { signal, done } = withTimeout(ms);
   try {
-    const res = await fetch(backendUrl(path, tenant, params), { signal, cache: 'no-store', headers: { Accept: 'application/json' } });
+    const res = await fetch(backendUrl(path, tenant, params), { signal, cache: 'no-store', headers: { Accept: 'application/json', ...internalHeaders() } });
     const data = res.ok ? ((await res.json().catch(() => null)) as T) : null;
     return { backendUp: res.ok, status: res.status, data };
   } catch {
@@ -120,7 +131,7 @@ export async function backendSend<T = unknown>(method: 'POST' | 'DELETE' | 'PUT'
       method,
       signal,
       cache: 'no-store',
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json', ...internalHeaders() },
       body: JSON.stringify({ ...body, tenant_id: tenant, now: new Date().toISOString() }),
     });
     // Only surface the backend payload on success — a 4xx/5xx body may carry

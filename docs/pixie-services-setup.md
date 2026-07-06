@@ -221,10 +221,14 @@ the Next.js frontend.
 - **CORS:** not required for the product, because the browser never calls the
   backend cross-origin (Next proxies server-side). If you ever expose the backend
   to a browser directly, add FastAPI `CORSMiddleware` (there is none today).
-- Put the backend behind auth/network controls: it has **no auth of its own** and
-  trusts `tenant_id`, so it must only be reachable by the trusted frontend proxy
-  (private network, shared secret header, or IP allowlist). The Next proxy always
-  injects the server-resolved tenant.
+- **Internal shared-secret (implemented):** set the same
+  `PIXIE_INTERNAL_API_SECRET` in **both** `backend/.env` and the frontend server
+  env. When set, the backend rejects any request without a matching
+  `X-Pixie-Internal-Secret` header (401) — except `/health` and the public OAuth
+  callback/webhook endpoints. The Next.js proxies attach the header server-side
+  (`internalHeaders()` in `lib/pixie-lab/backend.ts`); it is **never** sent from
+  the browser. When the var is unset the check is a no-op (local dev). Generate
+  with `openssl rand -hex 32`. This is in addition to the server-resolved tenant.
 
 **Must the Python backend be deployed separately? — Yes.** It is a separate
 language/runtime; Vercel serverless functions can't run the FastAPI app. Deploy

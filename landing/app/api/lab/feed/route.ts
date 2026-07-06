@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { resolveCaller, BACKEND } from '@/lib/pixie-lab/backend';
+import { resolveCaller, BACKEND, internalHeaders } from '@/lib/pixie-lab/backend';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -22,7 +22,7 @@ export async function GET(req: Request) {
   const controller = new AbortController();
   const t = setTimeout(() => controller.abort(), 2500);
   try {
-    const res = await fetch(`${BACKEND}${path}`, { signal: controller.signal, cache: 'no-store', headers: { Accept: 'application/json' } });
+    const res = await fetch(`${BACKEND}${path}`, { signal: controller.signal, cache: 'no-store', headers: { Accept: 'application/json', ...internalHeaders() } });
     clearTimeout(t);
     if (!res.ok) return NextResponse.json({ backendUp: false }, { status: 200 });
     const data = await res.json();
@@ -47,7 +47,7 @@ export async function POST(req: Request) {
       method: 'POST',
       signal: controller.signal,
       cache: 'no-store',
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json', ...internalHeaders() },
       body: JSON.stringify({
         tenant_id: caller.tenant, // server-resolved; never the client's value
         action_type,
