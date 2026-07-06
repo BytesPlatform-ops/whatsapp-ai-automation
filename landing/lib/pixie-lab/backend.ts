@@ -41,9 +41,16 @@ export interface ResolvedCaller {
  *  (Supabase-configured) deployment has no valid session. */
 export async function resolveCaller(): Promise<ResolvedCaller | null> {
   if (!supabaseConfigured()) return { tenant: 'demo', membership: null, demo: true };
-  const ctx = await getCurrentMembership();
-  if (!ctx) return null;
-  return { tenant: tenantForMembership(ctx.membership), membership: ctx.membership, demo: false };
+  try {
+    const ctx = await getCurrentMembership();
+    if (!ctx) return null;
+    return { tenant: tenantForMembership(ctx.membership), membership: ctx.membership, demo: false };
+  } catch (e: any) {
+    // A DB / session hiccup should degrade to "not signed in" (401), never 500
+    // the whole tool page.
+    console.error('[pixie-lab/backend] resolveCaller failed:', e?.message);
+    return null;
+  }
 }
 
 export type Guarded =
