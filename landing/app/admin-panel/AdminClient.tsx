@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { Check, Download, Loader2, RefreshCw, Search, Sparkles, Trash2, Users, X } from 'lucide-react';
+import { AlertTriangle, Check, Download, Loader2, RefreshCw, Search, Sparkles, Trash2, Users, X } from 'lucide-react';
 import type { WaitlistRow } from '@/lib/waitlistStore';
 import { SignOutButton } from './SignOutButton';
 import { deleteLead } from './actions';
@@ -64,6 +64,10 @@ export function AdminClient({ leads, adminEmail }: { leads: WaitlistRow[]; admin
   // server component re-fetches (refresh / revalidatePath).
   const [rows, setRows] = useState(leads);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  // Row awaiting delete confirmation (drives the in-app modal, not a native
+  // window.confirm — that showed the browser's "localhost says…" chrome).
+  const [confirmTarget, setConfirmTarget] = useState<WaitlistRow | null>(null);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
   useEffect(() => setRows(leads), [leads]);
 
   const filtered = useMemo(() => {
@@ -83,10 +87,18 @@ export function AdminClient({ leads, adminEmail }: { leads: WaitlistRow[]; admin
     startTransition(() => router.refresh());
   }
 
-  async function onDelete(r: WaitlistRow) {
+  // Clicking a row's Delete just opens the confirmation modal.
+  function onDelete(r: WaitlistRow) {
     if (deletingId) return;
-    const who = r.name || r.email;
-    if (!window.confirm(`Delete the waitlist response from ${who}? This can’t be undone.`)) return;
+    setErrorMsg(null);
+    setConfirmTarget(r);
+  }
+
+  // Runs only after the user confirms in the modal.
+  async function confirmDelete() {
+    const r = confirmTarget;
+    if (!r) return;
+    setConfirmTarget(null);
     setDeletingId(r.id);
     const prev = rows;
     setRows((rs) => rs.filter((x) => x.id !== r.id)); // optimistic
@@ -94,7 +106,7 @@ export function AdminClient({ leads, adminEmail }: { leads: WaitlistRow[]; admin
     setDeletingId(null);
     if (!res.ok) {
       setRows(prev); // restore on failure
-      window.alert('Could not delete: ' + (res.error ?? 'unknown error'));
+      setErrorMsg('Could not delete the response: ' + (res.error ?? 'unknown error') + '. Please try again.');
     }
   }
 
@@ -309,6 +321,78 @@ export function AdminClient({ leads, adminEmail }: { leads: WaitlistRow[]; admin
           </table>
           </div>
         </>
+      )}
+
+      {/* Delete confirmation modal — replaces the native window.confirm. */}
+      {confirmTarget && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="delete-modal-title"
+        >
+          {/* Backdrop — click to dismiss. */}
+          <button
+            type="button"
+            aria-label="Cancel"
+            onClick={() => setConfirmTarget(null)}
+            className="absolute inset-0 cursor-default bg-slate-950/70 backdrop-blur-sm"
+          />
+          <div className="relative w-full max-w-md rounded-2xl border border-white/10 bg-slate-900 p-6 shadow-2xl shadow-black/40">
+            <div className="flex items-start gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-rose-500/15 ring-1 ring-rose-400/20">
+                <AlertTriangle className="h-5 w-5 text-rose-300" strokeWidth={2.4} />
+              </div>
+              <div className="min-w-0">
+                <h2 id="delete-modal-title" className="text-base font-semibold text-white">
+                  Delete this waitlist response?
+                </h2>
+                <p className="mt-1 text-sm text-slate-400">
+                  You’re about to permanently delete the response from{' '}
+                  <span className="font-medium text-slate-200">
+                    {confirmTarget.name || confirmTarget.email || 'this lead'}
+                  </span>
+                  . This action can’t be undone.
+                </p>
+              </div>
+            </div>
+            <div className="mt-6 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setConfirmTarget(null)}
+                className="inline-flex items-center rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm font-medium text-slate-300 transition hover:bg-white/10"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmDelete}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-rose-500/30 bg-rose-500/90 px-4 py-2 text-sm font-semibold text-white transition hover:bg-rose-500"
+              >
+                <Trash2 className="h-4 w-4" strokeWidth={2.4} />
+                Delete response
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Error toast — replaces the native window.alert on failure. */}
+      {errorMsg && (
+        <div className="fixed inset-x-0 bottom-4 z-50 flex justify-center px-4">
+          <div className="flex max-w-md items-start gap-3 rounded-xl border border-rose-500/30 bg-rose-950/90 px-4 py-3 shadow-lg shadow-black/40 backdrop-blur">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-rose-300" strokeWidth={2.4} />
+            <p className="text-sm text-rose-100">{errorMsg}</p>
+            <button
+              type="button"
+              onClick={() => setErrorMsg(null)}
+              aria-label="Dismiss"
+              className="shrink-0 rounded p-0.5 text-rose-300 transition hover:bg-white/10 hover:text-white"
+            >
+              <X className="h-4 w-4" strokeWidth={2.4} />
+            </button>
+          </div>
+        </div>
       )}
     </main>
   );
