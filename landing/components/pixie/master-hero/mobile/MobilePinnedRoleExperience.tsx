@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { motion, AnimatePresence, type Variants } from 'framer-motion';
+import { ArrowRight } from 'lucide-react';
 import { hexToRgbString, getReadableButtonText, interpolateColor } from '../../mascot-role-hero/colorUtils';
 import { MOBILE_ROLES, type MobileRole } from './mobileContent';
 import { NORMAL_FORM, INTRO } from '../roleData';
@@ -12,6 +13,7 @@ import { MobileTopBar } from './MobileTopBar';
 import { MobileMenuOverlay } from './MobileMenuOverlay';
 import { MobileProgressRail } from './MobileProgressRail';
 import { PixieFooter } from '@/components/sections/PixieFooter';
+import { usePrimaryCta } from '@/components/auth/usePrimaryCta';
 
 // First/main mobile screen — mirrors the desktop intro: the NORMAL Pixie avatar
 // + the headline hero. After it, the role-changing flow begins (greeter → …).
@@ -36,7 +38,8 @@ const SCENES: MobileRole[] = [INTRO_SCENE, ...MOBILE_ROLES];
 // Avatar entry direction per scene: intro arrives centre (0); roles then
 // strictly alternate left/right (greeter left … core right).
 const DIRS = [0, -1, 1, -1, 1, -1, 1];
-const EASE = [0.65, 0, 0.35, 1] as const;
+// Silky expo-out settle for the avatar cross-transition (premium, not springy).
+const EASE = [0.16, 1, 0.3, 1] as const;
 
 /**
  * MobilePinnedRoleExperience (<lg) — ONE pinned screen. The user scrolls but the
@@ -59,6 +62,9 @@ export function MobilePinnedRoleExperience({ reducedMotion }: { reducedMotion: b
   const [scrolled, setScrolled] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [railVisible, setRailVisible] = useState(true);
+
+  // Single source of truth for the landing CTA (Enter Pixie Lab / Join Pixie).
+  const primaryCta = usePrimaryCta();
 
   // ── Theme (mirrored to :root so the top bar / menu / rail inherit it) ────
   const proxy = useRef({ p: 0 });
@@ -176,12 +182,17 @@ export function MobilePinnedRoleExperience({ reducedMotion }: { reducedMotion: b
   const avatarV: Variants = reducedMotion
     ? { enter: { opacity: 0 }, center: { opacity: 1 }, exit: { opacity: 0 } }
     : {
+        // Incoming avatar glides in from the alternating side and focuses in;
+        // outgoing softly defocuses out. Gentler travel + blur = VIP feel.
         enter: (d: number) =>
           d === 0
-            ? { y: 60, opacity: 0, scale: 0.84, rotate: 0 }
-            : { x: d * 120, opacity: 0, scale: 0.9, rotate: d * 6 },
-        center: { x: 0, y: 0, opacity: 1, scale: 1, rotate: 0 },
-        exit: (d: number) => (d === 0 ? { y: -40, opacity: 0, scale: 0.94 } : { x: -d * 120, opacity: 0, scale: 0.94 }),
+            ? { y: 54, opacity: 0, scale: 0.86, rotate: 0, filter: 'blur(10px)' }
+            : { x: d * 96, opacity: 0, scale: 0.92, rotate: d * 4, filter: 'blur(9px)' },
+        center: { x: 0, y: 0, opacity: 1, scale: 1, rotate: 0, filter: 'blur(0px)' },
+        exit: (d: number) =>
+          d === 0
+            ? { y: -36, opacity: 0, scale: 0.94, filter: 'blur(8px)' }
+            : { x: -d * 96, opacity: 0, scale: 0.94, rotate: -d * 3, filter: 'blur(8px)' },
       };
 
   const panelV: Variants = { hidden: {}, show: { transition: { staggerChildren: 0.06, delayChildren: 0.12 } } };
@@ -205,7 +216,7 @@ export function MobilePinnedRoleExperience({ reducedMotion }: { reducedMotion: b
         <div aria-hidden className="m-scene-grad" />
 
         {/* pt clears the fixed top bar (60px) + the top progress indicators. */}
-        <div className="relative z-10 mx-auto flex h-[100svh] w-full max-w-md flex-col items-center px-6 pb-[max(env(safe-area-inset-bottom),22px)] pt-[104px] text-center">
+        <div className="relative z-10 mx-auto flex h-[100svh] w-full max-w-md flex-col items-center px-6 pb-[max(env(safe-area-inset-bottom),22px)] pt-[calc(104px+env(safe-area-inset-top))] text-center">
           {/* Badge */}
           <motion.div key={`b-${activeIndex}`} className="flex shrink-0 justify-center pt-1" variants={panelV} initial="hidden" animate="show">
             <motion.span className="m-badge" variants={itemV}>{role.badge}</motion.span>
@@ -226,7 +237,7 @@ export function MobilePinnedRoleExperience({ reducedMotion }: { reducedMotion: b
                   initial="enter"
                   animate="center"
                   exit="exit"
-                  transition={{ duration: 0.72, ease: EASE }}
+                  transition={{ duration: 0.9, ease: EASE, opacity: { duration: 0.65, ease: 'easeInOut' } }}
                   className="absolute inset-0 m-auto h-full w-full select-none object-contain drop-shadow-[0_26px_50px_rgba(0,0,0,0.5)]"
                   draggable={false}
                 />
@@ -244,9 +255,23 @@ export function MobilePinnedRoleExperience({ reducedMotion }: { reducedMotion: b
               ))}
             </h2>
 
-            {/* Products are live — each scene routes to its service page. */}
+            {/* The intro (landing) scene shows the single auth-aware Pixie CTA
+                — "Enter Pixie Lab →" when signed in, "Join Pixie →" when not
+                (→ /login, never the waitlist). The role scenes keep their own
+                service-page CTA. */}
             <motion.div className="m-cta-stack w-full" variants={itemV}>
-              <a href={role.href} className="m-primary-cta">{role.primaryCta}</a>
+              {activeIndex === 0 ? (
+                <a
+                  href={primaryCta.href}
+                  data-testid="mobile-primary-cta"
+                  className="m-primary-cta group"
+                >
+                  <span>{primaryCta.label}</span>
+                  {primaryCta.showArrow && <ArrowRight className="m-cta-arrow h-4 w-4" />}
+                </a>
+              ) : (
+                <a href={role.href} className="m-primary-cta">{role.primaryCta}</a>
+              )}
             </motion.div>
 
             <motion.ul className="m-chips flex-nowrap" variants={itemV}>

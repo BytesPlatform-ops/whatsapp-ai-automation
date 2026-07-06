@@ -1,18 +1,20 @@
 import Link from 'next/link';
-import { Sparkles, Headset, Globe, Search, Clapperboard, Megaphone, ShieldCheck } from 'lucide-react';
+import { Headset, Globe, TrendingUp, Megaphone, Clapperboard, ShieldCheck } from 'lucide-react';
+import { BrandAvatar } from './BrandAvatar';
 
-const HIGHLIGHTS = [
+const FEATURES = [
   { icon: Headset, label: 'AI Receptionist', tint: '#34d399' },
   { icon: Globe, label: 'Website Builder', tint: '#60a5fa' },
-  { icon: Megaphone, label: 'Social Marketing', tint: '#f472b6' },
-  { icon: Clapperboard, label: 'AI Influencer', tint: '#fbbf24' },
-  { icon: Search, label: 'SEO Audit', tint: '#22d3ee' },
+  { icon: TrendingUp, label: 'SEO Growth', tint: '#22d3ee' },
+  { icon: Megaphone, label: 'Marketing Agent', tint: '#f472b6' },
+  { icon: Clapperboard, label: 'Content Creator', tint: '#fbbf24' },
 ];
 
 /**
- * Premium split-screen auth shell. Left: a branded, animated gradient panel that
- * sells the product. Right: the form (children). Mobile collapses to just the
- * form with a compact brand header.
+ * Premium split-screen auth shell. Left: a branded gradient panel that sells the
+ * product — Pixie mascot brand mark, balanced hero copy, a grid of feature
+ * cards, and a trust badge. Right: the form (children). Mobile collapses to just
+ * the form with a compact brand header. No auth logic lives here.
  */
 export function AuthShell({
   eyebrow,
@@ -32,55 +34,69 @@ export function AuthShell({
   altLabel: string;
 }) {
   return (
-    <main className="relative min-h-screen w-full overflow-hidden bg-[#05070d] text-white lg:grid lg:grid-cols-[1.05fr_1fr]">
+    <main className="relative min-h-screen w-full overflow-hidden bg-[#02040a] text-white lg:grid lg:grid-cols-[1.05fr_1fr]">
       {/* ── Brand panel ───────────────────────────────────────────────── */}
       <aside className="relative hidden overflow-hidden lg:flex lg:flex-col lg:justify-between lg:p-12 xl:p-16">
         <div
           className="pointer-events-none absolute inset-0"
           style={{
             background:
-              'radial-gradient(120% 90% at 18% 12%, rgba(37,211,102,0.22), transparent 55%), radial-gradient(90% 80% at 95% 100%, rgba(56,189,248,0.16), transparent 60%), linear-gradient(160deg, #07130f 0%, #060a14 55%, #05070d 100%)',
+              'radial-gradient(circle at 15% 18%, rgba(34,197,94,0.28), transparent 36%), radial-gradient(circle at 78% 88%, rgba(6,182,212,0.18), transparent 38%), linear-gradient(135deg, #03150c 0%, #061019 52%, #02040a 100%)',
           }}
         />
-        <div className="pointer-events-none absolute -left-24 top-1/3 h-72 w-72 rounded-full bg-[#25D366]/20 blur-[120px]" />
-        <div className="pointer-events-none absolute right-0 top-10 h-64 w-64 rounded-full bg-sky-400/10 blur-[120px]" />
+        <div className="pointer-events-none absolute -left-24 top-1/3 h-72 w-72 rounded-full bg-[#25D366]/15 blur-[130px]" />
+        <div className="pointer-events-none absolute bottom-0 right-0 h-64 w-64 rounded-full bg-cyan-400/10 blur-[130px]" />
 
-        <Link href="/" className="relative z-10 inline-flex items-center gap-2.5 font-display text-lg font-extrabold tracking-tight">
-          <span className="grid h-9 w-9 place-items-center rounded-xl bg-gradient-to-br from-[#25D366] to-[#22d3ee] text-[#05070d] shadow-[0_0_30px_-6px_rgba(37,211,102,0.7)]">
-            <Sparkles size={18} strokeWidth={2.5} />
+        {/* Brand lockup */}
+        <Link href="/" className="group relative z-10 inline-flex items-center gap-4">
+          <BrandAvatar size={64} />
+          <span className="flex flex-col leading-none">
+            <span className="font-display text-[2rem] font-extrabold tracking-[-0.02em] text-white [text-shadow:0_1px_20px_rgba(37,211,102,0.25)]">
+              Pixie
+            </span>
+            <span className="mt-1.5 text-[12px] font-medium uppercase tracking-[0.22em] text-white/45">
+              AI workspace
+            </span>
           </span>
-          Pixie
         </Link>
 
-        <div className="relative z-10 max-w-md">
-          <h2 className="font-display text-[2.6rem] font-extrabold leading-[1.05] tracking-tight">
-            Your entire AI
-            <br />
-            workforce, in
-            <br />
-            <span className="bg-gradient-to-r from-[#25D366] to-[#7dd3fc] bg-clip-text text-transparent">one dashboard.</span>
+        {/* Hero copy + features */}
+        <div className="relative z-10">
+          <h2
+            className="font-display font-extrabold tracking-[-0.03em] text-white"
+            style={{ fontSize: 'clamp(2.4rem, 3.4vw, 3.5rem)', lineHeight: 1.02, maxWidth: '15ch' }}
+          >
+            Run your business with{' '}
+            <span className="bg-gradient-to-r from-[#25D366] to-[#7dd3fc] bg-clip-text text-transparent">Pixie.</span>
           </h2>
-          <p className="mt-5 max-w-sm text-[15px] leading-relaxed text-white/55">
-            Receptionist, website builder, SEO, social content, and an AI influencer — every Pixie service in a single command center.
+          <p className="mt-5 text-[17px] leading-relaxed text-white/60" style={{ maxWidth: '30ch' }}>
+            Website, receptionist, SEO, content, and marketing — all from one AI workspace.
           </p>
 
-          <div className="mt-9 space-y-2.5">
-            {HIGHLIGHTS.map(({ icon: Icon, label, tint }) => (
-              <div key={label} className="flex items-center gap-3 text-sm text-white/75">
+          <div className="mt-9 grid max-w-md grid-cols-2 gap-2.5">
+            {FEATURES.map(({ icon: Icon, label, tint }, i) => (
+              <div
+                key={label}
+                className={`group flex items-center gap-3 rounded-xl border border-white/[0.08] bg-white/[0.03] px-3.5 py-3 backdrop-blur-sm transition-colors hover:border-white/[0.16] hover:bg-white/[0.06] ${
+                  i === FEATURES.length - 1 ? 'col-span-2' : ''
+                }`}
+              >
                 <span
-                  className="grid h-8 w-8 place-items-center rounded-lg border border-white/10 bg-white/[0.04]"
+                  className="grid h-8 w-8 flex-none place-items-center rounded-lg border border-white/10 bg-white/[0.04] transition-transform group-hover:scale-105"
                   style={{ color: tint }}
                 >
                   <Icon size={16} strokeWidth={2.2} />
                 </span>
-                {label}
+                <span className="text-[14px] font-medium text-white/80">{label}</span>
               </div>
             ))}
           </div>
         </div>
 
-        <div className="relative z-10 flex items-center gap-2 text-xs text-white/40">
-          <ShieldCheck size={14} /> Bank-grade auth · your data stays yours
+        {/* Trust badge */}
+        <div className="relative z-10 inline-flex w-fit items-center gap-2.5 rounded-xl border border-white/[0.08] bg-white/[0.03] px-3.5 py-2.5 text-[13px] text-white/55">
+          <ShieldCheck size={15} className="text-[#25D366]" />
+          Secure sign-in · Your workspace stays private
         </div>
       </aside>
 
@@ -89,11 +105,14 @@ export function AuthShell({
         <div className="pointer-events-none absolute inset-0 lg:hidden" style={{ background: 'radial-gradient(100% 60% at 50% 0%, rgba(37,211,102,0.12), transparent 60%)' }} />
         <div className="relative w-full max-w-[420px]">
           {/* mobile brand */}
-          <Link href="/" className="mb-8 inline-flex items-center gap-2 font-display text-base font-extrabold lg:hidden">
-            <span className="grid h-8 w-8 place-items-center rounded-lg bg-gradient-to-br from-[#25D366] to-[#22d3ee] text-[#05070d]">
-              <Sparkles size={16} strokeWidth={2.5} />
+          <Link href="/" className="mb-8 inline-flex items-center gap-3 lg:hidden">
+            <BrandAvatar size={50} />
+            <span className="flex flex-col leading-none">
+              <span className="font-display text-[1.35rem] font-extrabold tracking-[-0.02em]">Pixie</span>
+              <span className="mt-1 text-[10.5px] font-medium uppercase tracking-[0.22em] text-white/45">
+                AI workspace
+              </span>
             </span>
-            Pixie
           </Link>
 
           <p className="text-[13px] font-semibold uppercase tracking-[0.16em] text-[#25D366]">{eyebrow}</p>

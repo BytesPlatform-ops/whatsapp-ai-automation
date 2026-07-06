@@ -301,6 +301,14 @@
   .mh-robot-bob {
     animation: mhBob 3s ease-in-out infinite;
   }
+  /* Initial (pre-flight) resting position for the persistent robot — matches the
+     intro anchor (x 50%, y 31vh, scale 1.12) in VIEWPORT units, so the robot is
+     centered on every screen size from first paint and never flashes in the
+     top-left corner on reload while images preload. GSAP's inline transform
+     overrides this the moment the scroll-flight timeline initialises. */
+  .mh-robot-initial {
+    transform: translate(calc(50vw - 50%), calc(31vh - 50%)) scale(1.12);
+  }
   .mh-ring-shimmer {
     animation: mhRingShimmer 4s ease-in-out 0.6s infinite alternate;
   }
@@ -630,18 +638,28 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-height: 52px;
+    gap: 9px;
+    min-height: 56px;
     width: min(100%, 360px);
     border-radius: 999px;
     background: var(--accent);
     color: var(--button-text);
-    box-shadow: 0 18px 50px color-mix(in srgb, var(--accent) 26%, transparent), inset 0 1px 0 rgba(255, 255, 255, 0.22);
+    box-shadow: 0 18px 50px color-mix(in srgb, var(--accent) 30%, transparent), inset 0 1px 0 rgba(255, 255, 255, 0.22);
     font-weight: 800;
-    font-size: 0.95rem;
+    font-size: 1rem;
     transition: transform 180ms ease, filter 180ms ease;
   }
   .m-primary-cta:active {
     transform: scale(0.97);
+    filter: brightness(1.05);
+  }
+  /* CTA arrow — subtle nudge on press/hover so the button reads as the action. */
+  .m-cta-arrow {
+    transition: transform 200ms ease;
+  }
+  .m-primary-cta:hover .m-cta-arrow,
+  .m-primary-cta:active .m-cta-arrow {
+    transform: translateX(3px);
   }
   .m-primary-cta:focus-visible,
   .m-secondary-cta:focus-visible {
@@ -746,9 +764,10 @@
     border-bottom: 1px solid transparent;
   }
   .m-topbar.is-scrolled {
-    background: rgba(2, 7, 10, 0.68);
-    backdrop-filter: blur(16px);
-    border-bottom-color: color-mix(in srgb, var(--accent) 22%, rgba(255, 255, 255, 0.08));
+    background: rgba(3, 12, 10, 0.4);
+    backdrop-filter: blur(18px) saturate(140%);
+    -webkit-backdrop-filter: blur(18px) saturate(140%);
+    border-bottom-color: rgba(255, 255, 255, 0.06);
   }
   .m-icon-btn {
     display: flex;
@@ -757,8 +776,15 @@
     width: 44px;
     height: 44px;
     border-radius: 999px;
-    border: 1px solid rgba(255, 255, 255, 0.15);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    background: rgba(255, 255, 255, 0.06);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
     color: #fff;
+    transition: background 200ms ease, transform 200ms ease;
+  }
+  .m-icon-btn:active {
+    transform: scale(0.94);
   }
 
   /* Full-screen menu overlay */

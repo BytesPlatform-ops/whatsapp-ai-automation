@@ -11,7 +11,7 @@ import { RoleProgress } from './RoleProgress';
 import { PremiumNavbar } from './PremiumNavbar';
 import { MobilePinnedRoleExperience } from './mobile/MobilePinnedRoleExperience';
 import { PixieFooter } from '@/components/sections/PixieFooter';
-import { JoinPixie } from '@/pixie/JoinPixie';
+import { PrimaryCtaButton } from '@/components/auth/PrimaryCtaButton';
 import { FLYING_ROLES, INTRO, STUDIO_BG_SRC, NORMAL_FORM, preloadImage } from './roleData';
 import { ANCHORS, anchorPoint, oppositeSide } from './flightPath';
 import { themeFor, INTRO_THEME } from './themeMap';
@@ -217,7 +217,7 @@ export function PixieMasterHero() {
         activeId={activeId === 'intro' ? 'normal' : activeId}
         scanKey={scanKey}
         idle={!reducedMotion}
-        className="pointer-events-none absolute left-0 top-0 z-30 will-change-transform"
+        className="mh-robot-initial pointer-events-none absolute left-0 top-0 z-30 will-change-transform"
       />
 
       {/* Intro section — copy sits in a clear zone BELOW the robot (robot flies
@@ -228,10 +228,11 @@ export function PixieMasterHero() {
           <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-white/45">{INTRO.eyebrow}</p>
           <h1 className="mt-3 max-w-2xl font-display text-[clamp(2.1rem,4vw,3.25rem)] font-extrabold leading-[1.05] tracking-tight text-[#F4FFF9] text-balance">{INTRO.heading}</h1>
           <p className="mt-4 max-w-xl text-base leading-relaxed text-white/65 sm:text-lg">{INTRO.sub}</p>
-          {/* Intro uses our animated shimmer "Join Pixie" CTA → /join-pixie
-              waitlist (same button as the footer). Secondary jumps to roles. */}
+          {/* Intro uses the single resolver-driven CTA → "Join Pixie" (/login)
+              when signed out, "Enter Pixie Lab" (/pixie-lab/for-you) when signed
+              in. No waitlist. Secondary jumps to roles. */}
           <div className="mt-7 flex items-center gap-3">
-            <JoinPixie label={INTRO.primaryCta} size="md" />
+            <PrimaryCtaButton size="md" />
             <a href="#pixie-greeter" className="inline-flex h-[52px] items-center justify-center rounded-full border bg-white/[0.04] px-6 text-sm font-semibold text-white/85 backdrop-blur-md" style={{ borderColor: 'color-mix(in srgb, var(--accent) 28%, transparent)' }}>{INTRO.secondaryCta}</a>
           </div>
         </div>

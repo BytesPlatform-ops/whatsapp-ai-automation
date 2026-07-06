@@ -28,8 +28,13 @@ export function RobotFormMorph({ activeId, scanKey }: { activeId: string; scanKe
             className="absolute inset-0 m-auto h-full w-full select-none object-contain drop-shadow-[0_28px_55px_rgba(0,0,0,0.5)]"
             style={{
               opacity: on ? 1 : 0,
-              transform: on ? 'scale(1)' : 'scale(0.985)',
-              transition: 'opacity 0.7s ease, transform 0.8s cubic-bezier(0.22,1,0.36,1)',
+              // Incoming form rises softly into focus; outgoing drifts up and
+              // defocuses — a premium cross-dissolve rather than a hard swap.
+              transform: on ? 'scale(1) translateY(0)' : 'scale(0.93) translateY(8px)',
+              filter: on ? 'blur(0px)' : 'blur(5px)',
+              transition:
+                'opacity 0.85s cubic-bezier(0.4,0,0.2,1), transform 1.15s cubic-bezier(0.16,1,0.3,1), filter 0.8s cubic-bezier(0.4,0,0.2,1)',
+              willChange: 'opacity, transform, filter',
             }}
           />
         );
