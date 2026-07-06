@@ -15,7 +15,9 @@ export const dynamic = 'force-dynamic';
 export async function GET(req: Request) {
   const g = await guard('marketing.manage');
   if (!g.ok) return g.response;
-  const feature = new URL(req.url).searchParams.get('feature') || '';
+  const ALLOWED_FEATURES = new Set(['comments', 'dms', 'publishing', 'insights', 'ads_read']);
+  const raw = new URL(req.url).searchParams.get('feature') || '';
+  const feature = ALLOWED_FEATURES.has(raw) ? raw : '';
   const url = new URL('/api/meta/connect/start', BACKEND);
   url.searchParams.set('tenant_id', g.tenant);
   if (feature) url.searchParams.set('feature', feature);

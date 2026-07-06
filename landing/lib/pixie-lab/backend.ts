@@ -123,8 +123,10 @@ export async function backendSend<T = unknown>(method: 'POST' | 'DELETE' | 'PUT'
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
       body: JSON.stringify({ ...body, tenant_id: tenant, now: new Date().toISOString() }),
     });
-    const data = (await res.json().catch(() => null)) as T;
-    return { backendUp: true, status: res.status, data };
+    // Only surface the backend payload on success — a 4xx/5xx body may carry
+    // internal detail (stack traces, model names) we must not spread downstream.
+    const data = res.ok ? ((await res.json().catch(() => null)) as T) : null;
+    return { backendUp: res.ok, status: res.status, data };
   } catch {
     return { backendUp: false, status: 0, data: null };
   } finally {

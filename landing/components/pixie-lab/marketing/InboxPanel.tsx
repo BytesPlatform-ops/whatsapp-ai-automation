@@ -34,10 +34,13 @@ function Badge({ children, color }: { children: React.ReactNode; color: string }
   );
 }
 
+type InboxAction = 'analyze' | 'prepare-reply' | 'route' | 'hide';
+type ActionApiResult = { backendUp?: boolean; error?: string; status?: string; approval_id?: string; analysis?: unknown };
+
 interface ItemCardProps {
   item: MetaInboxItem;
   type: 'dm' | 'comment';
-  onAction: (item: MetaInboxItem) => void;
+  onAction: (item: MetaInboxItem, action: InboxAction, res: ActionApiResult) => void;
   busy: boolean;
   expanded: boolean;
   onToggle: () => void;
@@ -102,18 +105,18 @@ function ItemActions({
 }: {
   item: MetaInboxItem;
   type: 'dm' | 'comment';
-  onAction: (item: MetaInboxItem) => void;
+  onAction: (item: MetaInboxItem, action: InboxAction, res: ActionApiResult) => void;
   busy: boolean;
   result: ActionResult | null;
 }) {
   const [replyText, setReplyText] = useState('');
   const [localBusy, setLocalBusy] = useState<string | null>(null);
 
-  async function doAction(action: 'analyze' | 'prepare-reply' | 'route' | 'hide', reply?: string) {
+  async function doAction(action: InboxAction, reply?: string) {
     setLocalBusy(action);
-    await metaApi.inboxAction(action, item.id, reply);
+    const res = await metaApi.inboxAction(action, item.id, reply);
     setLocalBusy(null);
-    onAction(item);
+    onAction(item, action, res as ActionApiResult);
   }
 
   return (
@@ -215,10 +218,16 @@ export function InboxPanel({ type }: InboxPanelProps) {
 
   useEffect(() => { load(); }, [load]);
 
-  function handleAction(item: MetaInboxItem) {
+  function handleAction(item: MetaInboxItem, action: InboxAction, res: ActionApiResult) {
     setBusyId(null);
-    // Optimistically mark as processed and record a result to show feedback
-    setActionResults((prev) => ({ ...prev, [item.id]: { type: 'analysis' } }));
+    // Map the performed action to the right feedback, honouring backend errors.
+    let type: ActionResult['type'];
+    if (res && (res.backendUp === false || res.error)) type = 'error';
+    else if (action === 'route') type = 'routed';
+    else if (action === 'hide') type = 'hidden';
+    else if (action === 'prepare-reply') type = 'reply-queued';
+    else type = 'analysis';
+    setActionResults((prev) => ({ ...prev, [item.id]: { type, message: res?.error, approval_id: res?.approval_id } }));
     load();
   }
 

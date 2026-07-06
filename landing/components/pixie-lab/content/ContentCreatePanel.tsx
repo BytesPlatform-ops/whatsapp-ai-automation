@@ -1,11 +1,12 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { Upload, Image as ImageIcon, Film, CheckCircle2, Loader2, Sparkles } from 'lucide-react';
 import { contentApi } from '@/lib/pixie-lab/servicesClient';
 
 const ACCENT = '#D4AF37';
+const MAX_UPLOAD_BYTES = 50 * 1024 * 1024; // 50 MB — base64 in a single JSON body
 
 function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -30,9 +31,18 @@ export function ContentCreatePanel() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
 
+  // Revoke the preview object URL when the component unmounts (e.g. navigate
+  // away mid-upload) so we never leak it.
+  useEffect(() => () => { if (preview) URL.revokeObjectURL(preview); }, [preview]);
+
   function onFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0];
     if (!f) return;
+    if (f.size > MAX_UPLOAD_BYTES) {
+      setError(`File is too large (${formatSize(f.size)}). Max is ${formatSize(MAX_UPLOAD_BYTES)}.`);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
     // Revoke previous object URL to avoid leaks
     if (preview) URL.revokeObjectURL(preview);
     setFile(f);

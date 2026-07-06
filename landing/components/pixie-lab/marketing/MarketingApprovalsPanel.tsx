@@ -117,10 +117,10 @@ export function MarketingApprovalsPanel() {
       if (d.error) { setLoadStatus('error'); return; }
       const all = Array.isArray(d.items) ? d.items : [];
       // Filter to marketing-related pending items
+      // Only marketing-agent items (backend stamps agent="marketing-agent").
+      // Require the agent field so SEO/other pending items never leak in here.
       const marketing = all.filter(
-        (i) =>
-          i.status === 'pending' &&
-          (typeof i.agent === 'string' ? i.agent.includes('marketing') : true),
+        (i) => i.status === 'pending' && typeof i.agent === 'string' && i.agent.includes('marketing'),
       );
       setItems(marketing);
       setLoadStatus('done');

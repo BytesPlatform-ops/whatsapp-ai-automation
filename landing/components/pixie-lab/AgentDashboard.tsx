@@ -174,7 +174,7 @@ export function AgentDashboard({ agent, tenant = 'demo', nowMs }: { agent: FeedA
           <aside className="space-y-3">
             <div className="rounded-2xl border border-[var(--pl-border)] bg-[var(--pl-surface)] p-4">
               <p className="mb-3 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-[var(--pl-text-muted)]">
-                <Activity size={13} /> Recent activity
+                <Activity size={13} /> {MOCK_ACTIVITY[agent] ? 'Sample activity' : 'Recent activity'}
               </p>
               <ul className="space-y-2.5">
                 {(MOCK_ACTIVITY[agent] ?? ['No activity yet']).map((a, i) => (
@@ -190,7 +190,7 @@ export function AgentDashboard({ agent, tenant = 'demo', nowMs }: { agent: FeedA
       </main>
 
       {toast && (
-        <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-full border border-[var(--pl-border)] bg-[#0a0e16] px-4 py-2.5 text-[13px] text-[var(--pl-text)] shadow-2xl">
+        <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-full border border-[var(--pl-border)] bg-[var(--pl-surface)] px-4 py-2.5 text-[13px] text-[var(--pl-text)] shadow-2xl">
           {toast}
         </motion.div>
       )}
