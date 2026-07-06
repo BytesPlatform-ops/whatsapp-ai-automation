@@ -12,16 +12,19 @@ import json
 
 from activity.router import log_activity
 from approvals.router import ApprovalItem, create_approval, register_executor_for
+from content import get_asset
 from integrations import execute_action, resolve_connector
 from models import ModelRequest, get_router
 from schemas import ModelTier
 
 from . import insights
+from .content_items import MetaContentItem, ToolExecution, get_content_store
 from .marketing_prompt import CONTENT_PREP_PROMPT, MARKETING_AGENT_META_PROMPT
 from .schemas import AnalyzeBody, PreparePostBody, PrepareReplyBody
 from .store import get_meta_store
 
 AGENT_SLUG = "marketing-agent"
+SUPPORTED_CONTENT_TYPES = {"reel", "post", "photo", "video"}
 
 
 def _provider_label(mode: str) -> str:
@@ -78,16 +81,50 @@ def _media_type(content_type: str) -> str:
 
 
 async def prepare_post(body: PreparePostBody) -> dict:
-    """Generate a Meta-ready post (or use the given caption) and file an approval."""
+    """Validate, generate a Meta-ready post, and file an approval.
+
+    Media comes from an uploaded ContentAsset (media_asset_id) so the publish has a
+    real, Meta-fetchable URL. Impossible actions are refused up front — no approval
+    is created for an unsupported type or a real publish with unreachable media.
+    """
     tenant = body.tenant_id
     store = get_meta_store()
     if store.mode(tenant) is None:
         return {"status": "not_connected",
                 "message": "No Meta assets connected. Connect Meta (or use demo data) first."}
 
+    if body.content_type not in SUPPORTED_CONTENT_TYPES:
+        return {"status": "unsupported_action",
+                "message": f"'{body.content_type}' is not supported by the current Meta API/permissions."}
+
     defaults = store.defaults(tenant)
     asset_id = body.asset_id or (defaults.get("instagram_id") if body.platform == "instagram"
                                  else defaults.get("page_id")) or ""
+    if not asset_id:
+        return {"status": "missing_asset",
+                "message": "Select a Facebook Page or Instagram account first."}
+
+    capability = _publish_capability(body.content_type)
+    # "Ready" = a real connection is present and will actually publish. When no
+    # connection exists the publish blocks at execute anyway, so we don't pre-refuse
+    # for media there — the approval is created and blocks honestly on approve.
+    will_be_real = resolve_connector(tenant, capability).status == "ready"
+
+    # Resolve media from an uploaded ContentAsset (preferred) or a raw URL.
+    media_asset = get_asset(tenant, body.media_asset_id) if body.media_asset_id else None
+    if body.media_asset_id and not media_asset:
+        return {"status": "invalid_media", "message": f"Content asset {body.media_asset_id} not found."}
+    media_url = media_asset.public_url if media_asset else body.media_url
+
+    # Real publish must have media Meta can actually fetch.
+    if will_be_real:
+        if not media_asset and not media_url:
+            return {"status": "invalid_media",
+                    "message": "Upload media before publishing for real (media_asset_id required)."}
+        if body.platform == "instagram" and media_asset and not media_asset.meta_reachable():
+            return {"status": "invalid_media_url",
+                    "message": "Media is not publicly reachable by Meta. Use Supabase storage "
+                               "(PIXIE_STORAGE_PROVIDER=supabase), not local, for real publishing."}
 
     provider_label, model_id, content = "mock", "", {}
     if body.caption:
@@ -98,11 +135,10 @@ async def prepare_post(body: PreparePostBody) -> dict:
                     "Write the post now.")
         content, provider_label, model_id = await _llm_json(CONTENT_PREP_PROMPT, user_msg, tenant)
 
-    capability = _publish_capability(body.content_type)
     payload = {
         "platform": body.platform, "asset_id": asset_id, "caption": content.get("caption", ""),
-        "media_url": body.media_url, "media_type": _media_type(body.content_type),
-        "content_type": body.content_type, "media_asset_id": body.media_asset_id,
+        "media_asset_id": body.media_asset_id, "media_url": media_url,
+        "media_type": _media_type(body.content_type), "content_type": body.content_type,
         "scheduled_time": body.scheduled_time,
     }
     tool = resolve_connector(tenant, capability).provider
@@ -115,8 +151,9 @@ async def prepare_post(body: PreparePostBody) -> dict:
         "platform": body.platform, "content_type": body.content_type,
         "caption": content.get("caption", ""), "hook": content.get("hook", ""),
         "hashtags": content.get("hashtags", []), "script": content.get("script", ""),
-        "cta": content.get("cta", ""), "media_url": body.media_url,
+        "cta": content.get("cta", ""), "media_url": media_url, "media_asset_id": body.media_asset_id,
         "will_publish_to": will_publish_to,
+        "media_reachable": bool(media_asset and media_asset.meta_reachable()),
         "execution_actions": [{"capability": capability, "payload": payload}],
     }
     approval = create_approval(
@@ -129,9 +166,10 @@ async def prepare_post(body: PreparePostBody) -> dict:
     return {
         "status": "approval_required", "agent_slug": AGENT_SLUG,
         "approval_id": approval.id, "llm_provider": provider_label, "model": model_id,
+        "will_be_real": will_be_real,
         "preview": {
             "platform": body.platform, "content_type": body.content_type,
-            "caption": content.get("caption", ""), "media_url": body.media_url,
+            "caption": content.get("caption", ""), "media_url": media_url,
             "will_publish_to": will_publish_to,
         },
         "prepared_output": prepared_output,
@@ -162,26 +200,78 @@ async def prepare_comment_reply(body: PrepareReplyBody) -> dict:
             "llm_provider": provider, "model": model_id, "prepared_output": prepared_output}
 
 
+def _record_publish(item: ApprovalItem, action: dict, res: dict) -> None:
+    """Persist a MetaContentItem + ToolExecution for a publish action."""
+    if action.get("capability") not in ("meta_content_publish", "meta_reel_publish"):
+        return
+    payload = action.get("payload", {})
+    ok = res.get("status") == "success"
+    real = res.get("mode") == "real" and ok
+    status = "published" if real else ("mock_published" if ok else "failed")
+    get_content_store().record(
+        MetaContentItem(
+            tenant_id=item.tenant_id, asset_id=payload.get("asset_id", ""),
+            platform=payload.get("platform", ""), content_type=payload.get("content_type", ""),
+            media_asset_id=payload.get("media_asset_id", ""), caption=payload.get("caption", ""),
+            meta_post_id=res.get("post_id") or res.get("mock_post_id") or "",
+            meta_media_id=res.get("media_id", ""), status=status,
+        ),
+        ToolExecution(
+            tenant_id=item.tenant_id, approval_id=item.id, capability=action.get("capability", ""),
+            asset_id=payload.get("asset_id", ""), status=res.get("status", ""),
+            error=res.get("error", ""), output_payload=res,
+        ),
+    )
+
+
 def _execute_marketing(item: ApprovalItem) -> dict:
-    """Approvals executor for marketing-agent items — runs each action via a connector
-    (mock unless Meta is really connected AND production+real)."""
+    """Approvals executor for marketing-agent items — resolve media, publish via a
+    connector (mock unless Meta is really connected AND production+real), and record
+    a MetaContentItem. Never reports 'published' unless the connector confirmed it."""
     actions = (item.prepared_output or {}).get("execution_actions", [])
     results = []
     any_real = False
     all_ok = True
+    blocked_reason = ""
     for action in actions:
-        res = execute_action(item.tenant_id, action.get("capability", ""), action.get("payload", {}))
+        payload = action.get("payload", {})
+        # Resolve the media URL from the ContentAsset at execute time.
+        if payload.get("media_asset_id") and not payload.get("media_url"):
+            asset = get_asset(item.tenant_id, payload["media_asset_id"])
+            if asset:
+                payload["media_url"] = asset.public_url
+        res = execute_action(item.tenant_id, action.get("capability", ""), payload)
         results.append(res)
-        if res.get("status") == "blocked":
+        _record_publish(item, action, res)
+        if res.get("status") in ("blocked", "error"):
             all_ok = False
+            blocked_reason = res.get("error") or blocked_reason
         if res.get("mode") == "real" and res.get("status") == "success":
             any_real = True
-    return {
-        "ok": all_ok, "mode": "real" if any_real else "mock", "executed": any_real,
-        "results": results,
-        "detail": ("Published for real through Meta." if any_real
-                   else "Ran through the mock Meta connector — nothing went live."),
-    }
+
+    # If this approval came from the inbox, reflect the outcome on the inbox item.
+    inbox_item_id = (item.prepared_output or {}).get("inbox_item_id")
+    is_inbox = any(a.get("capability", "").startswith("meta_comment") or a.get("capability") == "meta_dm_reply"
+                   for a in actions)
+    if inbox_item_id and results:
+        from . import inbox
+        inbox.mark_reply_result(item.tenant_id, inbox_item_id, results[0])
+
+    if is_inbox:
+        if any_real:
+            detail = "Reply posted to Meta."
+        elif all_ok:
+            detail = "Mock reply completed. Nothing went live on Meta."
+        else:
+            detail = f"Meta reply blocked. Reason: {blocked_reason or 'see result'}."
+    elif any_real:
+        detail = "Published to Meta successfully."
+    elif all_ok:
+        detail = "Mock publish completed. Nothing went live on Meta."
+    else:
+        detail = f"Meta publishing blocked. Reason: {blocked_reason or 'see result'}."
+    return {"ok": all_ok, "mode": "real" if any_real else "mock", "executed": any_real,
+            "blocked_reason": blocked_reason, "results": results, "detail": detail}
 
 
 register_executor_for(AGENT_SLUG, _execute_marketing)

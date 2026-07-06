@@ -8,11 +8,12 @@ call to append events. Self-contained: one include_router line in app.py.
 
 from __future__ import annotations
 
-import itertools
 from typing import Optional
 
 from fastapi import APIRouter, Query
 from pydantic import BaseModel
+
+import persistence
 
 
 class ActivityEvent(BaseModel):
@@ -25,20 +26,24 @@ class ActivityEvent(BaseModel):
 
 
 class _Store:
+    """Row repo over table `activity_logs` (memory | file | supabase). Append-only."""
+
     def __init__(self) -> None:
-        self._events: dict[str, list[ActivityEvent]] = {}
-        self._seq = itertools.count(1)
+        self._repo = persistence.table("activity_logs")
 
     def add(self, tenant_id: str, type_: str, title: str = "", agent: str = "", created_at: str = "") -> ActivityEvent:
+        import secrets
         ev = ActivityEvent(
-            id=f"ev_{next(self._seq)}", tenant_id=tenant_id, agent=agent,
+            id=f"ev_{secrets.token_hex(6)}", tenant_id=tenant_id, agent=agent,
             type=type_, title=title, created_at=created_at,
         )
-        self._events.setdefault(tenant_id, []).append(ev)
+        # envelope created_at is stamped server-side (monotonic) for stable ordering
+        self._repo.upsert(persistence.envelope(ev.id, tenant_id, ev.model_dump()))
         return ev
 
     def recent(self, tenant_id: str, limit: int = 20) -> list[ActivityEvent]:
-        return list(reversed(self._events.get(tenant_id, [])))[:limit]
+        rows = self._repo.list_by_tenant(tenant_id)
+        return [ActivityEvent(**r["data"]) for r in reversed(rows)][:limit]
 
 
 _store: Optional[_Store] = None

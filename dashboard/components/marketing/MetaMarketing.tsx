@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { MetaNav } from './MetaNav';
 
 /**
  * Meta Marketing Agent dashboard.
@@ -44,24 +45,48 @@ export function MetaMarketing() {
   const [approvals, setApprovals] = useState<any[]>([]);
   const [activity, setActivity] = useState<any[]>([]);
   const [busy, setBusy] = useState('');
-  const [post, setPost] = useState({ platform: 'instagram', content_type: 'reel', idea: 'behind the scenes: how we make our signature latte', media_url: '' });
+  const [post, setPost] = useState({ platform: 'instagram', content_type: 'reel', idea: 'behind the scenes: how we make our signature latte' });
+  const [storage, setStorage] = useState<any>(null);
+  const [media, setMedia] = useState<any>(null); // uploaded ContentAsset
+  const [uploadErr, setUploadErr] = useState('');
 
   const refresh = useCallback(async () => {
-    const [st, a, ap, ev] = await Promise.all([
+    const [st, a, ap, ev, storeSt] = await Promise.all([
       callProxy(baseUrl, 'GET', `/api/meta/status?tenant_id=${encodeURIComponent(tenant)}`),
       callProxy(baseUrl, 'GET', `/api/meta/assets?tenant_id=${encodeURIComponent(tenant)}`),
       callProxy(baseUrl, 'GET', `/api/approvals?tenant_id=${encodeURIComponent(tenant)}`),
       callProxy(baseUrl, 'GET', `/api/activity?tenant_id=${encodeURIComponent(tenant)}&limit=20`),
+      callProxy(baseUrl, 'GET', `/api/content/storage/status`),
     ]);
     setStatus(st.data ?? { error: st.error });
     setAssets(a.data ?? null);
     setApprovals(Array.isArray(ap.data) ? ap.data.filter((x: any) => x.agent === 'marketing-agent') : []);
     setActivity(Array.isArray(ev.data) ? ev.data : []);
+    setStorage(storeSt.data ?? null);
     if (a.data?.connected) {
       const s = await callProxy(baseUrl, 'GET', `/api/meta/analytics/summary?tenant_id=${encodeURIComponent(tenant)}`);
       setSummary(s.data ?? null);
     } else { setSummary(null); }
   }, [baseUrl, tenant]);
+
+  function onPickFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadErr('');
+    setBusy('upload');
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const dataUrl = String(reader.result || '');
+      const r = await callProxy(baseUrl, 'POST', '/api/content/assets', {
+        tenant_id: tenant, filename: file.name, content_type: file.type || 'application/octet-stream',
+        data_base64: dataUrl.split(',')[1] || '',
+      });
+      setBusy('');
+      if (r.ok && r.data?.asset) setMedia({ ...r.data.asset, meta_reachable: r.data.meta_reachable });
+      else setUploadErr(r.data?.detail || r.error || 'Upload failed');
+    };
+    reader.readAsDataURL(file);
+  }
 
   useEffect(() => { void refresh(); }, [refresh]);
   useEffect(() => {
@@ -88,8 +113,15 @@ export function MetaMarketing() {
   }
   async function preparePost() {
     setBusy('prepare');
-    await callProxy(baseUrl, 'POST', '/api/agents/marketing/meta/prepare-post', { tenant_id: tenant, ...post });
-    setBusy(''); await refresh();
+    setUploadErr('');
+    const r = await callProxy(baseUrl, 'POST', '/api/agents/marketing/meta/prepare-post', {
+      tenant_id: tenant, ...post, media_asset_id: media?.id || '',
+    });
+    setBusy('');
+    // surface refusals (unsupported/invalid media) inline instead of silently doing nothing
+    const s = r.data?.status;
+    if (s && s !== 'approval_required') setUploadErr(r.data?.message || s);
+    await refresh();
   }
   async function resolve(id: string, action: 'approve' | 'skip') {
     setBusy(`${action}:${id}`);
@@ -113,6 +145,8 @@ export function MetaMarketing() {
           <button onClick={() => void refresh()} style={btn('rgba(255,255,255,0.1)')}>Refresh</button>
         </div>
       </div>
+
+      <MetaNav />
 
       {/* Connection */}
       <div style={{ ...card, marginTop: 16, borderColor: connected ? 'rgba(16,185,129,0.4)' : 'rgba(255,255,255,0.12)' }}>
@@ -138,6 +172,28 @@ export function MetaMarketing() {
             )}
           </div>
         </div>
+        {connected && status?.mode === 'demo' ? (
+          <div style={{ marginTop: 10, fontSize: 12.5, fontWeight: 600, color: '#fcd34d', background: 'rgba(252,211,77,0.1)', border: '1px solid rgba(252,211,77,0.25)', borderRadius: 8, padding: '8px 12px' }}>
+            Demo Meta Data — no real Meta account is connected. Publishing will be mock only.
+          </div>
+        ) : null}
+        {connected ? (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 10, fontSize: 11.5 }}>
+            <Perm label="Publishing" on={status?.permissions?.publishing} />
+            <Perm label="Insights" on={status?.permissions?.insights} />
+            <Perm label="Ads read" on={status?.permissions?.ads_read} />
+            <span style={{ padding: '3px 9px', borderRadius: 999, background: 'rgba(255,255,255,0.06)', opacity: 0.8 }}>exec: {status?.execution_mode}</span>
+            <span style={{ padding: '3px 9px', borderRadius: 999, background: 'rgba(255,255,255,0.06)', opacity: 0.8 }}>storage: {storage?.provider}{storage?.meta_reachable ? ' ✓' : ' (mock-only)'}</span>
+            <span style={{ padding: '3px 9px', borderRadius: 999, background: storage?.persistence?.multi_instance ? 'rgba(16,185,129,0.15)' : 'rgba(255,255,255,0.06)', color: storage?.persistence?.multi_instance ? '#6ee7b7' : 'rgba(255,255,255,0.8)' }}>
+              persistence: {storage?.persistence?.backend || '—'}{storage?.persistence?.multi_instance ? ' ✓ multi-instance' : ''}
+            </span>
+          </div>
+        ) : null}
+        {storage?.persistence?.warning ? (
+          <div style={{ marginTop: 10, fontSize: 12, color: '#fcd34d', background: 'rgba(252,211,77,0.08)', border: '1px solid rgba(252,211,77,0.2)', borderRadius: 8, padding: '7px 11px' }}>
+            ⚠ {storage.persistence.warning}
+          </div>
+        ) : null}
         {status && !status.configured ? (
           <div style={{ fontSize: 12, opacity: 0.65, marginTop: 10, lineHeight: 1.5 }}>
             To go live: developers.facebook.com → create app → Facebook Login for Business → redirect URI <code style={{ color: '#93c5fd' }}>{status.redirect_uri}</code> → request MVP scopes → submit for App Review.
@@ -213,7 +269,29 @@ export function MetaMarketing() {
                 </select></div>
             </div>
             <div style={{ marginTop: 12 }}><label style={label}>Idea / topic</label><input style={input} value={post.idea} onChange={(e) => setPost({ ...post, idea: e.target.value })} /></div>
-            <div style={{ marginTop: 12 }}><label style={label}>Media URL (public — required for a real Instagram publish)</label><input style={input} value={post.media_url} onChange={(e) => setPost({ ...post, media_url: e.target.value })} placeholder="https://…" /></div>
+
+            {/* Media upload */}
+            <div style={{ marginTop: 12 }}>
+              <label style={label}>Media (image/video) — stored in {storage?.provider || 'storage'}{storage && !storage.meta_reachable ? ' · not reachable by Meta (real IG publish needs Supabase)' : ''}</label>
+              <input type="file" accept="image/*,video/*" onChange={onPickFile} disabled={busy === 'upload'} style={{ ...input, padding: 6 }} />
+              {busy === 'upload' ? <div style={{ fontSize: 12, opacity: 0.6, marginTop: 6 }}>Uploading…</div> : null}
+              {media ? (
+                <div style={{ display: 'flex', gap: 12, marginTop: 10, alignItems: 'center', background: 'rgba(255,255,255,0.04)', borderRadius: 10, padding: 10 }}>
+                  {String(media.mime_type).startsWith('image/')
+                    ? <img src={mediaSrc(baseUrl, media.public_url)} alt="" style={{ width: 72, height: 72, objectFit: 'cover', borderRadius: 8 }} />
+                    : <video src={mediaSrc(baseUrl, media.public_url)} style={{ width: 96, height: 72, objectFit: 'cover', borderRadius: 8 }} muted />}
+                  <div style={{ fontSize: 12.5 }}>
+                    <div><b>{media.filename}</b> · {(media.size_bytes / 1024).toFixed(0)} KB · {media.mime_type}</div>
+                    <div style={{ opacity: 0.7 }}>storage: {media.storage_provider} · id {media.id}</div>
+                    <div style={{ color: media.meta_reachable ? '#6ee7b7' : '#fcd34d' }}>
+                      {media.meta_reachable ? '✓ Public URL — Meta can fetch this' : '⚠ Not Meta-reachable (fine for mock/demo; use Supabase for real)'}
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+
+            {uploadErr ? <div style={{ marginTop: 10, fontSize: 13, color: '#fda4af' }}>{uploadErr}</div> : null}
             <button onClick={() => void preparePost()} disabled={busy === 'prepare'} style={{ ...btn('#6366f1'), marginTop: 14, fontWeight: 700 }}>
               {busy === 'prepare' ? 'Writing caption…' : 'Prepare with Pixie'}
             </button>
@@ -257,6 +335,20 @@ export function MetaMarketing() {
       </div>
     </main>
   );
+}
+
+function Perm({ label, on }: { label: string; on?: boolean }) {
+  return (
+    <span style={{ padding: '3px 9px', borderRadius: 999, background: on ? 'rgba(16,185,129,0.15)' : 'rgba(255,255,255,0.06)', color: on ? '#6ee7b7' : 'rgba(255,255,255,0.55)' }}>
+      {on ? '✓' : '—'} {label}
+    </span>
+  );
+}
+
+function mediaSrc(baseUrl: string, url: string): string {
+  if (!url) return '';
+  if (url.startsWith('http')) return url; // Supabase public URL
+  return `${(baseUrl || 'http://localhost:8000').replace(/\/+$/, '')}${url}`; // local backend file
 }
 
 function Stat({ k, v }: { k: string; v: any }) {

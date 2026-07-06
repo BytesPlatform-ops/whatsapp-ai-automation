@@ -24,10 +24,10 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from pydantic import BaseModel
 
 from activity.router import log_activity
-from integrations import connections
 
 from . import oauth as m
 from . import seed
+from . import token_service as ts
 from .store import get_meta_store
 
 router = APIRouter(prefix="/api/meta", tags=["meta"])
@@ -79,10 +79,10 @@ async def connect_callback(code: str = Query(default=""), state: str = Query(def
     descriptor = {
         "provider": "meta", "status": "active", "mode": "live",
         "user_token": long["access_token"], "scopes": m.scopes_for(pending[1]),
-        "pages": assets.get("facebook_pages", []),
+        "pages": assets.get("facebook_pages", []),  # server-side ONLY (holds page tokens)
     }
-    connections.register_many(tenant_id, m.META_CAPABILITIES, descriptor)
-    get_meta_store().set_assets(tenant_id, assets, mode="live")
+    ts.save_token_ref(tenant_id, descriptor)
+    get_meta_store().set_assets(tenant_id, assets, mode="live")  # token-stripped inside
     log_activity(tenant_id, "meta_connected", title="Meta business assets connected",
                  agent="marketing-agent")
     return _popup_html("Meta connected ✓",
@@ -137,17 +137,34 @@ def set_defaults(body: DefaultsBody) -> dict:
 def status(tenant_id: str = Query(...)) -> dict:
     store = get_meta_store()
     mode = store.mode(tenant_id)
-    live_conn = connections.find_active_connection(tenant_id, "meta_content_publish")
     assets = store.get_assets(tenant_id)
+    defaults = store.defaults(tenant_id)
+    safe = ts.safe_status(tenant_id)   # server-side; NEVER contains a token
+    scopes = safe.get("scopes", []) if safe.get("connected") else []
+    from runtime.mode import execution_mode
+
     return {
         "configured": m.is_configured(),
         "connected": mode is not None,
         "mode": mode,  # "live" | "demo" | None
-        "live": live_conn is not None,
+        "live": safe.get("connected", False),
+        "display_name": safe.get("display_name"),
         "pages": len(assets.get("facebook_pages", [])),
         "instagram": len(assets.get("instagram_accounts", [])),
         "ad_accounts": len(assets.get("ad_accounts", [])),
+        "defaults": defaults,
+        "permissions": {
+            "publishing": any(s in scopes for s in ("pages_manage_posts", "instagram_content_publish")),
+            "insights": any(s in scopes for s in ("pages_read_engagement", "instagram_basic")),
+            "ads_read": "ads_read" in scopes,
+            "comments": ("available" if any(s in scopes for s in ("pages_manage_engagement", "instagram_manage_comments"))
+                         else ("app_review_needed" if mode == "live" else "missing")),
+            "dms": ("available" if any(s in scopes for s in ("instagram_manage_messages", "pages_messaging"))
+                    else ("app_review_needed" if mode == "live" else "missing")),
+        },
+        "execution_mode": execution_mode().value,
         "redirect_uri": m.redirect_uri(),
+        # no token, ever
     }
 
 
@@ -157,6 +174,6 @@ class DisconnectBody(BaseModel):
 
 @router.post("/disconnect")
 def disconnect(body: DisconnectBody) -> dict:
-    connections.disconnect(body.tenant_id, m.META_CAPABILITIES)
+    ts.delete_token(body.tenant_id)
     get_meta_store().clear(body.tenant_id)
     return {"ok": True, "connected": False}

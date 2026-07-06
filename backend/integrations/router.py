@@ -52,6 +52,14 @@ _CAPABILITY_MAP: dict[str, dict] = {
         "mock": ("mock_meta", _meta.mock_meta_reply),
         "real": ("meta", _meta.real_meta_comment_reply),
     },
+    "meta_comment_hide": {
+        "mock": ("mock_meta", _meta.mock_meta_hide),
+        "real": ("meta", _meta.real_meta_comment_hide),
+    },
+    "meta_dm_reply": {
+        "mock": ("mock_meta", _meta.mock_meta_reply),
+        "real": ("meta", _meta.real_meta_dm_reply),
+    },
 }
 
 CAPABILITIES = list(_CAPABILITY_MAP.keys())

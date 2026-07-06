@@ -56,11 +56,15 @@ def _reset(monkeypatch):
     import activity.router as act
     import meta.store as ms
     import meta.marketing_agent as agent
+    import meta.content_items as mci
+    import content.service as csvc
     from integrations import connections
 
     ar._store = None
     act._store = None
     ms._store = None
+    mci._store = None
+    csvc._store = None
     connections.disconnect("t_meta")
     monkeypatch.setattr(agent, "get_router", lambda: _StubRouter())
     monkeypatch.setenv("PIXIE_AGENT_MODE", "production")
@@ -185,6 +189,111 @@ def test_comment_reply_requires_approval(client):
     assert r["status"] == "approval_required"
     activity = client.get("/api/activity", params={"tenant_id": "t_meta"}).json()
     assert not any(e["type"] == "action_executed" for e in activity)
+
+
+import base64
+
+
+def _upload(client, tenant="t_meta", filename="reel.mp4", ctype="video/mp4"):
+    data = base64.b64encode(b"fake-media-bytes").decode()
+    return client.post("/api/content/assets", json={
+        "tenant_id": tenant, "filename": filename, "content_type": ctype, "data_base64": data}).json()
+
+
+def test_content_upload_creates_record(client, monkeypatch, tmp_path):
+    monkeypatch.setenv("PIXIE_STORAGE_PROVIDER", "local")
+    monkeypatch.setenv("PIXIE_DATA_DIR", str(tmp_path))
+    r = _upload(client)
+    assert r["status"] == "uploaded" and r["asset"]["id"]
+    lst = client.get("/api/content/assets", params={"tenant_id": "t_meta"}).json()
+    assert any(a["id"] == r["asset"]["id"] for a in lst["assets"])
+
+
+def test_prepare_post_uses_media_asset(client, monkeypatch, tmp_path):
+    monkeypatch.setenv("PIXIE_STORAGE_PROVIDER", "local")
+    monkeypatch.setenv("PIXIE_DATA_DIR", str(tmp_path))
+    _demo_connect(client)
+    aid = _upload(client)["asset"]["id"]
+    pp = client.post("/api/agents/marketing/meta/prepare-post", json={
+        "tenant_id": "t_meta", "platform": "instagram", "content_type": "reel",
+        "idea": "latte", "media_asset_id": aid}).json()
+    assert pp["status"] == "approval_required"
+    assert pp["prepared_output"]["media_asset_id"] == aid
+    assert pp["prepared_output"]["media_url"]  # resolved from the ContentAsset
+
+
+def test_mock_publish_creates_meta_content_item(client, monkeypatch, tmp_path):
+    monkeypatch.setenv("PIXIE_STORAGE_PROVIDER", "local")
+    monkeypatch.setenv("PIXIE_DATA_DIR", str(tmp_path))
+    _demo_connect(client)
+    aid = _upload(client)["asset"]["id"]
+    apid = client.post("/api/agents/marketing/meta/prepare-post", json={
+        "tenant_id": "t_meta", "platform": "instagram", "content_type": "reel",
+        "idea": "x", "media_asset_id": aid}).json()["approval_id"]
+    client.post(f"/api/approvals/{apid}/approve", json={"tenant_id": "t_meta"})
+    content = client.get("/api/meta/content", params={"tenant_id": "t_meta"}).json()
+    assert any(c["status"] == "mock_published" and c["media_asset_id"] == aid for c in content["content"])
+
+
+def test_real_mode_invalid_media_blocks_prepare(client, monkeypatch):
+    """A ready live connection but no uploaded media → prepare refuses (no approval)."""
+    from integrations import connections
+    from meta.oauth import META_CAPABILITIES
+    _demo_connect(client)
+    connections.register_many("t_meta", META_CAPABILITIES, {
+        "provider": "meta", "mode": "live",
+        "pages": [{"id": "page_demo_1", "page_access_token": "t",
+                   "linked_instagram": {"id": "ig_demo_1", "username": "brand"}}],
+    })
+    try:
+        r = client.post("/api/agents/marketing/meta/prepare-post", json={
+            "tenant_id": "t_meta", "platform": "instagram", "content_type": "reel", "idea": "x"}).json()
+        assert r["status"] == "invalid_media"
+        assert "approval_id" not in r
+    finally:
+        connections.disconnect("t_meta", META_CAPABILITIES)
+
+
+def test_no_token_in_status_or_assets(client):
+    """Tokens must never appear in frontend-facing responses."""
+    from meta.store import get_meta_store
+    from meta import token_service as ts
+    assets = {
+        "facebook_pages": [{"id": "page_1", "name": "P", "page_access_token": "SECRET_PAGE_TOKEN",
+                            "linked_instagram": {"id": "ig_1", "username": "brand"}}],
+        "instagram_accounts": [{"id": "ig_1", "username": "brand", "page_id": "page_1"}],
+        "ad_accounts": [],
+    }
+    ts.save_token_ref("t_meta", {"provider": "meta", "mode": "live", "user_token": "SECRET_USER_TOKEN",
+                                 "pages": assets["facebook_pages"], "scopes": ["pages_manage_posts"]})
+    get_meta_store().set_assets("t_meta", assets, mode="live")
+    status_text = client.get("/api/meta/status", params={"tenant_id": "t_meta"}).text
+    assets_text = client.get("/api/meta/assets", params={"tenant_id": "t_meta"}).text
+    for blob in (status_text, assets_text):
+        assert "SECRET_PAGE_TOKEN" not in blob
+        assert "SECRET_USER_TOKEN" not in blob
+        assert "page_access_token" not in blob
+    # ...but publishing permission IS surfaced (derived from scopes, safe)
+    import json as _json
+    assert _json.loads(status_text)["permissions"]["publishing"] is True
+
+
+def test_persistence_survives_reload(monkeypatch, tmp_path):
+    monkeypatch.setenv("PIXIE_PERSIST", "file")
+    monkeypatch.setenv("PIXIE_DATA_DIR", str(tmp_path))
+    import approvals.router as ar
+    ar._store = None
+    ar.create_approval("t_persist", "marketing-agent", "Persisted", action_type="meta_content_publish")
+    # simulate a restart: drop the singleton, rebuild from disk
+    ar._store = None
+    items = ar.get_approvals_store().list("t_persist")
+    assert len(items) == 1 and items[0].title == "Persisted"
+
+
+def test_demo_stays_mock(client):
+    _demo_connect(client)
+    from integrations import resolve_connector
+    assert resolve_connector("t_meta", "meta_content_publish").mode == "mock"
 
 
 def test_connected_meta_routes_to_real_connector(monkeypatch):

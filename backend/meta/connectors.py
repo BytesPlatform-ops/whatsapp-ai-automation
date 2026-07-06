@@ -16,6 +16,7 @@ import itertools
 import httpx
 
 from . import oauth as m
+from . import token_service as ts
 
 _seq = itertools.count(1)
 
@@ -42,7 +43,16 @@ def mock_meta_reply(payload: dict) -> dict:
         "status": "success", "provider": "mock_meta",
         "message": "Mock reply posted. Nothing went live.",
         "mock_reply_id": _mid("mock_reply"),
-        "target_id": payload.get("target_id"), "text": payload.get("text"),
+        "target_id": payload.get("comment_id") or payload.get("recipient_id") or payload.get("target_id"),
+        "text": payload.get("reply") or payload.get("text"),
+    }
+
+
+def mock_meta_hide(payload: dict) -> dict:
+    return {
+        "status": "success", "provider": "mock_meta",
+        "message": "Mock hide applied. Nothing changed on Meta.",
+        "mock_action_id": _mid("mock_hide"), "comment_id": payload.get("comment_id"),
     }
 
 
@@ -73,7 +83,7 @@ def real_meta_publish(payload: dict, connection: dict) -> dict:
             if not media_url:
                 return {"status": "error", "provider": "meta_instagram", "error": "no_media",
                         "message": "Instagram publishing requires a public media URL."}
-            token = page.get("page_access_token")
+            token = ts.page_token(connection, asset_id, by_instagram=True)
             media_type = payload.get("media_type", "IMAGE")
             container_body = {"caption": caption, "access_token": token}
             if media_type in ("REELS", "VIDEO"):
@@ -100,7 +110,7 @@ def real_meta_publish(payload: dict, connection: dict) -> dict:
             if not page:
                 return {"status": "error", "provider": "meta_pages", "error": "missing_asset",
                         "message": f"Page {asset_id} is not connected."}
-            token = page.get("page_access_token")
+            token = ts.page_token(connection, asset_id)
             with httpx.Client(timeout=30) as http:
                 if media_url:
                     r = http.post(f"{m.graph_base()}/{asset_id}/photos",
@@ -121,22 +131,68 @@ def real_meta_publish(payload: dict, connection: dict) -> dict:
 
 
 def real_meta_comment_reply(payload: dict, connection: dict) -> dict:
-    target_id = payload.get("target_id")
-    text = payload.get("text", "")
-    page = None
-    if connection.get("pages"):
-        page = connection["pages"][0]
-    if not page:
-        return {"status": "error", "provider": "meta", "error": "missing_asset",
-                "message": "No connected page for comment reply."}
+    target_id = payload.get("comment_id") or payload.get("target_id")
+    text = payload.get("reply") or payload.get("text", "")
+    token = ts.page_token(connection)
+    if not token:
+        return {"status": "error", "provider": "meta", "error": "missing_connection",
+                "message": "No connected page token for comment reply."}
     try:
         with httpx.Client(timeout=20) as http:
             r = http.post(f"{m.graph_base()}/{target_id}/comments",
-                          data={"message": text, "access_token": page.get("page_access_token")})
+                          data={"message": text, "access_token": token})
             if r.status_code >= 300:
                 return {"status": "error", "provider": "meta", "error": "api_error",
                         "http_status": r.status_code, "message": r.text[:400]}
             return {"status": "success", "provider": "meta",
                     "message": "Real reply posted.", "reply_id": r.json().get("id")}
+    except Exception as exc:
+        return {"status": "error", "provider": "meta", "error": "exception", "message": str(exc)}
+
+
+def real_meta_comment_hide(payload: dict, connection: dict) -> dict:
+    comment_id = payload.get("comment_id")
+    token = ts.page_token(connection)
+    if not token:
+        return {"status": "error", "provider": "meta", "error": "missing_connection",
+                "message": "No connected page token to hide a comment."}
+    try:
+        with httpx.Client(timeout=20) as http:
+            r = http.post(f"{m.graph_base()}/{comment_id}",
+                          data={"is_hidden": "true", "access_token": token})
+            if r.status_code >= 300:
+                return {"status": "error", "provider": "meta", "error": "api_error",
+                        "http_status": r.status_code, "message": r.text[:400]}
+            return {"status": "success", "provider": "meta", "message": "Comment hidden.",
+                    "comment_id": comment_id}
+    except Exception as exc:
+        return {"status": "error", "provider": "meta", "error": "exception", "message": str(exc)}
+
+
+def real_meta_dm_reply(payload: dict, connection: dict) -> dict:
+    """Send a DM via the Messenger/IG Messaging API. Requires reviewed messaging
+    permission; blocks honestly otherwise."""
+    recipient = payload.get("recipient_id")
+    text = payload.get("reply") or payload.get("text", "")
+    token = ts.page_token(connection)
+    if not token:
+        return {"status": "error", "provider": "meta", "error": "missing_connection",
+                "message": "No connected page token to send a DM."}
+    if not recipient:
+        return {"status": "error", "provider": "meta", "error": "missing_recipient",
+                "message": "No recipient id on the DM action."}
+    try:
+        with httpx.Client(timeout=20) as http:
+            r = http.post(f"{m.graph_base()}/me/messages",
+                          params={"access_token": token},
+                          json={"recipient": {"id": recipient},
+                                "message": {"text": text},
+                                "messaging_type": "RESPONSE"})
+            if r.status_code >= 300:
+                # Messaging permissions need App Review — surface that clearly.
+                return {"status": "error", "provider": "meta", "error": "missing_permission",
+                        "http_status": r.status_code, "message": r.text[:400]}
+            return {"status": "success", "provider": "meta", "message": "DM sent.",
+                    "message_id": r.json().get("message_id")}
     except Exception as exc:
         return {"status": "error", "provider": "meta", "error": "exception", "message": str(exc)}

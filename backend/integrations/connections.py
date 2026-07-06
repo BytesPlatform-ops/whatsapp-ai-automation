@@ -1,9 +1,11 @@
 """Connection registry — which tenants have which real tools connected.
 
-Holds OAuth connection descriptors (Google tokens etc.) keyed by
-(tenant_id, capability). Persisted to a gitignored JSON file so a connected
-Gmail survives a server restart. `find_active_connection` returns None until a
-real connection is registered, so real mode fails closed with 'missing_connection'.
+Holds OAuth connection descriptors (Google/Meta tokens) keyed by
+(tenant_id, capability). Persisted through the shared persistence layer, so in
+`PIXIE_PERSIST=supabase` mode tokens live in Postgres (pixie_kv, service-role
+only — never exposed to the frontend) and survive across instances; in `file`
+mode they survive a restart; in tests they stay in-memory. `find_active_connection`
+returns None until a real connection is registered, so real mode fails closed.
 
 Backward compatible: register_connection / find_active_connection / clear_connections
 keep their original signatures (used by tests + the integration router).
@@ -11,39 +13,30 @@ keep their original signatures (used by tests + the integration router).
 
 from __future__ import annotations
 
-import json
-import os
-from pathlib import Path
 from typing import Optional
+
+import persistence
+
+_KV_NAME = "integrations_connections"
 
 # (tenant_id, capability) -> connection descriptor (may hold tokens)
 _CONNECTIONS: dict[tuple[str, str], dict] = {}
 
-_STORE_PATH = Path(__file__).resolve().parent.parent / ".integrations_store.json"
-
 
 def _load() -> None:
-    if not _STORE_PATH.exists():
-        return
-    try:
-        rows = json.loads(_STORE_PATH.read_text(encoding="utf-8"))
-        for row in rows:
+    for row in persistence.load(_KV_NAME, []) or []:
+        try:
             _CONNECTIONS[(row["tenant_id"], row["capability"])] = row["descriptor"]
-    except (ValueError, KeyError, OSError):
-        pass  # a corrupt store must never crash boot
+        except (KeyError, TypeError):
+            continue  # a corrupt row must never crash boot
 
 
 def persist() -> None:
-    """Write the current connections to disk (best-effort)."""
-    rows = [
+    """Persist the current connections through the backend (memory/file/supabase)."""
+    persistence.save(_KV_NAME, [
         {"tenant_id": t, "capability": c, "descriptor": d}
         for (t, c), d in _CONNECTIONS.items()
-    ]
-    try:
-        _STORE_PATH.write_text(json.dumps(rows, indent=2), encoding="utf-8")
-        os.chmod(_STORE_PATH, 0o600)  # tokens inside — owner-only
-    except OSError:
-        pass
+    ])
 
 
 def register_connection(tenant_id: str, capability: str, descriptor: Optional[dict] = None) -> None:

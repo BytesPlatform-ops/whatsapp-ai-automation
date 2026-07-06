@@ -1,26 +1,47 @@
-"""Meta asset store — per-tenant discovered/demo assets + selected defaults.
+"""Meta asset store — per-tenant DISPLAY assets + selected defaults (durable).
 
-In-memory (mirrors approvals/activity/leads). The OAuth callback (or the demo
-connect) writes the discovered assets here; the dashboard reads them back and
-the agent uses the selected defaults. Tokens are NOT stored here — those live in
-the shared connections store (server-side, gitignored file).
+This holds ONLY frontend-safe data: asset ids, names, usernames, tasks, mode.
+It NEVER holds access tokens — those live server-side in the connections store
+(see token_service). `set_assets` strips any token before persisting, so a token
+can never leak through /api/meta/assets. Durable via persistence.py when
+PIXIE_PERSIST is on (survives restart); in-memory otherwise.
 """
 
 from __future__ import annotations
 
 from typing import Optional
 
+import persistence
+
+_TOKEN_KEYS = ("page_access_token", "access_token", "user_token", "token")
+
+
+def _safe_page(page: dict) -> dict:
+    return {k: v for k, v in page.items() if k not in _TOKEN_KEYS}
+
+
+def _sanitize(assets: dict) -> dict:
+    return {
+        "facebook_pages": [_safe_page(p) for p in assets.get("facebook_pages", [])],
+        "instagram_accounts": list(assets.get("instagram_accounts", [])),
+        "ad_accounts": list(assets.get("ad_accounts", [])),
+    }
+
 
 class _Store:
     def __init__(self) -> None:
-        self._assets: dict[str, dict] = {}      # tenant -> {facebook_pages, instagram_accounts, ad_accounts}
-        self._defaults: dict[str, dict] = {}    # tenant -> {page_id, instagram_id, ad_account_id}
-        self._mode: dict[str, str] = {}         # tenant -> "live" | "demo"
+        snap = persistence.load("meta_store", {}) or {}
+        self._assets: dict[str, dict] = snap.get("assets", {})
+        self._defaults: dict[str, dict] = snap.get("defaults", {})
+        self._mode: dict[str, str] = snap.get("mode", {})
+
+    def _persist(self) -> None:
+        persistence.save("meta_store", {"assets": self._assets, "defaults": self._defaults,
+                                        "mode": self._mode})
 
     def set_assets(self, tenant_id: str, assets: dict, mode: str = "live") -> None:
-        self._assets[tenant_id] = assets
+        self._assets[tenant_id] = _sanitize(assets)  # tokens stripped here
         self._mode[tenant_id] = mode
-        # sensible defaults on first connect
         d = self._defaults.setdefault(tenant_id, {})
         if assets.get("facebook_pages"):
             d.setdefault("page_id", assets["facebook_pages"][0]["id"])
@@ -28,6 +49,7 @@ class _Store:
             d.setdefault("instagram_id", assets["instagram_accounts"][0]["id"])
         if assets.get("ad_accounts"):
             d.setdefault("ad_account_id", assets["ad_accounts"][0]["id"])
+        self._persist()
 
     def get_assets(self, tenant_id: str) -> dict:
         return self._assets.get(tenant_id, {"facebook_pages": [], "instagram_accounts": [], "ad_accounts": []})
@@ -38,6 +60,7 @@ class _Store:
     def set_defaults(self, tenant_id: str, **kw) -> dict:
         d = self._defaults.setdefault(tenant_id, {})
         d.update({k: v for k, v in kw.items() if v})
+        self._persist()
         return d
 
     def defaults(self, tenant_id: str) -> dict:
@@ -47,6 +70,7 @@ class _Store:
         self._assets.pop(tenant_id, None)
         self._defaults.pop(tenant_id, None)
         self._mode.pop(tenant_id, None)
+        self._persist()
 
 
 _store: Optional[_Store] = None

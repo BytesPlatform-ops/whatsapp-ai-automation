@@ -34,3 +34,6 @@ form.jpeg
 
 # Pixie backend — OAuth token store (contains Google tokens)
 backend/.integrations_store.json
+
+# Pixie backend — durable JSON stores (may contain business data)
+backend/.pixie_data/

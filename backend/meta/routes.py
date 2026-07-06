@@ -18,8 +18,12 @@ from fastapi.responses import PlainTextResponse
 
 from activity.router import log_activity
 
+from pydantic import BaseModel
+
+from . import inbox as inbox_svc
 from . import insights
 from . import marketing_agent as agent
+from .content_items import get_content_store
 from .schemas import AnalyzeBody, PreparePostBody, PrepareReplyBody
 
 agent_router = APIRouter(prefix="/api/agents/marketing/meta", tags=["marketing-agent"])
@@ -45,6 +49,66 @@ async def prepare_reply(body: PrepareReplyBody) -> dict:
 def analytics_summary(tenant_id: str = Query(...), asset_id: str = Query(default=""),
                       range: str = Query(default="last_30_days")) -> dict:
     return insights.analytics_summary(tenant_id, asset_id, range)
+
+
+class ItemBody(BaseModel):
+    tenant_id: str = "demo_tenant"
+    item_id: str
+    reply: str = ""
+    now: str = ""
+
+
+@meta_data_router.get("/comments")
+def list_comments(tenant_id: str = Query(...), asset_id: str = Query(default="")) -> dict:
+    items = inbox_svc.list_inbox(tenant_id, "comment")
+    if asset_id:
+        items = [i for i in items if i.asset_id == asset_id]
+    return {"comments": [i.model_dump() for i in items]}
+
+
+@meta_data_router.get("/inbox")
+def list_inbox(tenant_id: str = Query(...), type: str = Query(default="")) -> dict:
+    return {"inbox": [i.model_dump() for i in inbox_svc.list_inbox(tenant_id, type)]}
+
+
+@meta_data_router.get("/permissions")
+def permissions(tenant_id: str = Query(...)) -> dict:
+    return inbox_svc.permissions(tenant_id)
+
+
+@agent_router.post("/comments/analyze")
+async def analyze_comment(body: ItemBody) -> dict:
+    return await inbox_svc.analyze(body.tenant_id, body.item_id)
+
+
+@agent_router.post("/inbox/analyze")
+async def analyze_inbox(body: ItemBody) -> dict:
+    return await inbox_svc.analyze(body.tenant_id, body.item_id)
+
+
+@agent_router.post("/inbox/prepare-reply")
+def inbox_prepare_reply(body: ItemBody) -> dict:
+    return inbox_svc.prepare_reply(body.tenant_id, body.item_id, body.reply, body.now)
+
+
+@agent_router.post("/inbox/hide")
+def inbox_hide(body: ItemBody) -> dict:
+    return inbox_svc.prepare_hide(body.tenant_id, body.item_id, body.now)
+
+
+@agent_router.post("/inbox/route")
+def inbox_route(body: ItemBody) -> dict:
+    return inbox_svc.route_to_receptionist(body.tenant_id, body.item_id, body.now)
+
+
+@meta_data_router.get("/content")
+def published_content(tenant_id: str = Query(...)) -> dict:
+    """Published/prepared Meta content history (survives restart when persistence is on)."""
+    store = get_content_store()
+    return {
+        "content": [i.model_dump() for i in store.list_content(tenant_id)],
+        "executions": [e.model_dump() for e in store.list_execs(tenant_id)],
+    }
 
 
 @meta_data_router.get("/ads/insights")

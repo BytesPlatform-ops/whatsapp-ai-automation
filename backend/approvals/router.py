@@ -16,12 +16,12 @@ fields are optional with defaults, so existing callers (feed) are unaffected.
 
 from __future__ import annotations
 
-import itertools
 from typing import Callable, Optional
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
+import persistence
 from activity.router import log_activity
 
 
@@ -44,20 +44,29 @@ class ApprovalItem(BaseModel):
 
 
 class _Store:
-    def __init__(self) -> None:
-        self._items: dict[str, dict[str, ApprovalItem]] = {}
-        self._seq = itertools.count(1)
+    """Row repo over table `approval_items` (memory | file | supabase)."""
 
-    def create(self, item: ApprovalItem) -> ApprovalItem:
-        item.id = f"ap_{next(self._seq)}"
-        self._items.setdefault(item.tenant_id, {})[item.id] = item
+    def __init__(self) -> None:
+        self._repo = persistence.table("approval_items")
+
+    def save(self, item: "ApprovalItem") -> None:
+        self._repo.upsert(persistence.envelope(item.id, item.tenant_id, item.model_dump(), item.created_at))
+
+    def create(self, item: "ApprovalItem") -> "ApprovalItem":
+        import secrets
+        from datetime import datetime, timezone
+        item.id = f"ap_{secrets.token_hex(6)}"  # unique across instances
+        if not item.created_at:  # stable ordering key; unchanged by later updates
+            item.created_at = datetime.now(timezone.utc).isoformat(timespec="microseconds")
+        self.save(item)
         return item
 
-    def get(self, tenant_id: str, approval_id: str) -> Optional[ApprovalItem]:
-        return self._items.get(tenant_id, {}).get(approval_id)
+    def get(self, tenant_id: str, approval_id: str) -> Optional["ApprovalItem"]:
+        row = self._repo.get(tenant_id, approval_id)
+        return ApprovalItem(**row["data"]) if row else None
 
-    def list(self, tenant_id: str) -> list[ApprovalItem]:
-        return list(reversed(list(self._items.get(tenant_id, {}).values())))
+    def list(self, tenant_id: str) -> list["ApprovalItem"]:
+        return [ApprovalItem(**r["data"]) for r in reversed(self._repo.list_by_tenant(tenant_id))]
 
 
 _store: Optional[_Store] = None
@@ -144,6 +153,7 @@ def _resolve(approval_id: str, body: ResolveBody, status: str, event: str) -> Ap
             title=item.title, agent=item.agent, created_at=body.now,
         )
     log_activity(body.tenant_id, event, title=item.title, agent=item.agent, created_at=body.now)
+    get_approvals_store().save(item)
     return item
 
 
@@ -189,4 +199,5 @@ def edit(approval_id: str, body: EditBody) -> ApprovalItem:
     if body.preview is not None:
         item.preview = body.preview
     log_activity(body.tenant_id, "approval_edited", title=item.title, agent=item.agent, created_at=body.now)
+    get_approvals_store().save(item)
     return item
