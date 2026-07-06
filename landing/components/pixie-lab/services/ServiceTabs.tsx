@@ -13,14 +13,14 @@ export interface ServiceTab { label: string; href: string }
 export function ServiceTabs({ tabs, accent }: { tabs: ServiceTab[]; accent: string }) {
   const pathname = usePathname();
   return (
-    <nav className="mt-6 flex flex-wrap gap-1.5 border-b border-[var(--pl-border)] pb-0">
+    <nav className="mt-6 flex gap-1.5 overflow-x-auto border-b border-[var(--pl-border)] pb-0 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
       {tabs.map((t) => {
         const active = pathname === t.href;
         return (
           <Link
             key={t.href}
             href={t.href}
-            className="relative rounded-t-lg px-3.5 py-2 text-[13.5px] font-semibold transition"
+            className="relative whitespace-nowrap rounded-t-lg px-3.5 py-2 text-[13.5px] font-semibold transition"
             style={active
               ? { color: accent, background: `color-mix(in srgb, ${accent} 12%, transparent)` }
               : { color: 'var(--pl-text-muted)' }}
