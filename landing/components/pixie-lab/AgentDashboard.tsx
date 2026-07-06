@@ -33,6 +33,25 @@ const MOCK_ACTIVITY: Record<string, string[]> = {
   receptionist: ['Answered 4 chats today', 'Captured 2 new leads', 'Drafted 3 follow-ups'],
 };
 
+/** Real service tools reachable from each agent's overview (kept in-shell). */
+const SERVICE_TOOLS: Record<string, { label: string; href: string }[]> = {
+  seo: [
+    { label: 'Run audit', href: '/pixie-lab/seo/audit' },
+    { label: 'History', href: '/pixie-lab/seo/history' },
+    { label: 'Connections', href: '/pixie-lab/seo/connections' },
+  ],
+  marketing: [
+    { label: 'Inbox', href: '/pixie-lab/marketing/inbox' },
+    { label: 'Comments', href: '/pixie-lab/marketing/comments' },
+    { label: 'Content', href: '/pixie-lab/marketing/content' },
+    { label: 'Approvals', href: '/pixie-lab/marketing/approvals' },
+  ],
+  content: [
+    { label: 'Create', href: '/pixie-lab/content/create' },
+    { label: 'Library', href: '/pixie-lab/content/library' },
+  ],
+};
+
 export function AgentDashboard({ agent, tenant = 'demo', nowMs }: { agent: FeedAgent; tenant?: string; nowMs: number }) {
   const meta = AGENT_META[agent];
   const accent = ACCENT[agent];
@@ -108,6 +127,22 @@ export function AgentDashboard({ agent, tenant = 'demo', nowMs }: { agent: FeedA
             <OpenFullServiceButton slug={getAgentByBackendKey(agent)!.slug} accent={accent} />
           )}
         </div>
+
+        {/* service tools quick-access (real backend-backed tools, in-shell) */}
+        {SERVICE_TOOLS[agent] && (
+          <div className="mt-5 flex flex-wrap items-center gap-2">
+            {SERVICE_TOOLS[agent].map((t) => (
+              <Link
+                key={t.href}
+                href={t.href}
+                className="inline-flex items-center gap-1.5 rounded-full border border-[var(--pl-border)] bg-[var(--pl-surface)] px-3.5 py-1.5 text-[13px] font-semibold text-[var(--pl-text-soft)] transition hover:border-[var(--pl-border-strong)] hover:text-[var(--pl-text)]"
+              >
+                {t.label}
+                <ArrowUpRight size={13} style={{ color: accent }} />
+              </Link>
+            ))}
+          </div>
+        )}
 
         {/* talk-to-agent bar */}
         <div className="mt-6 flex items-center gap-3 rounded-2xl border border-[var(--pl-border)] bg-[var(--pl-surface-soft)] px-4 py-3 focus-within:border-[var(--pl-border-strong)]">

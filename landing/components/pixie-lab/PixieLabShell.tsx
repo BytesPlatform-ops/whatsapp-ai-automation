@@ -33,6 +33,26 @@ const STATE_LABEL: Record<AgentState, string> = { active: 'Active', trial: 'Tria
 
 const AGENTS_ORDER: FeedAgent[] = ['website', 'receptionist', 'seo', 'marketing', 'content'];
 
+/** Sub-tools that live inside a service — shown indented under the active agent
+ *  so every tool stays reachable from the rail without leaving the Lab shell. */
+const SERVICE_SUBNAV: Partial<Record<FeedAgent, { label: string; href: string }[]>> = {
+  seo: [
+    { label: 'Audit', href: '/pixie-lab/seo/audit' },
+    { label: 'History', href: '/pixie-lab/seo/history' },
+    { label: 'Connections', href: '/pixie-lab/seo/connections' },
+  ],
+  marketing: [
+    { label: 'Inbox', href: '/pixie-lab/marketing/inbox' },
+    { label: 'Comments', href: '/pixie-lab/marketing/comments' },
+    { label: 'Content', href: '/pixie-lab/marketing/content' },
+    { label: 'Approvals', href: '/pixie-lab/marketing/approvals' },
+  ],
+  content: [
+    { label: 'Create', href: '/pixie-lab/content/create' },
+    { label: 'Library', href: '/pixie-lab/content/library' },
+  ],
+};
+
 export function PixieLabShell({
   name,
   tenant,
@@ -78,31 +98,57 @@ export function PixieLabShell({
           const st = stateFor(agent);
           const Icon = AGENT_ICON[agent];
           const accent = AGENT_ACCENT[agent];
-          const active = pathname === `/pixie-lab/${agent}`;
+          const base = `/pixie-lab/${agent}`;
+          const active = pathname === base;
+          const inSection = pathname === base || pathname.startsWith(`${base}/`);
+          const subnav = SERVICE_SUBNAV[agent];
           return (
-            <Link
-              key={agent}
-              href={agentHref(agent)}
-              onClick={() => setMobileOpen(false)}
-              className="flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium transition-colors"
-              style={{
-                background: active ? `color-mix(in srgb, ${accent} 15%, transparent)` : 'transparent',
-                color: active ? 'var(--pl-text)' : 'var(--pl-text-muted)',
-              }}
-            >
-              <Icon size={16} style={{ color: st === 'locked' ? 'var(--pl-text-muted)' : accent }} />
-              <span>{AGENT_META[agent].label}</span>
-              {st === 'locked' ? (
-                <Lock size={12} className="ml-auto text-[var(--pl-text-muted)]" />
-              ) : (
-                <span
-                  className="ml-auto rounded-full px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide"
-                  style={{ background: st === 'trial' ? 'rgba(139,92,246,0.18)' : `color-mix(in srgb, ${accent} 16%, transparent)`, color: st === 'trial' ? '#8b5cf6' : accent }}
-                >
-                  {STATE_LABEL[st]}
-                </span>
+            <div key={agent}>
+              <Link
+                href={agentHref(agent)}
+                onClick={() => setMobileOpen(false)}
+                className="flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium transition-colors"
+                style={{
+                  background: active ? `color-mix(in srgb, ${accent} 15%, transparent)` : 'transparent',
+                  color: active || inSection ? 'var(--pl-text)' : 'var(--pl-text-muted)',
+                }}
+              >
+                <Icon size={16} style={{ color: st === 'locked' ? 'var(--pl-text-muted)' : accent }} />
+                <span>{AGENT_META[agent].label}</span>
+                {st === 'locked' ? (
+                  <Lock size={12} className="ml-auto text-[var(--pl-text-muted)]" />
+                ) : (
+                  <span
+                    className="ml-auto rounded-full px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide"
+                    style={{ background: st === 'trial' ? 'rgba(139,92,246,0.18)' : `color-mix(in srgb, ${accent} 16%, transparent)`, color: st === 'trial' ? '#8b5cf6' : accent }}
+                  >
+                    {STATE_LABEL[st]}
+                  </span>
+                )}
+              </Link>
+              {/* Sub-tools appear when you're inside the service and it isn't locked. */}
+              {subnav && inSection && st !== 'locked' && (
+                <div className="mb-1 ml-[26px] mt-0.5 space-y-0.5 border-l border-[var(--pl-border)] pl-2.5">
+                  {subnav.map((s) => {
+                    const subActive = pathname === s.href;
+                    return (
+                      <Link
+                        key={s.href}
+                        href={s.href}
+                        onClick={() => setMobileOpen(false)}
+                        className="block rounded-lg px-2.5 py-1.5 text-[12.5px] font-medium transition-colors"
+                        style={{
+                          background: subActive ? `color-mix(in srgb, ${accent} 14%, transparent)` : 'transparent',
+                          color: subActive ? 'var(--pl-text)' : 'var(--pl-text-muted)',
+                        }}
+                      >
+                        {s.label}
+                      </Link>
+                    );
+                  })}
+                </div>
               )}
-            </Link>
+            </div>
           );
         })}
       </nav>
