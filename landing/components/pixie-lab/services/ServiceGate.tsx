@@ -13,18 +13,17 @@ import type { FeedAgent } from '@/lib/pixie-lab/feed';
  * guard; this is the trial/lock layer. Both render inside the Pixie Lab shell.
  */
 export function ServiceGate({ agent, tenant, children }: { agent: FeedAgent; tenant: string; children: React.ReactNode }) {
-  const { entitlements, live, stateOf } = useEntitlements(tenant);
-  const state = stateOf(agent);
+  const { loading, stateOf } = useEntitlements(tenant);
 
-  // Until the first entitlement fetch resolves, show a light placeholder rather
-  // than flashing the locked page.
-  if (!live && entitlements.every((e) => e.state === 'locked')) {
+  // Until the entitlement state is known, show a light placeholder rather than
+  // flashing the locked/pricing page.
+  if (loading) {
     return (
       <div className="grid min-h-[40vh] place-items-center text-[var(--pl-text-muted)]">
         <Loader2 size={20} className="animate-spin" />
       </div>
     );
   }
-  if (state === 'locked') return <TrialUnlock agent={agent} tenant={tenant} />;
+  if (stateOf(agent) === 'locked') return <TrialUnlock agent={agent} tenant={tenant} />;
   return <>{children}</>;
 }
