@@ -1,7 +1,18 @@
--- Pixie — Supabase/Postgres schema for PIXIE_PERSIST=supabase.
+-- ⚠️  REFERENCE / LEGACY ONLY — NO LONGER THE SOURCE OF TRUTH.
+-- ============================================================================
+-- These tables are now owned by Prisma (single source of truth for the schema):
+--   landing/prisma/schema.prisma  +  landing/prisma/migrations/0003_service_integrations
 --
--- Run once in the Supabase SQL editor (Dashboard → SQL → New query → paste → Run),
--- then set PIXIE_PERSIST=supabase and restart the backend.
+-- To create/update them, run Prisma migrations from the landing app instead of
+-- pasting this file:
+--   cd landing && npm run db:migrate        # prisma migrate deploy
+--
+-- The Prisma migration is idempotent (CREATE TABLE IF NOT EXISTS) and enables the
+-- same RLS, so it is safe on a database where this file was already run. This
+-- file is kept only as human-readable reference for the JSONB envelope design.
+-- ============================================================================
+--
+-- Pixie — Supabase/Postgres schema for PIXIE_PERSIST=supabase (reference).
 --
 -- Design: the persistence layer stores each transactional record as a normalized
 -- ROW (one row per record, so concurrent writers never clobber each other) with a

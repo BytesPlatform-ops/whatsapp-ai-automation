@@ -118,16 +118,16 @@ model WorkspaceService {
 }
 
 model WorkspaceMember {
-  id          String       @id @default(uuid()) @db.Uuid
-  workspaceId String       @map("workspace_id") @db.Uuid
-  userId      String       @map("user_id") @db.Uuid
+  id          String        @id @default(uuid()) @db.Uuid
+  workspaceId String        @map("workspace_id") @db.Uuid
+  userId      String        @map("user_id") @db.Uuid
   role        WorkspaceRole @default(member)
-  permissions Json         @default("[]")
+  permissions Json          @default("[]")
   status      MemberStatus  @default(active)
-  invitedBy   String?      @map("invited_by") @db.Uuid
-  joinedAt    DateTime?    @map("joined_at")
-  createdAt   DateTime     @default(now()) @map("created_at")
-  updatedAt   DateTime     @updatedAt @map("updated_at")
+  invitedBy   String?       @map("invited_by") @db.Uuid
+  joinedAt    DateTime?     @map("joined_at")
+  createdAt   DateTime      @default(now()) @map("created_at")
+  updatedAt   DateTime      @updatedAt @map("updated_at")
 
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
@@ -197,6 +197,155 @@ model BillingEvent {
   createdAt     DateTime @default(now()) @map("created_at")
 
   @@map("billing_events")
+}
+
+// ── Backend service-integration tables (SEO / Meta / Content) ─────────────────
+// SOURCE OF TRUTH: these models make Prisma migrations own the schema for the
+// tables the Python FastAPI backend uses (previously created by the manual
+// backend/meta/migrations.sql, now retired to reference). They are the
+// "envelope" shape the backend's persistence layer writes: a stable text id +
+// tenant_id + timestamps + a `data` JSONB payload (queryable via data->>'field').
+//
+// IMPORTANT — access & isolation:
+//   • Rows are written/read ONLY by the Python backend via the Supabase
+//     SERVICE-ROLE REST API — NOT by the Prisma client. Do not read/write these
+//     from Next server code; go through the /api/lab/* proxy → FastAPI.
+//   • `tenantId` is a free-form workspace tenant string (e.g. "ws_<workspaceId>"
+//     resolved server-side, plus system/demo tenants), so it is deliberately an
+//     indexed column and NOT a foreign key to Workspace. Cross-account isolation
+//     is enforced by the server-resolved tenant + the [tenantId, createdAt]
+//     index, and RLS is enabled (no anon policies) so no client can read them.
+//   • Timestamps are timestamptz to match the backend adapter.
+
+/// Key/value blobs — Meta asset cache + connection tokens. Tokens live ONLY here
+/// (service-role access), never returned to the frontend.
+model PixieKv {
+  name      String   @id
+  data      Json     @default(dbgenerated("'{}'::jsonb"))
+  updatedAt DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  @@map("pixie_kv")
+}
+
+/// Risky-action approval queue (shared by SEO one-tap fixes + Meta prepares).
+model ApprovalItem {
+  id        String   @id
+  tenantId  String   @map("tenant_id")
+  data      Json     @default(dbgenerated("'{}'::jsonb"))
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  @@index([tenantId, createdAt])
+  @@map("approval_items")
+}
+
+/// Tenant activity log.
+model ActivityLog {
+  id        String   @id
+  tenantId  String   @map("tenant_id")
+  data      Json     @default(dbgenerated("'{}'::jsonb"))
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  @@index([tenantId, createdAt])
+  @@map("activity_logs")
+}
+
+/// Uploaded media assets (Content service). Bytes live in Supabase Storage /
+/// local disk; this row is the metadata record.
+model ContentAsset {
+  id        String   @id
+  tenantId  String   @map("tenant_id")
+  data      Json     @default(dbgenerated("'{}'::jsonb"))
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  @@index([tenantId, createdAt])
+  @@map("content_assets")
+}
+
+/// Published Meta content records.
+model MetaContentItem {
+  id        String   @id
+  tenantId  String   @map("tenant_id")
+  data      Json     @default(dbgenerated("'{}'::jsonb"))
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  @@index([tenantId, createdAt])
+  @@map("meta_content_items")
+}
+
+/// Tool execution history (approvals executors, publishing, etc.).
+model ToolExecution {
+  id        String   @id
+  tenantId  String   @map("tenant_id")
+  data      Json     @default(dbgenerated("'{}'::jsonb"))
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  @@index([tenantId, createdAt])
+  @@map("tool_executions")
+}
+
+/// Meta unified inbox items (comments + DMs).
+model MetaInboxItem {
+  id        String   @id
+  tenantId  String   @map("tenant_id")
+  data      Json     @default(dbgenerated("'{}'::jsonb"))
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  @@index([tenantId, createdAt])
+  @@map("meta_inbox_items")
+}
+
+/// SEO audits (one per run).
+model SeoAudit {
+  id        String   @id
+  tenantId  String   @map("tenant_id")
+  data      Json     @default(dbgenerated("'{}'::jsonb"))
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  @@index([tenantId, createdAt])
+  @@map("seo_audits")
+}
+
+/// SEO crawled pages within an audit.
+model SeoPage {
+  id        String   @id
+  tenantId  String   @map("tenant_id")
+  data      Json     @default(dbgenerated("'{}'::jsonb"))
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  @@index([tenantId, createdAt])
+  @@map("seo_pages")
+}
+
+/// SEO issues found in an audit.
+model SeoIssue {
+  id        String   @id
+  tenantId  String   @map("tenant_id")
+  data      Json     @default(dbgenerated("'{}'::jsonb"))
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  @@index([tenantId, createdAt])
+  @@map("seo_issues")
+}
+
+/// SEO one-tap optimization actions (prepared/applied fixes).
+model SeoOptimizationAction {
+  id        String   @id
+  tenantId  String   @map("tenant_id")
+  data      Json     @default(dbgenerated("'{}'::jsonb"))
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  @@index([tenantId, createdAt])
+  @@map("seo_optimization_actions")
 }
 
 // ── Notification preferences ──────────────────────────────────────────────────
