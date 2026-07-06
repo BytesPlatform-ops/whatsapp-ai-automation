@@ -112,11 +112,11 @@ tables; does NOT apply RLS):**
 cd landing
 npm run db:push          # prisma db push — additive, non-destructive; creates the 11 new tables
 ```
-Then apply RLS once (Prisma can't model Postgres RLS) — paste the
-`ALTER TABLE … ENABLE ROW LEVEL SECURITY;` block from
-`prisma/migrations/0003_service_integrations/migration.sql` into the Supabase SQL
-editor. This is the ONLY remaining manual SQL, and only because RLS isn't
-expressible in Prisma.
+Then apply RLS once (Prisma can't model Postgres RLS) — paste
+**`supabase/rls/pixie-services-rls.sql`** into the Supabase SQL editor and run it.
+This is the ONLY remaining manual SQL, and only because RLS isn't expressible in
+Prisma. (The same statements are also embedded in the `0003` migration for
+Option 2.)
 
 **Option 2 — adopt migration history (recommended long-term; applies RLS too):**
 ```bash
