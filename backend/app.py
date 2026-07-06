@@ -8,6 +8,31 @@ per-step events) so cost-per-request is visible from the very first call.
 from __future__ import annotations
 
 import os
+from pathlib import Path
+
+
+def _load_local_env() -> None:
+    """Load backend/.env into os.environ (dependency-free) so local runs pick up
+    config without exporting vars or passing uvicorn --env-file. Existing
+    environment variables always win, so real deploy env is never overridden."""
+    env_path = Path(__file__).resolve().parent / ".env"
+    if not env_path.exists():
+        return
+    try:
+        for raw in env_path.read_text().splitlines():
+            line = raw.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, _, val = line.partition("=")
+            key = key.strip()
+            val = val.strip().strip('"').strip("'")
+            if key and key not in os.environ:
+                os.environ[key] = val
+    except Exception:
+        pass  # never block startup on a malformed .env
+
+
+_load_local_env()
 
 from fastapi import FastAPI
 from pydantic import BaseModel, Field

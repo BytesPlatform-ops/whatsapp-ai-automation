@@ -224,6 +224,40 @@ it as its own service and point `PIXIE_BACKEND_URL` at it.
 
 ---
 
+## 6a. Meta OAuth — going live
+
+The Marketing service works in a **setup-required** state until Meta keys are set.
+`GET /api/meta/status` returns `configured:false` + `missing_config:["META_APP_ID","META_APP_SECRET"]`
+(names only, never values). Managers see the exact missing vars in the UI;
+non-managers see a generic "not configured yet" message. No fake/connected state
+is ever shown.
+
+To run a real end-to-end OAuth test once you have a Meta app:
+
+1. In `backend/.env`, set:
+   ```
+   META_APP_ID=<your app id>
+   META_APP_SECRET=<your app secret>
+   META_REDIRECT_URI=http://localhost:8000/api/meta/connect/callback
+   META_GRAPH_VERSION=v23.0
+   META_WEBHOOK_VERIFY_TOKEN=<any random string>
+   ```
+   (Env names are exactly what the code reads — note `META_GRAPH_VERSION`, not
+   `META_GRAPH_API_VERSION`.) `backend/.env` is auto-loaded on startup.
+2. In the Meta app dashboard → Facebook Login → Valid OAuth Redirect URIs, add
+   the same `META_REDIRECT_URI`.
+3. Restart the backend, start the frontend, open `/pixie-lab/marketing/inbox`.
+   The setup bar should now show **Connect Facebook / Instagram**.
+4. Click Connect → the popup opens `/api/lab/meta/connect` → backend
+   `/api/meta/connect/start` → Meta OAuth. Approve; the callback
+   (`/api/meta/connect/callback`) stores the token server-side and the popup
+   closes. The bar flips to **Live** with your display name + permission pills.
+5. Verify `GET /api/meta/status` now returns `configured:true, connected:true`
+   and **never** a token.
+
+> `META_APP_SECRET` is server-only (backend). It is never sent to the browser and
+> never returned by any status endpoint.
+
 ## 7. External integrations needed
 
 - **Supabase** — Postgres (Prisma) + Storage + Auth.

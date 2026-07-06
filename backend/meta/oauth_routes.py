@@ -145,6 +145,7 @@ def status(tenant_id: str = Query(...)) -> dict:
 
     return {
         "configured": m.is_configured(),
+        "missing_config": m.missing_config(),  # required env var NAMES still unset (never values)
         "connected": mode is not None,
         "mode": mode,  # "live" | "demo" | None
         "live": safe.get("connected", False),

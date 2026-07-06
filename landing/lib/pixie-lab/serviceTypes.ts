@@ -82,6 +82,10 @@ export type MetaPermState = 'available' | 'app_review_needed' | 'missing';
 
 export interface MetaStatus {
   configured?: boolean;
+  /** Names (never values) of required Meta env vars still unset. */
+  missing_config?: string[];
+  /** Whether the viewer may manage the integration (marketing.manage). */
+  can_manage?: boolean;
   connected?: boolean;
   mode?: string; // 'live' | 'demo' | ''
   live?: boolean;

@@ -80,6 +80,18 @@ def is_configured() -> bool:
     return bool(app_id() and app_secret())
 
 
+# Env vars the Meta OAuth flow needs. Required = the connect flow can't start
+# without them; optional have safe defaults. Used to tell admins exactly what to
+# set (names only — a value is NEVER returned).
+REQUIRED_ENV = ["META_APP_ID", "META_APP_SECRET"]
+OPTIONAL_ENV = ["META_REDIRECT_URI", "META_GRAPH_VERSION", "META_WEBHOOK_VERIFY_TOKEN"]
+
+
+def missing_config() -> list[str]:
+    """Names of required Meta env vars that are currently unset (never values)."""
+    return [name for name in REQUIRED_ENV if not os.getenv(name)]
+
+
 def _require_configured() -> None:
     if not is_configured():
         raise MetaNotConfigured(

@@ -87,29 +87,47 @@ export function MetaSetupBar({ status, readiness, onRefresh }: MetaSetupBarProps
   }
 
   if (readiness === 'unconfigured') {
+    const canManage = status.can_manage !== false; // default to showing detail in demo/local
+    const missing = status.missing_config && status.missing_config.length
+      ? status.missing_config
+      : ['META_APP_ID', 'META_APP_SECRET'];
     return (
       <div className="mt-6 rounded-2xl border border-dashed border-[var(--pl-border)] bg-[var(--pl-surface)] p-5">
         <div className="flex items-start gap-3">
           <AlertCircle size={18} className="mt-0.5 flex-none" style={{ color: ACCENT }} />
           <div className="min-w-0 flex-1">
-            <p className="font-display text-[14.5px] font-bold text-[var(--pl-text)]">Meta isn&apos;t configured yet</p>
-            <p className="mt-1 text-[13px] text-[var(--pl-text-muted)]">
-              An admin needs to add <code className="rounded bg-[var(--pl-surface-soft)] px-1 py-0.5 text-[12px]">META_APP_ID</code> and{' '}
-              <code className="rounded bg-[var(--pl-surface-soft)] px-1 py-0.5 text-[12px]">META_APP_SECRET</code> to the backend environment.
-              You can still explore the UI with demo data.
+            <p className="font-display text-[14.5px] font-bold text-[var(--pl-text)]">
+              {canManage ? 'Meta isn’t configured yet' : 'Meta connection is not configured yet'}
             </p>
+            {canManage ? (
+              <div className="mt-1 text-[13px] text-[var(--pl-text-muted)]">
+                <p>Add these to the backend environment, then restart the backend:</p>
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {missing.map((v) => (
+                    <code key={v} className="rounded bg-[var(--pl-surface-soft)] px-1.5 py-0.5 text-[12px] text-[var(--pl-text-soft)]">{v}</code>
+                  ))}
+                </div>
+                <p className="mt-2">Create an app at developers.facebook.com. You can still explore the UI with demo data.</p>
+              </div>
+            ) : (
+              <p className="mt-1 text-[13px] text-[var(--pl-text-muted)]">
+                Ask a workspace admin to finish connecting Meta. It isn&apos;t available yet.
+              </p>
+            )}
           </div>
         </div>
-        <div className="mt-4 flex flex-wrap gap-2">
-          <button
-            onClick={handleSeedDemo}
-            disabled={seeding}
-            className="inline-flex items-center gap-2 rounded-lg border border-[var(--pl-border)] px-4 py-2 text-[13px] font-semibold text-[var(--pl-text-soft)] transition hover:text-[var(--pl-text)] disabled:opacity-50"
-          >
-            {seeding ? <Loader2 size={14} className="animate-spin" /> : null}
-            Seed demo data
-          </button>
-        </div>
+        {canManage && (
+          <div className="mt-4 flex flex-wrap gap-2">
+            <button
+              onClick={handleSeedDemo}
+              disabled={seeding}
+              className="inline-flex items-center gap-2 rounded-lg border border-[var(--pl-border)] px-4 py-2 text-[13px] font-semibold text-[var(--pl-text-soft)] transition hover:text-[var(--pl-text)] disabled:opacity-50"
+            >
+              {seeding ? <Loader2 size={14} className="animate-spin" /> : null}
+              Seed demo data
+            </button>
+          </div>
+        )}
       </div>
     );
   }
