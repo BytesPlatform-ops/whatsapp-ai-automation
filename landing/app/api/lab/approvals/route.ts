@@ -1,49 +1,37 @@
 import { NextResponse } from 'next/server';
+import { guard, backendGet, backendSend, degraded } from '@/lib/pixie-lab/backend';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 /**
- * Approvals proxy — same-origin bridge to the Python approvals service.
- *   GET  ?tenant_id=                       pending + recent approvals
- *   POST { tenant_id, id, decision }       approve | reject
+ * Approvals proxy → Python approvals service. Tenant is resolved SERVER-SIDE
+ * (workspace-scoped) so the queue only ever shows this workspace's pending
+ * actions — shared by SEO one-tap fixes and Meta post/reply prepares.
+ *   GET                                          pending + recent approvals (approvals.view)
+ *   POST { id, decision:'approve'|'reject'|'skip' }  resolve one            (approvals.manage)
+ *   POST { id, decision:'edit', prepared_output?, preview? }  tweak before approve
  */
-const BACKEND = process.env.PIXIE_BACKEND_URL || 'http://localhost:8000';
 
-async function timed<T>(fn: (s: AbortSignal) => Promise<T>, ms = 2500): Promise<T> {
-  const c = new AbortController();
-  const t = setTimeout(() => c.abort(), ms);
-  try { return await fn(c.signal); } finally { clearTimeout(t); }
-}
-
-export async function GET(req: Request) {
-  const tenant = new URL(req.url).searchParams.get('tenant_id') || 'demo';
-  try {
-    return await timed(async (signal) => {
-      const res = await fetch(`${BACKEND}/api/approvals?tenant_id=${encodeURIComponent(tenant)}`, { signal, cache: 'no-store', headers: { Accept: 'application/json' } });
-      if (!res.ok) return NextResponse.json({ backendUp: false, items: [] }, { status: 200 });
-      return NextResponse.json({ backendUp: true, items: await res.json() }, { headers: { 'Cache-Control': 'no-store' } });
-    });
-  } catch {
-    return NextResponse.json({ backendUp: false, items: [] }, { status: 200 });
-  }
+export async function GET() {
+  const g = await guard('approvals.view');
+  if (!g.ok) return g.response;
+  const r = await backendGet('/api/approvals', g.tenant);
+  if (!r.backendUp) return degraded({ items: [] });
+  return NextResponse.json({ backendUp: true, items: r.data ?? [] }, { headers: { 'Cache-Control': 'no-store' } });
 }
 
 export async function POST(req: Request) {
-  const b = (await req.json().catch(() => ({}))) as Record<string, string>;
-  const { tenant_id = 'demo', id, decision } = b;
-  if (!id || !decision) return NextResponse.json({ ok: false, error: 'id and decision required' }, { status: 400 });
-  const verb = decision === 'reject' ? 'reject' : 'approve';
-  try {
-    return await timed(async (signal) => {
-      const res = await fetch(`${BACKEND}/api/approvals/${encodeURIComponent(id)}/${verb}`, {
-        method: 'POST', signal, cache: 'no-store',
-        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-        body: JSON.stringify({ tenant_id, now: new Date().toISOString() }),
-      });
-      return NextResponse.json(await res.json(), { status: res.ok ? 200 : res.status });
-    });
-  } catch {
-    return NextResponse.json({ ok: false, backendUp: false }, { status: 200 });
-  }
+  const g = await guard('approvals.manage');
+  if (!g.ok) return g.response;
+  const b = (await req.json().catch(() => ({}))) as Record<string, unknown>;
+  const id = String(b.id || '');
+  const decision = String(b.decision || '');
+  if (!id || !decision) return NextResponse.json({ backendUp: true, error: 'id and decision required' }, { status: 400 });
+
+  const verb = decision === 'reject' ? 'reject' : decision === 'skip' ? 'skip' : decision === 'edit' ? 'edit' : 'approve';
+  const body = verb === 'edit' ? { prepared_output: b.prepared_output || {}, preview: b.preview || '' } : {};
+  const r = await backendSend('POST', `/api/approvals/${encodeURIComponent(id)}/${verb}`, g.tenant, body);
+  if (!r.backendUp) return degraded({ ok: false });
+  return NextResponse.json({ backendUp: true, ...(r.data as object) }, { status: r.status });
 }

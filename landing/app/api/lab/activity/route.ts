@@ -1,22 +1,18 @@
 import { NextResponse } from 'next/server';
+import { guard, backendGet, degraded } from '@/lib/pixie-lab/backend';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-/** Activity proxy — same-origin bridge to the Python activity log. */
-const BACKEND = process.env.PIXIE_BACKEND_URL || 'http://localhost:8000';
-
-export async function GET(req: Request) {
-  const tenant = new URL(req.url).searchParams.get('tenant_id') || 'demo';
-  const c = new AbortController();
-  const t = setTimeout(() => c.abort(), 2500);
-  try {
-    const res = await fetch(`${BACKEND}/api/activity?tenant_id=${encodeURIComponent(tenant)}&limit=30`, { signal: c.signal, cache: 'no-store', headers: { Accept: 'application/json' } });
-    clearTimeout(t);
-    if (!res.ok) return NextResponse.json({ backendUp: false, events: [] }, { status: 200 });
-    return NextResponse.json({ backendUp: true, events: await res.json() }, { headers: { 'Cache-Control': 'no-store' } });
-  } catch {
-    clearTimeout(t);
-    return NextResponse.json({ backendUp: false, events: [] }, { status: 200 });
-  }
+/**
+ * Activity log proxy → Python `/api/activity`. The tenant is resolved SERVER-SIDE
+ * from the session (workspace-scoped) — a client-supplied tenant_id is ignored —
+ * so the log can never surface another workspace's events.
+ */
+export async function GET() {
+  const g = await guard('activity.view');
+  if (!g.ok) return g.response;
+  const r = await backendGet('/api/activity', g.tenant, { limit: 30 });
+  if (!r.backendUp) return degraded({ events: [] });
+  return NextResponse.json({ backendUp: true, events: r.data ?? [] }, { headers: { 'Cache-Control': 'no-store' } });
 }
