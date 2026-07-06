@@ -90,7 +90,14 @@ async def _require_internal_secret(request, call_next):
     if _INTERNAL_SECRET and not _is_public(request.url.path):
         if request.headers.get("x-pixie-internal-secret", "") != _INTERNAL_SECRET:
             return JSONResponse({"detail": "unauthorized: missing/invalid internal secret"}, status_code=401)
-    return await call_next(request)
+    response = await call_next(request)
+    # Flag the deprecated in-memory SEO API (Mode A/B). The durable product API is
+    # /api/agents/seo/*. Kept for backward compatibility only.
+    p = request.url.path
+    if p.startswith("/api/seo/") or p == "/api/seo":
+        response.headers["Deprecation"] = "true"
+        response.headers["Link"] = '</api/agents/seo>; rel="successor-version"'
+    return response
 
 
 app.include_router(receptionist_router)
@@ -104,7 +111,7 @@ app.include_router(content_router)  # /api/content/assets — media upload (Supa
 app.include_router(seo_agent_router)  # /api/agents/seo — platform-aware audit + one-tap optimize
 app.include_router(onboarding_router)
 app.include_router(campaigns_router)
-app.include_router(seo_router)
+app.include_router(seo_router, deprecated=True)  # DEPRECATED /api/seo/* (in-memory); use /api/agents/seo/*
 app.include_router(content_creator_router)
 app.include_router(channels_router)  # /api/channels — agent/channel readiness for the dashboard
 app.include_router(feed_router)  # /api/feed — Pixie Lab proactive recommendation feed

@@ -1,8 +1,15 @@
-"""Self-contained FastAPI router for the SEO service (Mode A + Mode B).
+"""⚠️ DEPRECATED — SEO service Mode A + Mode B (`/api/seo/*`).
 
-By design this is NOT registered in the shared app (`backend/app.py`); the lead
-engineer adds one `include_router` line manually (see the handoff notes). All
-persisted data is tenant-scoped and `GET /score/{id}` requires tenant context.
+DEPRECATED: this router uses an in-process, in-memory repository
+(`InMemorySeoRepository`), so its reports do NOT survive a backend restart. It is
+NOT used by the Pixie Lab product UI.
+
+Use the durable, product-wired SEO API instead: **`/api/agents/seo/*`**
+(`backend/seo/agent_routes.py`), which persists via `backend/persistence.py`
+(memory/file/Supabase) and is what the `/pixie-lab/seo/*` pages call through the
+`/api/lab/seo/*` proxies. These routes are registered with `deprecated=True`
+(see `backend/app.py`) so they show as deprecated in the OpenAPI docs; they are
+kept only for backward compatibility and internal experiments.
 
 Endpoints:
   POST /api/seo/generate     Mode A — enrich a Pixie page + before/after score

@@ -289,8 +289,10 @@ To run a real end-to-end OAuth test once you have a Meta app:
   purpose — the shared Supabase DB has no Prisma migration history recorded
   (`migrate status` = 0 applied), so an unbaselined `migrate deploy` would fail
   on the pre-existing app tables. Verify with `npx prisma migrate status` after.
-- **`/api/seo/*` (Mode A/B) uses an in-memory repo** (`backend/seo/repository.py`)
-  — not durable across restarts. The audit agent under `/api/agents/seo/*` (the
-  one wired into the UI) uses the durable `persistence.py`.
+- **`/api/seo/*` (Mode A/B) is DEPRECATED** — it uses an in-memory repo
+  (`backend/seo/repository.py`), not durable across restarts, and no product UI
+  uses it. It is registered with `deprecated=True` and returns a `Deprecation`
+  header. The durable, product-wired SEO API is **`/api/agents/seo/*`** (uses
+  `persistence.py`) — this is the only path the `/pixie-lab/seo/*` pages use.
 - **Backend network hardening** — add a shared-secret header or private networking
   between the Vercel proxy and the FastAPI backend before public deployment.
