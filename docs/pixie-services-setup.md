@@ -130,11 +130,19 @@ npm run db:migrate       # prisma migrate deploy
 
 Other useful commands:
 ```bash
-npm run db:generate          # prisma generate — regenerate the client (offline)
-npx prisma migrate status    # show applied vs pending migrations
+npm run db:generate     # prisma generate — regenerate the client (offline)
+npm run db:status       # prisma migrate status — applied vs pending (read-only, safe)
 ```
+
+**Recommendation:** for the current shared dev DB use **Option 1** (`db:push` +
+paste the RLS file once) — it's the least risky given there's no migration
+history, and it matches how the existing tables were created. Adopt **Option 2**
+(baseline + `migrate deploy`) when you move to a production DB and want tracked,
+repeatable migrations (it also applies RLS automatically).
+
 > Never run `prisma migrate dev` against the shared Supabase DB — it can reset.
-> Use it only on a disposable local database.
+> Use it only on a disposable local database. Always run `npm run db:status`
+> first to see current state.
 
 ---
 
