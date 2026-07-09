@@ -38,8 +38,10 @@ def estimate_cost(
     )
     provider_cost = estimated_credits * usd_per_credit
 
-    if mode == ProviderMode.USER_ACCOUNT.value:
-        # User pays the provider directly from their own credits.
+    from content_creator.enums import canonical_provider_mode
+
+    if canonical_provider_mode(mode) == "client_own_account":
+        # Client pays the provider directly from their own credits — no Pixie markup.
         pixie_markup = 0.0
         final_user_price = 0.0
     else:

@@ -124,7 +124,7 @@ export async function backendGet<T = unknown>(path: string, tenant: string, para
 
 /** Send a JSON body to a backend endpoint (POST/DELETE), injecting the resolved
  *  tenant_id into the body so the client can never spoof it. */
-export async function backendSend<T = unknown>(method: 'POST' | 'DELETE' | 'PUT', path: string, tenant: string, body: Record<string, unknown> = {}, params?: Record<string, string | number | boolean | undefined>, ms = 20000): Promise<BackendResult<T>> {
+export async function backendSend<T = unknown>(method: 'POST' | 'DELETE' | 'PUT' | 'PATCH', path: string, tenant: string, body: Record<string, unknown> = {}, params?: Record<string, string | number | boolean | undefined>, ms = 20000): Promise<BackendResult<T>> {
   const { signal, done } = withTimeout(ms);
   try {
     const res = await fetch(backendUrl(path, tenant, params), {

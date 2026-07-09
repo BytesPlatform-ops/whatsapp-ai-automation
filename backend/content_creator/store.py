@@ -31,6 +31,7 @@ from .schemas import (
     InfluencerIdentity,
     Learning,
     Metric,
+    PixieUsage,
     Post,
     ProviderConnection,
     QualityCheck,
@@ -178,6 +179,16 @@ class InMemoryProviderRepository:
         for conn_id in reversed(self._order):
             conn = self._conns.get(conn_id)
             if conn is not None and conn.tenant_id == tenant_id and conn.connected:
+                return conn_id, conn
+        return None
+
+    def get_latest(self, tenant_id: str) -> Optional[Tuple[str, ProviderConnection]]:
+        """Most-recently-saved connection for the tenant, connected or NOT — the
+        chosen provider MODE is a preference that holds even when not 'connected'
+        (e.g. prompt_export, or pixie_managed before env creds are present)."""
+        for conn_id in reversed(self._order):
+            conn = self._conns.get(conn_id)
+            if conn is not None and conn.tenant_id == tenant_id:
                 return conn_id, conn
         return None
 
@@ -332,6 +343,17 @@ class InMemoryVideoRepository:
             return None
         return video_id, v
 
+    def update(self, tenant_id: str, video_id: str, **fields) -> Optional[Tuple[str, Video]]:
+        """Patch fields on an existing video (tenant-scoped). Used to advance a
+        real async job (generating → ready/failed) as it is polled."""
+        found = self.get(tenant_id, video_id)
+        if found is None:
+            return None
+        _, video = found
+        updated = video.model_copy(update=fields)
+        self._videos[video_id] = updated
+        return video_id, updated
+
     def list(self, tenant_id: str) -> List[Tuple[str, Video]]:
         return [(i, v) for i, v in self._videos.items() if v.tenant_id == tenant_id]
 
@@ -386,6 +408,37 @@ class InMemoryMetricRepository:
 
     def list(self, tenant_id: str) -> List[Tuple[str, Metric]]:
         return [(i, m) for i, m in self._metrics.items() if m.tenant_id == tenant_id]
+
+
+class InMemoryUsageRepository:
+    """Tenant-scoped billable-usage store (pixie_managed). Keyed by video ref."""
+
+    def __init__(self) -> None:
+        self._usage: Dict[str, PixieUsage] = {}
+
+    def save(self, usage: PixieUsage) -> Tuple[str, PixieUsage]:
+        uid = _stable_id("ccusage_", usage.tenant_id, usage.video_ref or usage.provider_job_id)
+        self._usage[uid] = usage
+        return uid, usage
+
+    def get_by_video(self, tenant_id: str, video_ref: str) -> Optional[Tuple[str, PixieUsage]]:
+        uid = _stable_id("ccusage_", tenant_id, video_ref)
+        u = self._usage.get(uid)
+        if u is None or u.tenant_id != tenant_id:
+            return None
+        return uid, u
+
+    def update(self, tenant_id: str, video_ref: str, **fields) -> Optional[Tuple[str, PixieUsage]]:
+        found = self.get_by_video(tenant_id, video_ref)
+        if found is None:
+            return None
+        uid, usage = found
+        updated = usage.model_copy(update=fields)
+        self._usage[uid] = updated
+        return uid, updated
+
+    def list(self, tenant_id: str) -> List[Tuple[str, PixieUsage]]:
+        return [(i, u) for i, u in self._usage.items() if u.tenant_id == tenant_id]
 
 
 class InMemoryLearningRepository:
@@ -468,6 +521,14 @@ _quality_repo: Optional[InMemoryQualityRepository] = None
 _post_repo: Optional[InMemoryPostRepository] = None
 _metric_repo: Optional[InMemoryMetricRepository] = None
 _learning_repo: Optional[InMemoryLearningRepository] = None
+_usage_repo: Optional[InMemoryUsageRepository] = None
+
+
+def get_usage_repository() -> InMemoryUsageRepository:
+    global _usage_repo
+    if _usage_repo is None:
+        _usage_repo = InMemoryUsageRepository()
+    return _usage_repo
 
 
 def get_video_repository() -> InMemoryVideoRepository:

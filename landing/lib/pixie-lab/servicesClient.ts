@@ -10,6 +10,9 @@ import type {
   SeoAuditResult, SeoConnectionPlatform, SeoHistoryAudit,
   MetaStatus, MetaInboxItem, MetaContentItem,
   ContentAsset, StorageStatus, ApprovalItem, Envelope,
+  RcpRunResult, RcpOverview, RcpIntegrationStatus, RcpConversation, RcpConversationDetail,
+  RcpContact, RcpBooking, RcpQuote, RcpTask, RcpTicket, RcpEscalation, RcpPayment,
+  RcpCampaign, RcpCampaignReply, RcpBusinessProfile, RcpKnowledgeItem, RcpHealth,
 } from './serviceTypes';
 
 async function req<T>(url: string, init?: RequestInit): Promise<Envelope<T>> {
@@ -72,4 +75,57 @@ export const contentApi = {
 export const approvalsApi = {
   list: () => req<{ items: ApprovalItem[] }>('/api/lab/approvals'),
   resolve: (id: string, decision: 'approve' | 'reject' | 'skip') => post('/api/lab/approvals', { id, decision }),
+};
+
+/* ------------------------------ AI Receptionist ------------------------------ */
+const R = '/api/lab/receptionist';
+export const receptionistApi = {
+  // brain / core
+  runMessage: (p: { message: string; channel?: string; conversation_id?: string; name?: string; email?: string; phone?: string; company?: string; campaign_id?: string }) =>
+    post<RcpRunResult>(`${R}/run`, p),
+  getHealth: () => req<RcpHealth>(`${R}/health`),
+  getCapabilities: () => req<RcpHealth>(`${R}/health`),
+  getOverview: () => req<RcpOverview>(`${R}/overview`),
+  getIntegrationStatus: () => req<RcpIntegrationStatus>(`${R}/integrations`),
+  testIntegration: (capability: string) => post<{ capability: string; result?: unknown; status?: unknown }>(`${R}/integrations`, { action: 'test', capability }),
+  // conversations
+  getConversations: () => req<{ conversations: RcpConversation[] }>(`${R}/conversations`),
+  getConversation: (id: string) => req<RcpConversationDetail>(`${R}/conversations?id=${encodeURIComponent(id)}`),
+  sendConversationMessage: (id: string, message: string) => post<RcpRunResult>(`${R}/run`, { message, conversation_id: id }),
+  escalateConversation: (id: string, reason?: string) => post<{ escalation: RcpEscalation }>(`${R}/conversations`, { action: 'escalate', id, reason }),
+  // CRM / leads
+  getLeads: (status?: string) => req<{ leads: RcpContact[] }>(`${R}/leads${status ? `?status=${encodeURIComponent(status)}` : ''}`),
+  updateLead: (id: string, patch: Partial<RcpContact>) => post<{ lead: RcpContact }>(`${R}/leads`, { action: 'update', id, ...patch }),
+  leadFollowUp: (id: string, title?: string, due_at?: string) => post<{ task: RcpTask }>(`${R}/leads`, { action: 'follow-up', id, title, due_at }),
+  // bookings
+  getBookings: () => req<{ bookings: RcpBooking[] }>(`${R}/bookings`),
+  createBooking: (p: Partial<RcpBooking>) => post<{ booking: RcpBooking }>(`${R}/bookings`, { action: 'create', ...p }),
+  confirmBooking: (id: string) => post<{ booking: RcpBooking }>(`${R}/bookings`, { action: 'confirm', id }),
+  cancelBooking: (id: string) => post<{ booking: RcpBooking }>(`${R}/bookings`, { action: 'cancel', id }),
+  // quotes
+  getQuotes: () => req<{ quotes: RcpQuote[] }>(`${R}/quotes`),
+  createQuote: (p: Partial<RcpQuote>) => post<{ quote: RcpQuote }>(`${R}/quotes`, { action: 'create', ...p }),
+  updateQuote: (id: string, patch: Partial<RcpQuote>) => post<{ quote: RcpQuote }>(`${R}/quotes`, { action: 'update', id, ...patch }),
+  // tasks
+  getTasks: (status?: string) => req<{ tasks: RcpTask[] }>(`${R}/tasks${status ? `?status=${encodeURIComponent(status)}` : ''}`),
+  createTask: (p: Partial<RcpTask>) => post<{ task: RcpTask }>(`${R}/tasks`, { action: 'create', ...p }),
+  completeTask: (id: string) => post<{ task: RcpTask }>(`${R}/tasks`, { action: 'complete', id }),
+  // tickets / escalations
+  getTickets: () => req<{ tickets: RcpTicket[] }>(`${R}/tickets`),
+  getEscalations: () => req<{ escalations: RcpEscalation[] }>(`${R}/tickets?resource=escalations`),
+  updateTicket: (id: string, patch: Partial<RcpTicket>) => post<{ ticket: RcpTicket }>(`${R}/tickets`, { action: 'update', id, ...patch }),
+  // payments
+  getPayments: () => req<{ payments: RcpPayment[] }>(`${R}/payments`),
+  createPaymentLink: (p: { amount: number; currency?: string; description?: string; email?: string }) => post<{ payment: RcpPayment; provider?: unknown }>(`${R}/payments`, { action: 'create-link', ...p }),
+  // campaigns
+  getCampaigns: () => req<{ campaigns: RcpCampaign[] }>(`${R}/campaigns`),
+  getCampaignReplies: (campaign_id: string) => req<{ replies: RcpCampaignReply[] }>(`${R}/campaigns?campaign_id=${encodeURIComponent(campaign_id)}`),
+  ingestCampaignReply: (p: { campaign_id?: string; message: string; email?: string; phone?: string }) => post<RcpRunResult>(`${R}/campaigns`, { action: 'ingest', ...p }),
+  // business profile + knowledge
+  getBusinessProfile: () => req<{ profile: RcpBusinessProfile; configured?: boolean }>(`${R}/business-profile`),
+  updateBusinessProfile: (patch: Partial<RcpBusinessProfile>) => post<{ profile: RcpBusinessProfile }>(`${R}/business-profile`, patch),
+  getKnowledge: () => req<{ items: RcpKnowledgeItem[] }>(`${R}/knowledge`),
+  createKnowledge: (p: { title: string; content: string; category?: string; tags?: string[] }) => post<{ item: RcpKnowledgeItem }>(`${R}/knowledge`, { action: 'create', ...p }),
+  updateKnowledge: (id: string, patch: Partial<RcpKnowledgeItem>) => post<{ item: RcpKnowledgeItem }>(`${R}/knowledge`, { action: 'update', id, ...patch }),
+  deleteKnowledge: (id: string) => post<{ deleted: boolean }>(`${R}/knowledge`, { action: 'delete', id }),
 };

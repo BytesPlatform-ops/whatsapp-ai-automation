@@ -194,3 +194,34 @@ def build_higgsfield_prompt(
         prompt["identity_ref"] = ""
 
     return prompt
+
+
+def render_prompt_text(prompt: Dict) -> str:
+    """Render the structured prompt into a clean, copy-pasteable Higgsfield brief
+    (for prompt_export mode — the user pastes this into Higgsfield manually)."""
+    prompt = prompt or {}
+    hook = prompt.get("script_hook", "")
+    body = prompt.get("script", "")
+    cta = prompt.get("script_cta", "")
+    spoken = " ".join(p for p in (hook, body, cta) if p).strip()
+
+    lines: List[str] = []
+    if spoken:
+        lines.append("SCRIPT: " + spoken)
+    if prompt.get("voice_direction"):
+        lines.append("VOICE: " + prompt["voice_direction"])
+    if prompt.get("camera"):
+        lines.append("CAMERA: " + prompt["camera"])
+    if prompt.get("lighting"):
+        lines.append("LIGHTING: " + prompt["lighting"])
+    if prompt.get("realism_cues"):
+        lines.append("REALISM: " + prompt["realism_cues"])
+    if prompt.get("brand_style"):
+        lines.append("BRAND: " + prompt["brand_style"])
+    lines.append("FORMAT: %s vertical, %ss, single clip" % (
+        prompt.get("aspect_ratio", "9:16"), prompt.get("duration_seconds", 15)))
+    if prompt.get("negative_prompt"):
+        lines.append("AVOID: " + prompt["negative_prompt"])
+    if prompt.get("identity_ref"):
+        lines.append("REFERENCE IMAGE: " + prompt["identity_ref"])
+    return "\n".join(lines)

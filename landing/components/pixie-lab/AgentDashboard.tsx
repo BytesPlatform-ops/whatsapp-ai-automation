@@ -35,6 +35,15 @@ const MOCK_ACTIVITY: Record<string, string[]> = {
 
 /** Real service tools reachable from each agent's overview (kept in-shell). */
 const SERVICE_TOOLS: Record<string, { label: string; href: string }[]> = {
+  receptionist: [
+    { label: 'Dashboard', href: '/pixie-lab/receptionist/dashboard' },
+    { label: 'Live console', href: '/pixie-lab/receptionist/console' },
+    { label: 'Conversations', href: '/pixie-lab/receptionist/conversations' },
+    { label: 'CRM & leads', href: '/pixie-lab/receptionist/crm' },
+    { label: 'Operations', href: '/pixie-lab/receptionist/operations' },
+    { label: 'Integrations', href: '/pixie-lab/receptionist/integrations' },
+    { label: 'Knowledge', href: '/pixie-lab/receptionist/knowledge' },
+  ],
   seo: [
     { label: 'Run audit', href: '/pixie-lab/seo/audit' },
     { label: 'History', href: '/pixie-lab/seo/history' },

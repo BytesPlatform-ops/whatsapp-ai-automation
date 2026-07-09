@@ -49,8 +49,32 @@ class ApprovalStatus(str, Enum):
 
 
 class ProviderMode(str, Enum):
-    USER_ACCOUNT = "user_account"    # Mode A — user's own Higgsfield credits
-    PIXIE_ACCOUNT = "pixie_account"  # Mode B — Pixie pays, charges via markup
+    # Canonical billing/provider modes.
+    CLIENT_OWN_ACCOUNT = "client_own_account"  # BYOK — client's own Higgsfield key/credits
+    PIXIE_MANAGED = "pixie_managed"            # Pixie pays from env creds, bills client + markup
+    PROMPT_EXPORT = "prompt_export"            # no API — Pixie emits a prompt to paste manually
+    # Legacy aliases (kept so older callers/tests keep working). canonical_provider_mode()
+    # folds USER_ACCOUNT→client_own_account and PIXIE_ACCOUNT→pixie_managed.
+    USER_ACCOUNT = "user_account"
+    PIXIE_ACCOUNT = "pixie_account"
+
+
+_CANONICAL_MODE = {
+    "client_own_account": "client_own_account",
+    "byok": "client_own_account",
+    "user_account": "client_own_account",
+    "pixie_managed": "pixie_managed",
+    "pixie_account": "pixie_managed",
+    "prompt_export": "prompt_export",
+}
+
+
+def canonical_provider_mode(mode) -> str:
+    """Fold any provider-mode input (enum, canonical string, or legacy alias) to one
+    of ``client_own_account`` | ``pixie_managed`` | ``prompt_export``. Unknown →
+    ``pixie_managed`` (the safe default: never a client key, never a fake)."""
+    value = getattr(mode, "value", mode)
+    return _CANONICAL_MODE.get(str(value).strip().lower(), "pixie_managed")
 
 
 class IdentitySource(str, Enum):

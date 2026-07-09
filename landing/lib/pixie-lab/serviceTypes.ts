@@ -166,6 +166,125 @@ export interface ApprovalItem {
   created_at?: string;
 }
 
+/* ----------------------------- AI Receptionist ----------------------------- */
+
+export interface RcpRunResult {
+  reply?: string;
+  intent?: string;
+  action?: string;
+  status?: string;
+  confidence?: number;
+  sentiment?: string;
+  degraded?: boolean;
+  llm_provider?: string;
+  model?: string;
+  conversation_id?: string;
+  contact_id?: string | null;
+  record_type?: string;
+  record_id?: string;
+  record?: Record<string, unknown> | null;
+  provider_status?: Record<string, unknown> | null;
+  escalated?: boolean;
+  action_id?: string;
+}
+
+export interface RcpOverview {
+  totals?: Record<string, number>;
+  rates?: { ai_resolution_rate?: number; human_escalation_rate?: number };
+  channel_breakdown?: Record<string, number>;
+  sentiment_breakdown?: Record<string, number>;
+  intent_distribution?: Record<string, number>;
+  booking_status_breakdown?: Record<string, number>;
+  lead_status_breakdown?: Record<string, number>;
+  ticket_priority_breakdown?: Record<string, number>;
+  campaign_reply_classification?: Record<string, number>;
+  conversion_funnel?: Record<string, number>;
+}
+
+export interface RcpProviderStatus {
+  capability: string;
+  provider?: string;
+  connected?: boolean;
+  status?: string; // connected | missing_env | mock | ready | ...
+  mode?: string;
+  required_env?: string[];
+  missing_env?: string[];
+  note?: string;
+}
+
+export interface RcpIntegrationStatus {
+  llm?: { provider?: string; model?: string; status?: string; note?: string };
+  core_capabilities?: { capability: string; status?: string; provider?: string; mode?: string }[];
+  receptionist_providers?: RcpProviderStatus[];
+  persistence?: { backend?: string; durable?: boolean; multi_instance?: boolean; supabase_configured?: boolean };
+  mode?: Record<string, unknown>;
+}
+
+export interface RcpConversation {
+  id: string; tenant_id?: string; contact_id?: string | null; channel?: string;
+  subject?: string; status?: string; last_intent?: string; last_action?: string;
+  sentiment?: string; summary?: string; message_count?: number;
+  created_at?: string; updated_at?: string;
+}
+export interface RcpMessage {
+  id: string; conversation_id?: string; role?: string; text?: string; channel?: string;
+  intent?: string; action?: string; confidence?: number; degraded?: boolean; created_at?: string;
+}
+export interface RcpConversationDetail { conversation: RcpConversation; messages: RcpMessage[]; actions: Record<string, unknown>[]; }
+
+export interface RcpContact {
+  id: string; name?: string | null; email?: string | null; phone?: string | null;
+  company?: string | null; service_interest?: string; budget?: string; urgency?: string;
+  notes?: string; source?: string; intent?: string; status?: string; score?: number;
+  tags?: string[]; last_message_summary?: string; last_contact_at?: string;
+  consent?: boolean; activity?: { at?: string; note?: string }[]; created_at?: string; updated_at?: string;
+}
+
+export interface RcpBooking {
+  id: string; contact_id?: string | null; name?: string | null; phone?: string | null; email?: string | null;
+  service_type?: string; date?: string; time?: string; timezone?: string; notes?: string;
+  status?: string; calendar_event_id?: string; calendar_html_link?: string; source?: string; created_at?: string;
+}
+export interface RcpQuote {
+  id: string; name?: string | null; email?: string | null; phone?: string | null; service?: string;
+  scope?: string; quantity?: string; location?: string; timeline?: string; budget?: string; notes?: string;
+  status?: string; estimated_min?: number | null; estimated_max?: number | null; currency?: string; created_at?: string;
+}
+export interface RcpTask {
+  id: string; kind?: string; title?: string; related_type?: string; related_id?: string;
+  owner?: string; status?: string; due_at?: string; notes?: string; contact_id?: string | null; created_at?: string;
+}
+export interface RcpTicket {
+  id: string; kind?: string; subject?: string; body?: string; priority?: string; sentiment?: string;
+  status?: string; assigned_to?: string; contact_id?: string | null; created_at?: string;
+}
+export interface RcpEscalation {
+  id: string; reason?: string; priority?: string; status?: string; context?: string;
+  notified?: string[]; conversation_id?: string; created_at?: string;
+}
+export interface RcpPayment {
+  id: string; name?: string | null; email?: string | null; amount?: number | null; currency?: string;
+  description?: string; status?: string; payment_link?: string; provider?: string; provider_ref?: string; created_at?: string;
+}
+export interface RcpCampaign { id: string; name?: string; type?: string; status?: string; channels?: string[]; dry_run?: boolean; }
+export interface RcpCampaignReply {
+  id: string; campaign_id?: string; from_email?: string | null; from_phone?: string | null;
+  channel?: string; text?: string; classification?: string; action_taken?: string; status?: string; created_at?: string;
+}
+export interface RcpBusinessProfile {
+  tenant_id?: string; business_name?: string; industry?: string; hours?: string; services?: string[];
+  pricing_notes?: string; location?: string; address?: string; phone?: string; email?: string; website?: string;
+  policies?: string; process?: string; tone?: string; escalation_rules?: string; custom_instructions?: string;
+  faqs?: { q?: string; a?: string }[]; updated_at?: string;
+}
+export interface RcpKnowledgeItem { id: string; title?: string; content?: string; category?: string; tags?: string[]; created_at?: string; }
+export interface RcpHealth {
+  status?: string; agent_slug?: string; llm_provider?: string; model?: string; handlers?: number;
+  persistence?: { backend?: string; durable?: boolean; supabase_configured?: boolean };
+  mode?: Record<string, unknown>;
+  capabilities?: { intents?: string[]; handlers?: string[]; actions_supported?: number; provider_capabilities?: string[] };
+}
+
 /** Envelope every proxy returns: backendUp flags whether the FastAPI service
  *  answered, so the UI can show a "service offline / setup required" state. */
 export type Envelope<T> = { backendUp: boolean; error?: string } & Partial<T>;

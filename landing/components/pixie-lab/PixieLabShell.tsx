@@ -36,6 +36,15 @@ const AGENTS_ORDER: FeedAgent[] = ['website', 'receptionist', 'seo', 'marketing'
 /** Sub-tools that live inside a service — shown indented under the active agent
  *  so every tool stays reachable from the rail without leaving the Lab shell. */
 const SERVICE_SUBNAV: Partial<Record<FeedAgent, { label: string; href: string }[]>> = {
+  receptionist: [
+    { label: 'Dashboard', href: '/pixie-lab/receptionist/dashboard' },
+    { label: 'Console', href: '/pixie-lab/receptionist/console' },
+    { label: 'Inbox', href: '/pixie-lab/receptionist/conversations' },
+    { label: 'CRM', href: '/pixie-lab/receptionist/crm' },
+    { label: 'Operations', href: '/pixie-lab/receptionist/operations' },
+    { label: 'Integrations', href: '/pixie-lab/receptionist/integrations' },
+    { label: 'Knowledge', href: '/pixie-lab/receptionist/knowledge' },
+  ],
   seo: [
     { label: 'Audit', href: '/pixie-lab/seo/audit' },
     { label: 'History', href: '/pixie-lab/seo/history' },

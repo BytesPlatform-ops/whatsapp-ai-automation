@@ -50,17 +50,25 @@ class InfluencerIdentity(_Base):
     tenant_id: str = Field(..., min_length=1)
     source: IdentitySource
     active: bool = True
-    reference_ref: str = ""              # stored reference (image ref or generated character ref)
+    reference_ref: str = ""              # stored reference: a hosted image URL, a pre-hosted URL, or a generated-character ref
+    reference_hosted: bool = False       # True when we uploaded/hosted the image ourselves
+    reference_asset_id: str = ""         # content-asset id when hosted (audit/cleanup)
     characteristics: Dict[str, Any] = Field(default_factory=dict)
     locked: bool = True
 
 
 class ProviderConnection(_Base):
     tenant_id: str = Field(..., min_length=1)
-    mode: ProviderMode = ProviderMode.PIXIE_ACCOUNT
-    connection_type: str = "mock"        # api_key | mcp | cli | oauth_placeholder | mock
+    user_id: str = ""
+    mode: ProviderMode = ProviderMode.PIXIE_MANAGED
+    connection_type: str = "mock"        # api_key | pixie_env | prompt_export | mock
     connected: bool = False
-    account_ref: str = ""                # never a secret value
+    configured: bool = False             # mode is usable (creds/model present, or export)
+    model_id: str = ""                   # per-tenant model (client_own); env model for pixie_managed
+    account_ref: str = ""                # never a secret value (masked hint only)
+    provider: str = "higgsfield"
+    status: str = ""                     # connected | invalid_credentials | provider_not_configured | prompt_export | ...
+    capabilities: Dict[str, Any] = Field(default_factory=dict)
     estimated_credits: int = 0
     estimated_provider_cost: float = 0.0
     pixie_markup: float = 0.0
@@ -111,6 +119,14 @@ class Video(_Base):
     duration_seconds: int = 15
     model: str = ""
     prompt_version: str = ""
+    # --- real async-job fields (empty in mock mode) ---
+    provider: str = ""                # "higgsfield" | "mock"
+    provider_mode: str = ""           # client_own_account | pixie_managed (canonical)
+    provider_job_id: str = ""         # the provider's request id (poll handle)
+    result_url: str = ""              # provider's (temporary) result media URL
+    storage_url: str = ""             # re-hosted, durable URL (Supabase) — what we serve
+    progress: float = 0.0             # 0.0..1.0 while generating
+    error: str = ""                   # safe error string on failure (no secrets)
 
 
 class QualityCheck(_Base):
@@ -159,4 +175,24 @@ class ApprovalRecord(_Base):
     gate: ApprovalGate
     target_ref: str = ""
     status: ApprovalStatus = ApprovalStatus.PENDING
+    note: str = ""
+
+
+class PixieUsage(_Base):
+    """Billable-usage record for pixie_managed generation (Pixie fronts the credits).
+
+    Client-own generation records no Pixie provider cost. If a wallet/billing system
+    isn't wired yet, this is stored as a pending billable record and marked clearly."""
+    tenant_id: str = Field(..., min_length=1)
+    user_id: str = ""
+    provider: str = "higgsfield"
+    provider_mode: str = "pixie_managed"
+    video_ref: str = ""
+    provider_job_id: str = ""
+    estimated_credits: int = 0
+    actual_credits: int = 0
+    estimated_cost: float = 0.0
+    client_price: float = 0.0
+    markup: float = 0.0
+    status: str = "pending_billable"  # pending_billable | submitted | completed | failed
     note: str = ""
