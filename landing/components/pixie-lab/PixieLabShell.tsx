@@ -96,13 +96,13 @@ export function PixieLabShell({
   }
 
   const Rail = (
-    <div className="flex h-full flex-col">
+    <div className="flex h-full flex-col overflow-y-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
       <Link href="/pixie-lab/dashboard" className="flex items-center gap-2.5 px-5 py-5 font-display text-base font-extrabold tracking-tight text-[var(--pl-text)]">
         <PixieAvatar />
         Pixie Lab
       </Link>
 
-      <nav className="min-h-0 flex-1 space-y-1 overflow-y-auto px-3">
+      <nav className="flex-1 space-y-1 px-3">
         <NavItem href="/pixie-lab/dashboard" icon={LayoutDashboard} label="Dashboard" active={pathname === '/pixie-lab/dashboard'} />
         <NavItem href="/pixie-lab/for-you" icon={LayoutGrid} label="For You" active={pathname === '/pixie-lab/for-you'} />
 
