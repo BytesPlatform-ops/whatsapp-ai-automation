@@ -21,11 +21,14 @@ export function Footer() {
           <a href="/tools" className="text-ink-500 transition hover:text-ink-900">
             Free tools
           </a>
-          <a href="/privacy" className="text-ink-500 transition hover:text-ink-900">
+          <a href="/privacy-policy" className="text-ink-500 transition hover:text-ink-900">
             Privacy
           </a>
-          <a href="#" className="text-ink-500 transition hover:text-ink-900">
+          <a href="/terms" className="text-ink-500 transition hover:text-ink-900">
             Terms
+          </a>
+          <a href="/data-deletion" className="text-ink-500 transition hover:text-ink-900">
+            Data deletion
           </a>
         </div>
       </div>

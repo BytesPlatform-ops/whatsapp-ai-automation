@@ -125,8 +125,10 @@ export function PixieFooter({ landingZone = false }: { landingZone?: boolean }) 
             <img src="/pixie-logo-white.png" alt="Pixie" className="h-5 w-auto opacity-80" />
             <span>© {new Date().getFullYear()} {siteConfig.brand}. All rights reserved.</span>
           </div>
-          <div className="flex items-center gap-5">
-            <a href="/privacy" className="transition-colors hover:text-white/80">Privacy</a>
+          <div className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2">
+            <a href="/privacy-policy" className="transition-colors hover:text-white/80">Privacy</a>
+            <a href="/terms" className="transition-colors hover:text-white/80">Terms</a>
+            <a href="/data-deletion" className="transition-colors hover:text-white/80">Data deletion</a>
             <a href={`mailto:${siteConfig.supportEmail}`} className="transition-colors hover:text-white/80">Contact</a>
           </div>
         </div>
