@@ -1,13 +1,15 @@
-"""Production HTTP surface for the Content Creator — stages 1-7.
+"""Production HTTP surface for the Content Creator — the 13-stage pipeline.
 
-One standalone `APIRouter(prefix="/api/content-creator")`. NOT registered in the
-shared app.py (that file is owned by another dev) — the lead adds one
-`include_router` line manually. Every endpoint is tenant-scoped. AI runs through
-the fallback-safe agents ($0 under PIXIE_MODEL_MODE=fake). Gate enforcement:
-script generation requires an APPROVED idea. Nothing here spends or posts.
+One `APIRouter(prefix="/api/content-creator")`, registered in app.py and reached
+from Pixie Lab through the /api/lab/content-creator proxy. A router-level
+`require_internal` dependency enforces the internal shared secret when configured.
+Every endpoint is tenant-scoped. AI runs through the fallback-safe agents ($0
+under PIXIE_MODEL_MODE=fake). Gate enforcement: e.g. script generation requires an
+APPROVED idea. Nothing here spends or posts under the mock/dry-run defaults.
 
-Persistence is the in-memory store seam (content_creator.store); saves/gets
-return (id, model) tuples since the schemas carry no id field.
+Persistence is the store seam (content_creator.store) — in-memory by default,
+durable (cc_* tables) when PIXIE_PERSIST=file|supabase; saves/gets return
+(id, model) tuples since the schemas carry no id field.
 """
 
 from __future__ import annotations
