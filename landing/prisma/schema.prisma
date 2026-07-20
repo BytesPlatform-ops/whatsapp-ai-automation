@@ -365,3 +365,166 @@ model NotificationPreference {
   @@unique([userId])
   @@map("notification_preferences")
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Content Creator (AI Influencer) pipeline — JSONB "envelope" tables read/written
+// by the Python backend via the Supabase service-role REST API
+// (backend/persistence.py -> persistence.table("cc_*")). Same shape/access model
+// as the SEO / Meta / Content tables above. See migration 0004_content_creator.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Content Creator — creator/business intake profile (stage 1).
+model CcProfile {
+  id        String   @id
+  tenantId  String   @map("tenant_id")
+  data      Json     @default(dbgenerated("'{}'::jsonb"))
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  @@index([tenantId, createdAt])
+  @@map("cc_profiles")
+}
+
+/// Content Creator — locked influencer identity (stage 2).
+model CcIdentity {
+  id        String   @id
+  tenantId  String   @map("tenant_id")
+  data      Json     @default(dbgenerated("'{}'::jsonb"))
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  @@index([tenantId, createdAt])
+  @@map("cc_identities")
+}
+
+/// Content Creator — provider connection / billing mode (stage 3).
+model CcProviderConnection {
+  id        String   @id
+  tenantId  String   @map("tenant_id")
+  data      Json     @default(dbgenerated("'{}'::jsonb"))
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  @@index([tenantId, createdAt])
+  @@map("cc_provider_connections")
+}
+
+/// Content Creator — Fernet-sealed BYOK provider credentials (never plaintext).
+model CcCredential {
+  id        String   @id
+  tenantId  String   @map("tenant_id")
+  data      Json     @default(dbgenerated("'{}'::jsonb"))
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  @@index([tenantId, createdAt])
+  @@map("cc_credentials")
+}
+
+/// Content Creator — generated reel ideas (stage 4/5).
+model CcIdea {
+  id        String   @id
+  tenantId  String   @map("tenant_id")
+  data      Json     @default(dbgenerated("'{}'::jsonb"))
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  @@index([tenantId, createdAt])
+  @@map("cc_ideas")
+}
+
+/// Content Creator — AIDA scripts (stage 6/7).
+model CcScript {
+  id        String   @id
+  tenantId  String   @map("tenant_id")
+  data      Json     @default(dbgenerated("'{}'::jsonb"))
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  @@index([tenantId, createdAt])
+  @@map("cc_scripts")
+}
+
+/// Content Creator — owner approval audit trail (4 gates, append-only).
+model CcApproval {
+  id        String   @id
+  tenantId  String   @map("tenant_id")
+  data      Json     @default(dbgenerated("'{}'::jsonb"))
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  @@index([tenantId, createdAt])
+  @@map("cc_approvals")
+}
+
+/// Content Creator — generated/queued videos (stage 9).
+model CcVideo {
+  id        String   @id
+  tenantId  String   @map("tenant_id")
+  data      Json     @default(dbgenerated("'{}'::jsonb"))
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  @@index([tenantId, createdAt])
+  @@map("cc_videos")
+}
+
+/// Content Creator — quality-check results (stage 10).
+model CcQualityCheck {
+  id        String   @id
+  tenantId  String   @map("tenant_id")
+  data      Json     @default(dbgenerated("'{}'::jsonb"))
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  @@index([tenantId, createdAt])
+  @@map("cc_quality_checks")
+}
+
+/// Content Creator — scheduled/posted packages (stage 12).
+model CcPost {
+  id        String   @id
+  tenantId  String   @map("tenant_id")
+  data      Json     @default(dbgenerated("'{}'::jsonb"))
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  @@index([tenantId, createdAt])
+  @@map("cc_posts")
+}
+
+/// Content Creator — post performance metrics (stage 13).
+model CcMetric {
+  id        String   @id
+  tenantId  String   @map("tenant_id")
+  data      Json     @default(dbgenerated("'{}'::jsonb"))
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  @@index([tenantId, createdAt])
+  @@map("cc_metrics")
+}
+
+/// Content Creator — pixie_managed billable-usage records.
+model CcUsage {
+  id        String   @id
+  tenantId  String   @map("tenant_id")
+  data      Json     @default(dbgenerated("'{}'::jsonb"))
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  @@index([tenantId, createdAt])
+  @@map("cc_usage")
+}
+
+/// Content Creator — analytics learning summaries (stage 13).
+model CcLearning {
+  id        String   @id
+  tenantId  String   @map("tenant_id")
+  data      Json     @default(dbgenerated("'{}'::jsonb"))
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  @@index([tenantId, createdAt])
+  @@map("cc_learnings")
+}
