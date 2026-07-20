@@ -71,6 +71,22 @@ export const contentApi = {
   storage: () => req<StorageStatus>('/api/lab/content/storage'),
 };
 
+/* ------------------------------ Content Creator (AI Influencer pipeline) ------------------------------ */
+// Proxies to Python /api/content-creator/* via /api/lab/content-creator/[...path].
+// `/status` is always 200 (the connectivity oracle); `/profile` 404s when a tenant
+// has no profile yet, which the proxy surfaces as backendUp:false — callers treat
+// that as "no profile yet" only when `/status` succeeded.
+export const contentCreatorApi = {
+  status: () => req<{
+    mock_mode?: boolean; mock?: boolean; dry_run?: boolean; live_enabled?: boolean;
+    banner?: string; provider?: { name?: string; mode?: string; configured?: boolean; connected?: boolean };
+    approval_gates?: Record<string, boolean>;
+  }>('/api/lab/content-creator/status'),
+  profile: () => req<{ id?: string; profile?: {
+    business_name?: string; niche?: string; target_audience?: string; content_goal?: string; brand_tone?: string;
+  } }>('/api/lab/content-creator/profile'),
+};
+
 /* ------------------------------ Approvals ------------------------------ */
 export const approvalsApi = {
   list: () => req<{ items: ApprovalItem[] }>('/api/lab/approvals'),
