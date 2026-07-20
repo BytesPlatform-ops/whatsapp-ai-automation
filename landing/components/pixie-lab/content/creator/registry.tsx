@@ -6,6 +6,10 @@ import { StepCard } from './ui';
 import { StepIntake } from './StepIntake';
 import { StepIdentity } from './StepIdentity';
 import { StepProvider } from './StepProvider';
+import { StepIdeas } from './StepIdeas';
+import { StepIdeaApproval } from './StepIdeaApproval';
+import { StepScript } from './StepScript';
+import { StepScriptApproval } from './StepScriptApproval';
 
 function Placeholder({ title }: { title: string }) {
   return (
@@ -19,10 +23,10 @@ export const STEP_COMPONENTS: Record<CreatorStage, (p: StepProps) => JSX.Element
   intake: StepIntake,
   influencer_setup: StepIdentity,
   provider_connection: StepProvider,
-  idea_generation: () => <Placeholder title="Idea generation" />,
-  idea_approval: () => <Placeholder title="Gate 1 · Idea approval" />,
-  script_generation: () => <Placeholder title="Script generation" />,
-  script_approval: () => <Placeholder title="Gate 2 · Script approval" />,
+  idea_generation: StepIdeas,
+  idea_approval: StepIdeaApproval,
+  script_generation: StepScript,
+  script_approval: StepScriptApproval,
   cost_estimate: () => <Placeholder title="Cost estimate · Gate 3" />,
   video_generation: () => <Placeholder title="Video generation" />,
   quality_check: () => <Placeholder title="Quality check" />,
