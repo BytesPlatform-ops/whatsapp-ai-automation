@@ -49,8 +49,12 @@ export const AGENTS = {
   },
   'content-creator': {
     type: 'agent', slug: 'content-creator', backendKey: 'content', name: 'Content Creator',
-    // live marketing page is /ai-influencer (alias ai-content-creator handled in normalize)
-    publicPath: '/ai-influencer', dashboardPath: '/pixie-lab/content', fullServicePath: '/pixie-lab/content/full-service',
+    // Public marketing page is /ai-influencer (alias ai-content-creator handled in normalize).
+    // The Lab entry is the AI-influencer PIPELINE product (/pixie-lab/content-creator, backed by
+    // /api/lab/content-creator -> Python /api/content-creator/*), NOT the media/asset library,
+    // which stays at /pixie-lab/content. backendKey 'content' is the shared entitlement family
+    // (content.view / content.manage) covering both surfaces.
+    publicPath: '/ai-influencer', dashboardPath: '/pixie-lab/content-creator', fullServicePath: '/pixie-lab/content/full-service',
     trialEnabled: true, accent: '#D4AF37', icon: 'clapperboard',
     description: 'Create posts, reels, scripts, captions, carousels, and campaign content.',
   },

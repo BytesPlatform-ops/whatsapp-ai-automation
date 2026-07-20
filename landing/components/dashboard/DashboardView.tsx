@@ -309,7 +309,7 @@ const QUICK_ACTIONS: { icon: LucideIcon; label: string; href: string; accent: st
   { icon: Globe, label: 'Create a website', href: '/pixie-lab/website', accent: '#3B82F6' },
   { icon: ShieldCheck, label: 'Review approvals', href: '/pixie-lab/approvals', accent: '#22C55E' },
   { icon: BookOpen, label: 'Add business knowledge', href: '/quick-setup', accent: '#14B8A6' },
-  { icon: Clapperboard, label: 'Generate content', href: '/pixie-lab/content', accent: '#D4AF37' },
+  { icon: Clapperboard, label: 'Generate content', href: '/pixie-lab/content-creator', accent: '#D4AF37' },
   { icon: ActivityIcon, label: 'Check activity', href: '/pixie-lab/activity', accent: '#EC4899' },
 ];
 
