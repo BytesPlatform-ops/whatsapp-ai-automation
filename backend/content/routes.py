@@ -10,19 +10,22 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
 import persistence
 import storage
 from content import service as svc
+from security import require_internal
 
-router = APIRouter(prefix="/api/content", tags=["content"])
+router = APIRouter(prefix="/api/content", tags=["content"], dependencies=[Depends(require_internal)])
 
 
 class UploadBody(BaseModel):
-    tenant_id: str = "demo_tenant"
+    # No default tenant: the trusted proxy always injects the workspace tenant, so
+    # an authenticated upload can never silently land in a shared "demo" bucket.
+    tenant_id: str = Field(..., min_length=1)
     uploaded_by: str = ""
     filename: str = Field(..., min_length=1)
     content_type: str = Field(..., min_length=1)

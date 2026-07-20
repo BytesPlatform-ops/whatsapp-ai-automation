@@ -14,8 +14,10 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field
+
+from security import require_internal
 
 from .agents.idea_agent import generate_ideas
 from .agents.scoring_agent import score_idea
@@ -77,7 +79,11 @@ from .store import (
     get_video_repository,
 )
 
-router = APIRouter(prefix="/api/content-creator", tags=["content_creator"])
+router = APIRouter(
+    prefix="/api/content-creator",
+    tags=["content_creator"],
+    dependencies=[Depends(require_internal)],
+)
 
 
 # --------------------------------------------------------------------------- #
