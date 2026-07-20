@@ -145,6 +145,45 @@ export async function backendSend<T = unknown>(method: 'POST' | 'DELETE' | 'PUT'
   }
 }
 
+export interface BackendForward {
+  backendUp: boolean;
+  status: number;
+  data: unknown; // parsed body for BOTH success and error responses
+}
+
+/**
+ * Like backendSend/backendGet but PRESERVES the backend status and parses the
+ * body on non-2xx too — for services whose 4xx contracts are structured and safe
+ * to forward (e.g. content-creator's `{error:'gate_blocked', gate, detail}` and
+ * FastAPI 422 validation). The tenant is still server-injected; a client tenant
+ * is never used. Do NOT use this for services with sensitive error bodies.
+ */
+export async function backendForward(
+  method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE',
+  path: string,
+  tenant: string,
+  body?: Record<string, unknown>,
+  params?: Record<string, string | number | boolean | undefined>,
+  ms = 20000,
+): Promise<BackendForward> {
+  const { signal, done } = withTimeout(ms);
+  try {
+    const headers: Record<string, string> = { Accept: 'application/json', ...internalHeaders() };
+    const init: RequestInit = { method, signal, cache: 'no-store', headers };
+    if (method !== 'GET') {
+      headers['Content-Type'] = 'application/json';
+      init.body = JSON.stringify({ ...(body || {}), tenant_id: tenant });
+    }
+    const res = await fetch(backendUrl(path, tenant, params), init);
+    const data = await res.json().catch(() => null);
+    return { backendUp: true, status: res.status, data };
+  } catch {
+    return { backendUp: false, status: 0, data: null };
+  } finally {
+    done();
+  }
+}
+
 /** Standard degraded JSON payload when the backend can't be reached. */
 export function degraded(extra: Record<string, unknown> = {}): NextResponse {
   return NextResponse.json({ backendUp: false, ...extra }, { status: 200, headers: { 'Cache-Control': 'no-store' } });
