@@ -10,6 +10,9 @@ import { StepIdeas } from './StepIdeas';
 import { StepIdeaApproval } from './StepIdeaApproval';
 import { StepScript } from './StepScript';
 import { StepScriptApproval } from './StepScriptApproval';
+import { StepCost } from './StepCost';
+import { StepVideo } from './StepVideo';
+import { StepQuality } from './StepQuality';
 
 function Placeholder({ title }: { title: string }) {
   return (
@@ -27,9 +30,9 @@ export const STEP_COMPONENTS: Record<CreatorStage, (p: StepProps) => JSX.Element
   idea_approval: StepIdeaApproval,
   script_generation: StepScript,
   script_approval: StepScriptApproval,
-  cost_estimate: () => <Placeholder title="Cost estimate · Gate 3" />,
-  video_generation: () => <Placeholder title="Video generation" />,
-  quality_check: () => <Placeholder title="Quality check" />,
+  cost_estimate: StepCost,
+  video_generation: StepVideo,
+  quality_check: StepQuality,
   publish_approval: () => <Placeholder title="Gate 4 · Publish approval" />,
   posting: () => <Placeholder title="Posting" />,
   analytics: () => <Placeholder title="Analytics + learning" />,
