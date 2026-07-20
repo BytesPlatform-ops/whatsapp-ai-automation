@@ -528,3 +528,45 @@ model CcLearning {
   @@index([tenantId, createdAt])
   @@map("cc_learnings")
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// General Content Agent — written-content documents + versions (+ job audit).
+// JSONB envelope tables read/written by the Python backend. See migration
+// 0005_content_agent. Separate from content_assets (media) and cc_* (influencer).
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Content Agent — a generated written-content document.
+model CaDocument {
+  id        String   @id
+  tenantId  String   @map("tenant_id")
+  data      Json     @default(dbgenerated("'{}'::jsonb"))
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  @@index([tenantId, createdAt])
+  @@map("ca_documents")
+}
+
+/// Content Agent — a version of a document (generation or manual edit).
+model CaVersion {
+  id        String   @id
+  tenantId  String   @map("tenant_id")
+  data      Json     @default(dbgenerated("'{}'::jsonb"))
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  @@index([tenantId, createdAt])
+  @@map("ca_versions")
+}
+
+/// Content Agent — generation-job audit record.
+model CaJob {
+  id        String   @id
+  tenantId  String   @map("tenant_id")
+  data      Json     @default(dbgenerated("'{}'::jsonb"))
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  @@index([tenantId, createdAt])
+  @@map("ca_jobs")
+}
