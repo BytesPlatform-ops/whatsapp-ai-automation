@@ -33,6 +33,7 @@ from .enums import (
     ApprovalGate,
     ApprovalStatus,
     IdentitySource,
+    PipelineStage,
     PlatformType,
     PostStatus,
     ProviderMode,
@@ -629,10 +630,10 @@ def reject_script(script_id: str, body: DecisionBody) -> dict:
 
 
 def _gate_approved(tenant_id: str, gate: ApprovalGate) -> bool:
-    return any(
-        r.status == ApprovalStatus.APPROVED
-        for r in get_approval_repository().list(tenant_id, gate)
-    )
+    """Latest-record-wins: the most recent decision is authoritative, so a
+    wizard invalidation reset (a later NEEDS_CHANGES) re-blocks the gated stage."""
+    records = get_approval_repository().list(tenant_id, gate)
+    return bool(records) and records[-1].status == ApprovalStatus.APPROVED
 
 
 def _gate_409(gate: ApprovalGate, detail: str) -> HTTPException:
@@ -1182,3 +1183,49 @@ def status(tenant_id: str = Query(default="")) -> dict:
     banner["provider"] = provider
     banner["billing"] = config.billing_block(mode)
     return banner
+
+
+# --------------------------------------------------------------------------- #
+# Wizard aggregate — one tenant-scoped snapshot the frontend resumes from
+# --------------------------------------------------------------------------- #
+@router.get("/wizard-state")
+def wizard_state(tenant_id: str = Query(..., min_length=1)) -> dict:
+    """Aggregate all pipeline artifacts + derived stage/gate progress in one read.
+    Read-only; tenant-scoped. See content_creator.wizard.build_wizard_state."""
+    from .wizard import build_wizard_state
+
+    return build_wizard_state(tenant_id)
+
+
+# Downstream stages invalidated when a given stage is edited. Editing a stage
+# resets every gate at-or-after it, so the wizard walks the owner back through
+# re-approval; regeneration overwrites the stale artifacts (upsert-by-key).
+_INVALIDATION_GATES = {
+    PipelineStage.INTAKE.value: [ApprovalGate.IDEA, ApprovalGate.SCRIPT, ApprovalGate.PRODUCTION, ApprovalGate.PUBLISH],
+    PipelineStage.INFLUENCER_SETUP.value: [ApprovalGate.IDEA, ApprovalGate.SCRIPT, ApprovalGate.PRODUCTION, ApprovalGate.PUBLISH],
+    PipelineStage.PROVIDER_CONNECTION.value: [ApprovalGate.PRODUCTION, ApprovalGate.PUBLISH],
+    PipelineStage.IDEA_GENERATION.value: [ApprovalGate.IDEA, ApprovalGate.SCRIPT, ApprovalGate.PRODUCTION, ApprovalGate.PUBLISH],
+    PipelineStage.IDEA_APPROVAL.value: [ApprovalGate.SCRIPT, ApprovalGate.PRODUCTION, ApprovalGate.PUBLISH],
+    PipelineStage.SCRIPT_GENERATION.value: [ApprovalGate.SCRIPT, ApprovalGate.PRODUCTION, ApprovalGate.PUBLISH],
+    PipelineStage.SCRIPT_APPROVAL.value: [ApprovalGate.PRODUCTION, ApprovalGate.PUBLISH],
+    PipelineStage.COST_ESTIMATE.value: [ApprovalGate.PRODUCTION, ApprovalGate.PUBLISH],
+    PipelineStage.VIDEO_GENERATION.value: [ApprovalGate.PUBLISH],
+    PipelineStage.QUALITY_CHECK.value: [ApprovalGate.PUBLISH],
+}
+
+
+class InvalidateBody(_Body):
+    from_stage: str = Field(..., min_length=1)
+
+
+@router.post("/wizard/invalidate")
+def wizard_invalidate(body: InvalidateBody) -> dict:
+    """Reset the gate approvals downstream of an edited stage. Idempotent; records
+    a NEEDS_CHANGES decision (latest-wins) so those gates require re-approval."""
+    gates = _INVALIDATION_GATES.get(body.from_stage, [])
+    repo = get_approval_repository()
+    for gate in gates:
+        repo.record(body.tenant_id, gate, body.from_stage, ApprovalStatus.NEEDS_CHANGES,
+                    note=f"invalidated by edit at {body.from_stage}")
+    return {"tenant_id": body.tenant_id, "from_stage": body.from_stage,
+            "reset_gates": [g.value for g in gates]}
