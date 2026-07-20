@@ -139,6 +139,15 @@ class GenerateResponse(BaseModel):
     usage: UsageSummary = Field(..., description="Latency + cost + per-step usage events.")
 
 
+@app.on_event("startup")
+async def _content_config_startup() -> None:
+    # Secret-free boot summary of persistence / AI / posting / provider modes, and
+    # a fail-fast when PIXIE_REQUIRE_DURABLE is set but persistence is in-memory.
+    from startup_checks import log_content_config
+
+    log_content_config()
+
+
 @app.get("/health")
 async def health() -> dict:
     return {"status": "ok", "model_mode": os.getenv("PIXIE_MODEL_MODE", "fake"), "mode": mode_banner()}
