@@ -1,9 +1,17 @@
-"""Tenant-scoped persistence seam for the Content Creator pipeline (stages 1-7).
+"""Tenant-scoped persistence seam for the Content Creator pipeline.
 
-In-memory, process-local stores so the module is functional today and tenant
-isolation + idempotency are actually exercised. A durable implementation (Prisma
-content-creator models / Supabase Postgres) drops in behind the SAME method
-surface in a later wave WITHOUT touching callers. No secrets stored here.
+Two interchangeable implementations sit behind the SAME method surface and the
+same ``get_*_repository()`` accessors, so callers never change:
+
+* ``InMemory*Repository`` (this file) — process-local dicts. The hermetic default
+  (``PIXIE_PERSIST`` unset) used by the test suite and quick local runs.
+* ``Durable*Repository`` (``store_durable.py``) — the same surface backed by the
+  shared ``backend/persistence.py`` seam (Supabase Postgres / JSONB file). Selected
+  automatically whenever ``persistence.enabled()`` is true (``PIXIE_PERSIST=file``
+  or ``supabase``), so pipeline state survives backend restarts and is
+  multi-instance safe. Tables: migration ``0004_content_creator`` (``cc_*``).
+
+No secrets stored here (BYOK credentials are sealed in ``providers/credentials``).
 
 Mirrors the convention in ``backend/marketing/profile/repository.py`` and
 ``backend/seo/repository.py``:
@@ -23,6 +31,8 @@ from __future__ import annotations
 
 import hashlib
 from typing import Dict, List, Optional, Tuple
+
+import persistence
 
 from .schemas import (
     ApprovalRecord,
@@ -465,102 +475,78 @@ class InMemoryLearningRepository:
 
 # ---------------------------------------------------------------------------
 # Module-level singletons + lazy accessors
+#
+# Each accessor returns the durable repository when ``persistence.enabled()``
+# (PIXIE_PERSIST=file|supabase) else the in-memory one — decided once and cached.
+# ``reset_repositories()`` clears the cache so a config change (or a simulated
+# restart in tests) is picked up on the next access.
 # ---------------------------------------------------------------------------
-_profile_repo: Optional[InMemoryProfileRepository] = None
-_identity_repo: Optional[InMemoryIdentityRepository] = None
-_provider_repo: Optional[InMemoryProviderRepository] = None
-_idea_repo: Optional[InMemoryIdeaRepository] = None
-_script_repo: Optional[InMemoryScriptRepository] = None
-_approval_repo: Optional[InMemoryApprovalRepository] = None
+_REPOS: Dict[str, object] = {}
 
 
-def get_profile_repository() -> InMemoryProfileRepository:
-    global _profile_repo
-    if _profile_repo is None:
-        _profile_repo = InMemoryProfileRepository()
-    return _profile_repo
+def _repo(key: str, mem_cls, durable_name: str):
+    cached = _REPOS.get(key)
+    if cached is not None:
+        return cached
+    if persistence.enabled():
+        from . import store_durable  # lazy — avoids import cycle, keeps stdlib path clean
+
+        inst = getattr(store_durable, durable_name)()
+    else:
+        inst = mem_cls()
+    _REPOS[key] = inst
+    return inst
 
 
-def get_identity_repository() -> InMemoryIdentityRepository:
-    global _identity_repo
-    if _identity_repo is None:
-        _identity_repo = InMemoryIdentityRepository()
-    return _identity_repo
+def reset_repositories() -> None:
+    """Drop all cached repository singletons. Next ``get_*`` rebuilds them for the
+    CURRENT ``PIXIE_PERSIST`` backend — used by tests and to simulate a restart."""
+    _REPOS.clear()
 
 
-def get_provider_repository() -> InMemoryProviderRepository:
-    global _provider_repo
-    if _provider_repo is None:
-        _provider_repo = InMemoryProviderRepository()
-    return _provider_repo
+def get_profile_repository():
+    return _repo("profile", InMemoryProfileRepository, "DurableProfileRepository")
 
 
-def get_idea_repository() -> InMemoryIdeaRepository:
-    global _idea_repo
-    if _idea_repo is None:
-        _idea_repo = InMemoryIdeaRepository()
-    return _idea_repo
+def get_identity_repository():
+    return _repo("identity", InMemoryIdentityRepository, "DurableIdentityRepository")
 
 
-def get_script_repository() -> InMemoryScriptRepository:
-    global _script_repo
-    if _script_repo is None:
-        _script_repo = InMemoryScriptRepository()
-    return _script_repo
+def get_provider_repository():
+    return _repo("provider", InMemoryProviderRepository, "DurableProviderRepository")
 
 
-def get_approval_repository() -> InMemoryApprovalRepository:
-    global _approval_repo
-    if _approval_repo is None:
-        _approval_repo = InMemoryApprovalRepository()
-    return _approval_repo
+def get_idea_repository():
+    return _repo("idea", InMemoryIdeaRepository, "DurableIdeaRepository")
 
 
-_video_repo: Optional[InMemoryVideoRepository] = None
-_quality_repo: Optional[InMemoryQualityRepository] = None
-_post_repo: Optional[InMemoryPostRepository] = None
-_metric_repo: Optional[InMemoryMetricRepository] = None
-_learning_repo: Optional[InMemoryLearningRepository] = None
-_usage_repo: Optional[InMemoryUsageRepository] = None
+def get_script_repository():
+    return _repo("script", InMemoryScriptRepository, "DurableScriptRepository")
 
 
-def get_usage_repository() -> InMemoryUsageRepository:
-    global _usage_repo
-    if _usage_repo is None:
-        _usage_repo = InMemoryUsageRepository()
-    return _usage_repo
+def get_approval_repository():
+    return _repo("approval", InMemoryApprovalRepository, "DurableApprovalRepository")
 
 
-def get_video_repository() -> InMemoryVideoRepository:
-    global _video_repo
-    if _video_repo is None:
-        _video_repo = InMemoryVideoRepository()
-    return _video_repo
+def get_usage_repository():
+    return _repo("usage", InMemoryUsageRepository, "DurableUsageRepository")
 
 
-def get_quality_repository() -> InMemoryQualityRepository:
-    global _quality_repo
-    if _quality_repo is None:
-        _quality_repo = InMemoryQualityRepository()
-    return _quality_repo
+def get_video_repository():
+    return _repo("video", InMemoryVideoRepository, "DurableVideoRepository")
 
 
-def get_post_repository() -> InMemoryPostRepository:
-    global _post_repo
-    if _post_repo is None:
-        _post_repo = InMemoryPostRepository()
-    return _post_repo
+def get_quality_repository():
+    return _repo("quality", InMemoryQualityRepository, "DurableQualityRepository")
 
 
-def get_metric_repository() -> InMemoryMetricRepository:
-    global _metric_repo
-    if _metric_repo is None:
-        _metric_repo = InMemoryMetricRepository()
-    return _metric_repo
+def get_post_repository():
+    return _repo("post", InMemoryPostRepository, "DurablePostRepository")
 
 
-def get_learning_repository() -> InMemoryLearningRepository:
-    global _learning_repo
-    if _learning_repo is None:
-        _learning_repo = InMemoryLearningRepository()
-    return _learning_repo
+def get_metric_repository():
+    return _repo("metric", InMemoryMetricRepository, "DurableMetricRepository")
+
+
+def get_learning_repository():
+    return _repo("learning", InMemoryLearningRepository, "DurableLearningRepository")
