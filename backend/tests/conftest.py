@@ -1,11 +1,18 @@
 """Pytest bootstrap for the backend.
 
-Neutralize the internal-secret gate for tests: the suite exercises the app
-directly via TestClient (no proxy), so the `X-Pixie-Internal-Secret` header isn't
-present. Setting the var to an empty string (present, so app._load_local_env
-won't re-populate it from a local backend/.env) makes the middleware a no-op
-during tests, regardless of whether a developer has a real secret in backend/.env.
+Neutralize env that a developer's local `backend/.env` would otherwise leak into
+the suite via `app._load_local_env` (which only sets vars NOT already present, so
+seeding them here wins):
+
+* `PIXIE_INTERNAL_API_SECRET=""` — the suite drives the ASGI app directly (no
+  proxy) and never sends the `X-Pixie-Internal-Secret` header, so blanking the
+  secret makes the gate a no-op.
+* `PIXIE_PERSIST="memory"` — keep repositories in-memory/hermetic even when the
+  local `.env` selects a durable backend (`file`/`supabase`), so tests don't leak
+  rows across cases through `.pixie_data`/Postgres. Tests that exercise durable
+  persistence set this per-case with monkeypatch and revert it.
 """
 import os
 
 os.environ["PIXIE_INTERNAL_API_SECRET"] = ""
+os.environ["PIXIE_PERSIST"] = "memory"
