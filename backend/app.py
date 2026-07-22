@@ -61,6 +61,7 @@ from seo.agent_routes import router as seo_agent_router
 from receptionist.campaigns.api import router as campaigns_router
 from receptionist.onboarding.api import router as onboarding_router
 from content_creator.router import router as content_creator_router
+from content_agent.routes import router as content_agent_router
 from schemas import Request, Site, UsageEvent
 from seo.router import router as seo_router
 
@@ -117,6 +118,7 @@ app.include_router(onboarding_router)
 app.include_router(campaigns_router)
 app.include_router(seo_router, deprecated=True)  # DEPRECATED /api/seo/* (in-memory); use /api/agents/seo/*
 app.include_router(content_creator_router)
+app.include_router(content_agent_router)  # /api/content-agent — General Content Agent (written content generation)
 app.include_router(channels_router)  # /api/channels — agent/channel readiness for the dashboard
 app.include_router(feed_router)  # /api/feed — Pixie Lab proactive recommendation feed
 app.include_router(entitlements_router)  # /api/entitlements — agent trial/purchase gating
