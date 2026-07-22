@@ -84,12 +84,29 @@ def _fallback_script(idea: dict, profile: dict) -> Dict:
     }
 
 
-def generate_script(idea: dict, profile: dict, *, ai: Optional[CcAiClient] = None) -> dict:
-    """Return ``{"hook","body","cta","word_count","approx_seconds":15}``.
+PROMPT_VERSION = "script_v1"
 
-    Tries the model layer (LARGE tier) then falls back to ``mock_script``.
-    Never raises.
-    """
+
+def _fallback_meta() -> dict:
+    return {"provider": "", "model": "", "estimated_cost": 0.0, "latency_ms": 0,
+            "fallback": True, "prompt_version": PROMPT_VERSION}
+
+
+def _meta_from_result(result) -> dict:
+    return {
+        "provider": getattr(result, "provider", "") or "",
+        "model": getattr(result, "model", "") or "",
+        "estimated_cost": float(getattr(result, "estimated_cost", 0.0) or 0.0),
+        "latency_ms": int(getattr(result, "latency_ms", 0) or 0),
+        "fallback": False,
+        "prompt_version": PROMPT_VERSION,
+    }
+
+
+def generate_script_with_meta(idea: dict, profile: dict, *, ai: Optional[CcAiClient] = None) -> tuple:
+    """Like :func:`generate_script` but also returns provider/usage metadata:
+    ``(script, meta)``. ``fallback=True`` means the deterministic mock produced the
+    script (no real model call). Never raises."""
     try:
         client = ai if ai is not None else CcAiClient()
         try:
@@ -100,16 +117,20 @@ def generate_script(idea: dict, profile: dict, *, ai: Optional[CcAiClient] = Non
         if result is not None and result.data is not None:
             script = _coerce_script(result.data)
             if script is not None:
-                return script
-        return _fallback_script(idea, profile)
+                return script, _meta_from_result(result)
+        return _fallback_script(idea, profile), _fallback_meta()
     except Exception:
         try:
-            return _fallback_script(idea, profile)
+            return _fallback_script(idea, profile), _fallback_meta()
         except Exception:
-            return {
-                "hook": "",
-                "body": "",
-                "cta": "",
-                "word_count": 0,
-                "approx_seconds": 15,
-            }
+            return {"hook": "", "body": "", "cta": "", "word_count": 0, "approx_seconds": 15}, _fallback_meta()
+
+
+def generate_script(idea: dict, profile: dict, *, ai: Optional[CcAiClient] = None) -> dict:
+    """Return ``{"hook","body","cta","word_count","approx_seconds":15}``.
+
+    Tries the model layer (LARGE tier) then falls back to ``mock_script``.
+    Never raises.
+    """
+    script, _meta = generate_script_with_meta(idea, profile, ai=ai)
+    return script

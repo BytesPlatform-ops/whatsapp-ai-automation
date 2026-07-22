@@ -21,9 +21,10 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from security import require_internal
 
-from .agents.idea_agent import generate_ideas
+from .agents.agent_log import AgentLog, get_agent_log_store
+from .agents.idea_agent import generate_ideas_with_meta
 from .agents.scoring_agent import score_idea
-from .agents.script_agent import generate_script
+from .agents.script_agent import generate_script_with_meta
 from . import config
 from .config import status_banner
 from .cost.estimator import estimate_cost
@@ -182,6 +183,25 @@ class ScheduleBody(_Body):
 def _profile_dict(tenant_id: str) -> Dict[str, Any]:
     found = get_profile_repository().get_active(tenant_id)
     return found[1].model_dump() if found else {}
+
+
+def _record_ai_usage(tenant_id: str, stage: str, meta: dict) -> None:
+    """Write one AgentLog telemetry row for a text-generation stage (provider,
+    model, prompt version, estimated cost, latency). ``fallback=True`` means the
+    deterministic mock produced the output — recorded with an empty model so the
+    AI-vs-deterministic split stays auditable. Never raises; no secrets logged."""
+    try:
+        get_agent_log_store().add(AgentLog(
+            tenant_id=tenant_id,
+            stage=stage,
+            status="done",
+            model=meta.get("model", "") or "",
+            prompt_version=meta.get("prompt_version", "") or "",
+            estimated_cost=float(meta.get("estimated_cost", 0.0) or 0.0),
+            latency_ms=int(meta.get("latency_ms", 0) or 0),
+        ))
+    except Exception:
+        pass  # telemetry is best-effort — never fail a generation on it
 
 
 # --------------------------------------------------------------------------- #
@@ -521,7 +541,8 @@ def ideas_generate(body: IdeasGenerateBody) -> dict:
     trends = gather_trends(profile, seeds=body.seeds)
     repo = get_idea_repository()
     history = [i.title for (_id, i) in repo.list(body.tenant_id)]
-    raw = generate_ideas(profile, trends=trends, history=history)
+    raw, meta = generate_ideas_with_meta(profile, trends=trends, history=history)
+    _record_ai_usage(body.tenant_id, PipelineStage.IDEA_GENERATION.value, meta)
     out = []
     for item in raw:
         scored = score_idea(item, profile)
@@ -586,7 +607,8 @@ def scripts_generate(body: ScriptGenerateBody) -> dict:
             },
         )
     profile = _profile_dict(body.tenant_id)
-    drafted = generate_script(idea.model_dump(), profile)
+    drafted, meta = generate_script_with_meta(idea.model_dump(), profile)
+    _record_ai_usage(body.tenant_id, PipelineStage.SCRIPT_GENERATION.value, meta)
     script = Script(
         tenant_id=body.tenant_id,
         idea_ref=body.idea_id,
@@ -1112,6 +1134,24 @@ def usage_get(tenant_id: str = Query(..., min_length=1)) -> dict:
     """Billable-usage records (pixie_managed). Never contains secrets."""
     rows = get_usage_repository().list(tenant_id)
     return {"tenant_id": tenant_id, "usage": [u.model_dump() for (_i, u) in rows]}
+
+
+@router.get("/ai-usage")
+def ai_usage_get(tenant_id: str = Query(..., min_length=1)) -> dict:
+    """Text-generation AI telemetry (idea/script): provider metadata, model,
+    prompt version, estimated cost and latency per call. Safe metadata only — no
+    prompt content, no generated text, no secrets. Credit deduction is NOT
+    enforced; this is auditing/observability, not billing."""
+    logs = get_agent_log_store().list(tenant_id)
+    ai = [row for row in logs if row.get("stage") in
+          (PipelineStage.IDEA_GENERATION.value, PipelineStage.SCRIPT_GENERATION.value)]
+    total_cost = sum(float(r.get("estimated_cost", 0.0) or 0.0) for r in ai)
+    return {
+        "tenant_id": tenant_id,
+        "billing_enforced": False,
+        "totals": {"estimated_cost": round(total_cost, 6), "records": len(ai)},
+        "ai_usage": ai,
+    }
 
 
 # --------------------------------------------------------------------------- #

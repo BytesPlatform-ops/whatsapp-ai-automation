@@ -85,6 +85,61 @@ def _coerce_ideas(data: object, n: int) -> Optional[List[Dict]]:
     return out[: max(1, int(n))]
 
 
+PROMPT_VERSION = "curator_idea_v1"
+
+
+def _fallback_meta() -> dict:
+    return {"provider": "", "model": "", "estimated_cost": 0.0, "latency_ms": 0,
+            "fallback": True, "prompt_version": PROMPT_VERSION}
+
+
+def _meta_from_result(result) -> dict:
+    return {
+        "provider": getattr(result, "provider", "") or "",
+        "model": getattr(result, "model", "") or "",
+        "estimated_cost": float(getattr(result, "estimated_cost", 0.0) or 0.0),
+        "latency_ms": int(getattr(result, "latency_ms", 0) or 0),
+        "fallback": False,
+        "prompt_version": PROMPT_VERSION,
+    }
+
+
+def generate_ideas_with_meta(
+    profile: dict,
+    trends: list = None,
+    history: list = None,
+    *,
+    ai: Optional[CcAiClient] = None,
+    n: int = 5,
+) -> tuple:
+    """Like :func:`generate_ideas` but also returns provider/usage metadata:
+    ``(ideas, meta)`` where ``meta`` carries provider/model/estimated_cost/
+    latency_ms/fallback/prompt_version. ``fallback=True`` means the deterministic
+    mock produced the ideas (no real model call). Never raises."""
+    try:
+        client = ai if ai is not None else CcAiClient()
+        n = max(1, int(n) if n else 5)
+        try:
+            prompt = _render_idea_prompt(profile, trends, history, n)
+            result = client.complete_json("idea", "large", prompt)
+        except Exception:
+            result = None
+        if result is not None and result.data is not None:
+            ideas = _coerce_ideas(result.data, n)
+            if ideas:
+                return ideas, _meta_from_result(result)
+        # Fallback — deterministic.
+        prof = profile if isinstance(profile, dict) else {}
+        topic = _topic_from_profile(prof)
+        brand = _as_text(prof.get("business_name", ""))
+        return mock_ideas(topic, brand, n), _fallback_meta()
+    except Exception:
+        try:
+            return mock_ideas("", "", max(1, int(n) if n else 5)), _fallback_meta()
+        except Exception:
+            return [{"title": "", "angle": "", "hook": "", "score": 0}], _fallback_meta()
+
+
 def generate_ideas(
     profile: dict,
     trends: list = None,
@@ -98,26 +153,5 @@ def generate_ideas(
     Tries the model layer (LARGE tier) then falls back to ``mock_ideas``.
     Never raises.
     """
-    try:
-        client = ai if ai is not None else CcAiClient()
-        n = max(1, int(n) if n else 5)
-        try:
-            prompt = _render_idea_prompt(profile, trends, history, n)
-            result = client.complete_json("idea", "large", prompt)
-        except Exception:
-            result = None
-        if result is not None and result.data is not None:
-            ideas = _coerce_ideas(result.data, n)
-            if ideas:
-                return ideas
-        # Fallback — deterministic.
-        prof = profile if isinstance(profile, dict) else {}
-        topic = _topic_from_profile(prof)
-        brand = _as_text(prof.get("business_name", ""))
-        return mock_ideas(topic, brand, n)
-    except Exception:
-        # Absolute last-resort guard.
-        try:
-            return mock_ideas("", "", max(1, int(n) if n else 5))
-        except Exception:
-            return [{"title": "", "angle": "", "hook": "", "score": 0}]
+    ideas, _meta = generate_ideas_with_meta(profile, trends, history, ai=ai, n=n)
+    return ideas
