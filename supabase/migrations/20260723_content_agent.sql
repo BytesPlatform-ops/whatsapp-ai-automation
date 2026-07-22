@@ -55,6 +55,14 @@ CREATE TABLE IF NOT EXISTS "ca_jobs" (
   "updated_at" timestamptz NOT NULL DEFAULT now(),
   "data" jsonb NOT NULL DEFAULT '{}'::jsonb);
 
+-- AI usage records (provider, model, tokens, estimated cost, mock/real, success).
+-- Not a billing ledger — credit deduction is not enforced. One row per generation.
+CREATE TABLE IF NOT EXISTS "ca_usage" (
+  "id" text PRIMARY KEY, "tenant_id" text NOT NULL,
+  "created_at" timestamptz NOT NULL DEFAULT now(),
+  "updated_at" timestamptz NOT NULL DEFAULT now(),
+  "data" jsonb NOT NULL DEFAULT '{}'::jsonb);
+
 -- ── Indexes ─────────────────────────────────────────────────────────────────
 -- Every table gets (tenant_id) + (tenant_id, created_at desc) — the two access
 -- patterns the row repo uses (list_by_tenant, ordered). Hot per-table lookups
@@ -73,7 +81,11 @@ CREATE INDEX IF NOT EXISTS "idx_ca_jobs_tenant"            ON "ca_jobs" ("tenant
 CREATE INDEX IF NOT EXISTS "idx_ca_jobs_created"           ON "ca_jobs" ("tenant_id", "created_at" DESC);
 CREATE INDEX IF NOT EXISTS "idx_ca_jobs_status"            ON "ca_jobs" ((data->>'status'));
 
+CREATE INDEX IF NOT EXISTS "idx_ca_usage_tenant"           ON "ca_usage" ("tenant_id");
+CREATE INDEX IF NOT EXISTS "idx_ca_usage_created"          ON "ca_usage" ("tenant_id", "created_at" DESC);
+
 -- ── Row Level Security (enable; no anon/authenticated policies → deny-all) ────
 ALTER TABLE "ca_documents" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "ca_versions"  ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "ca_jobs"      ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "ca_usage"     ENABLE ROW LEVEL SECURITY;

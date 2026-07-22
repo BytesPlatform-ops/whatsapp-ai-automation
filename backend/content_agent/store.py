@@ -13,7 +13,7 @@ from typing import List, Optional, Tuple
 import persistence
 
 from .enums import ContentStatus
-from .schemas import ContentDocument, ContentVersion, GenerationJob
+from .schemas import ContentDocument, ContentUsage, ContentVersion, GenerationJob
 
 
 def now_iso() -> str:
@@ -118,6 +118,23 @@ class JobRepository(_Repo):
         self._save(jid, tenant_id, job)
 
 
+class UsageRepository(_Repo):
+    table_name = "ca_usage"
+    model = ContentUsage
+
+    def create(self, usage: ContentUsage) -> Tuple[str, ContentUsage]:
+        uid = _id("cause_")
+        usage = usage.model_copy(update={"created_at": now_iso()})
+        self._save(uid, usage.tenant_id, usage)
+        return uid, usage
+
+    def list(self, tenant_id: str) -> List[Tuple[str, ContentUsage]]:
+        rows = [(r["id"], self._build(r)) for r in self._rows(tenant_id)]
+        rows = [(i, m) for (i, m) in rows if m]
+        rows.sort(key=lambda x: x[1].created_at, reverse=True)
+        return rows
+
+
 # ── singletons + reset ───────────────────────────────────────────────────────
 _REPOS: dict = {}
 
@@ -142,6 +159,10 @@ def get_version_repository() -> VersionRepository:
 
 def get_job_repository() -> JobRepository:
     return _repo("job", JobRepository)
+
+
+def get_usage_repository() -> UsageRepository:
+    return _repo("usage", UsageRepository)
 
 
 # ── query helpers (search / filter / sort / paginate) ────────────────────────

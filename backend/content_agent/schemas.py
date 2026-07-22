@@ -157,6 +157,27 @@ class GenerationJob(_Tenanted):
     result_version_ids: List[str] = Field(default_factory=list)
 
 
+class ContentUsage(_Tenanted):
+    """One AI-generation usage record (text). Records provider metadata + tokens +
+    estimated cost per request. Not a billing ledger — credit deduction is NOT
+    enforced; ``actual_cost`` is filled only when a provider reports it."""
+    product: str = "content_agent"
+    content_type: ContentType
+    provider: str = "mock"
+    model: str = "mock"
+    mock: bool = True
+    variations: int = 1
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    total_tokens: int = 0
+    duration_ms: int = 0
+    estimated_cost: float = 0.0
+    actual_cost: float = 0.0
+    success: bool = True
+    prompt_version: str = ""
+    created_at: str = ""
+
+
 # ── Request bodies for mutations ─────────────────────────────────────────────
 class DocumentPatch(_Tenanted):
     title: Optional[str] = None

@@ -27,6 +27,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from security import require_internal
 
 import logging
+import os
+import time
 
 from .enums import ContentStatus, ContentType, JobStatus
 from .errors import ProviderError, classify, redact
@@ -34,6 +36,7 @@ from .generator import generate, is_mock, model_mode
 from .prompts import PROMPT_VERSION
 from .schemas import (
     ContentDocument,
+    ContentUsage,
     ContentVersion,
     DocumentPatch,
     GeneratedVariation,
@@ -46,6 +49,7 @@ from .schemas import (
 from .store import (
     get_document_repository,
     get_job_repository,
+    get_usage_repository,
     get_version_repository,
     query_documents,
 )
@@ -83,20 +87,46 @@ def _require_inputs(req: GenerationRequest) -> None:
 _log = logging.getLogger("pixie.content_agent")
 
 
-def _run_generation(req: GenerationRequest):
-    """Run the provider-independent service, mapping any real-mode provider
-    failure to a SAFE, categorized error (never a fake success, never a raw
-    provider payload). Server logs get a redacted internal line tied to the same
-    correlation id."""
+def _record_usage(req: GenerationRequest, result, duration_ms: int, success: bool) -> None:
+    """Persist one usage record per generation (never blocks the request)."""
     try:
-        return generate(req.content_type, req.inputs, req.options)
+        usage = result.usage if result else None
+        get_usage_repository().create(ContentUsage(
+            tenant_id=req.tenant_id,
+            content_type=req.content_type,
+            provider=(usage.provider if usage else ("mock" if is_mock() else model_mode())),
+            model=(usage.model if usage else ""),
+            mock=(usage.mock if usage else is_mock()),
+            variations=int(req.options.variations or 1),
+            total_tokens=(usage.tokens if usage else 0),
+            estimated_cost=(usage.estimated_cost if usage else 0.0),
+            duration_ms=duration_ms,
+            success=success,
+            prompt_version=(usage.prompt_version if usage else ""),
+        ))
+    except Exception:  # usage recording is best-effort — never fail a generation on it
+        _log.debug("content_agent usage recording failed", exc_info=False)
+
+
+def _run_generation(req: GenerationRequest):
+    """Run the provider-independent service, recording usage and mapping any
+    real-mode provider failure to a SAFE, categorized error (never a fake success,
+    never a raw provider payload). Server logs get a redacted internal line tied to
+    the same correlation id."""
+    start = time.perf_counter()
+    try:
+        result = generate(req.content_type, req.inputs, req.options)
+        _record_usage(req, result, int((time.perf_counter() - start) * 1000), True)
+        return result
     except ProviderError as exc:
+        _record_usage(req, None, int((time.perf_counter() - start) * 1000), False)
         safe = classify(exc)
         _log.warning("content_agent generation failed cid=%s category=%s type=%s detail=%s",
                      safe.correlation_id, safe.category.value, req.content_type.value,
                      redact(getattr(exc, "internal", "") or str(exc)))
         raise HTTPException(status_code=safe.http_status, detail=safe.to_detail()) from exc
     except Exception as exc:  # never leak an unexpected traceback to the browser
+        _record_usage(req, None, int((time.perf_counter() - start) * 1000), False)
         safe = classify(exc)
         _log.warning("content_agent unexpected error cid=%s type=%s", safe.correlation_id, type(exc).__name__)
         raise HTTPException(status_code=safe.http_status, detail=safe.to_detail()) from exc
@@ -189,12 +219,43 @@ def content_types() -> dict:
 
 @router.get("/status")
 def status() -> dict:
-    """Frontend-safe generation-mode indicator (mock vs real). No secrets."""
+    """Frontend-safe generation-mode indicator (mock vs real). No secrets, and no
+    paid call — availability is inferred from configuration presence only."""
+    mode = model_mode()
+    mock = is_mock()
+    if mock:
+        provider, model, available, missing = "mock", "mock", True, []
+    elif mode == "openai":
+        provider = "openai"
+        model = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+        available = bool(os.getenv("OPENAI_API_KEY"))
+        missing = [] if available else ["OPENAI_API_KEY"]
+    else:
+        provider, model, available, missing = mode, "", False, ["PIXIE_MODEL_MODE (unsupported provider)"]
     return {
-        "mock": is_mock(),
-        "mode": model_mode(),
+        "mock": mock,
+        "mode": mode,
+        "provider": provider,
+        "model": model,
+        "available": available,
+        "missing": missing,
         "prompt_version": PROMPT_VERSION,
-        "provider": "mock" if is_mock() else model_mode(),
+        "billing_enforced": False,  # usage is recorded, but credit deduction is NOT enforced
+    }
+
+
+@router.get("/usage")
+def usage(tenant_id: str = Query(..., min_length=1), limit: int = Query(default=50, ge=1, le=200)) -> dict:
+    """Recorded AI usage for this workspace (provider/model/tokens/estimated cost).
+    Not a billing ledger — credit deduction is not enforced."""
+    rows = get_usage_repository().list(tenant_id)[:limit]
+    total_cost = sum(u.estimated_cost for (_i, u) in rows)
+    total_tokens = sum(u.total_tokens for (_i, u) in rows)
+    return {
+        "tenant_id": tenant_id,
+        "billing_enforced": False,
+        "totals": {"estimated_cost": round(total_cost, 6), "total_tokens": total_tokens, "records": len(rows)},
+        "usage": [{"id": i, "usage": u.model_dump()} for (i, u) in rows],
     }
 
 
