@@ -8,15 +8,12 @@ import { ContentCreatePanel } from './ContentCreatePanel';
 import { ContentLibraryPanel } from './ContentLibraryPanel';
 import { contentApi } from '@/lib/pixie-lab/servicesClient';
 import { OfflineState, SetupRequired, LoadingCards } from '@/components/pixie-lab/services/ServiceStates';
+import { CONTENT_TABS } from './agent/contentTabs';
 import type { StorageStatus, Envelope } from '@/lib/pixie-lab/serviceTypes';
 
 const ACCENT = '#D4AF37';
 
-const TABS = [
-  { label: 'Overview', href: '/pixie-lab/content' },
-  { label: 'Create', href: '/pixie-lab/content/create' },
-  { label: 'Library', href: '/pixie-lab/content/library' },
-];
+const TABS = CONTENT_TABS;
 
 type ContentTab = 'create' | 'library';
 type StorageState = 'loading' | 'offline' | 'unconfigured' | 'ready';
