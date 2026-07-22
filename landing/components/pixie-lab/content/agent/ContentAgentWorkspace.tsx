@@ -121,9 +121,17 @@ export function ContentAgentWorkspace() {
   return (
     <div>
       {status && (
-        <div className="mb-4 flex items-center gap-2 text-[12px] text-[var(--pl-text-muted)]">
+        <div className="mb-4 flex flex-wrap items-center gap-2 text-[12px] text-[var(--pl-text-muted)]">
           <ModeBadge mock={status.mock} />
-          <span>{status.mock ? 'Local mock mode — no paid API calls.' : `Live provider: ${status.provider}.`}</span>
+          {status.mock ? (
+            <span>Local mock mode — no paid API calls.</span>
+          ) : status.available ? (
+            <span>Live provider: {status.provider}{status.model ? ` · ${status.model}` : ''}.</span>
+          ) : (
+            <span className="text-amber-500">
+              Provider not configured{status.missing.length ? ` — set ${status.missing.join(', ')}` : ''}. Generation will fail until configured.
+            </span>
+          )}
         </div>
       )}
 

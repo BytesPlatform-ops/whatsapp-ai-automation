@@ -35,6 +35,9 @@ export type AgentErrorKind =
   | 'conflict'
   | 'validation'
   | 'provider_unavailable'
+  | 'rate_limited'
+  | 'quota_exceeded'
+  | 'provider_timeout'
   | 'offline'
   | 'server'
   | 'unknown';
@@ -60,8 +63,11 @@ function classify(status: number): AgentErrorKind {
   if (status === 403) return 'forbidden';
   if (status === 404) return 'not_found';
   if (status === 409) return 'conflict';
-  if (status === 422) return 'validation';
+  if (status === 422 || status === 400) return 'validation';
+  if (status === 429) return 'rate_limited';
+  if (status === 402) return 'quota_exceeded';
   if (status === 503) return 'provider_unavailable';
+  if (status === 504) return 'provider_timeout';
   if (status >= 500) return 'server';
   return 'unknown';
 }

@@ -183,8 +183,12 @@ export interface SavedVersionResponse extends DocumentEnvelope {
 export interface StatusResponse {
   mock: boolean;
   mode: string;
-  prompt_version: string;
   provider: string;
+  model: string;
+  available: boolean;
+  missing: string[];
+  prompt_version: string;
+  billing_enforced: boolean;
 }
 
 export interface ContentTypesResponse {
