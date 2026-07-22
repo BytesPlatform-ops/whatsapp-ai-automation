@@ -16,6 +16,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 REPO = Path(__file__).resolve().parent.parent.parent
 CA_MIGRATION = REPO / "supabase" / "migrations" / "20260723_content_agent.sql"
 CC_MIGRATION = REPO / "landing" / "prisma" / "migrations" / "0004_content_creator" / "migration.sql"
+PUB_MIGRATION = REPO / "supabase" / "migrations" / "20260724_publishing.sql"
 
 
 def _created_tables(sql: str) -> set:
@@ -60,6 +61,16 @@ def test_content_creator_migration_covers_all_cc_tables():
 def test_migrations_enable_rls_or_are_prisma_managed():
     ca = CA_MIGRATION.read_text().lower()
     assert "enable row level security" in ca  # deny-all posture for the ca_ tables
+
+
+def test_publishing_migration_covers_all_pub_tables():
+    pytest.importorskip("pydantic")
+    import publishing.store as store
+    code_tables = {store.JobRepository.table_name, store.AttemptRepository.table_name}
+    created = _created_tables(PUB_MIGRATION.read_text())
+    missing = code_tables - created
+    assert not missing, f"publishing tables missing from migration: {missing}"
+    assert "enable row level security" in PUB_MIGRATION.read_text().lower()
 
 
 # ── File → Supabase import utility ─────────────────────────────────────────────
