@@ -11,17 +11,20 @@ export interface GeneratePayload {
   options: GenerationOptions;
 }
 
-/** Split a flat value map into the field values (inputs) and control values
- *  (options). Both are also merged by the client, so this split is mainly for
- *  clarity and for storing a clean request snapshot. */
+/** Build the generation payload. `inputs` holds the content fields; `options`
+ *  holds the FULL flat value map (fields + controls). Options is a superset
+ *  because some fields (notably `platform`) belong to the backend's
+ *  GenerationOptions model — each Pydantic model ignores keys it does not own, so
+ *  a superset is safe and makes the stored request snapshot reconstruct exactly
+ *  on regenerate (no lost platform/tone). */
 function partition(spec: ContentTypeSpec, values: FormValues): GeneratePayload {
   const controlNames = new Set(spec.controls.map((c) => c.name));
   const inputs: GenerationInputs = {};
   const options: Record<string, FieldValue> = {};
   for (const [k, v] of Object.entries(values)) {
     if (v === '' || (Array.isArray(v) && v.length === 0)) continue;
-    if (controlNames.has(k)) options[k] = v;
-    else inputs[k] = v;
+    options[k] = v; // options is the full flat map (backend ignores unowned keys)
+    if (!controlNames.has(k)) inputs[k] = v;
   }
   return { inputs, options: options as GenerationOptions };
 }
