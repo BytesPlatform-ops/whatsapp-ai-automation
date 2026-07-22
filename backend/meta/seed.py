@@ -49,3 +49,34 @@ def demo_analytics_summary(asset_id: str = "ig_demo_1", date_range: str = "last_
             {"media_id": "m2", "type": "IMAGE", "permalink": "https://instagram.com/p/demo2"},
         ],
     }
+
+
+# ── Ads Marketing API demo data ───────────────────────────────────────────────
+# Shapes match the live Graph responses so the Ads UI renders identically in demo
+# and live modes. Clearly demo (act_demo_*), never a real ad account id.
+
+def demo_ad_accounts() -> list[dict]:
+    return [
+        {"id": "act_demo_1", "name": "Bytes Coffee Ads (demo)", "account_id": "demo_1",
+         "account_status": 1, "account_status_label": "ACTIVE", "currency": "USD",
+         "timezone_name": "America/Los_Angeles"},
+        {"id": "act_demo_2", "name": "Bytes Coffee — Test (demo)", "account_id": "demo_2",
+         "account_status": 1, "account_status_label": "ACTIVE", "currency": "USD",
+         "timezone_name": "America/New_York"},
+    ]
+
+
+def demo_campaigns(ad_account_id: str = "act_demo_1") -> list[dict]:
+    return [
+        {"id": "camp_demo_1", "name": "Weekend Brunch — Traffic", "status": "PAUSED",
+         "effective_status": "PAUSED", "objective": "OUTCOME_TRAFFIC"},
+        {"id": "camp_demo_2", "name": "New Menu Launch — Leads", "status": "ACTIVE",
+         "effective_status": "ACTIVE", "objective": "OUTCOME_LEADS"},
+        {"id": "camp_demo_3", "name": "Generic Boost — May", "status": "PAUSED",
+         "effective_status": "CAMPAIGN_PAUSED", "objective": "OUTCOME_ENGAGEMENT"},
+    ]
+
+
+def demo_ad_insights() -> dict:
+    """Account-level demo insights matching the live Graph field names."""
+    return {"spend": 214.30, "impressions": 61240.0, "clicks": 1189.0, "ctr": 1.94, "cpc": 0.18}

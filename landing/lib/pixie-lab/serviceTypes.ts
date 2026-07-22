@@ -98,6 +98,35 @@ export interface MetaStatus {
   execution_mode?: string;
 }
 
+/** A Meta ad account as returned by /api/meta/ad-accounts. Never carries a token. */
+export interface MetaAdAccount {
+  id: string;
+  name: string;
+  account_id?: string;
+  account_status?: number;
+  account_status_label?: string;
+  currency?: string;
+  timezone_name?: string;
+}
+
+/** A Meta campaign row from /api/meta/campaigns. */
+export interface MetaCampaign {
+  id: string;
+  name: string;
+  status: string;
+  effective_status: string;
+  objective: string;
+}
+
+/** Account-level ads insights from /api/meta/insights. */
+export interface MetaAdInsights {
+  spend: number;
+  impressions: number;
+  clicks: number;
+  ctr: number;
+  cpc: number;
+}
+
 export type MetaSentiment = 'positive' | 'neutral' | 'negative' | 'angry' | 'spam';
 
 export interface MetaInboxItem {

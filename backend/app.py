@@ -55,6 +55,7 @@ from integrations.oauth_routes import router as google_oauth_router
 from meta.oauth_routes import router as meta_connect_router
 from meta.routes import agent_router as meta_agent_router
 from meta.routes import meta_data_router
+from meta.ads_routes import router as meta_ads_router
 from content.routes import router as content_router
 from seo.agent_routes import router as seo_agent_router
 from receptionist.campaigns.api import router as campaigns_router
@@ -109,6 +110,7 @@ app.include_router(google_oauth_router)  # /api/integrations/google/* — real G
 app.include_router(meta_connect_router)  # /api/meta/connect|assets|status — Meta OAuth + asset discovery
 app.include_router(meta_agent_router)  # /api/agents/marketing/meta/* — Meta Marketing Agent
 app.include_router(meta_data_router)  # /api/meta/analytics|ads|webhooks — Meta insights (read-only)
+app.include_router(meta_ads_router)  # /api/meta/ad-accounts|campaigns|insights — Meta Ads Marketing API
 app.include_router(content_router)  # /api/content/assets — media upload (Supabase Storage)
 app.include_router(seo_agent_router)  # /api/agents/seo — platform-aware audit + one-tap optimize
 app.include_router(onboarding_router)

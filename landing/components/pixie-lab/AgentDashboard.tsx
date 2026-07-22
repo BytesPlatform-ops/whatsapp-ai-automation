@@ -50,6 +50,7 @@ const SERVICE_TOOLS: Record<string, { label: string; href: string }[]> = {
     { label: 'Connections', href: '/pixie-lab/seo/connections' },
   ],
   marketing: [
+    { label: 'Meta Ads', href: '/pixie-lab/marketing/ads' },
     { label: 'Inbox', href: '/pixie-lab/marketing/inbox' },
     { label: 'Comments', href: '/pixie-lab/marketing/comments' },
     { label: 'Content', href: '/pixie-lab/marketing/content' },

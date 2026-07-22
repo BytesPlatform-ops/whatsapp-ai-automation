@@ -52,6 +52,16 @@ def get_token_for_server_call(tenant_id: str, asset_id: str = "", *, by_instagra
     return page_token(conn, asset_id, by_instagram=by_instagram)
 
 
+def get_user_token(tenant_id: str) -> Optional[str]:
+    """The long-lived USER access token — used for account-level Marketing API
+    calls (ad accounts, campaigns, ads insights) that page tokens can't serve.
+    Server-side only; never returned to the frontend."""
+    conn = _connection(tenant_id)
+    if not conn:
+        return None
+    return conn.get("user_token")
+
+
 def refresh_token_if_needed(tenant_id: str) -> None:
     """Meta long-lived user tokens last ~60 days. Hook for a background refresh
     (fb_exchange_token). No-op today; kept so callers have a stable seam."""

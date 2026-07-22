@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 
 const TABS = [
   { href: '/agents/marketing/meta', label: 'Overview' },
+  { href: '/agents/marketing/meta/ads', label: 'Ads' },
   { href: '/agents/marketing/meta/content', label: 'Content Library' },
   { href: '/agents/marketing/meta/inbox', label: 'Inbox' },
   { href: '/agents/marketing/meta/comments', label: 'Comments' },

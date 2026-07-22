@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { createClient } from '@/lib/supabase/server';
 import { tenantForUser } from '@/lib/supabase/auth';
 import { ServiceView } from '@/components/pixie-lab/ServiceView';
+import { MetaConnectCard } from '@/components/pixie-lab/marketing/MetaConnectCard';
 import { AccessRestricted } from '@/components/pixie-lab/PageKit';
 import { guardPermission } from '@/lib/workspace';
 
@@ -20,5 +21,12 @@ export default async function MarketingPage() {
   if (configured()) {
     try { user = (await createClient().auth.getUser()).data.user; } catch { user = null; }
   }
-  return <ServiceView agent="marketing" tenant={tenantForUser(user)} nowMs={Date.now()} />;
+  return (
+    <>
+      {/* Meta integration entry (Connect Meta + status) — above the existing
+          marketing overview, which is left exactly as-is. */}
+      <MetaConnectCard />
+      <ServiceView agent="marketing" tenant={tenantForUser(user)} nowMs={Date.now()} />
+    </>
+  );
 }

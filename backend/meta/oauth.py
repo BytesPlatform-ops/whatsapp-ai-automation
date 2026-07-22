@@ -31,7 +31,10 @@ META_CAPABILITIES = [
     "meta_ads_insights_read",
 ]
 
-# MVP, least-privilege scope set (feature-based; do NOT request ads_management).
+# Scope set covers BOTH the content/publishing product AND the Ads Marketing API.
+# ads_management + business_management are required to read ad accounts/campaigns/
+# insights and to create (paused) campaigns; they need Meta App Review before they
+# work on a live app, which we surface honestly rather than faking.
 MVP_SCOPES = [
     "pages_show_list",
     "pages_read_engagement",
@@ -40,6 +43,8 @@ MVP_SCOPES = [
     "instagram_basic",
     "instagram_content_publish",
     "ads_read",
+    "ads_management",
+    "business_management",
 ]
 
 # Extra scopes per feature (requested only when that feature is asked for).
@@ -48,7 +53,7 @@ FEATURE_SCOPES = {
     "publishing": ["pages_manage_posts", "instagram_content_publish"],
     "messaging": ["instagram_manage_messages", "pages_messaging"],
     "comments": ["pages_manage_engagement", "instagram_manage_comments"],
-    "ads": ["ads_read"],
+    "ads": ["ads_read", "ads_management", "business_management"],
 }
 
 
@@ -69,7 +74,7 @@ def redirect_uri() -> str:
 
 
 def graph_version() -> str:
-    return os.getenv("META_GRAPH_VERSION", "v23.0")
+    return os.getenv("META_GRAPH_VERSION", "v25.0")
 
 
 def graph_base() -> str:
@@ -100,8 +105,35 @@ def _require_configured() -> None:
         )
 
 
+def env_scopes() -> list[str]:
+    """Scopes from the META_SCOPES env var (comma-separated), or [] if unset.
+
+    When set, this is the AUTHORITATIVE OAuth scope list: it is used verbatim and
+    NO hardcoded scopes (MVP_SCOPES / feature extras) are merged in. That is how
+    we avoid requesting publishing / Instagram scopes we don't yet have Meta App
+    Review for — set META_SCOPES to only the scopes the app is allowed to request
+    right now, and widen it after App Review."""
+    raw = os.getenv("META_SCOPES", "").strip()
+    if not raw:
+        return []
+    # de-dupe while preserving order
+    seen: set[str] = set()
+    out: list[str] = []
+    for s in (x.strip() for x in raw.split(",")):
+        if s and s not in seen:
+            seen.add(s)
+            out.append(s)
+    return out
+
+
 def scopes_for(feature: str) -> list[str]:
-    """Least-privilege scope list for a requested feature (defaults to MVP set)."""
+    """OAuth scope list. If META_SCOPES is set it is returned verbatim and the
+    `feature` argument is IGNORED (no merging of hardcoded publishing scopes).
+    Only when META_SCOPES is unset do we fall back to the hardcoded MVP set plus
+    the requested feature's extras."""
+    env = env_scopes()
+    if env:
+        return env
     base = list(MVP_SCOPES)
     for s in FEATURE_SCOPES.get(feature, []):
         if s not in base:

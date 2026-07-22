@@ -53,6 +53,9 @@ def connect_start(tenant_id: str = Query(...), feature: str = Query("analytics")
                             "message": "Set META_APP_ID and META_APP_SECRET in the backend .env."})
     nonce = secrets.token_urlsafe(16)
     _PENDING[nonce] = (tenant_id, feature)
+    # TEMP DEBUG — final OAuth scopes (no secret/token is ever logged). Remove later.
+    print(f"[meta.connect.start] tenant={tenant_id} feature={feature} "
+          f"scopes={m.scopes_for(feature)} graph={m.graph_version()}", flush=True)
     return RedirectResponse(m.build_auth_url(f"{tenant_id}:{nonce}", feature), status_code=302)
 
 

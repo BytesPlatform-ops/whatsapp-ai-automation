@@ -9,6 +9,7 @@
 import type {
   SeoAuditResult, SeoConnectionPlatform, SeoHistoryAudit,
   MetaStatus, MetaInboxItem, MetaContentItem,
+  MetaAdAccount, MetaCampaign, MetaAdInsights,
   ContentAsset, StorageStatus, ApprovalItem, Envelope,
   RcpRunResult, RcpOverview, RcpIntegrationStatus, RcpConversation, RcpConversationDetail,
   RcpContact, RcpBooking, RcpQuote, RcpTask, RcpTicket, RcpEscalation, RcpPayment,
@@ -60,6 +61,17 @@ export const metaApi = {
   seedDemo: () => post<{ ok: boolean }>('/api/lab/meta/connect', { action: 'demo' }),
   disconnect: () => post<{ ok: boolean }>('/api/lab/meta/connect', { action: 'disconnect' }),
   connectUrl: (feature?: string) => `/api/lab/meta/connect${feature ? `?feature=${encodeURIComponent(feature)}` : ''}`,
+  // ── Ads Marketing API ──────────────────────────────────────────────────────
+  adAccounts: () =>
+    req<{ source?: string; ad_accounts?: MetaAdAccount[]; empty?: boolean; note?: string; error?: string; needs_reconnect?: boolean; message?: string }>('/api/lab/meta/ad-accounts'),
+  selectAdAccount: (ad_account_id: string) =>
+    post<{ ok?: boolean; defaults?: Record<string, unknown> }>('/api/lab/meta/ad-accounts', { ad_account_id }),
+  campaigns: (ad_account_id: string) =>
+    req<{ source?: string; campaigns?: MetaCampaign[]; empty?: boolean; note?: string; error?: string; needs_reconnect?: boolean; message?: string }>(`/api/lab/meta/campaigns?ad_account_id=${encodeURIComponent(ad_account_id)}`),
+  createCampaign: (p: { ad_account_id: string; name: string; objective?: string }) =>
+    post<{ ok?: boolean; status?: string; campaign?: MetaCampaign; note?: string; error?: string; needs_reconnect?: boolean; message?: string }>('/api/lab/meta/campaigns', p),
+  insights: (ad_account_id: string, range?: string) =>
+    req<{ source?: string; insights?: MetaAdInsights; empty?: boolean; note?: string; date_range?: string; error?: string; needs_reconnect?: boolean; message?: string }>(`/api/lab/meta/insights?ad_account_id=${encodeURIComponent(ad_account_id)}${range ? `&range=${encodeURIComponent(range)}` : ''}`),
 };
 
 /* ------------------------------ Content ------------------------------ */
