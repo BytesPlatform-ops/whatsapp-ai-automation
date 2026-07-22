@@ -214,7 +214,8 @@ def test_real_mode_without_provider_maps_to_503(monkeypatch):
     monkeypatch.setitem(sys.modules, "models", None)  # force the model import to fail
     r = _generate(ct="blog", inputs={"topic": "x"}, options={})
     assert r.status_code == 503
-    assert r.json()["detail"]["status"] == "provider_unavailable"
+    assert r.json()["detail"]["status"] == "provider_not_configured"
+    assert "correlation_id" in r.json()["detail"]
 
 
 # ── internal-secret gate ───────────────────────────────────────────────────────

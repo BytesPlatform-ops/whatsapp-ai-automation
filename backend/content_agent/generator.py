@@ -14,16 +14,29 @@ router maps them to a safe message).
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 from typing import List, Tuple
 
 from .enums import STRUCTURED_TYPES, ContentType
+from .errors import ErrorCategory, ProviderError, classify
 from .prompts import PROMPT_VERSION, build_prompt, structured_schema
 from .schemas import GeneratedVariation, GenerationInputs, GenerationOptions, GenerationResult, UsageMeta
 
+# Hard cap on paid model calls per generation request (matches the 1–5 variation
+# bound) — a guardrail against an unbounded fan-out of paid calls.
+MAX_VARIATIONS = 5
 
-class ProviderUnavailable(RuntimeError):
-    """Real mode requested but no usable model provider is configured."""
+
+class ProviderUnavailable(ProviderError):
+    """Real mode requested but no usable model provider is configured.
+
+    A subclass of :class:`ProviderError` (category ``provider_not_configured``) so
+    existing callers that catch ``ProviderUnavailable`` still work while the router
+    can treat every provider failure uniformly via the shared error mapping."""
+
+    def __init__(self, internal: str = "") -> None:
+        super().__init__(ErrorCategory.PROVIDER_NOT_CONFIGURED, internal)
 
 
 def model_mode() -> str:
@@ -124,31 +137,104 @@ def _mock(ct: ContentType, inputs: GenerationInputs, options: GenerationOptions)
     return out
 
 
+def _render_structured_text(ct: ContentType, s: dict) -> str:
+    """A readable plain-text rendering of a structured payload (so the ``text``
+    field is populated alongside the preserved ``structured`` object)."""
+    if ct == ContentType.AD_COPY:
+        return "\n".join(x for x in [s.get("headline", ""), s.get("primary_text", ""), s.get("description", ""),
+                                     f"CTA: {s.get('cta', '')}" if s.get("cta") else ""] if x)
+    if ct == ContentType.SEO_CONTENT:
+        secs = "\n\n".join(f"{x.get('heading','')}\n{x.get('body','')}" for x in (s.get("sections") or []) if isinstance(x, dict))
+        return "\n\n".join(x for x in [s.get("h1", ""), s.get("meta_description", ""), secs] if x)
+    if ct == ContentType.CAROUSEL:
+        slides = "\n".join(f"{sl.get('title','')}: {sl.get('body','')}" for sl in (s.get("slides") or []) if isinstance(sl, dict))
+        return "\n\n".join(x for x in [s.get("hook", ""), slides, f"CTA: {s.get('cta','')}" if s.get("cta") else "", s.get("caption", "")] if x)
+    return json.dumps(s, ensure_ascii=False, indent=2)
+
+
+def _parse_structured(ct: ContentType, text: str) -> dict:
+    """Strict JSON parse + required-key validation for a structured type. Raises
+    a MALFORMED_OUTPUT ProviderError on failure (the model layer already does one
+    bounded JSON-repair; this is the final schema gate)."""
+    try:
+        data = json.loads(text)
+    except (ValueError, TypeError):
+        raise ProviderError(ErrorCategory.MALFORMED_OUTPUT, "structured output was not valid JSON")
+    if not isinstance(data, dict):
+        raise ProviderError(ErrorCategory.MALFORMED_OUTPUT, "structured output was not a JSON object")
+    required = structured_schema(ct).get("required", [])
+    missing = [k for k in required if k not in data or data[k] in (None, "", [], {})]
+    if missing:
+        raise ProviderError(ErrorCategory.MALFORMED_OUTPUT, f"structured output missing keys: {missing}")
+    return data
+
+
 def _real(ct: ContentType, inputs: GenerationInputs, options: GenerationOptions) -> Tuple[List[GeneratedVariation], UsageMeta]:
-    prompt = build_prompt(ct, inputs.model_dump(), options.model_dump())
+    """Real-provider generation. Produces DISTINCT variations via bounded calls
+    (never uncontrolled fan-out), parses+validates structured output, and sums
+    real token/cost usage across the calls. Never falls back to mock: an
+    unconfigured/failed provider raises a classified :class:`ProviderError`."""
+    n = max(1, min(MAX_VARIATIONS, int(options.variations or 1)))
+    expects_json = ct in STRUCTURED_TYPES
+    # Ask each call for ONE item (bounded parallel) so each completion is a single,
+    # cleanly-parseable variation. A per-call nonce nudges the model toward variety.
+    single_opts = options.model_copy(update={"variations": 1})
+    base_prompt = build_prompt(ct, inputs.model_dump(), single_opts.model_dump())
+
     try:
         import asyncio
+
         from models import ModelRequest, get_router  # type: ignore
         from schemas import ModelTier  # type: ignore
 
         router = get_router()
-        req = ModelRequest(tier=ModelTier.LARGE, task=f"content_agent:{ct.value}",
-                           system="You are a marketing content writer. Return the requested content.",
-                           user=prompt, expects_json=ct in STRUCTURED_TYPES)
-        result = asyncio.run(router.complete(req))
+
+        async def _run_all():
+            reqs = [
+                ModelRequest(
+                    tier=ModelTier.LARGE,
+                    task=f"content_agent:{ct.value}",
+                    system="You are an expert marketing content writer. Return exactly what is requested.",
+                    user=base_prompt + (f"\n\n(Variation {i + 1} of {n} — make this option meaningfully different.)" if n > 1 else ""),
+                    expects_json=expects_json,
+                )
+                for i in range(n)
+            ]
+            return await asyncio.gather(*[router.complete(r) for r in reqs])
+    except ImportError as exc:
+        # The model layer isn't importable at all (e.g. stdlib-only env) → not configured.
+        raise ProviderUnavailable(f"model layer unavailable: {type(exc).__name__}")
+
+    try:
+        results = asyncio.run(_run_all())
+    except ProviderError:
+        raise
+    except Exception as exc:  # network / auth / rate-limit / timeout → classify safely
+        raise ProviderError(classify(exc).category, f"{type(exc).__name__}: {exc}")
+
+    variations: List[GeneratedVariation] = []
+    total_tokens = 0
+    total_cost = 0.0
+    model = ""
+    for i, result in enumerate(results):
         text = (getattr(result, "text", "") or "").strip()
         if not text:
-            raise ProviderUnavailable("Empty completion from provider.")
-        provider = getattr(getattr(router, "_provider", None), "name", "") or model_mode()
-        usage = UsageMeta(provider=provider, model=getattr(result, "model", "") or "", mock=False,
-                          tokens=int(getattr(result, "tokens", 0) or 0),
-                          estimated_cost=float(getattr(result, "cost_usd", 0.0) or 0.0), prompt_version=PROMPT_VERSION)
-        variations = [GeneratedVariation(index=i, title=f"{ct.value} {i+1}", text=text) for i in range(options.variations)]
-        return variations, usage
-    except ProviderUnavailable:
-        raise
-    except Exception as exc:  # not configured / import error / bad response
-        raise ProviderUnavailable(f"Content provider unavailable in real mode: {type(exc).__name__}")
+            raise ProviderError(ErrorCategory.TEMPORARY_PROVIDER_FAILURE, "empty completion from provider")
+        model = getattr(result, "model", "") or model
+        total_tokens += int(getattr(result, "tokens_in", 0) or 0) + int(getattr(result, "tokens_out", 0) or 0)
+        total_cost += float(getattr(result, "cost_usd", 0.0) or 0.0)
+        structured: dict = {}
+        if expects_json:
+            structured = _parse_structured(ct, text)
+            text = _render_structured_text(ct, structured) or text
+        title = (structured.get("headline") or structured.get("h1") or structured.get("hook")
+                 or inputs.title or f"{ct.value.replace('_', ' ').title()} {i + 1}")
+        variations.append(GeneratedVariation(index=i, title=str(title)[:120], text=text, structured=structured))
+
+    provider = getattr(getattr(router, "_provider", None), "name", "") or model_mode()
+    usage = UsageMeta(provider=provider, model=model, mock=False, tokens=total_tokens,
+                      estimated_cost=round(total_cost, 6), prompt_version=PROMPT_VERSION)
+    return variations, usage
 
 
 def generate(ct: ContentType, inputs: GenerationInputs, options: GenerationOptions) -> GenerationResult:

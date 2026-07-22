@@ -26,8 +26,11 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 
 from security import require_internal
 
+import logging
+
 from .enums import ContentStatus, ContentType, JobStatus
-from .generator import ProviderUnavailable, generate, is_mock, model_mode
+from .errors import ProviderError, classify, redact
+from .generator import generate, is_mock, model_mode
 from .prompts import PROMPT_VERSION
 from .schemas import (
     ContentDocument,
@@ -77,18 +80,26 @@ def _require_inputs(req: GenerationRequest) -> None:
         )
 
 
+_log = logging.getLogger("pixie.content_agent")
+
+
 def _run_generation(req: GenerationRequest):
-    """Run the provider-independent service, mapping a real-mode provider outage
-    to a safe 503 (never a fake success)."""
+    """Run the provider-independent service, mapping any real-mode provider
+    failure to a SAFE, categorized error (never a fake success, never a raw
+    provider payload). Server logs get a redacted internal line tied to the same
+    correlation id."""
     try:
         return generate(req.content_type, req.inputs, req.options)
-    except ProviderUnavailable as exc:
-        raise HTTPException(
-            status_code=503,
-            detail={"status": "provider_unavailable",
-                    "message": "The content provider is not configured. "
-                               "Enable mock mode or configure a model provider."},
-        ) from exc
+    except ProviderError as exc:
+        safe = classify(exc)
+        _log.warning("content_agent generation failed cid=%s category=%s type=%s detail=%s",
+                     safe.correlation_id, safe.category.value, req.content_type.value,
+                     redact(getattr(exc, "internal", "") or str(exc)))
+        raise HTTPException(status_code=safe.http_status, detail=safe.to_detail()) from exc
+    except Exception as exc:  # never leak an unexpected traceback to the browser
+        safe = classify(exc)
+        _log.warning("content_agent unexpected error cid=%s type=%s", safe.correlation_id, type(exc).__name__)
+        raise HTTPException(status_code=safe.http_status, detail=safe.to_detail()) from exc
 
 
 def _settings_snapshot(req: GenerationRequest) -> dict:
