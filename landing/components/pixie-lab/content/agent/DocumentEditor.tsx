@@ -1,7 +1,9 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { ArrowLeft, Save, RefreshCw, Archive, History, Copy, Check } from 'lucide-react';
+import { ArrowLeft, Save, RefreshCw, Archive, History, Copy, Check, Send } from 'lucide-react';
+import { PublishDialog } from '../publishing/PublishDialog';
+import type { ContentFormat } from '@/lib/pixie-lab/publishingClient';
 import type { ContentType, ContentStatus, DocumentDetail, VersionEnvelope } from '@/lib/pixie-lab/contentAgentTypes';
 import {
   archiveDocument, createManualVersion, getDocument, getVersions, regenerateDocument,
@@ -30,6 +32,7 @@ export function DocumentEditor({ docId, onClose, onChanged }: { docId: string; o
   const [tags, setTags] = useState('');
   const [copied, setCopied] = useState(false);
   const [viewing, setViewing] = useState<VersionEnvelope | null>(null);
+  const [publishing, setPublishing] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -161,8 +164,19 @@ export function DocumentEditor({ docId, onClose, onChanged }: { docId: string; o
       {/* Actions */}
       <div className="mt-4 flex flex-wrap gap-3">
         <PrimaryButton busy={busy === 'regen'} disabled={busy === 'regen'} onClick={doRegenerate}><RefreshCw size={15} /> Regenerate</PrimaryButton>
+        <GhostButton onClick={() => setPublishing(true)}><Send size={14} /> Publish</GhostButton>
         <GhostButton onClick={() => setShowHistory((s) => !s)} aria-expanded={showHistory}><History size={14} /> {showHistory ? 'Hide' : 'Version'} history ({versions.length})</GhostButton>
       </div>
+
+      <PublishDialog
+        open={publishing}
+        onClose={() => setPublishing(false)}
+        sourceProduct="content_agent"
+        contentFormat={'text' as ContentFormat}
+        text={shown?.text || ''}
+        documentId={docId}
+        versionId={doc.current_version_id}
+      />
 
       {showHistory && (
         <div className="mt-4">

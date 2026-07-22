@@ -7,6 +7,7 @@ export const CONTENT_TABS: ServiceTab[] = [
   { label: 'Overview', href: '/pixie-lab/content' },
   { label: 'Content Agent', href: '/pixie-lab/content/agent' },
   { label: 'Generated', href: '/pixie-lab/content/generated' },
+  { label: 'Publishing', href: '/pixie-lab/content/publishing' },
   { label: 'Upload Media', href: '/pixie-lab/content/create' },
   { label: 'Media Library', href: '/pixie-lab/content/library' },
   { label: 'AI Influencer', href: '/pixie-lab/content-creator' },
