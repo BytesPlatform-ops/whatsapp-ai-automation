@@ -18,7 +18,7 @@ function baseState(identity: WizardState['identity'] = null): WizardState {
     tenant_id: 'ws', mock: true, dry_run: true, current_stage: 'influencer_setup', complete: false,
     completed_count: 1, total_stages: 13, stages: [],
     gates: { idea: 'pending', script: 'pending', production: 'pending', publish: 'pending' },
-    profile: {}, profile_id: 'p1', identity, identity_id: identity ? 'i1' : null, provider: null,
+    profile: null, profile_id: 'p1', identity, identity_id: identity ? 'i1' : null, provider: null,
     ideas: [], approved_idea_id: null, scripts: [], approved_script_id: null, video: null,
     quality: null, posts: [], metrics: [], learning: null,
   };
