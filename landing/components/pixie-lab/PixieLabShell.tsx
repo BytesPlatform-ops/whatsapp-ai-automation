@@ -51,6 +51,9 @@ const SERVICE_SUBNAV: Partial<Record<FeedAgent, { label: string; href: string }[
     { label: 'Connections', href: '/pixie-lab/seo/connections' },
   ],
   marketing: [
+    { label: 'Brand Brain', href: '/pixie-lab/marketing/brand-brain' },
+    { label: 'Ideas', href: '/pixie-lab/marketing/ideas' },
+    { label: 'Calendar', href: '/pixie-lab/marketing/calendar' },
     { label: 'Inbox', href: '/pixie-lab/marketing/inbox' },
     { label: 'Comments', href: '/pixie-lab/marketing/comments' },
     { label: 'Content', href: '/pixie-lab/marketing/content' },

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { ArrowRight, Megaphone } from 'lucide-react';
 import { MetaSetupBar, deriveReadiness, type MetaReadiness } from './MetaSetupBar';
+import { MetaDiagnosticsPanel } from './MetaDiagnosticsPanel';
 import { metaApi } from '@/lib/pixie-lab/servicesClient';
 import type { MetaStatus } from '@/lib/pixie-lab/serviceTypes';
 
@@ -57,6 +58,9 @@ export function MetaConnectCard() {
       ) : (
         <div className="mt-4 h-16 animate-pulse rounded-2xl border border-[var(--pl-border)] bg-[var(--pl-surface)]" />
       )}
+
+      {/* Post-connect health check — only once Meta is connected. */}
+      {readiness === 'ready' && <MetaDiagnosticsPanel />}
     </section>
   );
 }

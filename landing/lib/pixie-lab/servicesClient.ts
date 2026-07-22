@@ -9,7 +9,8 @@
 import type {
   SeoAuditResult, SeoConnectionPlatform, SeoHistoryAudit,
   MetaStatus, MetaInboxItem, MetaContentItem,
-  MetaAdAccount, MetaCampaign, MetaAdInsights,
+  MetaAdAccount, MetaCampaign, MetaAdInsights, MetaDiagnostics, MetaAdsAnalysis, BrandBrain,
+  ContentIdea, IdeaGenerateResult, CalendarItem, CalendarResult,
   ContentAsset, StorageStatus, ApprovalItem, Envelope,
   RcpRunResult, RcpOverview, RcpIntegrationStatus, RcpConversation, RcpConversationDetail,
   RcpContact, RcpBooking, RcpQuote, RcpTask, RcpTicket, RcpEscalation, RcpPayment,
@@ -72,6 +73,37 @@ export const metaApi = {
     post<{ ok?: boolean; status?: string; campaign?: MetaCampaign; note?: string; error?: string; needs_reconnect?: boolean; message?: string }>('/api/lab/meta/campaigns', p),
   insights: (ad_account_id: string, range?: string) =>
     req<{ source?: string; insights?: MetaAdInsights; empty?: boolean; note?: string; date_range?: string; error?: string; needs_reconnect?: boolean; message?: string }>(`/api/lab/meta/insights?ad_account_id=${encodeURIComponent(ad_account_id)}${range ? `&range=${encodeURIComponent(range)}` : ''}`),
+  // ── Connection diagnostics + Ads assistant ──────────────────────────────────
+  diagnostics: () => req<MetaDiagnostics & { backendUp?: boolean }>('/api/lab/meta/diagnostics'),
+  analyzeAds: (ad_account_id: string, range?: string) =>
+    post<MetaAdsAnalysis & { backendUp?: boolean }>('/api/lab/meta/ads-analyze', { ad_account_id, range }),
+  // ── Brand Brain ─────────────────────────────────────────────────────────────
+  brandBrain: () => req<BrandBrain & { backendUp?: boolean }>('/api/lab/meta/brand-brain'),
+  generateBrandBrain: () => post<BrandBrain & { backendUp?: boolean }>('/api/lab/meta/brand-brain', { action: 'generate' }),
+  // ── Idea Curator ────────────────────────────────────────────────────────────
+  generateIdeas: (types?: string[], per_type?: number) =>
+    post<IdeaGenerateResult & { backendUp?: boolean }>('/api/lab/meta/ideas', { action: 'generate', types, per_type }),
+  ideas: () => req<{ ideas?: ContentIdea[]; backendUp?: boolean }>('/api/lab/meta/ideas'),
+  saveIdea: (idea: ContentIdea) =>
+    post<{ status?: string; idea?: ContentIdea; backendUp?: boolean }>('/api/lab/meta/ideas', { action: 'save', idea }),
+  deleteIdea: (id: string) =>
+    req<{ status?: string; backendUp?: boolean }>(`/api/lab/meta/ideas?id=${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  // ── Content Calendar ────────────────────────────────────────────────────────
+  calendar: () => req<{ items?: CalendarItem[]; backendUp?: boolean }>('/api/lab/meta/calendar'),
+  generateCalendar: (horizon: number, start_date?: string) =>
+    post<CalendarResult & { backendUp?: boolean }>('/api/lab/meta/calendar', { horizon, start_date }),
+  updateCalendarItem: (id: string, patch: Partial<CalendarItem>) =>
+    req<{ status?: string; item?: CalendarItem; backendUp?: boolean }>('/api/lab/meta/calendar', {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, patch }),
+    }),
+  deleteCalendarItem: (id: string) =>
+    req<{ status?: string; backendUp?: boolean }>(`/api/lab/meta/calendar?id=${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  regenerateCalendarItem: (id: string) =>
+    post<{ status?: string; item?: CalendarItem; backendUp?: boolean }>('/api/lab/meta/calendar', { action: 'regenerate', id }),
+  saveCalendarItemToLibrary: (id: string) =>
+    post<{ status?: string; idea?: ContentIdea; backendUp?: boolean }>('/api/lab/meta/calendar', { action: 'save-to-library', id }),
+  requestPublishCalendarItem: (id: string) =>
+    post<{ status?: string; approval_id?: string; item?: CalendarItem; message?: string; note?: string; backendUp?: boolean }>('/api/lab/meta/calendar', { action: 'request-publish', id }),
 };
 
 /* ------------------------------ Content ------------------------------ */

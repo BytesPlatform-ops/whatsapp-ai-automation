@@ -92,13 +92,37 @@ def test_oauth_start_not_configured_is_safe(client, monkeypatch):
 
 
 def test_oauth_start_redirects_when_configured(client, monkeypatch):
+    """Pre-App-Review posture: when META_SCOPES is deliberately restricted it is
+    authoritative (used verbatim), so publishing scopes like
+    instagram_content_publish are intentionally NOT requested. This test pins that
+    behaviour deterministically instead of depending on ambient .env."""
     monkeypatch.setenv("META_APP_ID", "123")
     monkeypatch.setenv("META_APP_SECRET", "secret")
+    monkeypatch.setenv(
+        "META_SCOPES",
+        "pages_show_list,pages_read_engagement,ads_read,ads_management,business_management",
+    )
     r = client.get("/api/meta/connect/start", params={"tenant_id": "t_meta", "feature": "publishing"},
                    follow_redirects=False)
     assert r.status_code == 302
     loc = r.headers["location"]
-    assert "facebook.com" in loc and "instagram_content_publish" in loc
+    assert "facebook.com" in loc
+    assert "pages_show_list" in loc and "ads_read" in loc
+    # Publishing scopes are NOT requested until App Review is approved.
+    assert "instagram_content_publish" not in loc
+
+
+def test_oauth_start_requests_publishing_scopes_when_unrestricted(client, monkeypatch):
+    """When META_SCOPES is unset, the hardcoded MVP set + the requested feature's
+    extras are used — so the publishing feature does request instagram_content_publish.
+    (Guards that the feature-scope path still works once App Review widens scopes.)"""
+    monkeypatch.setenv("META_APP_ID", "123")
+    monkeypatch.setenv("META_APP_SECRET", "secret")
+    monkeypatch.setenv("META_SCOPES", "")  # unrestricted
+    r = client.get("/api/meta/connect/start", params={"tenant_id": "t_meta", "feature": "publishing"},
+                   follow_redirects=False)
+    assert r.status_code == 302
+    assert "instagram_content_publish" in r.headers["location"]
 
 
 def test_demo_connect_stores_assets(client):

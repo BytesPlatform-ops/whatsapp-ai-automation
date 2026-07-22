@@ -10,6 +10,9 @@ import { CommentsPanel } from './CommentsPanel';
 import { ContentLibraryPanel } from './ContentLibraryPanel';
 import { MarketingApprovalsPanel } from './MarketingApprovalsPanel';
 import { AdsPanel } from './AdsPanel';
+import { BrandBrainPanel } from './BrandBrainPanel';
+import { IdeaCuratorPanel } from './IdeaCuratorPanel';
+import { ContentCalendarPanel } from './ContentCalendarPanel';
 import { OfflineState } from '@/components/pixie-lab/services/ServiceStates';
 import { metaApi } from '@/lib/pixie-lab/servicesClient';
 import type { MetaStatus } from '@/lib/pixie-lab/serviceTypes';
@@ -18,6 +21,9 @@ const ACCENT = '#EC4899';
 
 const TABS = [
   { label: 'Overview', href: '/pixie-lab/marketing' },
+  { label: 'Brand Brain', href: '/pixie-lab/marketing/brand-brain' },
+  { label: 'Ideas', href: '/pixie-lab/marketing/ideas' },
+  { label: 'Calendar', href: '/pixie-lab/marketing/calendar' },
   { label: 'Meta Ads', href: '/pixie-lab/marketing/ads' },
   { label: 'Inbox', href: '/pixie-lab/marketing/inbox' },
   { label: 'Comments', href: '/pixie-lab/marketing/comments' },
@@ -25,9 +31,12 @@ const TABS = [
   { label: 'Approvals', href: '/pixie-lab/marketing/approvals' },
 ];
 
-type MarketingTab = 'ads' | 'inbox' | 'comments' | 'content' | 'approvals';
+type MarketingTab = 'brand-brain' | 'ideas' | 'calendar' | 'ads' | 'inbox' | 'comments' | 'content' | 'approvals';
 
 const TAB_TITLE: Record<MarketingTab, string> = {
+  'brand-brain': 'Brand Brain',
+  ideas: 'Idea Curator',
+  calendar: 'Content Calendar',
   ads: 'Meta Ads',
   inbox: 'DM Inbox',
   comments: 'Comments',
@@ -93,6 +102,9 @@ export function MarketingWorkspace({ tab, tenant }: { tab: MarketingTab; tenant:
         {/* Data panels — only when Meta is connected */}
         {showPanels && (
           <>
+            {tab === 'brand-brain' && <BrandBrainPanel />}
+            {tab === 'ideas' && <IdeaCuratorPanel />}
+            {tab === 'calendar' && <ContentCalendarPanel />}
             {tab === 'ads' && <AdsPanel onConnectionChange={fetchStatus} />}
             {tab === 'inbox' && <InboxPanel type="dm" />}
             {tab === 'comments' && <CommentsPanel />}

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Loader2, RefreshCw, AlertTriangle, Plug, Plus } from 'lucide-react';
 import { metaApi } from '@/lib/pixie-lab/servicesClient';
 import type { MetaAdAccount, MetaCampaign, MetaAdInsights } from '@/lib/pixie-lab/serviceTypes';
+import { AdsAssistant } from './AdsAssistant';
 
 const ACCENT = '#EC4899';
 
@@ -247,6 +248,11 @@ export function AdsPanel({ onConnectionChange }: { onConnectionChange?: () => vo
             </div>
           )}
         </div>
+      )}
+
+      {/* Ads assistant — read-only intelligence (creates nothing) */}
+      {accounts.length > 0 && selected && (
+        <AdsAssistant adAccountId={selected} range={range} />
       )}
 
       {/* Create campaign (always PAUSED) */}

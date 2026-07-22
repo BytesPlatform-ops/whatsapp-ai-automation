@@ -127,6 +127,135 @@ export interface MetaAdInsights {
   cpc: number;
 }
 
+/** A single connection-diagnostics check from /api/meta/diagnostics. */
+export type MetaCheckStatus = 'ok' | 'warning' | 'error' | 'skipped';
+export interface MetaDiagnosticCheck {
+  id: string;
+  label: string;
+  status: MetaCheckStatus;
+  detail: string;
+  remediation?: string;
+}
+export interface MetaRequiredScope { scope: string; label: string; why: string }
+export interface MetaDiagnostics {
+  connected?: boolean;
+  mode?: string | null;
+  demo?: boolean;
+  overall?: 'ok' | 'warning' | 'error' | 'disconnected';
+  checks?: MetaDiagnosticCheck[];
+  permissions?: Record<string, string>;
+  missing_permissions?: string[];
+  required_scopes?: MetaRequiredScope[];
+}
+
+/** Read-only Ads Assistant output from /api/meta/ads/analyze. */
+export interface MetaAdsSignal { type: 'weak' | 'attention' | 'opportunity'; title: string; detail: string }
+export interface MetaAdsAngle { angle: string; rationale: string }
+export interface MetaAdsSuggestedCampaign { name: string; objective: string; rationale: string }
+export interface MetaAdsAnalysis {
+  status?: string;
+  message?: string;
+  source?: string;
+  ad_account_id?: string;
+  date_range?: string;
+  campaign_count?: number;
+  insights?: MetaAdInsights;
+  insights_error?: string | null;
+  signals?: MetaAdsSignal[];
+  summary?: string;
+  suggested_angles?: MetaAdsAngle[];
+  suggested_paused_campaigns?: MetaAdsSuggestedCampaign[];
+  llm_provider?: string;
+  model?: string;
+  note?: string;
+  error?: string;
+  needs_reconnect?: boolean;
+}
+
+/** Brand Brain — learned brand identity from old posts (/api/meta/brand-brain). */
+export interface BrandBrainPost { caption: string; type?: string; engagement?: number; platform?: string; permalink?: string }
+export interface BrandBrainStats {
+  total_posts?: number;
+  avg_engagement?: number;
+  top_posts?: BrandBrainPost[];
+  weak_posts?: BrandBrainPost[];
+  post_types?: Record<string, number>;
+}
+export interface BrandBrainAnalyzed {
+  brand_tone?: string;
+  audience?: string;
+  services?: string[];
+  best_topics?: string[];
+  best_hooks?: string[];
+  weak_topics?: string[];
+  content_pillars?: string[];
+  cta_style?: string;
+  posting_suggestions?: string[];
+}
+export interface BrandBrain {
+  status?: string;
+  exists?: boolean;
+  source?: string;
+  partial?: boolean;
+  errors?: string[];
+  generated_at?: string;
+  post_count?: number;
+  ai_generated?: boolean;
+  analyzed?: BrandBrainAnalyzed;
+  stats?: BrandBrainStats;
+  llm_provider?: string;
+  model?: string;
+  message?: string;
+}
+
+/** Idea Curator — a single content idea (/api/meta/ideas). */
+export interface ContentIdea {
+  id: string;
+  type: string;
+  type_label?: string;
+  title: string;
+  hook: string;
+  slide_flow_or_script: string;
+  visual_direction: string;
+  caption: string;
+  cta: string;
+  saved?: boolean;
+}
+export interface IdeaGenerateResult {
+  status?: string;
+  ideas?: ContentIdea[];
+  types?: string[];
+  brand_brain_used?: boolean;
+  ai_generated?: boolean;
+  llm_provider?: string;
+  note?: string;
+  message?: string;
+}
+
+/** Content Calendar item + generation result (/api/meta/calendar). */
+export type CalendarStatus = 'draft' | 'review' | 'approved' | 'scheduled' | 'published' | 'rejected';
+export interface CalendarItem {
+  id: string;
+  date: string;
+  platform: string;
+  content_type: string;
+  topic: string;
+  hook: string;
+  caption: string;
+  visual_direction: string;
+  status: CalendarStatus;
+  created_at?: string;
+}
+export interface CalendarResult {
+  status?: string;
+  horizon?: number;
+  items?: CalendarItem[];
+  brand_brain_used?: boolean;
+  ai_generated?: boolean;
+  note?: string;
+  message?: string;
+}
+
 export type MetaSentiment = 'positive' | 'neutral' | 'negative' | 'angry' | 'spam';
 
 export interface MetaInboxItem {

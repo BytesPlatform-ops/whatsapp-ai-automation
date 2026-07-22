@@ -25,6 +25,7 @@ from pydantic import BaseModel
 
 from activity.router import log_activity
 
+from . import diagnostics
 from . import oauth as m
 from . import seed
 from . import token_service as ts
@@ -170,6 +171,13 @@ def status(tenant_id: str = Query(...)) -> dict:
         "redirect_uri": m.redirect_uri(),
         # no token, ever
     }
+
+
+@router.get("/diagnostics")
+def diagnostics_check(tenant_id: str = Query(...)) -> dict:
+    """Run the post-connect connection health check (read-only). Returns per-check
+    status + client-friendly remediation. Works in demo mode (all green)."""
+    return diagnostics.run_diagnostics(tenant_id)
 
 
 class DisconnectBody(BaseModel):

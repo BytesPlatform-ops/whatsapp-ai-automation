@@ -257,6 +257,12 @@ def _execute_marketing(item: ApprovalItem) -> dict:
         from . import inbox
         inbox.mark_reply_result(item.tenant_id, inbox_item_id, results[0])
 
+    # If this approval came from a calendar item, reflect the publish outcome on it.
+    calendar_item_id = (item.prepared_output or {}).get("calendar_item_id")
+    if calendar_item_id:
+        from . import calendar as _cal
+        _cal.mark_publish_result(item.tenant_id, calendar_item_id, any_real, all_ok)
+
     if is_inbox:
         if any_real:
             detail = "Reply posted to Meta."

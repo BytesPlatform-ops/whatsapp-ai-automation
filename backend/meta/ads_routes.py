@@ -18,6 +18,7 @@ from fastapi import APIRouter, Query
 from pydantic import BaseModel
 
 from . import ads
+from . import ads_agent
 
 router = APIRouter(prefix="/api/meta", tags=["meta-ads"])
 
@@ -49,3 +50,15 @@ class CreateCampaignBody(BaseModel):
 @router.post("/campaigns")
 def create_campaign(body: CreateCampaignBody) -> dict:
     return ads.create_campaign(body.tenant_id, body.ad_account_id, body.name, body.objective)
+
+
+class AnalyzeAdsBody(BaseModel):
+    tenant_id: str
+    ad_account_id: str = ""
+    range: str = "last_30d"
+
+
+@router.post("/ads/analyze")
+async def analyze_ads(body: AnalyzeAdsBody) -> dict:
+    """Read-only Ads Assistant: signals + AI suggestions. Creates/changes NOTHING."""
+    return await ads_agent.analyze_ads(body.tenant_id, body.ad_account_id, body.range)

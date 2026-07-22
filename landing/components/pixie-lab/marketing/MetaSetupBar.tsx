@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Loader2, Wifi, WifiOff, AlertCircle, CheckCircle2, RefreshCw } from 'lucide-react';
 import { metaApi } from '@/lib/pixie-lab/servicesClient';
 import type { MetaStatus, MetaPermState } from '@/lib/pixie-lab/serviceTypes';
+import { MetaConnectChecklist } from './MetaConnectChecklist';
 
 const ACCENT = '#EC4899';
 
@@ -143,6 +144,9 @@ export function MetaSetupBar({ status, readiness, onRefresh }: MetaSetupBarProps
               Link your Meta account to manage inbox messages, comments, and content publishing in one place.
             </p>
           </div>
+        </div>
+        <div className="mt-4">
+          <MetaConnectChecklist />
         </div>
         <div className="mt-4 flex flex-wrap gap-2">
           <button
