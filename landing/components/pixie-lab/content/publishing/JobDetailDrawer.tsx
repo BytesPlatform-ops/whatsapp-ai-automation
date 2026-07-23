@@ -7,6 +7,7 @@ import {
   type PublishJob,
 } from '@/lib/pixie-lab/publishingClient';
 import { statusMeta, formatDateTime, isSimulatedPostId, platformLabel } from '@/lib/pixie-lab/publishingFormat';
+import { contentRoutes } from '@/lib/pixie-lab/contentRoutes';
 import { Spinner, ErrorNote, GhostButton } from '../agent/ui';
 
 // ── types ─────────────────────────────────────────────────────────────────────
@@ -64,7 +65,7 @@ function SourceLink({ job }: { job: PublishJob }) {
   if (job.source_product === 'ai_influencer') {
     return (
       <a
-        href="/pixie-lab/content-creator"
+        href={contentRoutes.influencer()}
         className="inline-flex items-center gap-1 text-[12.5px] font-semibold text-[var(--pl-green)] hover:underline"
       >
         <ExternalLink size={11} aria-hidden /> Open in AI Influencer
@@ -72,9 +73,10 @@ function SourceLink({ job }: { job: PublishJob }) {
     );
   }
   if (snap?.document_id) {
+    // Open the source in the Generated Content library (was Overview).
     return (
       <a
-        href="/pixie-lab/content"
+        href={contentRoutes.generated({ doc: String(snap.document_id) })}
         className="inline-flex items-center gap-1 text-[12.5px] font-semibold text-[var(--pl-green)] hover:underline"
       >
         <ExternalLink size={11} aria-hidden /> Open source document
