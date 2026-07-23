@@ -62,6 +62,35 @@ def _validate_content(platform: Platform, snapshot: PublishSnapshot) -> None:
         raise PublishError("too_many_media", f"Carousel exceeds {pcaps.get('max_media', 10)} items.", 422)
 
 
+def _enforce_publishing_entitlements(body: CreatePublishJobBody) -> None:
+    """Plan-based publishing gates (live access, scheduled-job limit). Backend-only;
+    frontend checks are UX. No-op unless the credit system + billing enforcement are
+    both enabled, so billing-disabled mode preserves all current publishing behaviour.
+    Publishing consumes ZERO credits (no reservation) — this is entitlement/limit only."""
+    try:
+        from credits import config as credit_config, plans
+    except Exception:
+        return
+    if not (credit_config.credit_system_enabled() and credit_config.billing_enforcement_enabled()):
+        return
+
+    if not plans.check_feature(body.tenant_id, "publishing")["allowed"]:
+        raise PublishError("feature_not_entitled", "Your plan doesn't include publishing.", 402,
+                           {"remediation": "upgrade_plan"})
+    if body.mode is PublishMode.LIVE and not plans.check_feature(body.tenant_id, "live_publishing")["allowed"]:
+        raise PublishError("feature_not_entitled", "Live publishing isn't available on your plan.", 402,
+                           {"feature": "live_publishing", "remediation": "upgrade_plan"})
+    if body.scheduled_local:
+        from .enums import PublishStatus
+        active = sum(1 for _i, j in get_job_repository().list(body.tenant_id)
+                     if j and j.status in (PublishStatus.SCHEDULED, PublishStatus.QUEUED, PublishStatus.RETRY_WAIT))
+        limit = plans.check_limit(body.tenant_id, "scheduled_jobs", active)
+        if not limit["allowed"]:
+            raise PublishError("usage_limit_reached", "You've reached your plan's scheduled-job limit.", 402,
+                               {"limit_key": "scheduled_jobs", "limit": limit["limit"], "used": active,
+                                "remediation": "upgrade_plan"})
+
+
 def create_job(
     body: CreatePublishJobBody,
     *,
@@ -74,6 +103,8 @@ def create_job(
     account = resolve_account(body.tenant_id, body.connection_id)
     if not account:
         raise PublishError("connection_not_found", "That social account isn't connected to this workspace.", 404)
+
+    _enforce_publishing_entitlements(body)
 
     # Destination is taken from the SERVER-resolved account, never the client body,
     # so a tampered platform/account_id cannot redirect the post.
