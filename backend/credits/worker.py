@@ -32,8 +32,13 @@ ProviderResolver = Callable[[str, Reservation], dict]
 
 
 def _default_resolver(tenant_id: str, r: Reservation) -> dict:
-    """No provider linkage → treat an expired hold as abandoned (safe: release)."""
-    return {"state": "abandoned"}
+    """Resolve against real product state (video/text). Falls back to abandoned
+    (safe: release) if the product layer is unavailable."""
+    try:
+        from .reconcile_products import resolve
+        return resolve(tenant_id, r)
+    except Exception:
+        return {"state": "abandoned"}
 
 
 def reconcile_expired(worker_id: str = "credit-reconciler", *,
