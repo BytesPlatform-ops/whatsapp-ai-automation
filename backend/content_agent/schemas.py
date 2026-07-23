@@ -86,6 +86,7 @@ class GenerationRequest(_Tenanted):
     options: GenerationOptions = Field(default_factory=GenerationOptions)
     title: str = ""                 # optional document title override
     save: bool = False              # generate-and-save vs generate-only (preview)
+    idempotency_key: str = ""       # client-stable op id; a retry reuses one credit op
 
 
 # ── Outputs ──────────────────────────────────────────────────────────────────

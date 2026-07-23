@@ -29,6 +29,7 @@ from security import require_internal
 import logging
 import os
 import time
+import uuid
 
 from .enums import ContentStatus, ContentType, JobStatus
 from .errors import ProviderError, classify, redact
@@ -108,16 +109,51 @@ def _record_usage(req: GenerationRequest, result, duration_ms: int, success: boo
         _log.debug("content_agent usage recording failed", exc_info=False)
 
 
+def _real_usage_count(tenant_id: str) -> int:
+    """Real (non-mock) successful generations so far — used for the plan's monthly
+    text-generation limit. NOTE: period-scoping is a Phase 6.2 concern; until Stripe
+    periods sync, this is an all-time fallback count and only bites when
+    BILLING_ENFORCEMENT_ENABLED is on."""
+    try:
+        return sum(1 for _i, u in get_usage_repository().list(tenant_id) if not u.mock and u.success)
+    except Exception:
+        return 0
+
+
 def _run_generation(req: GenerationRequest):
     """Run the provider-independent service, recording usage and mapping any
     real-mode provider failure to a SAFE, categorized error (never a fake success,
     never a raw provider payload). Server logs get a redacted internal line tied to
-    the same correlation id."""
+    the same correlation id.
+
+    Real generation is wrapped in the credit-enforcement context: it reserves before
+    the provider call, settles the trusted actual cost on success, and releases on an
+    unbilled failure. It is a pass-through no-op when the credit system is disabled or
+    the run is mock (rules 15/17)."""
+    from credits import enforcement
+    from credits.estimate import content_agent_estimate
+    from credits.service import CreditError
+
+    is_m = is_mock()
+    op_id = req.idempotency_key or ("caop_" + uuid.uuid4().hex)
+    est = content_agent_estimate(req.tenant_id, variations=int(req.options.variations or 1), is_mock=is_m)
+
     start = time.perf_counter()
     try:
-        result = generate(req.content_type, req.inputs, req.options)
-        _record_usage(req, result, int((time.perf_counter() - start) * 1000), True)
-        return result
+        with enforcement.enforce(
+            req.tenant_id, operation_type="content_text", source_product="content_agent",
+            source_object_id=(req.title or req.content_type.value), operation_id=op_id, estimate=est,
+            feature="content_agent", limit_key="monthly_text_generations",
+            used=_real_usage_count(req.tenant_id), is_mock=is_m,
+        ) as op:
+            result = generate(req.content_type, req.inputs, req.options)
+            if not is_m and result.usage is not None:
+                actual_micro = int(round(float(result.usage.estimated_cost or 0.0) * 1_000_000))
+                op.provider_succeeded(actual_micro)  # trusted actual cost → settle
+            _record_usage(req, result, int((time.perf_counter() - start) * 1000), True)
+            return result
+    except CreditError as exc:  # insufficient credits / not entitled / limit reached — pre-provider
+        raise HTTPException(status_code=exc.http_status, detail=exc.to_detail()) from exc
     except ProviderError as exc:
         _record_usage(req, None, int((time.perf_counter() - start) * 1000), False)
         safe = classify(exc)
