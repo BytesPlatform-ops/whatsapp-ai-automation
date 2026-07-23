@@ -3,17 +3,13 @@
 import { useEffect, useState } from 'react';
 import { Clapperboard } from 'lucide-react';
 import { ServiceGate } from '@/components/pixie-lab/services/ServiceGate';
-import { ServiceTabs } from '@/components/pixie-lab/services/ServiceTabs';
 import { ContentCreatePanel } from './ContentCreatePanel';
 import { ContentLibraryPanel } from './ContentLibraryPanel';
 import { contentApi } from '@/lib/pixie-lab/servicesClient';
 import { OfflineState, SetupRequired, LoadingCards } from '@/components/pixie-lab/services/ServiceStates';
-import { CONTENT_TABS } from './agent/contentTabs';
 import type { StorageStatus, Envelope } from '@/lib/pixie-lab/serviceTypes';
 
 const ACCENT = '#D4AF37';
-
-const TABS = CONTENT_TABS;
 
 type ContentTab = 'create' | 'library';
 type StorageState = 'loading' | 'offline' | 'unconfigured' | 'ready';
@@ -60,9 +56,7 @@ export function ContentWorkspace({ tab, tenant }: { tab: ContentTab; tenant: str
           </div>
         </div>
 
-        <ServiceTabs tabs={TABS} accent={ACCENT} />
-
-        <div className="mt-6">
+        <div className="mt-8">
           {storageState === 'loading' && <LoadingCards count={3} height="h-24" />}
 
           {storageState === 'offline' && <OfflineState service="Content" />}

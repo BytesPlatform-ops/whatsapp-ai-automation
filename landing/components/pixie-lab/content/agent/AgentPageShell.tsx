@@ -1,12 +1,10 @@
 'use client';
 
 import { PenLine } from 'lucide-react';
-import { ServiceTabs } from '@/components/pixie-lab/services/ServiceTabs';
-import { CONTENT_TABS, CONTENT_ACCENT } from './contentTabs';
+import { CONTENT_ACCENT } from './contentTabs';
 
-/** Page shell for the Content Agent surfaces — matching the media workspace
- *  header + shared Content sub-navigation, so users can move between written
- *  content, media and the AI Influencer without leaving the layout. */
+/** Page shell for the Content Agent surfaces. Section navigation lives in the
+ *  sidebar submenu (CONTENT_NAV), so no in-page tab bar is rendered here. */
 export function AgentPageShell({ title, subtitle, children }: { title: string; subtitle: string; children: React.ReactNode }) {
   return (
     <main className="mx-auto w-full max-w-4xl px-[clamp(20px,4vw,52px)] py-9 text-[var(--pl-text)]">
@@ -21,9 +19,7 @@ export function AgentPageShell({ title, subtitle, children }: { title: string; s
       </div>
       <p className="mt-1.5 text-[13.5px] text-[var(--pl-text-muted)]">{subtitle}</p>
 
-      <ServiceTabs tabs={CONTENT_TABS} accent={CONTENT_ACCENT} />
-
-      <div className="mt-6">{children}</div>
+      <div className="mt-8">{children}</div>
     </main>
   );
 }
