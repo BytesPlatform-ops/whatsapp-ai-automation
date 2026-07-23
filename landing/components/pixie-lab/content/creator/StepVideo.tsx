@@ -6,6 +6,9 @@ import { startVideoGeneration, pollVideo, type CreatorError } from '@/lib/pixie-
 import type { Video } from '@/lib/pixie-lab/contentCreatorTypes';
 import { StepCard, PrimaryButton, GhostButton, ErrorNote, Badge } from './ui';
 import type { StepProps } from './stepProps';
+import { useCreditEstimate } from '@/lib/pixie-lab/useCreditEstimate';
+import { CreditEstimateBadge } from '@/components/pixie-lab/billing/CreditEstimateBadge';
+import { InsufficientCreditsNotice } from '@/components/pixie-lab/billing/InsufficientCreditsNotice';
 
 const TERMINAL = new Set<Video['status']>(['ready', 'mock', 'failed']);
 const isTerminal = (v: Video | null) => !!v && TERMINAL.has(v.status);
@@ -30,6 +33,15 @@ export function StepVideo({ state, advance, reload }: StepProps) {
   const [attempt, setAttempt] = useState(0);
   const [err, setErr] = useState<CreatorError | null>(null);
   const acRef = useRef<AbortController | null>(null);
+
+  // Non-blocking credit estimate — only renders when credit system is enabled.
+  // duration_seconds matches the value passed to startVideoGeneration below (15s).
+  const { show: showEstimate, estimate } = useCreditEstimate({
+    operation: 'influencer_video',
+    duration_seconds: 15,
+    is_mock: state.mock,
+    byok: false,
+  });
 
   async function beginPolling(id: string) {
     acRef.current?.abort();
@@ -72,12 +84,27 @@ export function StepVideo({ state, advance, reload }: StepProps) {
   const url = httpUrl(video?.storage_url) || httpUrl(video?.result_url);
   const ready = phase === 'done' && video && video.status !== 'failed';
 
+  // Only handle insufficient_credits from structured detail; existing error
+  // handling is preserved for all other error kinds.
+  const billingCode =
+    err && (err.kind === 'unknown' || err.kind === 'server')
+      ? (() => {
+          const d = err.detail as Record<string, unknown> | undefined;
+          const code = typeof d?.error === 'string' ? d.error : null;
+          return code === 'insufficient_credits' ? 'insufficient_credits' as const : null;
+        })()
+      : null;
+
   return (
     <StepCard
       title="Video generation"
       description="Generate the video from the locked identity and approved script, then poll until it is ready."
       footer={
         <>
+          {/* Credit estimate badge — only renders when credit system is enabled */}
+          {showEstimate && estimate && (
+            <CreditEstimateBadge estimate={estimate} />
+          )}
           <PrimaryButton busy={busy} disabled={!approvedScript || !productionApproved} onClick={generate}>
             <Film className="h-4 w-4" aria-hidden /> {video ? 'Regenerate video' : 'Generate video'}
           </PrimaryButton>
@@ -116,6 +143,24 @@ export function StepVideo({ state, advance, reload }: StepProps) {
         <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-4">
           <p className="text-sm text-red-500">{video?.error || err?.message || 'Generation failed.'}</p>
           <button type="button" onClick={generate} className="mt-2 rounded-full bg-[var(--pl-accent,#D4AF37)] px-3.5 py-1.5 text-xs font-semibold text-black">Retry</button>
+          {/* Billing notice — only renders when insufficient_credits is detected */}
+          {billingCode && (
+            <div className="mt-3">
+              <InsufficientCreditsNotice
+                code={billingCode}
+                detail={
+                  (() => {
+                    const d = err?.detail as Record<string, unknown> | undefined;
+                    return {
+                      available_mc: typeof d?.available_mc === 'number' ? d.available_mc : undefined,
+                      required_mc: typeof d?.required_mc === 'number' ? d.required_mc : undefined,
+                    };
+                  })()
+                }
+                planId={state.tenant_id ?? ''}
+              />
+            </div>
+          )}
         </div>
       ) : null}
 

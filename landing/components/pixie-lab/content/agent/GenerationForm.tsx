@@ -5,6 +5,8 @@ import { ArrowLeft, Sparkles, Save, RotateCcw } from 'lucide-react';
 import type { ContentTypeSpec, FieldSpec, GenerationInputs, GenerationOptions } from '@/lib/pixie-lab/contentAgentTypes';
 import { FieldInput, emptyValue, type FormValues, type FieldValue } from './fields';
 import { ErrorNote, GhostButton, PrimaryButton } from './ui';
+import { useCreditEstimate } from '@/lib/pixie-lab/useCreditEstimate';
+import { CreditEstimateBadge } from '@/components/pixie-lab/billing/CreditEstimateBadge';
 
 export interface GeneratePayload {
   inputs: GenerationInputs;
@@ -47,12 +49,15 @@ export function GenerationForm({
   serverError,
   onBack,
   onGenerate,
+  isMock = true,
 }: {
   spec: ContentTypeSpec;
   busy: boolean;
   serverError?: string;
   onBack: () => void;
   onGenerate: (payload: GeneratePayload, save: boolean) => void;
+  /** Whether the generation runs in mock mode. Defaults to true (safe — no charge). */
+  isMock?: boolean;
 }) {
   const allSpecs = useMemo(() => [...spec.fields, ...spec.controls], [spec]);
   const [values, setValues] = useState<FormValues>(() => {
@@ -67,6 +72,19 @@ export function GenerationForm({
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const dirty = useRef(false);
+
+  // Derive variations for the estimate (number field, may be absent)
+  const variationsValue = typeof values.variations === 'number' && values.variations > 0
+    ? values.variations
+    : 1;
+
+  // Non-blocking credit estimate — only renders when credit system is enabled.
+  const { show: showEstimate, estimate } = useCreditEstimate({
+    operation: 'content_text',
+    variations: variationsValue,
+    is_mock: isMock,
+    byok: false,
+  });
 
   function set(name: string, v: FieldValue) {
     dirty.current = true;
@@ -137,6 +155,11 @@ export function GenerationForm({
         )}
 
         {serverError && <ErrorNote>{serverError}</ErrorNote>}
+
+        {/* Credit estimate badge — only renders when credit system is enabled */}
+        {showEstimate && estimate && (
+          <CreditEstimateBadge estimate={estimate} />
+        )}
 
         <div className="flex flex-wrap items-center gap-3 pt-1">
           <PrimaryButton type="submit" busy={busy} disabled={busy}>

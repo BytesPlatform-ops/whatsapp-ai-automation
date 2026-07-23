@@ -13,6 +13,17 @@ import { GenerationForm, type GeneratePayload } from './GenerationForm';
 import { ResultWorkspace } from './ResultWorkspace';
 import { DocumentEditor } from './DocumentEditor';
 import { EmptyState, ErrorNote, GhostButton, ModeBadge, PrimaryButton, Spinner } from './ui';
+import { type BillingErrorCode } from '@/lib/pixie-lab/billingClient';
+import { InsufficientCreditsNotice } from '@/components/pixie-lab/billing/InsufficientCreditsNotice';
+
+const BILLING_CODES = new Set<string>([
+  'insufficient_credits',
+  'feature_not_entitled',
+  'usage_limit_reached',
+  'plan_inactive',
+  'billing_past_due',
+  'payment_required',
+]);
 
 const RECENT_KEY = 'ca_recent_types';
 
@@ -27,6 +38,19 @@ function pushRecent(ct: ContentType) {
 }
 
 type View = 'selector' | 'form' | 'result' | 'saved' | 'editor';
+
+/** Structured billing error state — separate from the generic string error so
+ *  existing error handling is never modified. */
+interface BillingErrorState {
+  code: BillingErrorCode;
+  detail?: {
+    limit_key?: string;
+    limit?: number;
+    used?: number;
+    available_mc?: number;
+    required_mc?: number;
+  };
+}
 
 /**
  * ContentAgentWorkspace — the "create written content" flow: choose a type →
@@ -46,6 +70,9 @@ export function ContentAgentWorkspace() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [savedDocId, setSavedDocId] = useState('');
+  /** Structured billing error — only set when the backend returns a billing gate
+   *  error code. Null otherwise (default path). */
+  const [billingError, setBillingError] = useState<BillingErrorState | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -63,17 +90,39 @@ export function ContentAgentWorkspace() {
     const spec = types?.find((t) => t.content_type === ct) || null;
     setSelected(spec);
     setError('');
+    setBillingError(null);
     setResult(null);
     setView('form');
   }, [types]);
 
   async function generate(p: GeneratePayload, save: boolean) {
     if (!selected) return;
-    setBusy(true); setError('');
+    setBusy(true); setError(''); setBillingError(null);
     setPayload(p);
     const r = await generateContent({ contentType: selected.content_type, inputs: p.inputs, options: p.options, save });
     setBusy(false);
-    if (!r.ok) { setError(r.error.message); return; }
+    if (!r.ok) {
+      // Check whether the backend returned a structured billing error code.
+      // The detail object may carry { error: 'insufficient_credits', ... } from
+      // the billing proxy. Existing message-based error handling is preserved.
+      const detail = r.error.detail as Record<string, unknown> | undefined;
+      const maybeCode = typeof detail?.error === 'string' ? detail.error : undefined;
+      if (maybeCode && BILLING_CODES.has(maybeCode)) {
+        setBillingError({
+          code: maybeCode as BillingErrorCode,
+          detail: {
+            available_mc: typeof detail?.available_mc === 'number' ? detail.available_mc : undefined,
+            required_mc: typeof detail?.required_mc === 'number' ? detail.required_mc : undefined,
+            limit_key: typeof detail?.limit_key === 'string' ? detail.limit_key : undefined,
+            limit: typeof detail?.limit === 'number' ? detail.limit : undefined,
+            used: typeof detail?.used === 'number' ? detail.used : undefined,
+          },
+        });
+      }
+      // Always set the string error too — existing error handling is unchanged.
+      setError(r.error.message);
+      return;
+    }
     if (save && r.data.saved) {
       pushRecent(selected.content_type);
       setRecent(readRecent());
@@ -111,7 +160,8 @@ export function ContentAgentWorkspace() {
   }
 
   function reset() {
-    setSelected(null); setResult(null); setPayload(null); setError(''); setSavedDocId('');
+    setSelected(null); setResult(null); setPayload(null);
+    setError(''); setBillingError(null); setSavedDocId('');
     setView('selector');
   }
 
@@ -141,7 +191,17 @@ export function ContentAgentWorkspace() {
       )}
 
       {view === 'form' && selected && (
-        <GenerationForm spec={selected} busy={busy} serverError={error} onBack={reset} onGenerate={generate} />
+        <>
+          <GenerationForm spec={selected} busy={busy} serverError={error} onBack={reset} onGenerate={generate} isMock={status?.mock ?? true} />
+          {/* Billing gate error — only renders when the backend returns a billing
+              error code. Additive; existing serverError display inside the form
+              is preserved. */}
+          {billingError && (
+            <div className="mt-4">
+              <InsufficientCreditsNotice code={billingError.code} detail={billingError.detail} planId="" />
+            </div>
+          )}
+        </>
       )}
 
       {view === 'result' && result && 'result' in result && selected && (
