@@ -162,6 +162,44 @@ def test_scheduled_job_appears_in_calendar():
     assert len(cal["events"]) == 1 and cal["events"][0]["timezone"] == "America/New_York"
 
 
+# ── recovery: filter jobs by source content ─────────────────────────────────────
+def test_list_jobs_filter_by_document_id():
+    _register_meta("ws_A")
+    a = _create(document_id="docA", version_id="v1").json()["id"]
+    _create(document_id="docB", version_id="v1")
+    lst = client.get("/api/publishing/jobs", params={"tenant_id": "ws_A", "document_id": "docA"}).json()
+    ids = {j["id"] for j in lst["jobs"]}
+    assert ids == {a}
+
+
+def test_influencer_job_recovery_by_video_id(monkeypatch):
+    """An AI Influencer job is recoverable by its approved video id — the frontend
+    Step Posting stage resumes from this after refresh/restart."""
+    import publishing.service as service
+    monkeypatch.setattr(service, "_default_gate_check", lambda tenant, vid: True)
+    _register_meta("ws_A")
+    body = {"tenant_id": "ws_A", "source_product": "ai_influencer", "connection_id": "facebook:PAGE1",
+            "platform": "facebook", "content_format": "video", "text": "reel", "influencer_video_id": "vid_1",
+            "media_asset_ids": ["m1"], "mode": "dry_run", "scheduled_local": "2099-01-01T09:00", "timezone": "UTC"}
+    jid = client.post("/api/publishing/jobs", json=body).json()["id"]
+    rec = client.get("/api/publishing/jobs", params={
+        "tenant_id": "ws_A", "source_product": "ai_influencer", "influencer_video_id": "vid_1"}).json()
+    assert [j["id"] for j in rec["jobs"]] == [jid]
+    # a different video does not resolve this job
+    none = client.get("/api/publishing/jobs", params={
+        "tenant_id": "ws_A", "influencer_video_id": "vid_other"}).json()
+    assert none["jobs"] == []
+
+
+def test_influencer_job_gate_blocked_without_approval():
+    _register_meta("ws_A")
+    body = {"tenant_id": "ws_A", "source_product": "ai_influencer", "connection_id": "facebook:PAGE1",
+            "platform": "facebook", "content_format": "video", "text": "reel", "influencer_video_id": "vid_1",
+            "media_asset_ids": ["m1"], "mode": "dry_run"}
+    r = client.post("/api/publishing/jobs", json=body)
+    assert r.status_code == 409 and r.json()["detail"]["error"] == "gate_blocked"
+
+
 # ── internal secret gate ─────────────────────────────────────────────────────────
 def test_internal_secret_enforced(monkeypatch):
     monkeypatch.setenv("PIXIE_INTERNAL_API_SECRET", "s3cret")

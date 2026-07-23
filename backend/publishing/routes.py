@@ -108,8 +108,11 @@ def list_jobs(
     status: str = Query(default=""),
     platform: str = Query(default=""),
     source_product: str = Query(default=""),
+    influencer_video_id: str = Query(default=""),
+    document_id: str = Query(default=""),
 ) -> dict:
-    rows = query_jobs(tenant_id, status=status, platform=platform, source_product=source_product)
+    rows = query_jobs(tenant_id, status=status, platform=platform, source_product=source_product,
+                      influencer_video_id=influencer_video_id, document_id=document_id)
     return {"tenant_id": tenant_id, "jobs": [_job_out(i, j) for (i, j) in rows]}
 
 

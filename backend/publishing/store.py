@@ -201,6 +201,8 @@ def query_jobs(
     status: str = "",
     platform: str = "",
     source_product: str = "",
+    influencer_video_id: str = "",
+    document_id: str = "",
     sort: str = "created",
 ) -> List[Tuple[str, PublishJob]]:
     jobs = get_job_repository().list(tenant_id)
@@ -211,6 +213,10 @@ def query_jobs(
         if platform and j.platform.value != platform:
             return False
         if source_product and j.source_product.value != source_product:
+            return False
+        if influencer_video_id and j.snapshot.influencer_video_id != influencer_video_id:
+            return False
+        if document_id and j.snapshot.document_id != document_id:
             return False
         return True
 
