@@ -71,7 +71,38 @@ CREATE UNIQUE INDEX IF NOT EXISTS "uq_credit_res_idempotency"
 -- ── Indexes: wallet ──────────────────────────────────────────────────────────
 CREATE INDEX IF NOT EXISTS "idx_credit_wallet_tenant" ON "credit_wallet" ("tenant_id");
 
+-- ── Workspace subscriptions (one row per tenant; id = tenant_id) ─────────────
+CREATE TABLE IF NOT EXISTS "credit_subscriptions" (
+  "id" text PRIMARY KEY, "tenant_id" text NOT NULL,
+  "created_at" timestamptz NOT NULL DEFAULT now(),
+  "updated_at" timestamptz NOT NULL DEFAULT now(),
+  "data" jsonb NOT NULL DEFAULT '{}'::jsonb);
+
+-- ── Stripe event receipts (idempotency; id = Stripe event id, tenant '_stripe') ──
+CREATE TABLE IF NOT EXISTS "credit_stripe_events" (
+  "id" text PRIMARY KEY, "tenant_id" text NOT NULL,
+  "created_at" timestamptz NOT NULL DEFAULT now(),
+  "updated_at" timestamptz NOT NULL DEFAULT now(),
+  "data" jsonb NOT NULL DEFAULT '{}'::jsonb);
+
+-- ── Financial audit log (append-only; safe metadata only) ────────────────────
+CREATE TABLE IF NOT EXISTS "credit_audit" (
+  "id" text PRIMARY KEY, "tenant_id" text NOT NULL,
+  "created_at" timestamptz NOT NULL DEFAULT now(),
+  "updated_at" timestamptz NOT NULL DEFAULT now(),
+  "data" jsonb NOT NULL DEFAULT '{}'::jsonb);
+
+CREATE INDEX IF NOT EXISTS "idx_credit_subs_tenant"    ON "credit_subscriptions" ("tenant_id");
+CREATE INDEX IF NOT EXISTS "idx_credit_subs_customer"  ON "credit_subscriptions" ((data->>'stripe_customer_id'));
+CREATE INDEX IF NOT EXISTS "idx_credit_subs_period"    ON "credit_subscriptions" ((data->>'current_period_end'));
+CREATE INDEX IF NOT EXISTS "idx_credit_evt_type"       ON "credit_stripe_events" ((data->>'event_type'));
+CREATE INDEX IF NOT EXISTS "idx_credit_audit_tenant"   ON "credit_audit" ("tenant_id", "created_at");
+CREATE INDEX IF NOT EXISTS "idx_credit_audit_type"     ON "credit_audit" ((data->>'event_type'));
+
 -- ── Row Level Security (enable; no anon/authenticated policies → deny-all) ────
-ALTER TABLE "credit_ledger"       ENABLE ROW LEVEL SECURITY;
-ALTER TABLE "credit_wallet"       ENABLE ROW LEVEL SECURITY;
-ALTER TABLE "credit_reservations" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "credit_ledger"        ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "credit_wallet"        ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "credit_reservations"  ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "credit_subscriptions" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "credit_stripe_events" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "credit_audit"         ENABLE ROW LEVEL SECURITY;

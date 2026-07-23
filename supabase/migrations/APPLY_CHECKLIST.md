@@ -52,9 +52,11 @@ if code introduces a durable table not present in the migration.
 
 ## Credits & billing (`20260725_credits.sql`, Phase 6.1) — NOT applied
 
-Tables: `credit_ledger`, `credit_wallet`, `credit_reservations` (envelope shape;
-indexes + unique `(tenant_id, idempotency_key)` + deny-all RLS). Contract verified by
-`backend/tests/credits/test_durable.py`.
+Tables: `credit_ledger`, `credit_wallet`, `credit_reservations`, `credit_subscriptions`,
+`credit_stripe_events`, `credit_audit` (envelope shape; indexes + unique
+`(tenant_id, idempotency_key)` on ledger/reservations + deny-all RLS on all six).
+Contract verified by `backend/tests/credits/test_durable.py`. The generic importer
+covers all six (`--only credit_ledger …`).
 
 1. Apply `20260725_credits.sql` in the Supabase SQL editor (idempotent).
 2. Import any local file billing data with the existing generic importer — dry-run

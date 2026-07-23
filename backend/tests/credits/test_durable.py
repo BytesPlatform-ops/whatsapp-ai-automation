@@ -87,16 +87,19 @@ def _sql() -> str:
 
 
 def test_migration_defines_repository_table_names():
+    from credits import audit, subscriptions
     sql = _sql()
-    for table in (ledger.LedgerRepository.table_name, wallet.WalletRepository.table_name,
-                  reservations.ReservationRepository.table_name):
+    tables = (ledger.LedgerRepository.table_name, wallet.WalletRepository.table_name,
+              reservations.ReservationRepository.table_name, subscriptions.SubscriptionRepository.table_name,
+              subscriptions.StripeEventStore.table_name, audit.AuditRepository.table_name)
+    for table in tables:
         assert re.search(rf'CREATE TABLE IF NOT EXISTS "{table}"', sql), f"missing table {table}"
 
 
 def test_migration_enforces_unique_idempotency_and_rls():
     sql = _sql()
     assert "uq_credit_ledger_idempotency" in sql and "uq_credit_res_idempotency" in sql
-    assert sql.count("ENABLE ROW LEVEL SECURITY") == 3
+    assert sql.count("ENABLE ROW LEVEL SECURITY") == 6  # 6 credit tables
 
 
 def test_migration_indexes_match_queried_fields():
