@@ -14,6 +14,7 @@ durable (cc_* tables) when PIXIE_PERSIST=file|supabase; saves/gets return
 
 from __future__ import annotations
 
+import uuid
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -150,6 +151,7 @@ class ProviderBody(_Body):
 
 class IdeasGenerateBody(_Body):
     seeds: List[str] = Field(default_factory=list)
+    idempotency_key: str = ""       # a retry reuses one credit operation
 
 
 class DecisionBody(_Body):
@@ -158,6 +160,7 @@ class DecisionBody(_Body):
 
 class ScriptGenerateBody(_Body):
     idea_id: str = Field(..., min_length=1)
+    idempotency_key: str = ""       # a retry reuses one credit operation
 
 
 class CostEstimateBody(_Body):
@@ -535,13 +538,41 @@ def get_provider(tenant_id: str = Query(..., min_length=1)) -> dict:
 # --------------------------------------------------------------------------- #
 # Stage 4 — Idea generation  /  Stage 5 — Gate 1 idea approval
 # --------------------------------------------------------------------------- #
+def _cc_micro_usd(meta: dict) -> int:
+    """Trusted provider cost (USD float from usage meta) → integer µUSD for settlement."""
+    return int(round(float(meta.get("estimated_cost", 0.0) or 0.0) * 1_000_000))
+
+
 @router.post("/ideas/generate")
 def ideas_generate(body: IdeasGenerateBody) -> dict:
+    from credits import enforcement
+    from credits.estimate import influencer_idea_estimate
+    from credits.service import CreditError
+    from credits.usage import count_operations
+
+    is_m = config.mock_mode()
+    op_id = body.idempotency_key or ("ccidea_" + uuid.uuid4().hex)
+    est = influencer_idea_estimate(body.tenant_id, is_mock=is_m)
+    try:
+        with enforcement.enforce(
+            body.tenant_id, operation_type="influencer_idea", source_product="ai_influencer",
+            source_object_id="ideas", operation_id=op_id, estimate=est,
+            feature="ai_influencer", limit_key="monthly_text_generations",
+            used=count_operations(body.tenant_id, "influencer_idea"), is_mock=is_m,
+        ) as _op:
+            return _ideas_generate_inner(body, _op, is_m)
+    except CreditError as exc:
+        raise HTTPException(status_code=exc.http_status, detail=exc.to_detail()) from exc
+
+
+def _ideas_generate_inner(body: IdeasGenerateBody, _op, is_m: bool) -> dict:
     profile = _profile_dict(body.tenant_id)
     trends = gather_trends(profile, seeds=body.seeds)
     repo = get_idea_repository()
     history = [i.title for (_id, i) in repo.list(body.tenant_id)]
     raw, meta = generate_ideas_with_meta(profile, trends=trends, history=history)
+    if not is_m:
+        _op.provider_succeeded(_cc_micro_usd(meta))
     _record_ai_usage(body.tenant_id, PipelineStage.IDEA_GENERATION.value, meta)
     out = []
     for item in raw:
@@ -606,21 +637,40 @@ def scripts_generate(body: ScriptGenerateBody) -> dict:
                 "detail": "Idea must be approved (Gate 1) before script generation.",
             },
         )
-    profile = _profile_dict(body.tenant_id)
-    drafted, meta = generate_script_with_meta(idea.model_dump(), profile)
-    _record_ai_usage(body.tenant_id, PipelineStage.SCRIPT_GENERATION.value, meta)
-    script = Script(
-        tenant_id=body.tenant_id,
-        idea_ref=body.idea_id,
-        hook=drafted.get("hook", ""),
-        body=drafted.get("body", ""),
-        cta=drafted.get("cta", ""),
-        word_count=int(drafted.get("word_count", 0) or 0),
-        approx_seconds=int(drafted.get("approx_seconds", 15) or 15),
-        approval_status=ApprovalStatus.PENDING,
-    )
-    sid, stored = get_script_repository().save(script)
-    return {"id": sid, "script": stored.model_dump()}
+    from credits import enforcement
+    from credits.estimate import influencer_script_estimate
+    from credits.service import CreditError
+    from credits.usage import count_operations
+
+    is_m = config.mock_mode()
+    op_id = body.idempotency_key or ("ccscript_" + uuid.uuid4().hex)
+    est = influencer_script_estimate(body.tenant_id, is_mock=is_m)
+    try:
+        with enforcement.enforce(
+            body.tenant_id, operation_type="influencer_script", source_product="ai_influencer",
+            source_object_id=body.idea_id, operation_id=op_id, estimate=est,
+            feature="ai_influencer", limit_key="monthly_text_generations",
+            used=count_operations(body.tenant_id, "influencer_script"), is_mock=is_m,
+        ) as _op:
+            profile = _profile_dict(body.tenant_id)
+            drafted, meta = generate_script_with_meta(idea.model_dump(), profile)
+            if not is_m:
+                _op.provider_succeeded(_cc_micro_usd(meta))
+            _record_ai_usage(body.tenant_id, PipelineStage.SCRIPT_GENERATION.value, meta)
+            script = Script(
+                tenant_id=body.tenant_id,
+                idea_ref=body.idea_id,
+                hook=drafted.get("hook", ""),
+                body=drafted.get("body", ""),
+                cta=drafted.get("cta", ""),
+                word_count=int(drafted.get("word_count", 0) or 0),
+                approx_seconds=int(drafted.get("approx_seconds", 15) or 15),
+                approval_status=ApprovalStatus.PENDING,
+            )
+            sid, stored = get_script_repository().save(script)
+            return {"id": sid, "script": stored.model_dump()}
+    except CreditError as exc:
+        raise HTTPException(status_code=exc.http_status, detail=exc.to_detail()) from exc
 
 
 @router.get("/scripts/{script_id}")
