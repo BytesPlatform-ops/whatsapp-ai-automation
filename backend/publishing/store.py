@@ -129,6 +129,21 @@ class JobRepository(_Repo):
                 break
         return out
 
+    def stuck_publishing_jobs(self, *, lock_timeout_s: int = 300) -> List[Tuple[str, PublishJob]]:
+        """Jobs left in PUBLISHING with a stale/absent lock — a worker died mid-flight.
+        Cross-tenant (worker only). These are reconciled back to a terminal/retryable
+        state so a crash never strands a job. A fresh lock means a worker is still
+        actively publishing, so it is left alone."""
+        out: List[Tuple[str, PublishJob]] = []
+        for row in self._all_rows():
+            job = self._build(row)
+            if not job or job.status != PublishStatus.PUBLISHING:
+                continue
+            if job.locked_at and not _older_than(job.locked_at, lock_timeout_s):
+                continue  # a worker is still on it
+            out.append((row["id"], job))
+        return out
+
     def acquire_lock(self, tenant_id: str, job_id: str, worker_id: str, *, lock_timeout_s: int = 300) -> Optional[PublishJob]:
         """Try to claim a job. Returns the locked job on success, else None (already
         locked and fresh). Re-reads current state to avoid a stale decision."""

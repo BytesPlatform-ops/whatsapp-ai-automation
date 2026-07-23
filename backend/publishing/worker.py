@@ -50,6 +50,37 @@ def _default_media_resolver(tenant_id: str, asset_ids: List[str]) -> List[str]:
     return urls
 
 
+def reconcile_pending(worker_id: str = "reconciler") -> dict:
+    """Recover jobs stranded in PUBLISHING by a crashed/restarted worker.
+
+    Reconciliation strategy is POLLING, not webhooks: Meta returns the post id
+    synchronously (FB feed) or via the adapter's bounded container polling (IG), and
+    sends no asynchronous "published" event to finalize job state. So the only async
+    gap is a worker dying mid-publish, leaving a stale lock. Here we:
+
+      * finalize as PUBLISHED when a platform post id already exists (the platform
+        completed; only our bookkeeping lagged — delayed-completion recovery), or
+      * requeue for a fresh attempt otherwise (safe: idempotency + the post-id guard
+        in ``_execute`` prevent a double-post).
+
+    Cross-tenant, worker-only. Runs at the head of every worker tick, so a restart
+    self-heals without operator action. See publishing/RECONCILIATION.md.
+    """
+    jobrepo = get_job_repository()
+    stuck = jobrepo.stuck_publishing_jobs(lock_timeout_s=config.lock_timeout_seconds())
+    reconciled = []
+    for jid, job in stuck:
+        if job.platform_post_id:
+            jobrepo.release_lock(job.tenant_id, jid, status=PublishStatus.PUBLISHED, completed_at=now_iso())
+            reconciled.append({"job_id": jid, "result": "finalized_published"})
+        else:
+            jobrepo.release_lock(job.tenant_id, jid, status=PublishStatus.QUEUED, scheduled_utc=now_iso())
+            reconciled.append({"job_id": jid, "result": "requeued"})
+    if reconciled:
+        _log.info("[publishing] reconciled %d stranded job(s)", len(reconciled))
+    return {"worker": worker_id, "reconciled": reconciled, "count": len(reconciled)}
+
+
 def run_due_once(
     worker_id: str = "worker-1",
     *,
@@ -57,7 +88,10 @@ def run_due_once(
     token_resolver: Optional[TokenResolver] = None,
     media_resolver: Optional[MediaResolver] = None,
 ) -> dict:
-    """Process all currently-due jobs once. Returns a summary (no secrets)."""
+    """Process all currently-due jobs once. Returns a summary (no secrets).
+
+    Reconciles stranded PUBLISHING jobs first so a prior worker crash self-heals."""
+    reconcile_pending(worker_id)
     jobs = get_job_repository().due_jobs(lock_timeout_s=config.lock_timeout_seconds())
     processed = []
     for jid, job in jobs:
