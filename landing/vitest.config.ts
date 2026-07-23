@@ -18,6 +18,7 @@ export default defineConfig({
       'lib/pixie-lab/**/*.test.{ts,tsx}',
       'components/pixie-lab/content/**/*.test.{ts,tsx}',
       'components/pixie-lab/billing/**/*.test.{ts,tsx}',
+      'components/pixie-lab/services/**/*.test.{ts,tsx}',
     ],
     css: false,
   },
