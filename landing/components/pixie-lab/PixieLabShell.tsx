@@ -1,9 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname, useRouter } from 'next/navigation';
+import { CONTENT_NAV, isContentRoute, activeContentHref } from '@/lib/pixie-lab/contentRoutes';
 import {
   Sparkles, LayoutGrid, LayoutDashboard, Globe, Headset, Search, Megaphone, Clapperboard,
   Lock, ChevronDown, LogOut, Menu, X, ShieldCheck, Activity, CreditCard, type LucideIcon,
@@ -59,11 +60,15 @@ const SERVICE_SUBNAV: Partial<Record<FeedAgent, { label: string; href: string }[
     { label: 'Content', href: '/pixie-lab/marketing/content' },
     { label: 'Approvals', href: '/pixie-lab/marketing/approvals' },
   ],
-  content: [
-    { label: 'Create', href: '/pixie-lab/content/create' },
-    { label: 'Library', href: '/pixie-lab/content/library' },
-  ],
+  // The full Content workspace navigation lives in the sidebar — single source
+  // CONTENT_NAV (routes from the contentRoutes registry).
+  content: CONTENT_NAV,
 };
+
+function prefersReducedMotion(): boolean {
+  return typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+    && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+}
 
 export function PixieLabShell({
   name,
@@ -83,6 +88,12 @@ export function PixieLabShell({
   const [mobileOpen, setMobileOpen] = useState(false);
   const { stateOf } = useEntitlements(tenant);
   const stateFor = stateOf;
+
+  // Keep the active submenu item visible when the sidebar is short / on route change.
+  const activeSubRef = useRef<HTMLAnchorElement>(null);
+  useEffect(() => {
+    activeSubRef.current?.scrollIntoView({ block: 'nearest', behavior: prefersReducedMotion() ? 'auto' : 'smooth' });
+  }, [pathname]);
 
   async function signOut() {
     try {
@@ -116,8 +127,14 @@ export function PixieLabShell({
           const accent = AGENT_ACCENT[agent];
           const base = `/pixie-lab/${agent}`;
           const active = pathname === base;
-          const inSection = pathname === base || pathname.startsWith(`${base}/`);
+          // Content spans two route roots (/content and /content-creator).
+          const inSection = agent === 'content'
+            ? isContentRoute(pathname)
+            : pathname === base || pathname.startsWith(`${base}/`);
           const subnav = SERVICE_SUBNAV[agent];
+          // Longest-prefix active child for Content (nested detail → correct parent);
+          // exact match for other services' flat sub-lists.
+          const activeSub = agent === 'content' ? activeContentHref(pathname) : '';
           return (
             <div key={agent}>
               <Link
@@ -144,13 +161,15 @@ export function PixieLabShell({
               </Link>
               {/* Sub-tools appear when you're inside the service and it isn't locked. */}
               {subnav && inSection && st !== 'locked' && (
-                <div className="mb-1 ml-[26px] mt-0.5 space-y-0.5 border-l border-[var(--pl-border)] pl-2.5">
+                <div className="mb-1 ml-[26px] mt-0.5 max-h-[50vh] space-y-0.5 overflow-y-auto border-l border-[var(--pl-border)] pl-2.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                   {subnav.map((s) => {
-                    const subActive = pathname === s.href;
+                    const subActive = agent === 'content' ? s.href === activeSub : pathname === s.href;
                     return (
                       <Link
                         key={s.href}
+                        ref={subActive ? activeSubRef : undefined}
                         href={s.href}
+                        aria-current={subActive ? 'page' : undefined}
                         onClick={() => setMobileOpen(false)}
                         className="block rounded-lg px-2.5 py-1.5 text-[12.5px] font-medium transition-colors"
                         style={{

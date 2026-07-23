@@ -30,3 +30,44 @@ export const contentRoutes = {
 } as const;
 
 export type ContentRouteKey = keyof typeof contentRoutes;
+
+/** The complete Content workspace navigation — the single source for the sidebar
+ *  submenu (and anywhere else the section list is needed). User-facing labels;
+ *  destinations come from the helpers above so they never drift. */
+export interface ContentNavItem { label: string; href: string }
+
+export const CONTENT_NAV: ContentNavItem[] = [
+  { label: 'Overview', href: contentRoutes.overview() },
+  { label: 'Content Agent', href: contentRoutes.agent() },
+  { label: 'Generated Content', href: contentRoutes.generated() },
+  { label: 'Publishing', href: contentRoutes.publishing() },
+  { label: 'Calendar', href: contentRoutes.publishingCalendar() },
+  { label: 'Upload Media', href: contentRoutes.uploadMedia() },
+  { label: 'Media Library', href: contentRoutes.mediaLibrary() },
+  { label: 'AI Influencer', href: contentRoutes.influencer() },
+];
+
+/** True when the path is inside the Content workspace — includes the AI Influencer
+ *  route, which lives at /pixie-lab/content-creator (a sibling of /pixie-lab/content). */
+export function isContentRoute(pathname: string): boolean {
+  const overview = contentRoutes.overview();
+  const influencer = contentRoutes.influencer();
+  return (
+    pathname === overview || pathname.startsWith(overview + '/')
+    || pathname === influencer || pathname.startsWith(influencer + '/')
+  );
+}
+
+/** The CONTENT_NAV href that best matches the current path (longest prefix), so a
+ *  nested detail route highlights its correct parent item and Publishing vs Calendar
+ *  are never both active. Returns '' when the path isn't a Content route. */
+export function activeContentHref(pathname: string): string {
+  let best = '';
+  for (const item of CONTENT_NAV) {
+    const base = item.href.split('?')[0];
+    if ((pathname === base || pathname.startsWith(base + '/')) && base.length > best.length) {
+      best = item.href;
+    }
+  }
+  return best;
+}
