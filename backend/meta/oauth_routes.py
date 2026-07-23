@@ -132,9 +132,29 @@ class DefaultsBody(BaseModel):
 
 @router.post("/assets/defaults")
 def set_defaults(body: DefaultsBody) -> dict:
+    _enforce_connected_account_limit(body.tenant_id)
     d = get_meta_store().set_defaults(body.tenant_id, page_id=body.page_id,
                                       instagram_id=body.instagram_id, ad_account_id=body.ad_account_id)
     return {"ok": True, "defaults": d}
+
+
+def _enforce_connected_account_limit(tenant_id: str) -> None:
+    """Plan connected-account cap, enforced when a workspace finalizes its Meta
+    publishing destinations. No-op unless billing enforcement is enabled."""
+    try:
+        from credits import enforcement
+        from publishing import connections
+        pages = [a for a in connections.list_accounts(tenant_id) if a.get("platform") == "facebook"]
+        # current = accounts already connected (excluding the one being finalized) so
+        # the plan limit N permits up to N pages.
+        enforcement.check_connected_accounts(tenant_id, current=max(0, len(pages) - 1))
+    except HTTPException:
+        raise
+    except Exception as exc:
+        from credits.service import CreditError
+        if isinstance(exc, CreditError):
+            raise HTTPException(status_code=exc.http_status, detail=exc.to_detail())
+        return
 
 
 @router.get("/status")

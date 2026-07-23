@@ -88,6 +88,22 @@ def _past_due_block(tenant_id: str) -> None:
                                   {"remediation": "manage_billing"})
 
 
+def check_connected_accounts(tenant_id: str, *, current: int) -> None:
+    """Enforce the plan's connected-social-account limit at the Meta OAuth finalize
+    point. No-op unless the credit system + billing enforcement are both on, so the
+    connect flow is unchanged by default (rule 17). Raises CreditError(402)."""
+    if not (config.credit_system_enabled() and config.billing_enforcement_enabled()):
+        return
+    r = plans.check_limit(tenant_id, "connected_accounts", current)
+    if not r["allowed"]:
+        audit.emit(tenant_id, audit.USAGE_LIMIT_REACHED, operation="connected_accounts",
+                   metadata={"limit": r["limit"], "used": current})
+        raise service.CreditError("usage_limit_reached",
+                                  "You've reached your plan's connected-account limit.", 402,
+                                  {"limit_key": "connected_accounts", "limit": r["limit"], "used": current,
+                                   "remediation": "upgrade_plan"})
+
+
 def precheck(tenant_id: str, *, features=(), limit_key: str = "", used: int = 0) -> None:
     """Public entitlement/limit gate for async paths (e.g. video) that reserve
     manually. No-op unless the credit system is enabled. Raises CreditError (402)."""
