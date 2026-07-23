@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
+import { contentRoutes } from '@/lib/pixie-lab/contentRoutes';
 import { Upload, Image as ImageIcon, Film, CheckCircle2, Loader2, Sparkles } from 'lucide-react';
 import { contentApi } from '@/lib/pixie-lab/servicesClient';
 
@@ -122,7 +123,7 @@ export function ContentCreatePanel() {
         </p>
         <div className="mt-5 flex justify-center gap-3 flex-wrap">
           <Link
-            href="/pixie-lab/content/library"
+            href={contentRoutes.mediaLibrary()}
             className="rounded-xl px-4 py-2.5 text-[13.5px] font-bold text-[#02120f] transition"
             style={{ background: ACCENT }}
           >

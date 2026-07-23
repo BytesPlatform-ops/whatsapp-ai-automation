@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
+import { contentRoutes } from '@/lib/pixie-lab/contentRoutes';
 import { CheckCircle2, PenLine } from 'lucide-react';
 import type {
   ContentType, ContentTypeSpec, GenerateResponse, GeneratedVariation, StatusResponse,
@@ -174,7 +175,7 @@ function SavedConfirmation({ onOpen, onNew }: { onOpen: () => void; onNew: () =>
       action={
         <div className="flex flex-wrap justify-center gap-3">
           <PrimaryButton onClick={onOpen}><PenLine size={15} /> Open document</PrimaryButton>
-          <Link href="/pixie-lab/content/generated"><GhostButton><CheckCircle2 size={14} /> Go to library</GhostButton></Link>
+          <Link href={contentRoutes.generated()}><GhostButton><CheckCircle2 size={14} /> Go to library</GhostButton></Link>
           <GhostButton onClick={onNew}>Create another</GhostButton>
         </div>
       }
