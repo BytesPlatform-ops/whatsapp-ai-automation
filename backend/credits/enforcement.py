@@ -23,7 +23,7 @@ import logging
 from contextlib import contextmanager
 from typing import Iterator, Optional
 
-from . import config, plans, service
+from . import audit, config, plans, service
 
 _log = logging.getLogger("pixie.credits")
 
@@ -55,12 +55,16 @@ def _entitlement_precheck(tenant_id: str, feature: str, limit_key: str, used: in
     if feature:
         r = plans.check_feature(tenant_id, feature)
         if not r["allowed"]:
+            audit.emit(tenant_id, audit.ENTITLEMENT_DENIED, operation=feature,
+                       metadata={"plan_id": r["plan_id"], "feature": feature})
             raise service.CreditError("feature_not_entitled",
                                       "Your plan doesn't include this feature.", 402,
                                       {"plan_id": r["plan_id"], "remediation": "upgrade_plan"})
     if limit_key:
         r = plans.check_limit(tenant_id, limit_key, used)
         if not r["allowed"]:
+            audit.emit(tenant_id, audit.USAGE_LIMIT_REACHED, operation=limit_key,
+                       metadata={"limit_key": limit_key, "limit": r["limit"], "used": r["used"]})
             raise service.CreditError("usage_limit_reached",
                                       "You've reached your plan's limit for this action.", 402,
                                       {"limit_key": limit_key, "limit": r["limit"], "used": r["used"],

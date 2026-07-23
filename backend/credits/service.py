@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from typing import Optional, Tuple
 
-from . import config
+from . import audit, config
 from .ledger import LedgerEntry, LedgerEntryType, get_ledger_repository
 from .money import CURRENT_PRICING_VERSION, provider_micro_usd_to_mc
 from .reservations import (
@@ -66,6 +66,9 @@ def grant(tenant_id: str, amount_mc: int, *, entry_type: LedgerEntryType = Ledge
         reference_id=reference_id, stripe_event_id=stripe_event_id,
         pricing_version=pricing_version or CURRENT_PRICING_VERSION, created_by=created_by))
     get_wallet_repository().refresh(tenant_id)
+    audit.emit(tenant_id, audit.CREDITS_GRANTED, actor=created_by or "system",
+               reference_type=reference_type, reference_id=reference_id,
+               metadata={"amount_mc": amount_mc, "entry_type": entry_type.value, "reason": reason_code})
     return lid, entry
 
 
@@ -87,6 +90,9 @@ def reserve(tenant_id: str, *, operation_type: str, source_product: str, source_
         return existing  # idempotent — never a second hold for the same action
 
     if not config.allow_negative_credits() and available_mc(tenant_id) < max_reserved_mc:
+        audit.emit(tenant_id, audit.INSUFFICIENT_CREDITS, product=source_product,
+                   operation=operation_type, reference_id=source_object_id,
+                   metadata={"available_mc": available_mc(tenant_id), "required_mc": max_reserved_mc})
         raise CreditError("insufficient_credits",
                           "Not enough credits for this operation.", 402,
                           {"available_mc": available_mc(tenant_id), "required_mc": max_reserved_mc})
@@ -110,6 +116,8 @@ def reserve(tenant_id: str, *, operation_type: str, source_product: str, source_
         reference_type=source_product, reference_id=source_object_id, reservation_id=rid,
         idempotency_key=f"resv:{rid}", pricing_version=pv, created_by=created_by))
     get_wallet_repository().refresh(tenant_id)
+    audit.emit(tenant_id, audit.RESERVATION_CREATED, product=source_product, operation=operation_type,
+               reference_id=source_object_id, metadata={"reservation_id": rid, "max_reserved_mc": max_reserved_mc})
     return rid, r
 
 
@@ -155,6 +163,9 @@ def settle(tenant_id: str, reservation_id: str, *, actual_provider_micro_usd: in
     _, updated = resrepo.update(tenant_id, reservation_id, status=ReservationStatus.SETTLED,
                                 settled_mc=settle_mc, anomaly=anomaly)
     get_wallet_repository().refresh(tenant_id)
+    audit.emit(tenant_id, audit.SETTLEMENT_CREATED, product=r.source_product, operation=r.operation_type,
+               reference_id=r.source_object_id,
+               metadata={"reservation_id": reservation_id, "settled_mc": settle_mc, "anomaly": anomaly})
     return reservation_id, updated
 
 
@@ -179,6 +190,9 @@ def release(tenant_id: str, reservation_id: str, *, reason_code: str,
         pricing_version=r.pricing_version))
     _, updated = resrepo.update(tenant_id, reservation_id, status=status, reason_code=reason_code)
     get_wallet_repository().refresh(tenant_id)
+    audit.emit(tenant_id, audit.RESERVATION_RELEASED, product=r.source_product, operation=r.operation_type,
+               reference_id=r.source_object_id,
+               metadata={"reservation_id": reservation_id, "reason": reason_code, "status": status.value})
     return reservation_id, updated
 
 
@@ -201,4 +215,7 @@ def refund(tenant_id: str, *, amount_mc: int, reason_code: str, reservation_id: 
         if found:
             get_reservation_repository().update(tenant_id, reservation_id, status=ReservationStatus.REFUNDED)
     get_wallet_repository().refresh(tenant_id)
+    audit.emit(tenant_id, audit.REFUND_CREATED, actor=created_by or "system", reference_type=reference_type,
+               reference_id=reference_id, metadata={"amount_mc": amount_mc, "reason": reason_code,
+                                                     "reservation_id": reservation_id})
     return lid, entry
