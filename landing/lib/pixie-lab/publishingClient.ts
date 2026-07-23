@@ -214,6 +214,34 @@ export const rescheduleJob = (id: string, scheduledLocal: string, timezone: stri
   call<{ id: string; job: PublishJob }>(PUB, 'POST', `/jobs/${encodeURIComponent(id)}/reschedule`, { body: { scheduled_local: scheduledLocal, timezone } });
 export const editJob = (id: string, patch: { text?: string; first_comment?: string; media_asset_ids?: string[] }) =>
   call<{ id: string; job: PublishJob }>(PUB, 'PATCH', `/jobs/${encodeURIComponent(id)}`, { body: { ...patch } });
-export const getCalendar = (signal?: AbortSignal) => call<{ events: Array<Record<string, unknown>> }>(PUB, 'GET', '/calendar', { signal });
+export interface CalendarEvent {
+  id: string;
+  scheduled_utc: string;
+  local_time: string;
+  timezone: string;
+  platform: string;
+  status: PublishStatus;
+  source_product: string;
+  account_id: string;
+  mode: PublishMode;
+  preview: string;
+  content_format: string;
+  attempt_count: number;
+  platform_post_id: string;
+  platform_permalink: string;
+  error_category: string;
+}
+
+export interface CalendarQuery {
+  start?: string;           // UTC ISO lower bound (inclusive)
+  end?: string;             // UTC ISO upper bound (inclusive)
+  include_cancelled?: boolean;
+}
+
+export const getCalendar = (q: CalendarQuery = {}, signal?: AbortSignal) =>
+  call<{ start: string; end: string; events: CalendarEvent[] }>(PUB, 'GET', '/calendar', {
+    params: { start: q.start, end: q.end, include_cancelled: q.include_cancelled },
+    signal,
+  });
 export const getHistory = (signal?: AbortSignal) => call<{ history: Array<Record<string, unknown>> }>(PUB, 'GET', '/history', { signal });
 export const runWorkerOnce = () => call<{ count: number; processed: unknown[] }>(PUB, 'POST', '/worker/run-once', { body: {} });
