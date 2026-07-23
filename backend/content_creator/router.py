@@ -172,6 +172,7 @@ class CostEstimateBody(_Body):
 class VideoGenerateBody(_Body):
     script_id: str = Field(..., min_length=1)
     duration_seconds: int = 15
+    idempotency_key: str = ""       # a double-click reuses one reservation + job
 
 
 class ScheduleBody(_Body):
@@ -854,6 +855,13 @@ def videos_generate(body: VideoGenerateBody) -> dict:
         raise HTTPException(status_code=400, detail=res["error"])
 
     provider = res["provider"]
+
+    # ── Credit reservation BEFORE provider submission (Gate 3 alone never bypasses
+    # credits). No-op when the credit system is disabled or the run is mock. ──────
+    is_m = config.mock_mode()
+    video_op_id = body.idempotency_key or f"ccvideo:{body.tenant_id}:{body.script_id}"
+    reservation_id, billing_state = _reserve_video(body, is_m, video_op_id)
+
     try:
         job = provider.submit_job(
             prompt,
@@ -862,8 +870,10 @@ def videos_generate(body: VideoGenerateBody) -> dict:
             image_url=_image_url_for_identity(identity),
         )
     except ProviderNotConfigured as exc:
+        _release_video_reservation(body.tenant_id, reservation_id, credit_reason="provider_not_configured")
         raise HTTPException(status_code=400, detail={"status": "provider_not_configured", "message": str(exc)})
     except ProviderError as exc:
+        _release_video_reservation(body.tenant_id, reservation_id, credit_reason="provider_rejected")
         raise HTTPException(status_code=502, detail={"status": "provider_error", "message": str(exc), "retryable": True})
 
     status_str = str(job.get("status", "generating")).lower()
@@ -880,14 +890,93 @@ def videos_generate(body: VideoGenerateBody) -> dict:
         aspect_ratio=job.get("aspect_ratio", "9:16") or "9:16",
         duration_seconds=int(job.get("duration_seconds", 15) or 15),
         model=job.get("model", ""),
+        reservation_id=reservation_id,
+        billing_state=billing_state,
     )
     vid, stored = get_video_repository().save(video)
+
+    # Link the provider job to the reservation so reconciliation can resolve state.
+    if reservation_id:
+        try:
+            from credits.reservations import get_reservation_repository
+            get_reservation_repository().update(body.tenant_id, reservation_id,
+                                                provider_operation_id=job.get("provider_job_id", ""),
+                                                source_object_id=vid)
+        except Exception:
+            pass
 
     # pixie_managed: record billable usage (Pixie fronts the credits).
     if config.real_mode() and mode == "pixie_managed":
         _record_pixie_usage(body.tenant_id, body.tenant_id, vid, job.get("provider_job_id", ""), body.script_id)
 
     return {"id": vid, "video": stored.model_dump()}
+
+
+# ── video billing helpers ────────────────────────────────────────────────────────
+def _video_final_mc(tenant_id: str, video, is_mock: bool) -> int:
+    """Trusted FINAL estimate for a completed video from its actual duration/model
+    (no retry budget) — settled when the provider gives no itemised cost (allowed for
+    video per the billing policy)."""
+    from credits.estimate import influencer_video_estimate
+    est = influencer_video_estimate(tenant_id, duration_seconds=int(getattr(video, "duration_seconds", 15) or 15),
+                                    model=getattr(video, "model", "") or "standard", outputs=1, retry_budget=0,
+                                    is_mock=is_mock, authorized_balance=False)
+    return int(est["max_reservation_mc"])
+
+
+def _reserve_video(body: "VideoGenerateBody", is_m: bool, op_id: str):
+    """Entitlement/limit precheck + credit reservation before Higgsfield submission.
+    Returns (reservation_id, billing_state). Raises HTTPException(402) on CreditError."""
+    from credits import config as credit_config, enforcement, service as credit_service
+    from credits.estimate import influencer_video_estimate
+    from credits.usage import count_operations
+
+    if not credit_config.credit_system_enabled():
+        return "", "not_required"
+    try:
+        enforcement.precheck(body.tenant_id, features=("ai_influencer", "video_generation"),
+                             limit_key="monthly_video_generations",
+                             used=count_operations(body.tenant_id, "influencer_video"))
+        est = influencer_video_estimate(body.tenant_id, duration_seconds=int(body.duration_seconds or 15),
+                                        is_mock=is_m)
+        if is_m and not credit_config.mock_usage_consumes_credits():
+            return "", "not_required"
+        if int(est["max_reservation_mc"]) <= 0:
+            return "", "not_required"
+        rid, _ = credit_service.reserve(
+            body.tenant_id, operation_type="influencer_video", source_product="ai_influencer",
+            source_object_id=body.script_id, max_reserved_mc=int(est["max_reservation_mc"]),
+            estimated_provider_micro_usd=int(est["estimated_provider_micro_usd"]), idempotency_key=op_id)
+        return rid, "reserved"
+    except credit_service.CreditError as exc:
+        raise HTTPException(status_code=exc.http_status, detail=exc.to_detail()) from exc
+
+
+def _release_video_reservation(tenant_id: str, reservation_id: str, *, credit_reason: str) -> None:
+    if not reservation_id:
+        return
+    try:
+        from credits import service as credit_service
+        reason = getattr(credit_service, {
+            "provider_not_configured": "REASON_PROVIDER_NOT_CONFIGURED",
+            "provider_rejected": "REASON_PROVIDER_REJECTED",
+        }.get(credit_reason, "REASON_PROVIDER_REJECTED"))
+        credit_service.release(tenant_id, reservation_id, reason_code=reason)
+    except Exception:
+        pass
+
+
+def _settle_video_reservation(tenant_id: str, video) -> str:
+    """Settle a completed video's reservation once → billing_state. Idempotent."""
+    rid = getattr(video, "reservation_id", "")
+    if not rid:
+        return video.billing_state or "not_required"
+    try:
+        from credits import service as credit_service
+        credit_service.settle(tenant_id, rid, settle_mc=_video_final_mc(tenant_id, video, is_mock=False))
+        return "settled"
+    except Exception:
+        return "reconciliation_required"
 
 
 # --------------------------------------------------------------------------- #
@@ -934,11 +1023,14 @@ def videos_status(video_id: str, tenant_id: str = Query(..., min_length=1)) -> d
         return {"video_id": video_id, "video": updated.model_dump()}
 
     if state in ("failed",):
+        # Unbilled provider failure → release the full hold (once).
+        _release_video_reservation(tenant_id, getattr(video, "reservation_id", ""), credit_reason="provider_rejected")
         _, updated = get_video_repository().update(
             tenant_id, video_id,
             status=VideoStatus.FAILED,
             error=str(st.get("error", "") or "generation failed")[:300],
             progress=0.0,
+            billing_state="released" if getattr(video, "reservation_id", "") else video.billing_state,
         )
         return {"video_id": video_id, "video": updated.model_dump()}
 
@@ -961,15 +1053,21 @@ def videos_status(video_id: str, tenant_id: str = Query(..., min_length=1)) -> d
             )
             storage_url = saved.get("storage_url", "")
         except Exception as exc:  # storage misconfig — surface, don't fake a URL
+            # Provider DELIVERED the video; only our storage failed → settle (do not
+            # refund delivered work) and flag reconciliation.
+            _settle_video_reservation(tenant_id, video)
             _, updated = get_video_repository().update(
                 tenant_id, video_id,
                 status=VideoStatus.FAILED,
                 result_url=source_url,
                 error=("generated but storage failed: " + str(exc))[:300],
                 progress=1.0,
+                billing_state="reconciliation_required" if getattr(video, "reservation_id", "") else video.billing_state,
             )
             return {"video_id": video_id, "video": updated.model_dump()}
 
+    # Completed successfully → settle the reservation once.
+    _bstate = _settle_video_reservation(tenant_id, video)
     _, updated = get_video_repository().update(
         tenant_id, video_id,
         status=VideoStatus.READY,
@@ -979,6 +1077,7 @@ def videos_status(video_id: str, tenant_id: str = Query(..., min_length=1)) -> d
         preview_ref=storage_url or source_url,
         progress=1.0,
         error="",
+        billing_state=_bstate,
     )
     if video.provider_mode == "pixie_managed":
         get_usage_repository().update(tenant_id, video_id, status="completed")

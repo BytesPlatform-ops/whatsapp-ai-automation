@@ -127,6 +127,9 @@ class Video(_Base):
     storage_url: str = ""             # re-hosted, durable URL (Supabase) — what we serve
     progress: float = 0.0             # 0.0..1.0 while generating
     error: str = ""                   # safe error string on failure (no secrets)
+    # --- billing linkage (credit reservation for this generation) ---
+    reservation_id: str = ""          # credit hold placed before provider submission
+    billing_state: str = ""           # not_required | reserved | settled | released | reconciliation_required
 
 
 class QualityCheck(_Base):

@@ -71,6 +71,17 @@ def _entitlement_precheck(tenant_id: str, feature: str, limit_key: str, used: in
                                        "remediation": "upgrade_plan"})
 
 
+def precheck(tenant_id: str, *, features=(), limit_key: str = "", used: int = 0) -> None:
+    """Public entitlement/limit gate for async paths (e.g. video) that reserve
+    manually. No-op unless the credit system is enabled. Raises CreditError (402)."""
+    if not config.credit_system_enabled():
+        return
+    for f in features:
+        _entitlement_precheck(tenant_id, f, "", 0)
+    if limit_key:
+        _entitlement_precheck(tenant_id, "", limit_key, used)
+
+
 @contextmanager
 def enforce(tenant_id: str, *, operation_type: str, source_product: str, source_object_id: str,
             operation_id: str, estimate: dict, feature: str = "", limit_key: str = "", used: int = 0,
