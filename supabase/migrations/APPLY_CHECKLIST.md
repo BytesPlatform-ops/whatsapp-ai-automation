@@ -49,3 +49,22 @@ if code introduces a durable table not present in the migration.
 7. Smoke test: create a content document + an influencer profile, then restart and
    confirm both survive; verify cross-tenant reads return nothing.
 8. Do NOT delete `.pixie_data` until the migrated records are verified in Supabase.
+
+## Credits & billing (`20260725_credits.sql`, Phase 6.1) — NOT applied
+
+Tables: `credit_ledger`, `credit_wallet`, `credit_reservations` (envelope shape;
+indexes + unique `(tenant_id, idempotency_key)` + deny-all RLS). Contract verified by
+`backend/tests/credits/test_durable.py`.
+
+1. Apply `20260725_credits.sql` in the Supabase SQL editor (idempotent).
+2. Import any local file billing data with the existing generic importer — dry-run
+   first, `--on-conflict fail` for money data (financial ambiguity must fail safely):
+   ```
+   PIXIE_DATA_DIR=backend/.pixie_data python scripts/import_file_persistence_to_supabase.py \
+       --only credit_ledger --only credit_wallet --only credit_reservations           # preview
+   ```
+3. Keep enforcement OFF until the tables exist and data is verified:
+   `CREDIT_SYSTEM_ENABLED=false`, `BILLING_ENFORCEMENT_ENABLED=false`.
+4. Only after wallet balances reconcile against the ledger in Supabase, enable
+   `CREDIT_SYSTEM_ENABLED=true`, then separately `BILLING_ENFORCEMENT_ENABLED=true`.
+   Never enable enforcement against non-durable (memory/file) storage.
