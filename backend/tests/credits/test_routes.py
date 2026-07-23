@@ -95,6 +95,25 @@ def test_operation_lookup_by_idempotency_key():
     assert client.get(f"{B}/operations/op-xyz", params={"tenant_id": "ws_B"}).status_code == 404
 
 
+def test_status_entitlements_usage_ledger():
+    service.grant("ws_A", 5000, reason_code="seed", idempotency_key="s")
+    st = client.get(f"{B}/status", params={"tenant_id": "ws_A"}).json()
+    assert st["subscription"]["plan_id"] == "free" and st["subscription"]["past_due"] is False
+    ent = client.get(f"{B}/entitlements", params={"tenant_id": "ws_A"}).json()
+    assert ent["access"]["content_agent"] is True and "monthly_text_generations" in ent["limits"]
+    usage = client.get(f"{B}/usage", params={"tenant_id": "ws_A"}).json()
+    assert "counters" in usage and usage["period"]["fallback"] is True
+    led = client.get(f"{B}/ledger", params={"tenant_id": "ws_A"}).json()
+    assert led["total"] == 1 and led["entries"][0]["entry_type"] == "grant"
+    # ledger never exposes idempotency keys or metadata
+    assert "idempotency_key" not in led["entries"][0] and "metadata" not in led["entries"][0]
+
+
+def test_ledger_tenant_isolated():
+    service.grant("ws_A", 5000, reason_code="s", idempotency_key="a")
+    assert client.get(f"{B}/ledger", params={"tenant_id": "ws_B"}).json()["total"] == 0
+
+
 def test_internal_secret_enforced(monkeypatch):
     monkeypatch.setenv("PIXIE_INTERNAL_API_SECRET", "s3cret")
     assert client.get(f"{B}/config").status_code == 401
