@@ -160,6 +160,27 @@ def test_scheduled_job_appears_in_calendar():
     _create(scheduled_local="2099-01-01T09:00", timezone="America/New_York")
     cal = client.get("/api/publishing/calendar", params={"tenant_id": "ws_A"}).json()
     assert len(cal["events"]) == 1 and cal["events"][0]["timezone"] == "America/New_York"
+    # calendar events carry the timezone-aware execution time + safe status fields
+    ev = cal["events"][0]
+    assert ev["mode"] == "dry_run" and ev["status"] == "scheduled" and ev["content_format"] == "text"
+
+
+def test_calendar_date_range_filters_window():
+    _register_meta("ws_A")
+    _create(scheduled_local="2099-01-15T09:00", timezone="UTC")  # in-window
+    _create(scheduled_local="2099-03-15T09:00", timezone="UTC")  # out-of-window
+    cal = client.get("/api/publishing/calendar", params={
+        "tenant_id": "ws_A", "start": "2099-01-01T00:00:00+00:00", "end": "2099-02-01T00:00:00+00:00"}).json()
+    assert len(cal["events"]) == 1 and cal["events"][0]["scheduled_utc"].startswith("2099-01-15")
+
+
+def test_calendar_hides_cancelled_by_default():
+    _register_meta("ws_A")
+    jid = _create(scheduled_local="2099-01-15T09:00", timezone="UTC").json()["id"]
+    client.post(f"/api/publishing/jobs/{jid}/cancel", json={"tenant_id": "ws_A"})
+    assert client.get("/api/publishing/calendar", params={"tenant_id": "ws_A"}).json()["events"] == []
+    shown = client.get("/api/publishing/calendar", params={"tenant_id": "ws_A", "include_cancelled": "true"}).json()
+    assert len(shown["events"]) == 1 and shown["events"][0]["status"] == "cancelled"
 
 
 # ── recovery: filter jobs by source content ─────────────────────────────────────

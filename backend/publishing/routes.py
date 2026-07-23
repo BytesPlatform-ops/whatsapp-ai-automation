@@ -20,7 +20,6 @@ from security import require_internal
 
 from . import config, connections, service
 from .enums import (
-    DUE_STATUSES,
     TERMINAL_STATUSES,
     ContentFormat,
     Platform,
@@ -116,17 +115,42 @@ def list_jobs(
     return {"tenant_id": tenant_id, "jobs": [_job_out(i, j) for (i, j) in rows]}
 
 
+def _calendar_event(i: str, j) -> dict:
+    return {"id": i, "scheduled_utc": j.scheduled_utc, "local_time": j.local_time, "timezone": j.timezone,
+            "platform": j.platform.value, "status": j.status.value, "source_product": j.source_product.value,
+            "account_id": j.account_id, "mode": j.mode.value, "preview": (j.snapshot.text or "")[:120],
+            "content_format": j.snapshot.content_format.value, "attempt_count": j.attempt_count,
+            "platform_post_id": j.platform_post_id, "platform_permalink": j.platform_permalink,
+            "error_category": j.error_category}
+
+
 @publishing_router.get("/calendar")
-def calendar(tenant_id: str = Query(..., min_length=1)) -> dict:
-    """Scheduled/queued/retry jobs with their execution time — for a calendar view."""
+def calendar(
+    tenant_id: str = Query(..., min_length=1),
+    start: str = Query(default=""),
+    end: str = Query(default=""),
+    include_cancelled: bool = Query(default=False),
+) -> dict:
+    """Publish jobs anchored on their execution time — for a calendar view.
+
+    Anchored on ``scheduled_utc`` so a job sits in the day it runs. ``start``/``end``
+    (UTC ISO) bound the returned window — the UI fetches only the visible range plus a
+    small buffer, never the whole history. Cancelled jobs are hidden unless asked for.
+    """
     rows = query_jobs(tenant_id, sort="scheduled")
-    upcoming = [j for j in rows if j[1].status in DUE_STATUSES or j[1].status == PublishStatus.PUBLISHING]
-    return {"tenant_id": tenant_id, "events": [
-        {"id": i, "scheduled_utc": j.scheduled_utc, "local_time": j.local_time, "timezone": j.timezone,
-         "platform": j.platform.value, "status": j.status.value, "source_product": j.source_product.value,
-         "account_id": j.account_id, "preview": (j.snapshot.text or "")[:120]}
-        for (i, j) in upcoming
-    ]}
+
+    def keep(j) -> bool:
+        if j.status == PublishStatus.CANCELLED and not include_cancelled:
+            return False
+        anchor = j.scheduled_utc or j.created_at
+        if start and anchor and anchor < start:
+            return False
+        if end and anchor and anchor > end:
+            return False
+        return True
+
+    events = [_calendar_event(i, j) for (i, j) in rows if keep(j)]
+    return {"tenant_id": tenant_id, "start": start, "end": end, "events": events}
 
 
 @publishing_router.get("/history")
