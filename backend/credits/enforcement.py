@@ -71,11 +71,29 @@ def _entitlement_precheck(tenant_id: str, feature: str, limit_key: str, used: in
                                        "remediation": "upgrade_plan"})
 
 
+def _past_due_block(tenant_id: str) -> None:
+    """A past-due workspace can't start new paid operations (default grace policy).
+    Only a hard block when enforcement is on."""
+    if not config.billing_enforcement_enabled():
+        return
+    try:
+        from .subscriptions import get_subscription_repository
+        sub = get_subscription_repository().get(tenant_id)
+    except Exception:
+        sub = None
+    if sub and sub.past_due:
+        audit.emit(tenant_id, audit.PAYMENT_FAILED, metadata={"blocked": True, "reason": "past_due"})
+        raise service.CreditError("billing_past_due",
+                                  "Your workspace has a payment issue — resolve billing to continue.", 402,
+                                  {"remediation": "manage_billing"})
+
+
 def precheck(tenant_id: str, *, features=(), limit_key: str = "", used: int = 0) -> None:
     """Public entitlement/limit gate for async paths (e.g. video) that reserve
     manually. No-op unless the credit system is enabled. Raises CreditError (402)."""
     if not config.credit_system_enabled():
         return
+    _past_due_block(tenant_id)
     for f in features:
         _entitlement_precheck(tenant_id, f, "", 0)
     if limit_key:
@@ -95,6 +113,7 @@ def enforce(tenant_id: str, *, operation_type: str, source_product: str, source_
                         required=False, mock=is_mock)
         return
 
+    _past_due_block(tenant_id)
     _entitlement_precheck(tenant_id, feature, limit_key, used)
 
     charge_mock = is_mock and config.mock_usage_consumes_credits()
