@@ -9,7 +9,7 @@ function stateWithGates(gates: Partial<WizardState['gates']>): WizardState {
     gates: { idea: 'approved', script: 'approved', production: 'pending', publish: 'pending', ...gates },
     profile: null, profile_id: null, identity: null, identity_id: null, provider: null,
     ideas: [], approved_idea_id: null, scripts: [], approved_script_id: null, video: null,
-    quality: null, posts: [], metrics: [], learning: null,
+    quality: null, posts: [], publish_job: null, metrics: [], learning: null,
   };
 }
 

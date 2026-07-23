@@ -22,7 +22,7 @@ function stateAt(current: CreatorStage): WizardState {
     gates: { idea: 'pending', script: 'pending', production: 'pending', publish: 'pending' },
     profile: null, profile_id: null, identity: null, identity_id: null, provider: null,
     ideas: [], approved_idea_id: null, scripts: [], approved_script_id: null, video: null,
-    quality: null, posts: [], metrics: [], learning: null,
+    quality: null, posts: [], publish_job: null, metrics: [], learning: null,
   };
 }
 

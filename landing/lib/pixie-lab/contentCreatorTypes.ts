@@ -145,6 +145,30 @@ export interface CostEstimate {
   message?: string;
 }
 
+/** Safe subset of the durable publish job surfaced for Step Posting resume.
+ *  Matches wizard.py::_publish_job_for_video — never a token or raw snapshot. */
+export interface PublishJobRef {
+  id: string;
+  source_product: string;
+  connection_id: string;
+  platform: string;
+  account_id: string;
+  mode: 'dry_run' | 'live';
+  status: string;
+  scheduled_utc: string;
+  local_time: string;
+  timezone: string;
+  attempt_count: number;
+  max_attempts: number;
+  next_retry_utc: string;
+  platform_post_id: string;
+  platform_permalink: string;
+  error_category: string;
+  error_correlation_id: string;
+  created_at: string;
+  updated_at: string;
+}
+
 // ── Wizard aggregate (matches wizard.py::build_wizard_state) ─────────────────
 export interface WizardStageView {
   stage: CreatorStage;
@@ -177,6 +201,7 @@ export interface WizardState {
   video: { id: string; video: Video } | null;
   quality: { id: string; quality: QualityCheck } | null;
   posts: Array<{ id: string; post: CreatorPost }>;
+  publish_job: PublishJobRef | null;
   metrics: unknown[];
   learning: Record<string, unknown> | null;
 }
