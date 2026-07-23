@@ -52,6 +52,39 @@ def _gate_approved(tenant_id: str, gate: ApprovalGate) -> bool:
     return _gate_status(tenant_id, gate) == ApprovalStatus.APPROVED.value
 
 
+_PUBLISH_JOB_FIELDS = (
+    "source_product", "connection_id", "platform", "account_id", "mode", "status",
+    "scheduled_utc", "local_time", "timezone", "attempt_count", "max_attempts",
+    "next_retry_utc", "platform_post_id", "platform_permalink", "error_category",
+    "error_correlation_id", "created_at", "updated_at",
+)
+
+
+def _publish_job_for_video(tenant_id: str, video_id: str) -> Optional[dict]:
+    """Latest AI-Influencer publish job for a video — safe subset for wizard resume.
+
+    Lazy/defensive: the posting stage recovers its durable job (id, destination,
+    schedule, status, attempts, permalink) from this after refresh/restart. Never
+    returns tokens or the raw snapshot."""
+    if not video_id:
+        return None
+    try:
+        from publishing.store import query_jobs
+    except Exception:
+        return None
+    try:
+        rows = query_jobs(tenant_id, source_product="ai_influencer", influencer_video_id=video_id)
+    except Exception:
+        return None
+    if not rows:
+        return None
+    jid, job = rows[0]  # query_jobs sorts newest-first
+    data = job.model_dump()
+    out = {k: data.get(k) for k in _PUBLISH_JOB_FIELDS}
+    out["id"] = jid
+    return out
+
+
 def build_wizard_state(tenant_id: str) -> dict:
     """One-shot, tenant-scoped snapshot the frontend resumes from."""
     profile = get_profile_repository().get_active(tenant_id)
@@ -69,6 +102,11 @@ def build_wizard_state(tenant_id: str) -> dict:
     quality = (
         get_quality_repository().get_by_video(tenant_id, video[0]) if video else None
     )
+
+    # Real durable publish job for the working video (if the Step Posting stage created
+    # one via the publishing engine). Kept defensive + lazy so content_creator never
+    # hard-depends on the publishing module.
+    publish_job = _publish_job_for_video(tenant_id, video[0]) if video else None
 
     approved_ideas = [i for i in ideas if i[1].approval_status == ApprovalStatus.APPROVED]
     approved_scripts = [s for s in scripts if s[1].approval_status == ApprovalStatus.APPROVED]
@@ -88,7 +126,7 @@ def build_wizard_state(tenant_id: str) -> dict:
         PipelineStage.VIDEO_GENERATION.value: video is not None,
         PipelineStage.QUALITY_CHECK.value: quality is not None,
         PipelineStage.PUBLISH_APPROVAL.value: _gate_approved(tenant_id, ApprovalGate.PUBLISH),
-        PipelineStage.POSTING.value: len(posts) > 0,
+        PipelineStage.POSTING.value: len(posts) > 0 or publish_job is not None,
         PipelineStage.ANALYTICS.value: len(metrics) > 0 or learning is not None,
     }
 
@@ -143,6 +181,7 @@ def build_wizard_state(tenant_id: str) -> dict:
         "video": {"id": video[0], "video": video[1].model_dump()} if video else None,
         "quality": {"id": quality[0], "quality": quality[1].model_dump()} if quality else None,
         "posts": [{"id": i, "post": m.model_dump()} for (i, m) in posts],
+        "publish_job": publish_job,
         "metrics": [m.model_dump() for (_i, m) in metrics],
         "learning": learning[1].model_dump() if learning else None,
     }
