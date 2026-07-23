@@ -64,7 +64,7 @@ from receptionist.campaigns.api import router as campaigns_router
 from receptionist.onboarding.api import router as onboarding_router
 from content_creator.router import router as content_creator_router
 from content_agent.routes import router as content_agent_router
-from credits.routes import billing_router
+from credits.routes import billing_router, stripe_webhook_router
 from publishing.routes import publishing_router, social_router
 from schemas import Request, Site, UsageEvent
 from seo.router import router as seo_router
@@ -128,6 +128,7 @@ app.include_router(content_agent_router)  # /api/content-agent — General Conte
 app.include_router(social_router)  # /api/social — connected publishing destinations + capabilities
 app.include_router(publishing_router)  # /api/publishing — publish jobs, calendar, history (dry-run default)
 app.include_router(billing_router)  # /api/billing — wallet, reservations, estimates (credit system OFF by default)
+app.include_router(stripe_webhook_router)  # /api/billing/webhook — Stripe events (public; signature-verified)
 app.include_router(channels_router)  # /api/channels — agent/channel readiness for the dashboard
 app.include_router(feed_router)  # /api/feed — Pixie Lab proactive recommendation feed
 app.include_router(entitlements_router)  # /api/entitlements — agent trial/purchase gating
