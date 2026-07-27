@@ -5,6 +5,8 @@
  * preserve workspace/document/job context across navigation.
  */
 
+import { billingRoutes } from './billingRoutes';
+
 const CONTENT = '/pixie-lab/content';
 
 export const contentRoutes = {
@@ -25,8 +27,8 @@ export const contentRoutes = {
   mediaLibrary: () => `${CONTENT}/library`,
   fullService: () => `${CONTENT}/full-service`,
   influencer: () => '/pixie-lab/content-creator',
-  billing: () => '/pixie-lab/billing',
-  billingCenter: () => '/pixie-lab/billing/center',
+  billing: () => billingRoutes.overview(),
+  billingCenter: () => billingRoutes.center(),
 } as const;
 
 export type ContentRouteKey = keyof typeof contentRoutes;

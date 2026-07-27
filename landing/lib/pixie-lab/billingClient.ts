@@ -297,27 +297,53 @@ async function call<T>(
 
 // ── exports ───────────────────────────────────────────────────────────────────
 
+// ── optional product/agent filter ─────────────────────────────────────────────
+// Callers may pass `product` (the stable billing product id, e.g. 'content_agent')
+// or `agent` (an agent slug that maps to a product) — both are forwarded as the
+// `product` query param.  The backend validates and silently normalises unknowns.
+
+export type ProductFilter = { product?: string; agent?: string };
+
+/** Merge a ProductFilter into a single `product` query param (product wins). */
+function resolveProductParam(f?: ProductFilter): string | undefined {
+  return f?.product || f?.agent || undefined;
+}
+
 export const getBillingConfig = (signal?: AbortSignal) =>
   call<BillingConfig>('GET', '/config', { signal });
 
-export const getBillingStatus = (signal?: AbortSignal) =>
-  call<BillingStatus>('GET', '/status', { signal });
+export const getBillingStatus = (filter?: ProductFilter, signal?: AbortSignal) =>
+  call<BillingStatus>('GET', '/status', {
+    params: { product: resolveProductParam(filter) },
+    signal,
+  });
 
 export const getWallet = (signal?: AbortSignal) =>
   call<WalletResponse>('GET', '/wallet', { signal });
 
-export const getEntitlements = (signal?: AbortSignal) =>
-  call<EntitlementsResponse>('GET', '/entitlements', { signal });
+export const getEntitlements = (filter?: ProductFilter, signal?: AbortSignal) =>
+  call<EntitlementsResponse>('GET', '/entitlements', {
+    params: { product: resolveProductParam(filter) },
+    signal,
+  });
 
-export const getUsage = (signal?: AbortSignal) =>
-  call<UsageResponse>('GET', '/usage', { signal });
+export const getUsage = (filter?: ProductFilter, signal?: AbortSignal) =>
+  call<UsageResponse>('GET', '/usage', {
+    params: { product: resolveProductParam(filter) },
+    signal,
+  });
 
 export const getLedger = (
-  q: { limit?: number; offset?: number; type?: string } = {},
+  q: { limit?: number; offset?: number; type?: string; product?: string; agent?: string } = {},
   signal?: AbortSignal,
 ) =>
   call<LedgerResponse>('GET', '/ledger', {
-    params: { limit: q.limit, offset: q.offset, type: q.type },
+    params: {
+      limit: q.limit,
+      offset: q.offset,
+      type: q.type,
+      product: q.product || q.agent || undefined,
+    },
     signal,
   });
 

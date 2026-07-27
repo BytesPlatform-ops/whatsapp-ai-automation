@@ -53,10 +53,10 @@ export function useBilling(): BillingState {
 
     const [configRes, statusRes, walletRes, entRes, usageRes] = await Promise.all([
       getBillingConfig(ctrl.signal),
-      getBillingStatus(ctrl.signal),
+      getBillingStatus(undefined, ctrl.signal),
       getWallet(ctrl.signal),
-      getEntitlements(ctrl.signal),
-      getUsage(ctrl.signal),
+      getEntitlements(undefined, ctrl.signal),
+      getUsage(undefined, ctrl.signal),
     ]).catch((e) => {
       // AbortError: component unmounted — silently bail
       if ((e as Error)?.name === 'AbortError') return null;
