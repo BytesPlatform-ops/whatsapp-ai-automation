@@ -46,29 +46,36 @@ export function useCreditEstimate(req: EstimateRequest | null): CreditEstimateRe
 
     (async () => {
       setLoading(true);
-      // 1. Check whether the credit system is enabled. Default path: disabled →
-      //    show stays false and we never issue an estimate request.
-      const configResult = await getBillingConfig(ac.signal);
-      if (!alive || ac.signal.aborted) return;
+      try {
+        // 1. Check whether the credit system is enabled. Default path: disabled →
+        //    show stays false and we never issue an estimate request.
+        const configResult = await getBillingConfig(ac.signal);
+        if (!alive || ac.signal.aborted) return;
 
-      if (!configResult.ok || !configResult.data.credit_system_enabled) {
-        setShow(false);
-        setEstimate(null);
+        if (!configResult.ok || !configResult.data.credit_system_enabled) {
+          setShow(false);
+          setEstimate(null);
+          setLoading(false);
+          return;
+        }
+
+        setShow(true);
+
+        // 2. Fetch the estimate (best-effort; errors are swallowed — billing UI is
+        //    never blocking).
+        const estimateResult = await postEstimate(req);
+        if (!alive || ac.signal.aborted) return;
+
+        if (estimateResult.ok) {
+          setEstimate(estimateResult.data);
+        }
         setLoading(false);
-        return;
+      } catch (e) {
+        // The request was aborted (req changed / component unmounted) — that's
+        // expected teardown, not an error. `call()` re-throws AbortError so it can
+        // reach here; swallow it. Anything still mounted just stops loading.
+        if ((e as Error)?.name !== 'AbortError' && alive) setLoading(false);
       }
-
-      setShow(true);
-
-      // 2. Fetch the estimate (best-effort; errors are swallowed — billing UI is
-      //    never blocking).
-      const estimateResult = await postEstimate(req);
-      if (!alive || ac.signal.aborted) return;
-
-      if (estimateResult.ok) {
-        setEstimate(estimateResult.data);
-      }
-      setLoading(false);
     })();
 
     return () => {
