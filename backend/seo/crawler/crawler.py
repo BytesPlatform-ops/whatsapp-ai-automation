@@ -116,8 +116,17 @@ def _count_words(text: str) -> int:
     return len(text.split())
 
 
+_OUT_LINKS_CAP: int = 500  # max outbound link targets stored per page
+
+
 def _extract_page_meta(html_text: str, url: str) -> dict:
-    """Extract SEO fields from HTML; returns a flat dict of page metadata."""
+    """Extract SEO fields from HTML; returns a flat dict of page metadata.
+
+    The returned dict includes ``out_links`` — a deduplicated, capped list of
+    normalized same-domain outbound link target URLs.  This list is stored in
+    ``extra["out_links"]`` by the caller and lets the post-processing layer
+    reconstruct the full internal-link graph without re-fetching pages.
+    """
     try:
         parsed = html_to_page(html_text, url)
     except Exception:
@@ -142,6 +151,28 @@ def _extract_page_meta(html_text: str, url: str) -> dict:
         elif "nofollow" in robots_lower:
             indexability = "nofollow"
 
+    # Build the deduplicated set of normalized same-domain outbound link targets.
+    # We use the page's own URL as the base for resolution and same_domain check.
+    seen_out: set = set()
+    out_links_ordered: list = []
+    for lnk in links:
+        if not isinstance(lnk, dict):
+            continue
+        href = (lnk.get("href") or "").strip()
+        if not href:
+            continue
+        normalized = normalize_url(url, href)
+        if normalized is None:
+            continue
+        if not same_domain(url, normalized):
+            continue
+        if normalized in seen_out:
+            continue
+        seen_out.add(normalized)
+        out_links_ordered.append(normalized)
+        if len(out_links_ordered) >= _OUT_LINKS_CAP:
+            break
+
     # Count internal outbound links (those without explicit internal=False)
     internal_links_out = sum(
         1 for lnk in links
@@ -157,6 +188,7 @@ def _extract_page_meta(html_text: str, url: str) -> dict:
         "indexability": indexability,
         "internal_links_out": internal_links_out,
         "content": content,
+        "out_links": out_links_ordered,
     }
 
 
@@ -408,6 +440,12 @@ def run_crawl(
                 meta_fields = _extract_page_meta(html_text, url)
             except Exception as exc:
                 logger.debug("run_crawl: meta extraction error %s: %s", url, exc)
+
+        # Persist the same-domain outbound link targets in extra["out_links"].
+        # This allows post-processing to reconstruct the link graph.
+        out_links = meta_fields.get("out_links")
+        if out_links:
+            extra["out_links"] = out_links
 
         # Persist CrawledPage (even for non-HTML — record the fetch)
         page = CrawledPage(
