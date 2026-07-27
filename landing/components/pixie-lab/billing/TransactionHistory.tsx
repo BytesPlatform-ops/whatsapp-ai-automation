@@ -101,13 +101,19 @@ function EntryRow({ entry }: { entry: LedgerEntry }) {
   );
 }
 
+interface TransactionHistoryProps {
+  /** Optional product filter — only show ledger entries attributed to this product. */
+  product?: string;
+}
+
 /**
  * TransactionHistory — paginated ledger table. Loads the current page from the
  * /ledger endpoint; prev/next navigate via limit+offset. Shows human-readable
  * entry types, signed credit amounts and reservation relationships.
  * Does NOT render raw metadata fields.
+ * When `product` is provided, the ledger endpoint is called with that filter.
  */
-export function TransactionHistory() {
+export function TransactionHistory({ product }: TransactionHistoryProps = {}) {
   const [offset, setOffset] = useState(0);
   const [entries, setEntries] = useState<LedgerEntry[]>([]);
   const [total, setTotal] = useState(0);
@@ -117,7 +123,7 @@ export function TransactionHistory() {
   const loadPage = useCallback(async (pageOffset: number) => {
     setLoading(true);
     setError('');
-    const r = await getLedger({ limit: PAGE_SIZE, offset: pageOffset });
+    const r = await getLedger({ limit: PAGE_SIZE, offset: pageOffset, product });
     if (!r.ok) {
       setError(r.error.message);
     } else {
@@ -125,7 +131,10 @@ export function TransactionHistory() {
       setTotal(r.data.total);
     }
     setLoading(false);
-  }, []);
+  }, [product]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Reset to page 0 when the product filter changes
+  useEffect(() => { setOffset(0); }, [product]);
 
   useEffect(() => {
     loadPage(offset);

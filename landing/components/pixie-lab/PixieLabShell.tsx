@@ -5,6 +5,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname, useRouter } from 'next/navigation';
 import { CONTENT_NAV, isContentRoute, activeContentHref } from '@/lib/pixie-lab/contentRoutes';
+import { billingRoutes, isBillingRoute } from '@/lib/pixie-lab/billingRoutes';
 import {
   Sparkles, LayoutGrid, LayoutDashboard, Globe, Headset, Search, Megaphone, Clapperboard,
   Lock, ChevronDown, LogOut, Menu, X, ShieldCheck, Activity, CreditCard, type LucideIcon,
@@ -192,7 +193,7 @@ export function PixieLabShell({
         <p className="px-3 pb-1 pt-2 text-[10px] font-bold uppercase tracking-wider text-[var(--pl-text-muted)]">Workspace</p>
         <NavItem href="/pixie-lab/approvals" icon={ShieldCheck} label="Approvals" active={pathname === '/pixie-lab/approvals'} />
         <NavItem href="/pixie-lab/activity" icon={Activity} label="Activity" active={pathname === '/pixie-lab/activity'} />
-        <NavItem href="/pixie-lab/billing/center" icon={CreditCard} label="Billing" active={pathname.startsWith('/pixie-lab/billing/center')} />
+        <NavItem href={billingRoutes.overview()} icon={CreditCard} label="Billing" active={isBillingRoute(pathname)} />
       </div>
 
       <button onClick={signOut} className="m-3 flex items-center gap-2 rounded-xl border border-[var(--pl-border)] bg-[var(--pl-surface-soft)] px-3 py-2 text-sm font-medium text-[var(--pl-text-muted)] transition hover:text-[var(--pl-text)] hover:border-[var(--pl-border-strong)]">

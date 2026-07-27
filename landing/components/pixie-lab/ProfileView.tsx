@@ -6,6 +6,7 @@ import {
   User, Settings, KeyRound, CreditCard, Building2, Bell, LifeBuoy, Check, Loader2,
   Mail, ShieldCheck, Save, type LucideIcon,
 } from 'lucide-react';
+import { billingRoutes } from '@/lib/pixie-lab/billingRoutes';
 import { createClient, supabaseConfigured } from '@/lib/supabase/client';
 
 /**
@@ -45,7 +46,7 @@ export function ProfileView({ name, email, tenant, role }: { name: string; email
       <Section id="billing" icon={CreditCard} title="Billing / Plan" subtitle="Your current plan and usage.">
         <div className="flex flex-col gap-3 rounded-2xl border border-[var(--pl-border)] bg-[var(--pl-surface-soft)] p-4 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-[13.5px] text-[var(--pl-text-soft)]">Manage your plan, invoices and payment method on the billing page.</p>
-          <a href="/pixie-lab/billing" className="inline-flex items-center justify-center rounded-xl bg-gradient-to-r from-[#22C55E] to-[#0EA5A3] px-4 py-2.5 text-[13.5px] font-bold text-white transition hover:brightness-110">Open billing</a>
+          <a href={billingRoutes.overview()} className="inline-flex items-center justify-center rounded-xl bg-gradient-to-r from-[#22C55E] to-[#0EA5A3] px-4 py-2.5 text-[13.5px] font-bold text-white transition hover:brightness-110">Open billing</a>
         </div>
       </Section>
 

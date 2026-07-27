@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   ChevronDown, User, Settings, KeyRound, CreditCard, Building2, Bell, LifeBuoy, LogOut, type LucideIcon,
 } from 'lucide-react';
+import { billingRoutes } from '@/lib/pixie-lab/billingRoutes';
 
 /** ProfileMenu — the top-right avatar dropdown. Initials avatar + chevron; a
  *  menu of account/workspace links (all inside Pixie Lab) + sign out. */
@@ -14,7 +15,7 @@ const ITEMS: { label: string; href: string; icon: LucideIcon }[] = [
   { label: 'View Profile', href: '/pixie-lab/profile', icon: User },
   { label: 'Account Settings', href: '/pixie-lab/settings', icon: Settings },
   { label: 'Change Password', href: '/pixie-lab/security', icon: KeyRound },
-  { label: 'Billing / Plan', href: '/pixie-lab/billing', icon: CreditCard },
+  { label: 'Billing / Plan', href: billingRoutes.overview(), icon: CreditCard },
   { label: 'Workspace Settings', href: '/pixie-lab/workspace-settings', icon: Building2 },
   { label: 'Notifications', href: '/pixie-lab/notifications', icon: Bell },
   { label: 'Help / Support', href: '/pixie-lab/support', icon: LifeBuoy },

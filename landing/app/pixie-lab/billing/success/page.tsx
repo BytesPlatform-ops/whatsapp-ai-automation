@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { CheckCircle2 } from 'lucide-react';
 import { PageContainer, PageHeader, BackToDashboard } from '@/components/pixie-lab/PageKit';
+import { billingRoutes } from '@/lib/pixie-lab/billingRoutes';
 
 export const metadata: Metadata = { title: 'Subscription active — Pixie Lab', robots: { index: false, follow: false } };
 export const dynamic = 'force-dynamic';
@@ -19,7 +20,7 @@ export default function BillingSuccessPage() {
           Thanks! Your plan is being confirmed — it&apos;ll appear on your billing page in a moment.
         </p>
         <div className="mt-6 flex justify-center gap-3">
-          <Link href="/pixie-lab/billing" className="inline-flex items-center rounded-xl bg-gradient-to-r from-[#22C55E] to-[#0EA5A3] px-4 py-2.5 text-[13.5px] font-bold text-white transition hover:brightness-110">View billing</Link>
+          <Link href={billingRoutes.overview()} className="inline-flex items-center rounded-xl bg-gradient-to-r from-[#22C55E] to-[#0EA5A3] px-4 py-2.5 text-[13.5px] font-bold text-white transition hover:brightness-110">View billing</Link>
           <BackToDashboard />
         </div>
       </div>
