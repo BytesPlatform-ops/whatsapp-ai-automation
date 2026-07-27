@@ -1,11 +1,13 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { Search, Loader2, Zap, Copy, Check, Globe } from 'lucide-react';
+import { Search, Loader2, Zap, Copy, Check, Globe, PlayCircle } from 'lucide-react';
+import Link from 'next/link';
 import { seoApi } from '@/lib/pixie-lab/servicesClient';
 import type { SeoAuditResult, SeoIssue } from '@/lib/pixie-lab/serviceTypes';
 import { Ring } from './Ring';
 import { EmptyState, OfflineState, ErrorState } from '@/components/pixie-lab/services/ServiceStates';
+import { seoRoutes } from '@/lib/pixie-lab/seoRoutes';
 
 const ACCENT = '#14B8A6';
 
@@ -64,7 +66,62 @@ function IssueRow({ issue, onPrepare, prepared }: { issue: SeoIssue; onPrepare: 
   );
 }
 
-export function SeoAuditPanel({ initialUrl, auditId }: { initialUrl?: string; auditId?: string }) {
+/** Multi-page crawl card — shown when a siteId is in scope so the user can kick
+ *  off a full-site crawl without leaving the audit page. */
+function MultiPageCrawlCard({ siteId }: { siteId: string }) {
+  const [busy, setBusy] = useState(false);
+  const [started, setStarted] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  async function start() {
+    setBusy(true); setErr(null);
+    const d = await seoApi.startCrawl({ site_id: siteId, crawl_type: 'site' });
+    setBusy(false);
+    if (d.backendUp && d.job_id) {
+      setStarted(true);
+    } else {
+      setErr(d.error ?? 'Failed to start crawl. Please try again.');
+    }
+  }
+
+  if (started) {
+    return (
+      <div className="flex items-center gap-3 rounded-2xl border border-[var(--pl-border)] bg-[var(--pl-surface)] p-4">
+        <span className="grid h-9 w-9 flex-none place-items-center rounded-xl" style={{ background: `${ACCENT}1a`, color: ACCENT }}>
+          <PlayCircle size={18} />
+        </span>
+        <div className="flex-1">
+          <p className="font-display text-[14px] font-bold text-[var(--pl-text)]">Crawl started</p>
+          <p className="text-[12.5px] text-[var(--pl-text-muted)]">Track progress in Crawl Jobs.</p>
+        </div>
+        <Link href={seoRoutes.crawls({ site_id: siteId })} className="rounded-lg px-3 py-1.5 text-[12.5px] font-bold text-[#02120f]" style={{ background: ACCENT }}>
+          View
+        </Link>
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-2xl border border-[var(--pl-border)] bg-[var(--pl-surface)] p-4">
+      <p className="mb-1 text-[11px] font-bold uppercase tracking-wider text-[var(--pl-text-muted)]">Multi-page crawl</p>
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-[13px] text-[var(--pl-text-soft)]">Start a full-site crawl for deeper analysis — discovers all pages, scores your site, and lists every technical issue.</p>
+        <button
+          onClick={start}
+          disabled={busy}
+          className="inline-flex flex-none items-center gap-1.5 rounded-xl px-4 py-2 text-[13px] font-bold text-[#02120f] disabled:opacity-60"
+          style={{ background: ACCENT }}
+        >
+          {busy ? <Loader2 size={14} className="animate-spin" /> : <PlayCircle size={14} />}
+          {busy ? 'Starting…' : 'Start crawl'}
+        </button>
+      </div>
+      {err && <p className="mt-2 text-[12px] text-amber-500">{err}</p>}
+    </div>
+  );
+}
+
+export function SeoAuditPanel({ initialUrl, auditId, siteId }: { initialUrl?: string; auditId?: string; siteId?: string }) {
   const [url, setUrl] = useState(initialUrl || '');
   const [pagespeed, setPagespeed] = useState(false);
   const [status, setStatus] = useState<'idle' | 'loading' | 'done' | 'error' | 'offline'>('idle');
@@ -108,9 +165,15 @@ export function SeoAuditPanel({ initialUrl, auditId }: { initialUrl?: string; au
   const shown = tab === 'quick' ? quickWins : issues;
 
   return (
-    <div className="mt-6">
-      {/* input card */}
+    <div className="mt-6 space-y-5">
+      {/* Multi-page crawl shortcut (only shown when a siteId is in context) */}
+      {siteId && (
+        <MultiPageCrawlCard siteId={siteId} />
+      )}
+
+      {/* Single-URL audit card */}
       <div className="rounded-2xl border border-[var(--pl-border)] bg-[var(--pl-surface)] p-5 shadow-[var(--pl-shadow-sm)]">
+        <p className="mb-3 text-[11px] font-bold uppercase tracking-wider text-[var(--pl-text-muted)]">Single-URL audit</p>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
           <div className="flex flex-1 items-center gap-2 rounded-xl border border-[var(--pl-border)] bg-[var(--pl-surface-soft)] px-3.5 py-2.5 focus-within:border-[var(--pl-border-strong)]">
             <Globe size={16} className="text-[var(--pl-text-muted)]" />
@@ -140,6 +203,7 @@ export function SeoAuditPanel({ initialUrl, auditId }: { initialUrl?: string; au
 
       {/* results */}
       <div className="mt-5">
+
         {status === 'idle' && (
           <EmptyState title="Audit any website" body="Enter a URL to get a platform-aware technical SEO audit — score, issues, and one-tap fixes." />
         )}

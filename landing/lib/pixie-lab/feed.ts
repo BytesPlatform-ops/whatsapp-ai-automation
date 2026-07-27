@@ -125,18 +125,8 @@ export const MOCK_FEED: FeedCard[] = [
     outcome: 'A reel ready to film.',
     actions: [A('a1', 'Approve', 'approve'), A('a2', 'Preview', 'preview'), A('a3', 'Edit', 'edit')],
   },
-  {
-    id: 'c_seo_meta',
-    heading: 'Add missing meta titles',
-    full_idea: '4 of your pages are missing meta titles, so Google shows a guessed snippet. Pixie wrote optimized ones.',
-    reason: 'Missing meta titles lower click-through from search results.',
-    category: 'website_seo',
-    priority: 'medium',
-    primary_agent: 'seo',
-    source_signals: ['seo.pages_missing_meta = 4'],
-    outcome: 'Better search click-through.',
-    actions: [A('a1', 'Preview', 'preview'), A('a2', 'Apply fixes', 'do_this', true), A('a3', 'Skip', 'skip')],
-  },
+  // Note: the SEO feed card (c_seo_meta) was removed — SEO insights now come
+  // from real crawl data via the SEO agent workspace (/pixie-lab/seo).
   {
     id: 'c_content_plan',
     heading: 'Plan this week’s content',
@@ -296,8 +286,8 @@ export const UPSELL_COPY: Record<FeedAgent, { teaser: string; does: string; outc
     outcome: 'Never miss a lead again.',
   },
   seo: {
-    teaser: 'Pixie can boost search traffic',
-    does: 'Audits your site, fixes meta and technical issues, and finds keyword opportunities.',
+    teaser: 'Pixie can audit your site',
+    does: 'Crawls your site, identifies technical SEO issues, scores pages, and prepares fixes.',
     outcome: 'Get found on Google.',
   },
   marketing: {

@@ -6,44 +6,95 @@ import { ServiceTabs } from '@/components/pixie-lab/services/ServiceTabs';
 import { SeoAuditPanel } from './SeoAuditPanel';
 import { SeoHistoryPanel } from './SeoHistoryPanel';
 import { SeoConnectionsPanel } from './SeoConnectionsPanel';
+import { SeoOverviewPanel } from './SeoOverviewPanel';
+import { SeoSitesPanel } from './SeoSitesPanel';
+import { SeoCrawlsPanel } from './SeoCrawlsPanel';
+import { SeoIssuesPanel } from './SeoIssuesPanel';
+import { SeoPagesPanel } from './SeoPagesPanel';
+import { SeoReportsPanel } from './SeoReportsPanel';
+import { SEO_NAV } from '@/lib/pixie-lab/seoRoutes';
 
 const ACCENT = '#14B8A6';
-const TABS = [
-  { label: 'Overview', href: '/pixie-lab/seo' },
-  { label: 'Audit', href: '/pixie-lab/seo/audit' },
-  { label: 'History', href: '/pixie-lab/seo/history' },
-  { label: 'Connections', href: '/pixie-lab/seo/connections' },
-];
 
-type SeoTab = 'audit' | 'history' | 'connections';
+export type SeoTab =
+  | 'overview'
+  | 'sites'
+  | 'audit'
+  | 'crawls'
+  | 'issues'
+  | 'pages'
+  | 'history'
+  | 'connections'
+  | 'reports';
+
+const TAB_TITLE: Record<SeoTab, string> = {
+  overview: 'SEO Overview',
+  sites: 'Sites',
+  audit: 'New Audit',
+  crawls: 'Crawl Jobs',
+  issues: 'Technical Issues',
+  pages: 'Pages',
+  history: 'Audit History',
+  connections: 'Platform Connections',
+  reports: 'Reports',
+};
+
+interface WorkspaceProps {
+  tab: SeoTab;
+  tenant: string;
+  // Audit params
+  initialUrl?: string;
+  auditId?: string;
+  // Crawls / issues / pages / reports params
+  siteId?: string;
+  crawlJobId?: string;
+  severity?: string;
+}
 
 /**
- * SeoWorkspace — real SEO agent tools inside the Pixie Lab shell. Header + tab
- * nav (Overview links back to the agent dashboard) + the entitlement gate, then
- * the tool panel for the active tab. All data flows through the workspace-scoped
- * /api/lab/seo/* proxies.
+ * SeoWorkspace — the unified SEO agent workspace inside Pixie Lab. All 9 SEO
+ * sub-pages share this shell: header + horizontally-scrollable ServiceTabs +
+ * entitlement gate + the active panel. Deep-links work via the page.tsx server
+ * components passing the correct `tab` and optional filter props.
  */
-export function SeoWorkspace({ tab, tenant, initialUrl, auditId }: { tab: SeoTab; tenant: string; initialUrl?: string; auditId?: string }) {
+export function SeoWorkspace({
+  tab,
+  tenant,
+  initialUrl,
+  auditId,
+  siteId,
+  crawlJobId,
+  severity,
+}: WorkspaceProps) {
   return (
     <ServiceGate agent="seo" tenant={tenant}>
       <main className="mx-auto w-full max-w-4xl px-[clamp(20px,4vw,52px)] py-9 text-[var(--pl-text)]">
         <div className="flex items-center gap-3">
-          <span className="grid h-11 w-11 place-items-center rounded-2xl border border-[var(--pl-border)]" style={{ background: `${ACCENT}1a`, color: ACCENT }}>
+          <span
+            className="grid h-11 w-11 place-items-center rounded-2xl border border-[var(--pl-border)]"
+            style={{ background: `${ACCENT}1a`, color: ACCENT }}
+          >
             <Search size={20} />
           </span>
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[var(--pl-text-muted)]">SEO Agent</p>
             <h1 className="font-display text-[clamp(1.5rem,3vw,2rem)] font-extrabold leading-tight tracking-tight">
-              {tab === 'audit' ? 'Site Audit' : tab === 'history' ? 'Audit History' : 'Platform Connections'}
+              {TAB_TITLE[tab]}
             </h1>
           </div>
         </div>
 
-        <ServiceTabs tabs={TABS} accent={ACCENT} />
+        <ServiceTabs tabs={SEO_NAV} accent={ACCENT} />
 
-        {tab === 'audit' && <SeoAuditPanel initialUrl={initialUrl} auditId={auditId} />}
+        {tab === 'overview' && <SeoOverviewPanel tenant={tenant} />}
+        {tab === 'sites' && <SeoSitesPanel />}
+        {tab === 'audit' && <SeoAuditPanel initialUrl={initialUrl} auditId={auditId} siteId={siteId} />}
+        {tab === 'crawls' && <SeoCrawlsPanel initialSiteId={siteId} />}
+        {tab === 'issues' && <SeoIssuesPanel initialCrawlJobId={crawlJobId} initialSiteId={siteId} initialSeverity={severity} />}
+        {tab === 'pages' && <SeoPagesPanel initialCrawlJobId={crawlJobId} />}
         {tab === 'history' && <SeoHistoryPanel />}
         {tab === 'connections' && <SeoConnectionsPanel />}
+        {tab === 'reports' && <SeoReportsPanel initialSiteId={siteId} initialCrawlJobId={crawlJobId} />}
       </main>
     </ServiceGate>
   );

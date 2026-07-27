@@ -1,8 +1,8 @@
 import type { Metadata } from 'next';
+import { tenantForMembership } from '@/lib/pixie-lab/backend';
 import { SeoWorkspace } from '@/components/pixie-lab/seo/SeoWorkspace';
 import { AccessRestricted } from '@/components/pixie-lab/PageKit';
 import { guardPermission } from '@/lib/workspace';
-import { tenantForMembership } from '@/lib/pixie-lab/backend';
 
 export const metadata: Metadata = { title: 'SEO Connections — Pixie Lab', robots: { index: false, follow: false } };
 export const dynamic = 'force-dynamic';
