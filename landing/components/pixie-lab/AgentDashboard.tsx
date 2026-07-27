@@ -14,6 +14,7 @@ import {
   type FeedAgent, type FeedCard as FeedCardType, type FeedCardAction,
 } from '@/lib/pixie-lab/feed';
 import { contentRoutes } from '@/lib/pixie-lab/contentRoutes';
+import { seoRoutes } from '@/lib/pixie-lab/seoRoutes';
 
 /**
  * AgentDashboard — reusable per-agent workspace: header (agent + status + open),
@@ -46,9 +47,12 @@ const SERVICE_TOOLS: Record<string, { label: string; href: string }[]> = {
     { label: 'Knowledge', href: '/pixie-lab/receptionist/knowledge' },
   ],
   seo: [
-    { label: 'Run audit', href: '/pixie-lab/seo/audit' },
-    { label: 'History', href: '/pixie-lab/seo/history' },
-    { label: 'Connections', href: '/pixie-lab/seo/connections' },
+    { label: 'Sites', href: seoRoutes.sites() },
+    { label: 'Crawl Jobs', href: seoRoutes.crawls() },
+    { label: 'Technical Issues', href: seoRoutes.issues() },
+    { label: 'New Audit', href: seoRoutes.audit() },
+    { label: 'Reports', href: seoRoutes.reports() },
+    { label: 'Connections', href: seoRoutes.connections() },
   ],
   marketing: [
     { label: 'Meta Ads', href: '/pixie-lab/marketing/ads' },

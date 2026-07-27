@@ -5,6 +5,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname, useRouter } from 'next/navigation';
 import { CONTENT_NAV, isContentRoute, activeContentHref } from '@/lib/pixie-lab/contentRoutes';
+import { SEO_NAV, isSeoRoute, activeSeoHref } from '@/lib/pixie-lab/seoRoutes';
 import { billingRoutes, isBillingRoute } from '@/lib/pixie-lab/billingRoutes';
 import {
   Sparkles, LayoutGrid, LayoutDashboard, Globe, Headset, Search, Megaphone, Clapperboard,
@@ -47,11 +48,7 @@ const SERVICE_SUBNAV: Partial<Record<FeedAgent, { label: string; href: string }[
     { label: 'Integrations', href: '/pixie-lab/receptionist/integrations' },
     { label: 'Knowledge', href: '/pixie-lab/receptionist/knowledge' },
   ],
-  seo: [
-    { label: 'Audit', href: '/pixie-lab/seo/audit' },
-    { label: 'History', href: '/pixie-lab/seo/history' },
-    { label: 'Connections', href: '/pixie-lab/seo/connections' },
-  ],
+  seo: SEO_NAV,
   marketing: [
     { label: 'Brand Brain', href: '/pixie-lab/marketing/brand-brain' },
     { label: 'Ideas', href: '/pixie-lab/marketing/ideas' },
@@ -129,13 +126,19 @@ export function PixieLabShell({
           const base = `/pixie-lab/${agent}`;
           const active = pathname === base;
           // Content spans two route roots (/content and /content-creator).
+          // SEO uses longest-prefix matching via activeSeoHref (9 sub-pages).
           const inSection = agent === 'content'
             ? isContentRoute(pathname)
-            : pathname === base || pathname.startsWith(`${base}/`);
+            : agent === 'seo'
+              ? isSeoRoute(pathname)
+              : pathname === base || pathname.startsWith(`${base}/`);
           const subnav = SERVICE_SUBNAV[agent];
-          // Longest-prefix active child for Content (nested detail → correct parent);
-          // exact match for other services' flat sub-lists.
-          const activeSub = agent === 'content' ? activeContentHref(pathname) : '';
+          // Longest-prefix active child for Content and SEO; exact match for other flat lists.
+          const activeSub = agent === 'content'
+            ? activeContentHref(pathname)
+            : agent === 'seo'
+              ? activeSeoHref(pathname)
+              : '';
           return (
             <div key={agent}>
               <Link
@@ -164,7 +167,7 @@ export function PixieLabShell({
               {subnav && inSection && st !== 'locked' && (
                 <div className="mb-1 ml-[26px] mt-0.5 max-h-[50vh] space-y-0.5 overflow-y-auto border-l border-[var(--pl-border)] pl-2.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                   {subnav.map((s) => {
-                    const subActive = agent === 'content' ? s.href === activeSub : pathname === s.href;
+                    const subActive = (agent === 'content' || agent === 'seo') ? s.href === activeSub : pathname === s.href;
                     return (
                       <Link
                         key={s.href}
