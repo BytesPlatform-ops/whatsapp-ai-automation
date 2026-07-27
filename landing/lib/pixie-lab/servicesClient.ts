@@ -8,6 +8,7 @@
  */
 import type {
   SeoAuditResult, SeoConnectionPlatform, SeoHistoryAudit,
+  SeoDurableSite, SeoCrawlJob, SeoCrawledPageSummary, SeoCrawlIssue, SeoCrawlReport,
   MetaStatus, MetaInboxItem, MetaContentItem,
   MetaAdAccount, MetaCampaign, MetaAdInsights, MetaDiagnostics, MetaAdsAnalysis, BrandBrain,
   ContentIdea, IdeaGenerateResult, CalendarItem, CalendarResult,
@@ -33,6 +34,7 @@ function post<T>(url: string, body: Record<string, unknown>) {
 
 /* ------------------------------ SEO ------------------------------ */
 export const seoApi = {
+  // ── Existing audit-mode endpoints ──────────────────────────────────────────
   runAudit: (website_url: string, opts?: { crawl_limit?: number; include_pagespeed?: boolean }) =>
     post<SeoAuditResult>('/api/lab/seo/audit', { website_url, ...opts }),
   getAudit: (audit_id: string) =>
@@ -47,6 +49,113 @@ export const seoApi = {
     post<{ status: string }>('/api/lab/seo/connections', { kind: 'disconnect', platform }),
   prepareFix: (audit_id: string, issue_id: string, new_value?: string) =>
     post<{ status: string; approval_id?: string; copy_text?: string; message?: string }>('/api/lab/seo/optimize', { mode: 'prepare', audit_id, issue_id, new_value }),
+
+  // ── Durable pipeline: Sites ────────────────────────────────────────────────
+  /** List all registered sites for the workspace. */
+  listSites: () =>
+    req<{ sites: SeoDurableSite[] }>('/api/lab/seo/sites'),
+
+  /** Create a new site. */
+  createSite: (p: {
+    domain: string;
+    canonical_base_url?: string;
+    display_name?: string;
+    country?: string;
+    language?: string;
+    crawl_limit?: number;
+    crawl_frequency?: string;
+    robots_policy?: string;
+    sitemap_urls?: string[];
+    included_paths?: string[];
+    excluded_paths?: string[];
+  }) => post<{ site: SeoDurableSite }>('/api/lab/seo/sites', p),
+
+  /** Get a single site by ID. */
+  getSite: (site_id: string) =>
+    req<{ site: SeoDurableSite }>(`/api/lab/seo/sites/${encodeURIComponent(site_id)}`),
+
+  /** Edit crawl settings for a site. */
+  patchSite: (site_id: string, patch: Partial<Pick<SeoDurableSite,
+    'crawl_limit' | 'crawl_frequency' | 'country' | 'language' | 'target_location' |
+    'included_paths' | 'excluded_paths' | 'sitemap_urls' | 'robots_policy' |
+    'display_name' | 'canonical_base_url'
+  >>) =>
+    req<{ site: SeoDurableSite }>(`/api/lab/seo/sites/${encodeURIComponent(site_id)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(patch),
+    }),
+
+  /** Delete / archive a site. */
+  deleteSite: (site_id: string) =>
+    req<{ deleted: string }>(`/api/lab/seo/sites/${encodeURIComponent(site_id)}`, { method: 'DELETE' }),
+
+  // ── Durable pipeline: Crawls ───────────────────────────────────────────────
+  /** List crawl jobs, optionally filtered by site. */
+  listCrawls: (site_id?: string) =>
+    req<{ jobs: SeoCrawlJob[] }>(`/api/lab/seo/crawl${site_id ? `?site_id=${encodeURIComponent(site_id)}` : ''}`),
+
+  /** Start a new crawl. The server clamps requested_limit server-side. */
+  startCrawl: (p: { site_id: string; url?: string; crawl_type?: 'site' | 'single'; requested_limit?: number }) =>
+    post<{ job_id: string; status: string; requested_limit: number; crawl_type: string; site_id: string }>(
+      '/api/lab/seo/crawl',
+      p,
+    ),
+
+  /** Poll the status of a crawl job. */
+  getCrawlJob: (job_id: string) =>
+    req<{ job: SeoCrawlJob }>(`/api/lab/seo/crawl/${encodeURIComponent(job_id)}`),
+
+  /** Cancel a running or queued crawl job. */
+  cancelCrawl: (job_id: string) =>
+    post<{ cancelled: string }>(`/api/lab/seo/crawl/${encodeURIComponent(job_id)}?action=cancel`, {}),
+
+  /** Retry a failed or cancelled crawl job. */
+  retryCrawl: (job_id: string) =>
+    post<{ retried: string }>(`/api/lab/seo/crawl/${encodeURIComponent(job_id)}?action=retry`, {}),
+
+  // ── Durable pipeline: Pages ────────────────────────────────────────────────
+  /** List crawled pages for a job with pagination. */
+  listPages: (crawl_job_id: string, opts?: { limit?: number; offset?: number }) => {
+    const params = new URLSearchParams({ crawl_job_id });
+    if (opts?.limit != null) params.set('limit', String(opts.limit));
+    if (opts?.offset != null) params.set('offset', String(opts.offset));
+    return req<{ total: number; limit: number; offset: number; pages: SeoCrawledPageSummary[] }>(
+      `/api/lab/seo/pages?${params}`,
+    );
+  },
+
+  // ── Durable pipeline: Issues ───────────────────────────────────────────────
+  /** List SEO issues with optional filters. */
+  listIssues: (filters?: {
+    crawl_job_id?: string;
+    site_id?: string;
+    severity?: string;
+    status?: string;
+    category?: string;
+  }) => {
+    const params = new URLSearchParams();
+    if (filters?.crawl_job_id) params.set('crawl_job_id', filters.crawl_job_id);
+    if (filters?.site_id) params.set('site_id', filters.site_id);
+    if (filters?.severity) params.set('severity', filters.severity);
+    if (filters?.status) params.set('status', filters.status);
+    if (filters?.category) params.set('category', filters.category);
+    const qs = params.toString();
+    return req<{ issues: SeoCrawlIssue[] }>(`/api/lab/seo/issues${qs ? `?${qs}` : ''}`);
+  },
+
+  /** Mark an issue as resolved. */
+  resolveIssue: (issue_id: string) =>
+    post<{ issue: SeoCrawlIssue }>(`/api/lab/seo/issues/${encodeURIComponent(issue_id)}`, {}),
+
+  // ── Durable pipeline: Reports ──────────────────────────────────────────────
+  /** Latest report for a site (pass site_id) or report for a crawl job (pass crawl_job_id). */
+  getReport: (opts: { site_id?: string; crawl_job_id?: string }) => {
+    const params = new URLSearchParams();
+    if (opts.site_id) params.set('site_id', opts.site_id);
+    if (opts.crawl_job_id) params.set('crawl_job_id', opts.crawl_job_id);
+    return req<{ report: SeoCrawlReport | null }>(`/api/lab/seo/reports?${params}`);
+  },
 };
 
 /* ------------------------------ Meta / Marketing ------------------------------ */

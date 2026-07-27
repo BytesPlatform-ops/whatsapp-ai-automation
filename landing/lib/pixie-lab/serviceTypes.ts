@@ -11,6 +11,109 @@ export type SeoFixMode = 'auto_fix' | 'approval_required' | 'copy_ready' | 'manu
 export type SeoSeverity = 'critical' | 'high' | 'medium' | 'low' | 'info';
 export type SeoDifficulty = 'easy' | 'medium' | 'hard';
 
+// ── Durable pipeline types ──────────────────────────────────────────────────
+
+export type SeoCrawlStatus = 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
+export type SeoCrawlType = 'site' | 'single';
+export type SeoIssueStatus = 'open' | 'resolved' | 'ignored';
+export type SeoConnectionStatus = 'pending' | 'connected' | 'disconnected' | 'error';
+export type SeoRobotsPolicy = 'respect' | 'ignore';
+
+/** A registered site in the durable SEO pipeline. */
+export interface SeoDurableSite {
+  id: string;
+  tenant_id?: string;
+  domain: string;
+  canonical_base_url?: string;
+  display_name?: string;
+  connection_status?: SeoConnectionStatus;
+  country?: string;
+  language?: string;
+  target_location?: string;
+  crawl_limit?: number;
+  crawl_frequency?: string;
+  robots_policy?: SeoRobotsPolicy;
+  sitemap_urls?: string[];
+  included_paths?: string[];
+  excluded_paths?: string[];
+  created_at?: string;
+  updated_at?: string;
+}
+
+/** A crawl job returned by the durable pipeline. */
+export interface SeoCrawlJob {
+  id: string;
+  tenant_id?: string;
+  site_id: string;
+  status: SeoCrawlStatus;
+  crawl_type: SeoCrawlType;
+  requested_limit?: number;
+  discovered_count?: number;
+  crawled_count?: number;
+  failed_count?: number;
+  queued_at?: string;
+  started_at?: string;
+  finished_at?: string;
+  cancelled_at?: string;
+  error_category?: string;
+  retry_count?: number;
+  progress?: number;
+  config_snapshot?: Record<string, unknown>;
+}
+
+/** Summary of a crawled page (heavy fields like raw HTML are excluded). */
+export interface SeoCrawledPageSummary {
+  id: string;
+  site_id: string;
+  crawl_job_id: string;
+  url: string;
+  normalized_url?: string;
+  status_code?: number;
+  content_type?: string;
+  canonical?: string;
+  title?: string;
+  meta_description?: string;
+  h1?: string;
+  word_count?: number;
+  indexability?: string;
+  internal_links_in?: number;
+  internal_links_out?: number;
+  response_time_ms?: number;
+  page_size_bytes?: number;
+  crawled_at?: string;
+}
+
+/** A durable SEO issue from a crawl job (distinct from the audit-mode SeoIssue). */
+export interface SeoCrawlIssue {
+  id: string;
+  site_id: string;
+  crawl_job_id: string;
+  page_id?: string;
+  rule_key: string;
+  category?: string;
+  severity?: SeoSeverity;
+  status?: SeoIssueStatus;
+  evidence?: Record<string, unknown>;
+  recommendation?: string;
+  fix_mode?: string;
+  rule_version?: string;
+  first_detected_at?: string;
+  last_detected_at?: string;
+  resolved_at?: string;
+}
+
+/** A site-wide SEO report produced after a completed crawl. */
+export interface SeoCrawlReport {
+  id: string;
+  site_id: string;
+  crawl_job_id: string;
+  score: number;
+  category_scores?: Record<string, number>;
+  issue_counts?: Record<string, number>;
+  created_at?: string;
+  export_metadata?: Record<string, unknown>;
+}
+
 export interface SeoIssue {
   id: string;
   audit_id?: string;
