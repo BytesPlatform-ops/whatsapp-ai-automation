@@ -13,6 +13,7 @@ import {
   feedForAgent, AGENT_META,
   type FeedAgent, type FeedCard as FeedCardType, type FeedCardAction,
 } from '@/lib/pixie-lab/feed';
+import { contentRoutes } from '@/lib/pixie-lab/contentRoutes';
 
 /**
  * AgentDashboard — reusable per-agent workspace: header (agent + status + open),
@@ -57,8 +58,8 @@ const SERVICE_TOOLS: Record<string, { label: string; href: string }[]> = {
     { label: 'Approvals', href: '/pixie-lab/marketing/approvals' },
   ],
   content: [
-    { label: 'Create', href: '/pixie-lab/content/create' },
-    { label: 'Library', href: '/pixie-lab/content/library' },
+    { label: 'Content Agent', href: contentRoutes.agent() },
+    { label: 'Generated Content', href: contentRoutes.generated() },
   ],
 };
 
