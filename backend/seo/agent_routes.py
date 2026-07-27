@@ -14,6 +14,7 @@ from . import website_connections as wc
 from .agent_schemas import AuditStartBody, ConnectTokenBody, ConnectWordPressBody, OptimizePrepareBody
 from .httpx_fetch import fetch_full
 from .platform_detector import detect_platform
+from .url_guard import UrlRejected
 
 router = APIRouter(prefix="/api/agents/seo", tags=["seo-agent"])
 
@@ -46,6 +47,13 @@ def platform_detect(url: str = Query(...)) -> dict:
     u = url if url.startswith(("http://", "https://")) else "https://" + url
     try:
         fetched = fetch_full(u)
+    except UrlRejected as exc:
+        # Return a structured 400 with only the safe category — never the
+        # resolved IP or any internal topology detail.
+        raise HTTPException(
+            status_code=400,
+            detail={"error": "unsafe_url", "reason": exc.reason},
+        ) from exc
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"fetch failed: {exc}") from exc
     return detect_platform(fetched["html"], fetched["headers"], fetched["final_url"])

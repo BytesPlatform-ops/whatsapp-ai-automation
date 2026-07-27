@@ -1,29 +1,46 @@
-"""Working HTTP fetch for the SEO agent (httpx + certifi).
+"""Working HTTP fetch for the SEO agent — hardened via url_guard.
 
-The legacy `seo/mode_external/fetch.py` uses urllib, which fails TLS verification
-on some Python builds. This httpx fetcher is used by the audit agent + platform
-detector so real public pages fetch reliably. `audit_url` accepts an injected
-fetcher, so the entire existing audit engine is reused unchanged.
+The ``fetch_full`` function delegates to ``url_guard.safe_fetch`` which:
+  - validates the URL (scheme, no credentials, port whitelist, SSRF check)
+  - resolves DNS and rejects hostnames that point to private IPs
+  - handles redirects manually and re-validates each target
+  - caps the body at 2 MB and enforces timeouts
+
+The legacy ``seo/mode_external/fetch.py`` uses urllib and is kept for
+the deprecated ``/api/seo/audit-url`` path only.  New code must use
+``fetch_full`` from this module (or ``url_guard.safe_fetch`` directly).
+
+Return shape is unchanged so existing callers and monkeypatches continue
+to work:
+    {"html": str, "headers": dict, "final_url": str, "status": int}
 """
 
 from __future__ import annotations
 
-import httpx
-
-_UA = "PixieSEO/1.0 (+https://pixie.app)"
+from seo.url_guard import UrlRejected, safe_fetch  # noqa: F401 — re-export for convenience
 
 
 def fetch_full(url: str, timeout: float = 20.0) -> dict:
-    """Fetch a page: returns {html, headers, final_url, status}. Raises httpx errors."""
-    with httpx.Client(timeout=timeout, follow_redirects=True,
-                      headers={"User-Agent": _UA, "Accept": "text/html,*/*"}) as http:
-        r = http.get(url)
-        return {
-            "html": r.text,
-            "headers": {k.lower(): v for k, v in r.headers.items()},
-            "final_url": str(r.url),
-            "status": r.status_code,
-        }
+    """Fetch a page via the hardened url_guard.safe_fetch.
+
+    Returns ``{"html": str, "headers": dict, "final_url": str, "status": int}``.
+
+    Raises ``UrlRejected`` when the URL or a redirect target violates the
+    SSRF policy, or on content-type / size violations.  Raises
+    ``httpx.HTTPError`` / ``OSError`` for genuine network failures.
+
+    The ``timeout`` parameter is forwarded to ``safe_fetch`` as
+    ``timeout_s``.  The ``require_html=True`` flag ensures the final
+    response is HTML (text/html or application/xhtml+xml), consistent
+    with the purpose of this fetcher (HTML SEO analysis).
+    """
+    result = safe_fetch(url, timeout_s=timeout, require_html=True)
+    return {
+        "html": result["text"],
+        "headers": result["headers"],
+        "final_url": result["final_url"],
+        "status": result["status"],
+    }
 
 
 def html_fetcher(cached_html: str):
