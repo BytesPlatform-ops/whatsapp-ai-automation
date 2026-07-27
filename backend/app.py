@@ -169,6 +169,89 @@ async def _content_config_startup() -> None:
 
     start_worker()
 
+    # SEO crawl sweeper — re-claims stale/queued crawl jobs after a restart.
+    # Skipped under pytest (PYTEST_CURRENT_TEST is set by pytest itself) and
+    # when SEO_SWEEPER_DISABLED=1 so integration tests stay hermetic.
+    _start_seo_sweeper()
+
+
+def _start_seo_sweeper() -> None:
+    """Start a lightweight background sweeper that re-claims stale SEO crawl jobs.
+
+    The sweeper is a daemon thread that wakes every SEO_SWEEPER_INTERVAL_S
+    seconds (default 60), finds any queued or stale-running jobs, and calls
+    poll_once to re-process them.  This ensures jobs survive a process restart.
+
+    Guards
+    ------
+    - Not started under pytest: PYTEST_CURRENT_TEST env var is set by pytest.
+    - Not started when SEO_SWEEPER_DISABLED=1 (set in tests or staging).
+    - Never logs secrets; only logs job counts and worker IDs.
+    """
+    import os
+    import threading
+    import time
+    import uuid as _uuid
+    import logging as _logging
+
+    _logger = _logging.getLogger("seo.sweeper")
+
+    # Safety guards — do NOT run under pytest or when explicitly disabled.
+    if os.getenv("PYTEST_CURRENT_TEST"):
+        return
+    if os.getenv("SEO_SWEEPER_DISABLED", "").strip().lower() in ("1", "true", "yes"):
+        return
+
+    interval_s = int(os.getenv("SEO_SWEEPER_INTERVAL_S", "60"))
+
+    def _sweep():
+        from seo.crawler.worker import poll_once
+        from seo.stores import get_crawl_job_repository, CrawlStatus
+
+        worker_id = f"sweeper-{_uuid.uuid4().hex[:8]}"
+        _logger.info("seo.sweeper: started (interval=%ds worker=%s)", interval_s, worker_id)
+
+        while True:
+            try:
+                time.sleep(interval_s)
+                # Find all tenants with pending/stale jobs and re-process them.
+                # In memory mode the repo is a flat dict; in supabase mode the
+                # sweeper just tries every known tenant from the job list.
+                repo = get_crawl_job_repository()
+                # Collect unique tenant_ids from all stored jobs.
+                try:
+                    # Access the raw rows from the underlying persistence layer.
+                    # This works for memory/file backends; supabase would expose
+                    # the same interface.  The sweeper is best-effort — if the
+                    # repo doesn't expose a cross-tenant scan we skip.
+                    all_rows = repo._repo.list_all() if hasattr(repo._repo, "list_all") else []
+                except Exception:
+                    all_rows = []
+
+                tenants_seen: set = set()
+                for row in all_rows:
+                    tid = (row.get("data") or {}).get("tenant_id") or row.get("tenant_id")
+                    status = (row.get("data") or {}).get("status", "")
+                    if tid and status in (CrawlStatus.QUEUED.value, CrawlStatus.RUNNING.value):
+                        tenants_seen.add(tid)
+
+                for tenant_id in tenants_seen:
+                    try:
+                        processed = poll_once(worker_id, tenant_id)
+                        if processed:
+                            _logger.info(
+                                "seo.sweeper: recovered job for tenant=%s", tenant_id
+                            )
+                    except Exception as exc:
+                        _logger.warning(
+                            "seo.sweeper: error processing tenant=%s: %s", tenant_id, exc
+                        )
+            except Exception as exc:
+                _logger.warning("seo.sweeper: sweep cycle error: %s", exc)
+
+    t = threading.Thread(target=_sweep, daemon=True, name="seo-sweeper")
+    t.start()
+
 
 @app.get("/health")
 async def health() -> dict:
