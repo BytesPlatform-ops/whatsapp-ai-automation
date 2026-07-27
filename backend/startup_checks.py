@@ -9,6 +9,10 @@ refuses to boot on in-memory persistence — which silently loses Content Creato
 pipeline state on restart. Off by default, so tests and local dev keep using
 memory without ceremony. This keeps persistence mode independent of AI mock mode:
 mock generation ($0) can still run on durable persistence.
+
+Guardrail: set ``PIXIE_REQUIRE_INTERNAL_SECRET=1`` (do this in production) so the
+process refuses to boot without ``PIXIE_INTERNAL_API_SECRET`` set. When the flag is
+OFF (the default) the check is a no-op so tests and local dev work without a secret.
 """
 
 from __future__ import annotations
@@ -23,11 +27,28 @@ log = logging.getLogger("pixie.startup")
 
 
 class StartupConfigError(RuntimeError):
-    """Raised at boot when required durable persistence is not configured."""
+    """Raised at boot when required configuration is not correctly set."""
 
 
 def _truthy(name: str) -> bool:
     return os.getenv(name, "").strip().lower() in ("1", "true", "yes", "on")
+
+
+def validate_internal_secret() -> None:
+    """Fail fast when PIXIE_REQUIRE_INTERNAL_SECRET is set but no secret is configured.
+
+    When the flag is OFF (tests / local dev) this is a no-op.  NEVER logs the
+    secret value — only its presence is checked.
+    """
+    if not _truthy("PIXIE_REQUIRE_INTERNAL_SECRET"):
+        return
+    secret = os.getenv("PIXIE_INTERNAL_API_SECRET", "").strip()
+    if not secret:
+        raise StartupConfigError(
+            "PIXIE_REQUIRE_INTERNAL_SECRET is set but PIXIE_INTERNAL_API_SECRET is "
+            "empty or unset. Set PIXIE_INTERNAL_API_SECRET to a strong random value "
+            "so the backend only accepts requests from the trusted Next.js proxy."
+        )
 
 
 def content_config_summary() -> dict:
@@ -65,6 +86,7 @@ def validate_content_config() -> dict:
 
 def log_content_config() -> dict:
     """Validate + emit the boot summary (secret-free). Called once at app startup."""
+    validate_internal_secret()
     s = validate_content_config()
     log.info(
         "[content] persistence=%s durable=%s ai_mock=%s dry_run_posting=%s "

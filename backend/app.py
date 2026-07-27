@@ -80,7 +80,6 @@ app = FastAPI(title="Pixie Backend", version="0.2.0")
 # no-op, so local dev works without it; SET IT IN PRODUCTION.
 from starlette.responses import JSONResponse  # noqa: E402
 
-_INTERNAL_SECRET = os.getenv("PIXIE_INTERNAL_API_SECRET", "").strip()
 _PUBLIC_PATHS = {
     "/", "/health", "/docs", "/openapi.json", "/redoc",
     "/api/meta/connect/start", "/api/meta/connect/callback", "/api/meta/webhooks",
@@ -94,8 +93,11 @@ def _is_public(path: str) -> bool:
 
 @app.middleware("http")
 async def _require_internal_secret(request, call_next):
-    if _INTERNAL_SECRET and not _is_public(request.url.path):
-        if request.headers.get("x-pixie-internal-secret", "") != _INTERNAL_SECRET:
+    # Read the secret live (not captured at import) so tests can toggle it per-case
+    # via monkeypatch.setenv and the value is always current. NEVER log its value.
+    _secret = os.getenv("PIXIE_INTERNAL_API_SECRET", "").strip()
+    if _secret and not _is_public(request.url.path):
+        if request.headers.get("x-pixie-internal-secret", "") != _secret:
             return JSONResponse({"detail": "unauthorized: missing/invalid internal secret"}, status_code=401)
     response = await call_next(request)
     # Flag the deprecated in-memory SEO API (Mode A/B). The durable product API is
