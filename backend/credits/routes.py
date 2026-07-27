@@ -15,8 +15,9 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from security import require_internal
 
-from . import config, estimate as est, plans, stripe, usage as usage_mod
+from . import config, estimate as est, plans, products as products_mod, stripe, usage as usage_mod
 from .ledger import get_ledger_repository
+from .products import validate_product
 from .reservations import get_reservation_repository
 from .subscriptions import get_subscription_repository
 from .wallet import project
@@ -128,9 +129,13 @@ def reconcile_status() -> dict:
 
 # ── subscription status / entitlements / usage / ledger ─────────────────────────
 @billing_router.get("/status")
-def status(tenant_id: str = Query(..., min_length=1)) -> dict:
+def status(tenant_id: str = Query(..., min_length=1),
+           product: str = Query(default="")) -> dict:
+    """Subscription status + plan. ``product`` is accepted for symmetry but ignored —
+    subscription state is always workspace-level."""
     sub = get_subscription_repository().get(tenant_id)
     plan = plans.plan_for_workspace(tenant_id)
+    canonical_product = validate_product(product)
     subscription = {
         "status": sub.status if sub else "inactive",
         "plan_id": plan.id,
@@ -138,37 +143,104 @@ def status(tenant_id: str = Query(..., min_length=1)) -> dict:
         "current_period_end": sub.current_period_end if sub else "",
         "past_due": bool(sub.past_due) if sub else False,
     }
-    return {"tenant_id": tenant_id, "subscription": subscription, "plan": plans.plan_summary(plan)}
+    result: dict = {"tenant_id": tenant_id, "subscription": subscription, "plan": plans.plan_summary(plan)}
+    if canonical_product:
+        result["product"] = canonical_product
+    return result
 
 
 @billing_router.get("/entitlements")
-def entitlements(tenant_id: str = Query(..., min_length=1)) -> dict:
+def entitlements(tenant_id: str = Query(..., min_length=1),
+                 product: str = Query(default="")) -> dict:
+    """Plan entitlements.  When ``product`` is a valid product id, also returns the
+    product-specific access flag and limits that apply to that agent."""
     plan = plans.plan_for_workspace(tenant_id)
-    return {"tenant_id": tenant_id, "plan": {"id": plan.id, "name": plan.name},
-            "access": dict(plan.access), "limits": dict(plan.limits)}
+    canonical_product = validate_product(product)
+    result: dict = {
+        "tenant_id": tenant_id,
+        "plan": {"id": plan.id, "name": plan.name},
+        "access": dict(plan.access),
+        "limits": dict(plan.limits),
+    }
+    if canonical_product:
+        spec = products_mod.get_product(canonical_product)
+        product_access: Optional[bool] = None
+        if spec and spec.access_key:
+            product_access = bool(plan.access.get(spec.access_key, False))
+        result["product"] = canonical_product
+        result["product_access"] = product_access   # None = no dedicated flag in plans
+    return result
 
 
 @billing_router.get("/usage")
-def usage(tenant_id: str = Query(..., min_length=1)) -> dict:
-    return {"tenant_id": tenant_id, **usage_mod.usage_summary(tenant_id)}
+def usage(tenant_id: str = Query(..., min_length=1),
+          product: str = Query(default="")) -> dict:
+    """Usage counters.  When ``product`` is a valid product id, only the counters
+    attributable to that product are returned; invalid/missing product → all counters."""
+    canonical_product = validate_product(product)
+    summary = usage_mod.usage_summary(tenant_id)
+    if canonical_product:
+        allowed_keys = products_mod.counter_keys_for_product(canonical_product) or []
+        summary["counters"] = [c for c in summary.get("counters", [])
+                               if c.get("key") in allowed_keys]
+        summary["product"] = canonical_product
+    return {"tenant_id": tenant_id, **summary}
 
 
 _LEDGER_SAFE = ("entry_type", "amount_mc", "reserved_delta_mc", "reason_code", "reference_type",
                 "reference_id", "reservation_id", "original_txn_id", "created_at")
 
 
+def _ledger_product_for_entry(e) -> Optional[str]:
+    """Best-effort: derive the product for a ledger entry from its reference_type or
+    reason_code.  Uses the products registry so no product string is hard-coded here."""
+    ref = getattr(e, "reference_type", "") or ""
+    if ref:
+        by_src = products_mod.attribute_by_source_product(ref)
+        if by_src:
+            return by_src
+        by_op = products_mod.attribute_by_operation(ref)
+        if by_op:
+            return by_op
+    reason = getattr(e, "reason_code", "") or ""
+    if reason:
+        by_op = products_mod.attribute_by_operation(reason)
+        if by_op:
+            return by_op
+    return None
+
+
 @billing_router.get("/ledger")
 def ledger(tenant_id: str = Query(..., min_length=1),
            type: str = Query(default=""),
+           product: str = Query(default=""),
            limit: int = Query(default=50, ge=1, le=200),
            offset: int = Query(default=0, ge=0)) -> dict:
-    rows = [(i, e) for (i, e) in get_ledger_repository().list(tenant_id)
-            if e and (not type or e.entry_type == type)]
+    """Credit ledger.  Optional ``type`` filter (entry_type) and optional ``product``
+    filter (product id).  Unknown ``product`` values silently fall back to all entries."""
+    canonical_product = validate_product(product)
+    all_rows = [(i, e) for (i, e) in get_ledger_repository().list(tenant_id) if e]
+
+    def _matches(e) -> bool:
+        if type and e.entry_type != type:
+            return False
+        if canonical_product:
+            ep = _ledger_product_for_entry(e)
+            if ep != canonical_product:
+                return False
+        return True
+
+    rows = [(i, e) for (i, e) in all_rows if _matches(e)]
     rows.sort(key=lambda x: x[1].created_at, reverse=True)
     total = len(rows)
     page = rows[offset:offset + limit]
-    entries = [{"id": i, **{k: getattr(e, k) for k in _LEDGER_SAFE}} for (i, e) in page]
-    return {"tenant_id": tenant_id, "total": total, "limit": limit, "offset": offset, "entries": entries}
+    entries = [{"id": i, "product": _ledger_product_for_entry(e),
+                **{k: getattr(e, k) for k in _LEDGER_SAFE}} for (i, e) in page]
+    result: dict = {"tenant_id": tenant_id, "total": total, "limit": limit, "offset": offset,
+                    "entries": entries}
+    if canonical_product:
+        result["product"] = canonical_product
+    return result
 
 
 # ── checkout / portal ───────────────────────────────────────────────────────────
