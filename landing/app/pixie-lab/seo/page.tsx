@@ -1,6 +1,5 @@
 import type { Metadata } from 'next';
-import { createClient } from '@/lib/supabase/server';
-import { tenantForUser } from '@/lib/supabase/auth';
+import { tenantForMembership } from '@/lib/pixie-lab/backend';
 import { ServiceView } from '@/components/pixie-lab/ServiceView';
 import { AccessRestricted } from '@/components/pixie-lab/PageKit';
 import { guardPermission } from '@/lib/workspace';
@@ -8,17 +7,13 @@ import { guardPermission } from '@/lib/workspace';
 export const metadata: Metadata = { title: 'Seo — Pixie Lab', robots: { index: false, follow: false } };
 export const dynamic = 'force-dynamic';
 
-function configured() {
-  return Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
-}
-
 export default async function SeoPage() {
   const guard = await guardPermission('seo.view');
   if (!guard.ok) return <AccessRestricted what="Seo" />;
 
-  let user = null;
-  if (configured()) {
-    try { user = (await createClient().auth.getUser()).data.user; } catch { user = null; }
-  }
-  return <ServiceView agent="seo" tenant={tenantForUser(user)} nowMs={Date.now()} />;
+  // Use the workspace-scoped tenant (ws_<workspaceId>) so the overview page,
+  // entitlements, feed, and SEO tools all operate on the same tenant namespace.
+  // Previously this used tenantForUser (t_<userId>) which mismatched the tools.
+  const tenant = tenantForMembership(guard.membership);
+  return <ServiceView agent="seo" tenant={tenant} nowMs={Date.now()} />;
 }

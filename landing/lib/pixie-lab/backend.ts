@@ -108,11 +108,21 @@ export interface BackendResult<T = unknown> {
   data: T | null;
 }
 
+/**
+ * Headers sent on every server→FastAPI request: internal secret + trusted
+ * tenant. Both are server-side only. The tenant header (X-Pixie-Tenant) is the
+ * authoritative source the backend uses; the body/query tenant_id is a
+ * backwards-compat fallback for dev/test environments without the header.
+ */
+export function tenantHeaders(tenant: string): Record<string, string> {
+  return { 'X-Pixie-Tenant': tenant, ...internalHeaders() };
+}
+
 /** GET a backend JSON endpoint with a timeout + graceful degrade. */
 export async function backendGet<T = unknown>(path: string, tenant: string, params?: Record<string, string | number | boolean | undefined>, ms = 6000): Promise<BackendResult<T>> {
   const { signal, done } = withTimeout(ms);
   try {
-    const res = await fetch(backendUrl(path, tenant, params), { signal, cache: 'no-store', headers: { Accept: 'application/json', ...internalHeaders() } });
+    const res = await fetch(backendUrl(path, tenant, params), { signal, cache: 'no-store', headers: { Accept: 'application/json', ...tenantHeaders(tenant) } });
     const data = res.ok ? ((await res.json().catch(() => null)) as T) : null;
     return { backendUp: res.ok, status: res.status, data };
   } catch {
@@ -131,7 +141,7 @@ export async function backendSend<T = unknown>(method: 'POST' | 'DELETE' | 'PUT'
       method,
       signal,
       cache: 'no-store',
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json', ...internalHeaders() },
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json', ...tenantHeaders(tenant) },
       body: JSON.stringify({ ...body, tenant_id: tenant, now: new Date().toISOString() }),
     });
     // Only surface the backend payload on success — a 4xx/5xx body may carry
@@ -168,7 +178,7 @@ export async function backendForward(
 ): Promise<BackendForward> {
   const { signal, done } = withTimeout(ms);
   try {
-    const headers: Record<string, string> = { Accept: 'application/json', ...internalHeaders() };
+    const headers: Record<string, string> = { Accept: 'application/json', ...tenantHeaders(tenant) };
     const init: RequestInit = { method, signal, cache: 'no-store', headers };
     if (method !== 'GET') {
       headers['Content-Type'] = 'application/json';
