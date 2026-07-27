@@ -6,7 +6,7 @@ import os
 import time
 import urllib.parse
 import urllib.request
-from typing import List
+from typing import Dict, List, Optional, Tuple
 
 from seo.schemas import Severity
 
@@ -21,37 +21,103 @@ CLS_POOR = 0.25
 INP_GOOD_MS = 200
 INP_POOR_MS = 500
 
+# FCP thresholds (ms)
+FCP_GOOD_MS = 1800
+FCP_POOR_MS = 3000
 
-def _hash_ints(url: str, count: int = 6) -> List[int]:
+# TBT thresholds (ms)
+TBT_GOOD_MS = 200
+TBT_POOR_MS = 600
+
+VALID_STRATEGIES = ("mobile", "desktop")
+
+
+def _hash_ints(url: str, count: int = 8) -> List[int]:
     """Deterministic, evenly-distributed ints derived from sha1(url)."""
     digest = hashlib.sha1((url or "").encode("utf-8")).digest()
     # Use disjoint byte windows so each metric is independent but stable.
     return [digest[i % len(digest)] for i in range(count)]
 
 
+def _cwv_to_full_dict(cwv: "CoreWebVitals", *, strategy: str, mock: bool, request_ts: str) -> dict:
+    """Map a CoreWebVitals object to the documented CWV output envelope.
+
+    Fields stored in CrawledPage.extra["pagespeed"][strategy]:
+      performance_score, lcp_ms, cls, inp_ms, fcp_ms, tbt_ms,
+      opportunities, diagnostics, provider, provider_status,
+      request_timestamp, mock, field_data_available.
+
+    Rules:
+    - When mock=True → mark mock:true, field_data_available:false,
+      and DO NOT present synthetic field values as real. The metrics
+      stored are clearly synthetic (sha1-derived) for display only.
+    - When provider unavailable → status:"provider_unavailable" marker.
+    """
+    fcp_ms = getattr(cwv, "fcp_ms", 0) or 0
+    tbt_ms = getattr(cwv, "tbt_ms", 0) or 0
+    opportunities = getattr(cwv, "opportunities", []) or []
+    diagnostics = getattr(cwv, "diagnostics", []) or []
+
+    provider_status = "ok"
+    if "unavailable" in (cwv.provider or ""):
+        provider_status = "provider_unavailable"
+    elif "fallback" in (cwv.provider or ""):
+        provider_status = "degraded_fallback"
+
+    return {
+        "strategy": strategy,
+        "performance_score": cwv.performance_score,
+        "lcp_ms": cwv.lcp_ms,
+        "cls": cwv.cls,
+        "inp_ms": cwv.inp_ms,
+        "fcp_ms": fcp_ms,
+        "tbt_ms": tbt_ms,
+        "opportunities": opportunities,
+        "diagnostics": diagnostics,
+        "provider": cwv.provider,
+        "provider_status": provider_status,
+        "request_timestamp": request_ts,
+        "latency_ms": cwv.latency_ms,
+        "cache_hit": cwv.cache_hit,
+        "mock": mock,
+        # When mock, synthetic numbers are clearly not real field data.
+        "field_data_available": not mock,
+    }
+
+
 class PageSpeedProvider:
     """Abstract provider returning CoreWebVitals for a url."""
 
     name = "abstract"
+    is_mock: bool = True
 
-    def fetch(self, url: str) -> CoreWebVitals:  # pragma: no cover - abstract
+    def fetch(self, url: str, strategy: str = "mobile") -> CoreWebVitals:  # pragma: no cover
         raise NotImplementedError
 
 
 class MockPageSpeedProvider(PageSpeedProvider):
-    """Deterministic CWV derived from sha1(url). No network, no randomness."""
+    """Deterministic CWV derived from sha1(url). No network, no randomness.
+
+    Clearly synthetic: mock=True, field_data_available=False. Metrics are
+    sha1-derived for determinism — they must NOT be presented as real field data.
+    """
 
     name = "mock"
+    is_mock: bool = True
 
-    def fetch(self, url: str) -> CoreWebVitals:
-        b = _hash_ints(url, 6)
+    def fetch(self, url: str, strategy: str = "mobile") -> CoreWebVitals:
+        # Include strategy in hash so mobile != desktop deterministically.
+        key = f"{url}:{strategy}"
+        b = _hash_ints(key, 8)
         # Map bytes (0-255) into the documented ranges, deterministically.
         lcp = 1500 + int(b[0] / 255 * 3500)          # 1500-5000 ms
         cls = round(b[1] / 255 * 0.4, 3)             # 0.0-0.4
         inp = 100 + int(b[2] / 255 * 400)            # 100-500 ms
         perf = 50 + int(b[3] / 255 * 50)             # 50-100
         a11y = 50 + int(b[4] / 255 * 50)             # 50-100
-        return CoreWebVitals(
+        fcp = 800 + int(b[5] / 255 * 2500)           # 800-3300 ms
+        tbt = int(b[6] / 255 * 700)                  # 0-700 ms
+        cwv = CoreWebVitals(
             lcp_ms=lcp,
             cls=cls,
             inp_ms=inp,
@@ -62,6 +128,11 @@ class MockPageSpeedProvider(PageSpeedProvider):
             latency_ms=0,
             cache_hit=False,
         )
+        cwv.fcp_ms = fcp  # type: ignore[attr-defined]
+        cwv.tbt_ms = tbt  # type: ignore[attr-defined]
+        cwv.opportunities = []  # type: ignore[attr-defined]
+        cwv.diagnostics = []   # type: ignore[attr-defined]
+        return cwv
 
 
 class GooglePageSpeedProvider(PageSpeedProvider):
@@ -74,6 +145,7 @@ class GooglePageSpeedProvider(PageSpeedProvider):
     """
 
     name = "google_pagespeed"
+    is_mock: bool = False
     ENDPOINT = "https://www.googleapis.com/pagespeedonline/v5/runPagespeed"
 
     def __init__(self, api_key: str = "") -> None:
@@ -82,10 +154,12 @@ class GooglePageSpeedProvider(PageSpeedProvider):
     def available(self) -> bool:
         return bool(self.api_key)
 
-    def fetch(self, url: str) -> CoreWebVitals:
+    def fetch(self, url: str, strategy: str = "mobile") -> CoreWebVitals:
         if not self.available():
             # Degrade rather than raise.
-            return MockPageSpeedProvider().fetch(url)
+            cwv = MockPageSpeedProvider().fetch(url, strategy)
+            cwv.provider = self.name + ":no_key"
+            return cwv
         start = time.time()
         try:
             params = urllib.parse.urlencode(
@@ -93,7 +167,7 @@ class GooglePageSpeedProvider(PageSpeedProvider):
                     "url": url,
                     "key": self.api_key,
                     "category": "performance",
-                    "strategy": "mobile",
+                    "strategy": strategy,
                 }
             )
             req = urllib.request.Request(self.ENDPOINT + "?" + params)
@@ -101,9 +175,15 @@ class GooglePageSpeedProvider(PageSpeedProvider):
             with urllib.request.urlopen(req, timeout=20) as resp:  # pragma: no cover
                 payload = json.loads(resp.read().decode("utf-8"))
             return self._parse(url, payload, start)
-        except Exception:  # pragma: no cover - network/parse failure -> mock
-            cwv = MockPageSpeedProvider().fetch(url)
-            cwv.provider = self.name + ":fallback"
+        except Exception as exc:  # pragma: no cover - network/parse failure -> mock
+            # Check for quota errors (HTTP 429 / "quotaExceeded" in the body).
+            # We can only do string matching on the exception message here since
+            # urlopen raises urllib.error.HTTPError for HTTP errors.
+            err_str = str(exc).lower()
+            is_quota = "429" in err_str or "quota" in err_str or "rate" in err_str
+            provider_suffix = ":quota_exceeded" if is_quota else ":fallback"
+            cwv = MockPageSpeedProvider().fetch(url, strategy)
+            cwv.provider = self.name + provider_suffix
             cwv.latency_ms = int((time.time() - start) * 1000)
             return cwv
 
@@ -116,10 +196,32 @@ class GooglePageSpeedProvider(PageSpeedProvider):
             num = audits.get(audit_id, {}).get("numericValue", 0)
             return int(num or 0)
 
+        def _opportunities() -> list:
+            ops = []
+            for k, a in audits.items():
+                if a.get("details", {}).get("type") == "opportunity":
+                    ops.append({
+                        "id": k,
+                        "title": a.get("title", ""),
+                        "savings_ms": int(a.get("details", {}).get("overallSavingsMs", 0) or 0),
+                    })
+            return ops
+
+        def _diagnostics() -> list:
+            diags = []
+            for k, a in audits.items():
+                if a.get("score") is not None and a.get("score", 1) < 0.9:
+                    diags.append({
+                        "id": k,
+                        "title": a.get("title", ""),
+                        "display_value": a.get("displayValue", ""),
+                    })
+            return diags[:10]  # Cap at 10 diagnostics
+
         cls_val = audits.get("cumulative-layout-shift", {}).get("numericValue", 0.0)
         perf = int(round(categories.get("performance", {}).get("score", 0.0) * 100))
         a11y = int(round(categories.get("accessibility", {}).get("score", 0.0) * 100))
-        return CoreWebVitals(
+        cwv = CoreWebVitals(
             lcp_ms=_ms("largest-contentful-paint"),
             cls=round(float(cls_val or 0.0), 3),
             inp_ms=_ms("interaction-to-next-paint") or _ms("experimental-interaction-to-next-paint"),
@@ -130,6 +232,11 @@ class GooglePageSpeedProvider(PageSpeedProvider):
             latency_ms=int((time.time() - start) * 1000),
             cache_hit=False,
         )
+        cwv.fcp_ms = _ms("first-contentful-paint")  # type: ignore[attr-defined]
+        cwv.tbt_ms = _ms("total-blocking-time")     # type: ignore[attr-defined]
+        cwv.opportunities = _opportunities()         # type: ignore[attr-defined]
+        cwv.diagnostics = _diagnostics()            # type: ignore[attr-defined]
+        return cwv
 
 
 def get_pagespeed_provider() -> PageSpeedProvider:
@@ -143,6 +250,70 @@ def get_pagespeed_provider() -> PageSpeedProvider:
         except Exception:
             pass
     return MockPageSpeedProvider()
+
+
+# ── Multi-page, multi-strategy PSI runner (for crawl integration) ────────────
+
+def run_pagespeed_for_job(
+    urls: List[str],
+    *,
+    strategies: Tuple[str, ...] = ("mobile", "desktop"),
+    max_pages: int = 3,
+    provider: Optional[PageSpeedProvider] = None,
+) -> Tuple[Dict[str, Dict[str, dict]], int]:
+    """Run PSI for up to ``max_pages`` URLs × strategies.
+
+    Returns
+    -------
+    results: dict mapping url → { strategy → cwv_full_dict }
+    real_request_count: number of REAL (non-mock) PSI calls made
+        (used for metering — mock calls are always 0).
+
+    Caches by (url, strategy) so a URL is never fetched twice in one job.
+    Handles quota / provider-unavailable gracefully: stores a
+    ``{status: "provider_unavailable"}`` marker and continues.
+    """
+    import datetime
+
+    ps = provider or get_pagespeed_provider()
+    is_mock_provider = getattr(ps, "is_mock", True)
+
+    results: Dict[str, Dict[str, dict]] = {}
+    real_request_count = 0
+    seen: Dict[Tuple[str, str], dict] = {}  # (url, strategy) → cwv_full_dict
+
+    pages_to_process = urls[:max_pages]
+
+    for url in pages_to_process:
+        results[url] = {}
+        for strategy in strategies:
+            cache_key = (url, strategy)
+            if cache_key in seen:
+                results[url][strategy] = seen[cache_key]
+                continue
+
+            request_ts = datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds")
+            try:
+                cwv = ps.fetch(url, strategy)
+                mock_flag = is_mock_provider or "fallback" in (cwv.provider or "") or "no_key" in (cwv.provider or "")
+                if not mock_flag:
+                    real_request_count += 1
+                entry = _cwv_to_full_dict(cwv, strategy=strategy, mock=mock_flag, request_ts=request_ts)
+            except Exception as exc:
+                # Any provider failure → store a marker, do not crash.
+                entry = {
+                    "strategy": strategy,
+                    "status": "provider_unavailable",
+                    "error": str(exc)[:200],
+                    "request_timestamp": request_ts,
+                    "mock": True,
+                    "field_data_available": False,
+                }
+
+            seen[cache_key] = entry
+            results[url][strategy] = entry
+
+    return results, real_request_count
 
 
 def evaluate_cwv(cwv: CoreWebVitals) -> List[TechnicalIssue]:

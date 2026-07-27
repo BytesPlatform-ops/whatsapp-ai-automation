@@ -34,9 +34,11 @@ from .agent_schemas import (
     ConnectTokenBody,
     ConnectWordPressBody,
     CrawlStartBody,
+    CrawlEstimateBody,
     CreateSiteBody,
     IssueResolveBody,
     OptimizePrepareBody,
+    PageSpeedBody,
     PatchSiteBody,
     CRAWL_LIMIT_MAX,
 )
@@ -489,7 +491,11 @@ def crawl_start(
     )
 
     # Kick execution off the request thread via BackgroundTasks.
-    background_tasks.add_task(poll_once, worker_id, tenant)
+    # Pass include_pagespeed so the worker knows to run PSI after the crawl.
+    include_ps = body.include_pagespeed
+    background_tasks.add_task(
+        poll_once, worker_id, tenant, include_pagespeed=include_ps
+    )
 
     return {
         "job_id": job_id,
@@ -497,6 +503,7 @@ def crawl_start(
         "requested_limit": clamped_limit,
         "crawl_type": crawl_type.value,
         "site_id": site_id,
+        "include_pagespeed": include_ps,
     }
 
 
@@ -689,3 +696,142 @@ def get_report_by_job(
     pairs.sort(key=lambda p: p[1].created_at, reverse=True)
     rid, report = pairs[0]
     return {"report": _report_to_dict(rid, report)}
+
+
+# ── PageSpeed / CWV on-demand endpoint ────────────────────────────────────────
+
+@router.post("/pagespeed")
+def pagespeed_single(
+    body: PageSpeedBody,
+    _header_tenant: Optional[str] = Depends(resolve_tenant_header),
+) -> dict:
+    """On-demand PageSpeed / Core Web Vitals for a single URL.
+
+    Validates the URL with assert_safe_url (→ 400 on UrlRejected) before any
+    outbound call. Returns mobile+desktop CWV (or whichever strategy was
+    requested). Meters real PSI calls against the tenant's seo_agent product.
+
+    Body
+    ----
+    url         — the page to analyse (must be a public http/https URL).
+    strategy    — "mobile" | "desktop" | "both"  (default "both").
+    tenant_id   — resolved from X-Pixie-Tenant header first; body fallback.
+    """
+    import datetime
+
+    tenant = effective_tenant(_header_tenant, body.tenant_id)
+
+    raw_url = (body.url or "").strip()
+    if not raw_url.startswith(("http://", "https://")):
+        raw_url = "https://" + raw_url
+    try:
+        assert_safe_url(raw_url)
+    except UrlRejected as exc:
+        raise HTTPException(
+            status_code=400,
+            detail={"error": "unsafe_url", "reason": exc.reason},
+        ) from exc
+
+    from .technical.pagespeed import (
+        get_pagespeed_provider,
+        run_pagespeed_for_job,
+        VALID_STRATEGIES,
+        _cwv_to_full_dict,
+    )
+    from .metering import record_pagespeed_requests
+
+    strategy_input = (body.strategy or "both").lower()
+    if strategy_input == "both":
+        strategies = tuple(VALID_STRATEGIES)
+    elif strategy_input in VALID_STRATEGIES:
+        strategies = (strategy_input,)
+    else:
+        raise HTTPException(
+            status_code=422,
+            detail={"error": "invalid_strategy", "valid": list(VALID_STRATEGIES) + ["both"]},
+        )
+
+    provider = get_pagespeed_provider()
+    request_ts = datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds")
+
+    results: dict = {}
+    real_request_count = 0
+
+    for strategy in strategies:
+        try:
+            cwv = provider.fetch(raw_url, strategy)
+            is_mock_result = (
+                getattr(provider, "is_mock", True)
+                or "fallback" in (cwv.provider or "")
+                or "no_key" in (cwv.provider or "")
+            )
+            entry = _cwv_to_full_dict(cwv, strategy=strategy, mock=is_mock_result, request_ts=request_ts)
+            if not is_mock_result:
+                real_request_count += 1
+        except Exception as exc:
+            entry = {
+                "strategy": strategy,
+                "status": "provider_unavailable",
+                "error": str(exc)[:200],
+                "request_timestamp": request_ts,
+                "mock": True,
+                "field_data_available": False,
+            }
+        results[strategy] = entry
+
+    # Meter real PSI calls (no-op when credit system is off or mock).
+    if real_request_count > 0:
+        op_id = f"psi_ondemand:{tenant}:{raw_url}"
+        record_pagespeed_requests(
+            tenant,
+            real_request_count=real_request_count,
+            job_id=op_id,
+            is_mock=False,
+        )
+
+    return {
+        "url": raw_url,
+        "results": results,
+        "real_request_count": real_request_count,
+    }
+
+
+# ── Crawl cost estimate endpoint ───────────────────────────────────────────────
+
+@router.post("/crawl/estimate")
+def crawl_estimate(
+    body: CrawlEstimateBody,
+    _header_tenant: Optional[str] = Depends(resolve_tenant_header),
+) -> dict:
+    """Preview the credit cost for a crawl BEFORE starting it.
+
+    Returns an estimate broken down by sub-operation (crawl pages, PageSpeed
+    calls, report generation). No job is created; no network call is made.
+    The estimate is server-authoritative (browser-supplied ``requested_limit``
+    is clamped to CRAWL_LIMIT_MAX server-side).
+
+    Body
+    ----
+    requested_limit   — number of pages to estimate for (clamped to CRAWL_LIMIT_MAX).
+    include_pagespeed — whether PSI runs should be included in the estimate.
+    tenant_id         — resolved from X-Pixie-Tenant header first; body fallback.
+    """
+    tenant = effective_tenant(_header_tenant, body.tenant_id)
+
+    # Server-side clamp — never trust client value as-is.
+    clamped_limit = min(int(body.requested_limit or 1), CRAWL_LIMIT_MAX)
+
+    from .metering import estimate_crawl
+
+    estimate = estimate_crawl(
+        tenant,
+        clamped_limit,
+        include_pagespeed=body.include_pagespeed,
+    )
+
+    return {
+        "tenant_id": tenant,
+        "requested_limit": clamped_limit,
+        "include_pagespeed": body.include_pagespeed,
+        "estimate": estimate,
+    }

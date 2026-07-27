@@ -96,6 +96,23 @@ class CrawlStartBody(BaseModel):
     url: Optional[str] = None              # seed URL (overrides site.canonical_base_url)
     crawl_type: str = "site"               # "site" | "single"
     requested_limit: Optional[int] = None  # server-side clamped to CRAWL_LIMIT_MAX
+    include_pagespeed: bool = False        # when True, run PSI for homepage + representative pages
+
+
+class PageSpeedBody(BaseModel):
+    """Body for POST /pagespeed — on-demand CWV for a single URL."""
+    model_config = ConfigDict(extra="ignore")
+    tenant_id: Optional[str] = "demo_tenant"
+    url: str = Field(..., min_length=4)
+    strategy: str = "both"   # "mobile" | "desktop" | "both"
+
+
+class CrawlEstimateBody(BaseModel):
+    """Body for POST /crawl/estimate — preview cost before starting a crawl."""
+    model_config = ConfigDict(extra="ignore")
+    tenant_id: Optional[str] = "demo_tenant"
+    requested_limit: int = Field(default=100, ge=1)
+    include_pagespeed: bool = False
 
 
 class IssueResolveBody(BaseModel):

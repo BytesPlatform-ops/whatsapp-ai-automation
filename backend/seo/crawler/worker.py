@@ -113,6 +113,73 @@ def _run_analysis(tenant_id: str, job_id: str, site, site_id: str) -> None:
     )
 
 
+def _run_pagespeed_for_crawl(
+    tenant_id: str,
+    job_id: str,
+    site,
+    *,
+    provider=None,
+) -> int:
+    """Run PSI for the homepage + representative crawled pages, store results in
+    CrawledPage.extra["pagespeed"], return the number of real PSI requests made.
+
+    Safe: never raises. Returns 0 on any failure.
+    """
+    from seo.technical.pagespeed import run_pagespeed_for_job, MAX_PSI_PAGES, VALID_STRATEGIES  # type: ignore
+    from seo.stores import get_crawled_page_repository  # type: ignore
+
+    try:
+        page_repo = get_crawled_page_repository()
+        _total, all_pairs = page_repo.list_by_crawl_job(tenant_id, job_id, limit=MAX_PSI_PAGES + 10)
+    except Exception as exc:
+        logger.warning("worker: pagespeed: could not list pages for job %s: %s", job_id, exc)
+        return 0
+
+    if not all_pairs:
+        return 0
+
+    # Pick homepage first, then additional pages (up to MAX_PSI_PAGES total).
+    homepage_url = (
+        site.canonical_base_url
+        if hasattr(site, "canonical_base_url") and site.canonical_base_url
+        else None
+    )
+    urls_ordered = []
+    if homepage_url:
+        urls_ordered.append(homepage_url)
+    for _pid, page in all_pairs:
+        if page.url not in urls_ordered:
+            urls_ordered.append(page.url)
+        if len(urls_ordered) >= MAX_PSI_PAGES:
+            break
+
+    try:
+        results, real_request_count = run_pagespeed_for_job(
+            urls_ordered,
+            strategies=tuple(VALID_STRATEGIES),
+            max_pages=MAX_PSI_PAGES,
+            provider=provider,
+        )
+    except Exception as exc:
+        logger.warning("worker: pagespeed: run_pagespeed_for_job failed for job %s: %s", job_id, exc)
+        return 0
+
+    # Store results in the corresponding CrawledPage.extra["pagespeed"].
+    # CrawledPageRepository has no update() — we use the internal _save() pattern
+    # via a direct dataclass mutation and re-save.
+    try:
+        for pid, page in all_pairs:
+            if page.url in results:
+                extra = dict(page.extra or {})
+                extra["pagespeed"] = results[page.url]
+                page.extra = extra
+                page_repo._save(pid, tenant_id, page)
+    except Exception as exc:
+        logger.warning("worker: pagespeed: storing results failed for job %s: %s", job_id, exc)
+
+    return real_request_count
+
+
 def poll_once(
     worker_id: str,
     tenant_id: str,
@@ -121,6 +188,8 @@ def poll_once(
     store=None,
     min_delay_s: float = 0.5,
     max_retries: int = 2,
+    include_pagespeed: bool = False,
+    pagespeed_provider=None,
 ) -> bool:
     """Claim and process one pending job for *tenant_id*.
 
@@ -205,6 +274,48 @@ def poll_once(
                     error_category="analysis_error",
                 )
                 return True
+
+            # ── PageSpeed pass (optional) ─────────────────────────────────
+            psi_real_requests = 0
+            is_mock_crawl = (fetch is not safe_fetch)  # non-default fetch = injected/fake
+            if include_pagespeed:
+                try:
+                    psi_real_requests = _run_pagespeed_for_crawl(
+                        claimed_tenant_id,
+                        job_id,
+                        site,
+                        provider=pagespeed_provider,
+                    )
+                except Exception:
+                    pass  # PSI is best-effort; never block job completion
+
+            # ── Metering ─────────────────────────────────────────────────
+            try:
+                from seo.metering import (  # type: ignore
+                    record_crawl_pages,
+                    record_pagespeed_requests,
+                    record_report_generated,
+                )
+                record_crawl_pages(
+                    claimed_tenant_id,
+                    crawled_count=summary.get("crawled_count", 0),
+                    job_id=job_id,
+                    is_mock=is_mock_crawl,
+                )
+                if include_pagespeed and psi_real_requests > 0:
+                    record_pagespeed_requests(
+                        claimed_tenant_id,
+                        real_request_count=psi_real_requests,
+                        job_id=job_id,
+                        is_mock=False,
+                    )
+                record_report_generated(
+                    claimed_tenant_id,
+                    job_id=job_id,
+                    is_mock=is_mock_crawl,
+                )
+            except Exception as meter_exc:
+                logger.warning("worker: metering failed for job %s: %s", job_id, meter_exc)
 
             release_job(
                 claimed_tenant_id,
