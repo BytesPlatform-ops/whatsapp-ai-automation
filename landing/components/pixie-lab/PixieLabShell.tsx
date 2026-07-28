@@ -5,11 +5,11 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname, useRouter } from 'next/navigation';
 import { CONTENT_NAV, isContentRoute, activeContentHref } from '@/lib/pixie-lab/contentRoutes';
-import { SEO_NAV, isSeoRoute, activeSeoHref } from '@/lib/pixie-lab/seoRoutes';
+import { SEO_NAV_GROUPED, isSeoRoute, activeSeoHref, type SeoNavGroup } from '@/lib/pixie-lab/seoRoutes';
 import { billingRoutes, isBillingRoute } from '@/lib/pixie-lab/billingRoutes';
 import {
   Sparkles, LayoutGrid, LayoutDashboard, Globe, Headset, Search, Megaphone, Clapperboard,
-  Lock, ChevronDown, LogOut, Menu, X, ShieldCheck, Activity, CreditCard, type LucideIcon,
+  Lock, ChevronDown, ChevronRight, LogOut, Menu, X, ShieldCheck, Activity, CreditCard, type LucideIcon,
 } from 'lucide-react';
 import { AGENT_META, type FeedAgent, type AgentState } from '@/lib/pixie-lab/feed';
 import { useEntitlements } from '@/lib/pixie-lab/useEntitlements';
@@ -48,7 +48,10 @@ const SERVICE_SUBNAV: Partial<Record<FeedAgent, { label: string; href: string }[
     { label: 'Integrations', href: '/pixie-lab/receptionist/integrations' },
     { label: 'Knowledge', href: '/pixie-lab/receptionist/knowledge' },
   ],
-  seo: SEO_NAV,
+  // SEO uses the grouped nav — rendered by SeoGroupedNav below instead of the flat list.
+  // We still need a non-empty entry so `subnav && inSection` triggers the subnav block.
+  // The actual rendering is handled by the SeoGroupedNav component.
+  seo: [{ label: '_grouped', href: '_grouped' }],
   marketing: [
     { label: 'Brand Brain', href: '/pixie-lab/marketing/brand-brain' },
     { label: 'Ideas', href: '/pixie-lab/marketing/ideas' },
@@ -66,6 +69,96 @@ const SERVICE_SUBNAV: Partial<Record<FeedAgent, { label: string; href: string }[
 function prefersReducedMotion(): boolean {
   return typeof window !== 'undefined' && typeof window.matchMedia === 'function'
     && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+}
+
+/**
+ * Grouped, collapsible SEO sidebar nav. Groups collapse to a header chevron;
+ * a group auto-expands when any of its items is the active route.
+ */
+function SeoGroupedNav({
+  groups,
+  activeSub,
+  activeSubRef,
+  onNavigate,
+  accent,
+}: {
+  groups: SeoNavGroup[];
+  activeSub: string;
+  activeSubRef: React.RefObject<HTMLAnchorElement>;
+  onNavigate: () => void;
+  accent: string;
+}) {
+  // Determine which groups contain the active item.
+  const activeGroup = groups.find((g) => g.items.some((i) => i.href === activeSub))?.group ?? null;
+
+  // Track open/closed state per group — default open if contains active item.
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(() => {
+    const init: Record<string, boolean> = {};
+    for (const g of groups) {
+      init[g.group] = g.defaultOpen === true || g.items.some((i) => i.href === activeSub);
+    }
+    return init;
+  });
+
+  // Auto-open the group when the active item changes to one within it.
+  useEffect(() => {
+    if (activeGroup) {
+      setOpenGroups((prev) => ({ ...prev, [activeGroup]: true }));
+    }
+  }, [activeGroup]);
+
+  function toggleGroup(group: string) {
+    setOpenGroups((prev) => ({ ...prev, [group]: !prev[group] }));
+  }
+
+  return (
+    <div className="space-y-0.5">
+      {groups.map((g) => {
+        const isOpen = openGroups[g.group] ?? false;
+        const isActive = g.group === activeGroup;
+        return (
+          <div key={g.group}>
+            {/* Group header — clicking toggles collapse */}
+            <button
+              type="button"
+              onClick={() => toggleGroup(g.group)}
+              className="flex w-full items-center gap-1.5 rounded-lg px-2.5 py-1 text-[10.5px] font-bold uppercase tracking-wider transition-colors"
+              style={{ color: isActive ? accent : 'var(--pl-text-muted)' }}
+            >
+              {isOpen
+                ? <ChevronDown size={11} />
+                : <ChevronRight size={11} />}
+              {g.group}
+            </button>
+            {/* Items */}
+            {isOpen && (
+              <div className="mb-0.5 ml-2.5 space-y-0 border-l border-[var(--pl-border)] pl-2">
+                {g.items.map((s) => {
+                  const subActive = s.href === activeSub;
+                  return (
+                    <Link
+                      key={s.href}
+                      ref={subActive ? activeSubRef : undefined}
+                      href={s.href}
+                      aria-current={subActive ? 'page' : undefined}
+                      onClick={onNavigate}
+                      className="block rounded-lg px-2.5 py-1.5 text-[12.5px] font-medium transition-colors"
+                      style={{
+                        background: subActive ? `color-mix(in srgb, ${accent} 14%, transparent)` : 'transparent',
+                        color: subActive ? 'var(--pl-text)' : 'var(--pl-text-muted)',
+                      }}
+                    >
+                      {s.label}
+                    </Link>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
 }
 
 export function PixieLabShell({
@@ -165,26 +258,38 @@ export function PixieLabShell({
               </Link>
               {/* Sub-tools appear when you're inside the service and it isn't locked. */}
               {subnav && inSection && st !== 'locked' && (
-                <div className="mb-1 ml-[26px] mt-0.5 max-h-[50vh] space-y-0.5 overflow-y-auto border-l border-[var(--pl-border)] pl-2.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                  {subnav.map((s) => {
-                    const subActive = (agent === 'content' || agent === 'seo') ? s.href === activeSub : pathname === s.href;
-                    return (
-                      <Link
-                        key={s.href}
-                        ref={subActive ? activeSubRef : undefined}
-                        href={s.href}
-                        aria-current={subActive ? 'page' : undefined}
-                        onClick={() => setMobileOpen(false)}
-                        className="block rounded-lg px-2.5 py-1.5 text-[12.5px] font-medium transition-colors"
-                        style={{
-                          background: subActive ? `color-mix(in srgb, ${accent} 14%, transparent)` : 'transparent',
-                          color: subActive ? 'var(--pl-text)' : 'var(--pl-text-muted)',
-                        }}
-                      >
-                        {s.label}
-                      </Link>
-                    );
-                  })}
+                <div className="mb-1 ml-[26px] mt-0.5 max-h-[60vh] overflow-y-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                  {agent === 'seo' ? (
+                    <SeoGroupedNav
+                      groups={SEO_NAV_GROUPED}
+                      activeSub={activeSub}
+                      activeSubRef={activeSubRef}
+                      onNavigate={() => setMobileOpen(false)}
+                      accent={accent}
+                    />
+                  ) : (
+                    <div className="space-y-0.5 border-l border-[var(--pl-border)] pl-2.5">
+                      {subnav.map((s) => {
+                        const subActive = agent === 'content' ? s.href === activeSub : pathname === s.href;
+                        return (
+                          <Link
+                            key={s.href}
+                            ref={subActive ? activeSubRef : undefined}
+                            href={s.href}
+                            aria-current={subActive ? 'page' : undefined}
+                            onClick={() => setMobileOpen(false)}
+                            className="block rounded-lg px-2.5 py-1.5 text-[12.5px] font-medium transition-colors"
+                            style={{
+                              background: subActive ? `color-mix(in srgb, ${accent} 14%, transparent)` : 'transparent',
+                              color: subActive ? 'var(--pl-text)' : 'var(--pl-text-muted)',
+                            }}
+                          >
+                            {s.label}
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               )}
             </div>

@@ -71,6 +71,19 @@ export const seoRoutes = {
   },
   alerts: (opts?: { site_id?: string }) =>
     opts?.site_id ? `${SEO}/alerts?site_id=${encodeURIComponent(opts.site_id)}` : `${SEO}/alerts`,
+  // ── Off-site ────────────────────────────────────────────────────────────────
+  backlinks: (opts?: { site_id?: string }) =>
+    opts?.site_id ? `${SEO}/backlinks?site_id=${encodeURIComponent(opts.site_id)}` : `${SEO}/backlinks`,
+  outreach: () => `${SEO}/outreach`,
+  // ── Local SEO ───────────────────────────────────────────────────────────────
+  local: () => `${SEO}/local`,
+  locations: () => `${SEO}/locations`,
+  reviews: (opts?: { location_id?: string }) =>
+    opts?.location_id ? `${SEO}/reviews?location_id=${encodeURIComponent(opts.location_id)}` : `${SEO}/reviews`,
+  citations: () => `${SEO}/citations`,
+  // ── Monitor ─────────────────────────────────────────────────────────────────
+  schedulerStatus: () => `${SEO}/scheduler`,
+  billingUsage: () => `${SEO}/billing-usage`,
 } as const;
 
 export type SeoRouteKey = keyof typeof seoRoutes;
@@ -81,27 +94,72 @@ export interface SeoNavItem {
   href: string;
 }
 
-/** The complete SEO workspace navigation — single source for the sidebar
- *  submenu and anywhere else the section list is needed. */
-export const SEO_NAV: SeoNavItem[] = [
-  { label: 'Overview', href: seoRoutes.overview() },
-  { label: 'Sites', href: seoRoutes.sites() },
-  { label: 'New Audit', href: seoRoutes.audit() },
-  { label: 'Crawl Jobs', href: seoRoutes.crawls() },
-  { label: 'Technical Issues', href: seoRoutes.issues() },
-  { label: 'Pages', href: seoRoutes.pages() },
-  { label: 'History', href: seoRoutes.history() },
-  { label: 'Connections', href: seoRoutes.connections() },
-  { label: 'Reports', href: seoRoutes.reports() },
-  // ── Search Intelligence ──────────────────────────────────────────────────
-  { label: 'Keywords', href: seoRoutes.keywords() },
-  { label: 'Rankings', href: seoRoutes.rankings() },
-  { label: 'Competitors', href: seoRoutes.competitors() },
-  { label: 'Opportunities', href: seoRoutes.opportunities() },
-  { label: 'Optimise', href: seoRoutes.optimise() },
-  { label: 'Briefs', href: seoRoutes.briefs() },
-  { label: 'Alerts', href: seoRoutes.alerts() },
+/** A collapsible nav group for the SEO sidebar. */
+export interface SeoNavGroup {
+  group: string;
+  items: SeoNavItem[];
+  /** If true the group is expanded by default when any item is active. */
+  defaultOpen?: boolean;
+}
+
+/** Grouped SEO navigation — structured into collapsible sections. */
+export const SEO_NAV_GROUPED: SeoNavGroup[] = [
+  {
+    group: 'Overview',
+    items: [{ label: 'Overview', href: seoRoutes.overview() }],
+    defaultOpen: true,
+  },
+  {
+    group: 'Research',
+    items: [
+      { label: 'Sites', href: seoRoutes.sites() },
+      { label: 'Audits', href: seoRoutes.audit() },
+      { label: 'Crawl Jobs', href: seoRoutes.crawls() },
+      { label: 'Technical Issues', href: seoRoutes.issues() },
+      { label: 'Pages', href: seoRoutes.pages() },
+    ],
+  },
+  {
+    group: 'Rankings',
+    items: [
+      { label: 'Keywords', href: seoRoutes.keywords() },
+      { label: 'Rankings', href: seoRoutes.rankings() },
+      { label: 'Competitors', href: seoRoutes.competitors() },
+      { label: 'Opportunities', href: seoRoutes.opportunities() },
+      { label: 'Optimise', href: seoRoutes.optimise() },
+      { label: 'Content Briefs', href: seoRoutes.briefs() },
+    ],
+  },
+  {
+    group: 'Off-site',
+    items: [
+      { label: 'Backlinks', href: seoRoutes.backlinks() },
+      { label: 'Outreach', href: seoRoutes.outreach() },
+    ],
+  },
+  {
+    group: 'Local',
+    items: [
+      { label: 'Local SEO', href: seoRoutes.local() },
+      { label: 'Locations', href: seoRoutes.locations() },
+      { label: 'Reviews', href: seoRoutes.reviews() },
+      { label: 'Citations', href: seoRoutes.citations() },
+    ],
+  },
+  {
+    group: 'Monitor',
+    items: [
+      { label: 'Alerts', href: seoRoutes.alerts() },
+      { label: 'Reports', href: seoRoutes.reports() },
+      { label: 'History', href: seoRoutes.history() },
+      { label: 'Connections', href: seoRoutes.connections() },
+    ],
+  },
 ];
+
+/** Flat list derived from groups — used by PixieLabShell subnav and ServiceTabs.
+ *  Keeps the public surface identical to the old SEO_NAV shape. */
+export const SEO_NAV: SeoNavItem[] = SEO_NAV_GROUPED.flatMap((g) => g.items);
 
 /** True when the pathname is inside the SEO workspace. */
 export function isSeoRoute(pathname: string): boolean {

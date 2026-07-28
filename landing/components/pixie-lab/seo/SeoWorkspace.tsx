@@ -19,6 +19,14 @@ import { SeoOpportunitiesPanel } from './SeoOpportunitiesPanel';
 import { SeoOptimisePanel } from './SeoOptimisePanel';
 import { SeoBriefsPanel } from './SeoBriefsPanel';
 import { SeoAlertsPanel } from './SeoAlertsPanel';
+import { SeoBacklinksPanel } from './SeoBacklinksPanel';
+import { SeoOutreachPanel } from './SeoOutreachPanel';
+import { SeoLocalPanel } from './SeoLocalPanel';
+import { SeoLocationsPanel } from './SeoLocationsPanel';
+import { SeoReviewsPanel } from './SeoReviewsPanel';
+import { SeoCitationsPanel } from './SeoCitationsPanel';
+import { SeoSchedulerPanel } from './SeoSchedulerPanel';
+import { SeoBillingUsagePanel } from './SeoBillingUsagePanel';
 import { SEO_NAV } from '@/lib/pixie-lab/seoRoutes';
 
 const ACCENT = '#14B8A6';
@@ -40,7 +48,18 @@ export type SeoTab =
   | 'opportunities'
   | 'optimise'
   | 'briefs'
-  | 'alerts';
+  | 'alerts'
+  // ── Off-site ────────────────────────────────────────────────────────────
+  | 'backlinks'
+  | 'outreach'
+  // ── Local SEO ────────────────────────────────────────────────────────────
+  | 'local'
+  | 'locations'
+  | 'reviews'
+  | 'citations'
+  // ── Monitor (admin/internal) ──────────────────────────────────────────────
+  | 'scheduler'
+  | 'billing-usage';
 
 const TAB_TITLE: Record<SeoTab, string> = {
   overview: 'SEO Overview',
@@ -60,6 +79,17 @@ const TAB_TITLE: Record<SeoTab, string> = {
   optimise: 'Optimise',
   briefs: 'Content Briefs',
   alerts: 'Alerts',
+  // ── Off-site ────────────────────────────────────────────────────────────
+  backlinks: 'Backlinks',
+  outreach: 'Outreach',
+  // ── Local SEO ────────────────────────────────────────────────────────────
+  local: 'Local SEO',
+  locations: 'Locations',
+  reviews: 'Reviews',
+  citations: 'Citations',
+  // ── Monitor ──────────────────────────────────────────────────────────────
+  scheduler: 'Scheduler Status',
+  'billing-usage': 'SEO Usage',
 };
 
 interface WorkspaceProps {
@@ -77,10 +107,12 @@ interface WorkspaceProps {
   initialProjectId?: string;
   initialKeyword?: string;
   initialPageId?: string;
+  // Local params
+  locationId?: string;
 }
 
 /**
- * SeoWorkspace — the unified SEO agent workspace inside Pixie Lab. All 16 SEO
+ * SeoWorkspace — the unified SEO agent workspace inside Pixie Lab. All SEO
  * sub-pages share this shell: header + horizontally-scrollable ServiceTabs +
  * entitlement gate + the active panel. Deep-links work via the page.tsx server
  * components passing the correct `tab` and optional filter props.
@@ -97,6 +129,7 @@ export function SeoWorkspace({
   initialProjectId,
   initialKeyword,
   initialPageId,
+  locationId,
 }: WorkspaceProps) {
   // Resolve siteId — accept both the legacy `siteId` prop (used by crawls/issues/pages)
   // and the newer `initialSiteId` (used by the search-intelligence panels).
@@ -141,6 +174,20 @@ export function SeoWorkspace({
         {tab === 'optimise' && <SeoOptimisePanel initialSiteId={resolvedSiteId} initialPageId={initialPageId} initialKeyword={initialKeyword} />}
         {tab === 'briefs' && <SeoBriefsPanel initialSiteId={resolvedSiteId} initialProjectId={initialProjectId} />}
         {tab === 'alerts' && <SeoAlertsPanel initialSiteId={resolvedSiteId} />}
+
+        {/* ── Off-site tabs ───────────────────────────────────────────────── */}
+        {tab === 'backlinks' && <SeoBacklinksPanel initialSiteId={resolvedSiteId} />}
+        {tab === 'outreach' && <SeoOutreachPanel />}
+
+        {/* ── Local SEO tabs ──────────────────────────────────────────────── */}
+        {tab === 'local' && <SeoLocalPanel />}
+        {tab === 'locations' && <SeoLocationsPanel />}
+        {tab === 'reviews' && <SeoReviewsPanel initialLocationId={locationId} />}
+        {tab === 'citations' && <SeoCitationsPanel initialLocationId={locationId} />}
+
+        {/* ── Monitor / admin tabs ────────────────────────────────────────── */}
+        {tab === 'scheduler' && <SeoSchedulerPanel />}
+        {tab === 'billing-usage' && <SeoBillingUsagePanel />}
       </main>
     </ServiceGate>
   );

@@ -1,49 +1,79 @@
 import { describe, it, expect } from 'vitest';
-import { SEO_NAV, seoRoutes, isSeoRoute, activeSeoHref } from './seoRoutes';
+import { SEO_NAV, SEO_NAV_GROUPED, seoRoutes, isSeoRoute, activeSeoHref } from './seoRoutes';
 
 describe('seoRoutes registry', () => {
-  it('exposes all SEO sections (nine core + seven search-intelligence)', () => {
-    expect(SEO_NAV.map((n) => n.label)).toEqual([
+  it('flat SEO_NAV contains 22 items (all grouped items flattened)', () => {
+    expect(SEO_NAV).toHaveLength(22);
+  });
+
+  it('SEO_NAV_GROUPED has 6 groups', () => {
+    expect(SEO_NAV_GROUPED).toHaveLength(6);
+    expect(SEO_NAV_GROUPED.map((g) => g.group)).toEqual([
       'Overview',
-      'Sites',
-      'New Audit',
-      'Crawl Jobs',
-      'Technical Issues',
-      'Pages',
-      'History',
-      'Connections',
-      'Reports',
-      // Search Intelligence
-      'Keywords',
+      'Research',
       'Rankings',
-      'Competitors',
-      'Opportunities',
-      'Optimise',
-      'Briefs',
-      'Alerts',
+      'Off-site',
+      'Local',
+      'Monitor',
     ]);
   });
 
-  it('registry hrefs match the route helpers', () => {
-    expect(SEO_NAV.map((n) => n.href)).toEqual([
-      '/pixie-lab/seo',
-      '/pixie-lab/seo/sites',
-      '/pixie-lab/seo/audit',
-      '/pixie-lab/seo/crawls',
-      '/pixie-lab/seo/issues',
-      '/pixie-lab/seo/pages',
-      '/pixie-lab/seo/history',
-      '/pixie-lab/seo/connections',
-      '/pixie-lab/seo/reports',
-      // Search Intelligence
-      '/pixie-lab/seo/keywords',
-      '/pixie-lab/seo/rankings',
-      '/pixie-lab/seo/competitors',
-      '/pixie-lab/seo/opportunities',
-      '/pixie-lab/seo/optimise',
-      '/pixie-lab/seo/briefs',
-      '/pixie-lab/seo/alerts',
+  it('Overview group contains just Overview', () => {
+    const g = SEO_NAV_GROUPED.find((x) => x.group === 'Overview')!;
+    expect(g.items.map((i) => i.label)).toEqual(['Overview']);
+  });
+
+  it('Research group contains Sites, Audits, Crawl Jobs, Technical Issues, Pages', () => {
+    const g = SEO_NAV_GROUPED.find((x) => x.group === 'Research')!;
+    expect(g.items.map((i) => i.label)).toEqual(['Sites', 'Audits', 'Crawl Jobs', 'Technical Issues', 'Pages']);
+  });
+
+  it('Rankings group contains Keywords, Rankings, Competitors, Opportunities, Optimise, Content Briefs', () => {
+    const g = SEO_NAV_GROUPED.find((x) => x.group === 'Rankings')!;
+    expect(g.items.map((i) => i.label)).toEqual([
+      'Keywords', 'Rankings', 'Competitors', 'Opportunities', 'Optimise', 'Content Briefs',
     ]);
+  });
+
+  it('Off-site group contains Backlinks and Outreach', () => {
+    const g = SEO_NAV_GROUPED.find((x) => x.group === 'Off-site')!;
+    expect(g.items.map((i) => i.label)).toEqual(['Backlinks', 'Outreach']);
+  });
+
+  it('Local group contains Local SEO, Locations, Reviews, Citations', () => {
+    const g = SEO_NAV_GROUPED.find((x) => x.group === 'Local')!;
+    expect(g.items.map((i) => i.label)).toEqual(['Local SEO', 'Locations', 'Reviews', 'Citations']);
+  });
+
+  it('Monitor group contains Alerts, Reports, History, Connections', () => {
+    const g = SEO_NAV_GROUPED.find((x) => x.group === 'Monitor')!;
+    expect(g.items.map((i) => i.label)).toEqual(['Alerts', 'Reports', 'History', 'Connections']);
+  });
+
+  it('flat SEO_NAV hrefs match expected route helpers', () => {
+    const hrefs = SEO_NAV.map((n) => n.href);
+    expect(hrefs).toContain('/pixie-lab/seo');
+    expect(hrefs).toContain('/pixie-lab/seo/sites');
+    expect(hrefs).toContain('/pixie-lab/seo/audit');
+    expect(hrefs).toContain('/pixie-lab/seo/crawls');
+    expect(hrefs).toContain('/pixie-lab/seo/issues');
+    expect(hrefs).toContain('/pixie-lab/seo/pages');
+    expect(hrefs).toContain('/pixie-lab/seo/keywords');
+    expect(hrefs).toContain('/pixie-lab/seo/rankings');
+    expect(hrefs).toContain('/pixie-lab/seo/competitors');
+    expect(hrefs).toContain('/pixie-lab/seo/opportunities');
+    expect(hrefs).toContain('/pixie-lab/seo/optimise');
+    expect(hrefs).toContain('/pixie-lab/seo/briefs');
+    expect(hrefs).toContain('/pixie-lab/seo/backlinks');
+    expect(hrefs).toContain('/pixie-lab/seo/outreach');
+    expect(hrefs).toContain('/pixie-lab/seo/local');
+    expect(hrefs).toContain('/pixie-lab/seo/locations');
+    expect(hrefs).toContain('/pixie-lab/seo/reviews');
+    expect(hrefs).toContain('/pixie-lab/seo/citations');
+    expect(hrefs).toContain('/pixie-lab/seo/alerts');
+    expect(hrefs).toContain('/pixie-lab/seo/reports');
+    expect(hrefs).toContain('/pixie-lab/seo/history');
+    expect(hrefs).toContain('/pixie-lab/seo/connections');
   });
 
   it('seoRoutes.audit() preserves URL and audit_id params', () => {
@@ -74,6 +104,16 @@ describe('seoRoutes registry', () => {
     expect(seoRoutes.reports({ site_id: 's1' })).toBe('/pixie-lab/seo/reports?site_id=s1');
     expect(seoRoutes.reports({ crawl_job_id: 'j2' })).toBe('/pixie-lab/seo/reports?crawl_job_id=j2');
   });
+
+  it('seoRoutes.backlinks() optionally filters by site_id', () => {
+    expect(seoRoutes.backlinks()).toBe('/pixie-lab/seo/backlinks');
+    expect(seoRoutes.backlinks({ site_id: 's1' })).toBe('/pixie-lab/seo/backlinks?site_id=s1');
+  });
+
+  it('seoRoutes.reviews() optionally filters by location_id', () => {
+    expect(seoRoutes.reviews()).toBe('/pixie-lab/seo/reviews');
+    expect(seoRoutes.reviews({ location_id: 'loc1' })).toBe('/pixie-lab/seo/reviews?location_id=loc1');
+  });
 });
 
 describe('isSeoRoute', () => {
@@ -90,6 +130,8 @@ describe('isSeoRoute', () => {
   it('is true for deep nested paths', () => {
     expect(isSeoRoute('/pixie-lab/seo/crawls/some-job-id')).toBe(true);
     expect(isSeoRoute('/pixie-lab/seo/issues/issue-123')).toBe(true);
+    expect(isSeoRoute('/pixie-lab/seo/backlinks/overview')).toBe(true);
+    expect(isSeoRoute('/pixie-lab/seo/outreach/campaigns')).toBe(true);
   });
 
   it('is false for unrelated routes', () => {
@@ -130,16 +172,36 @@ describe('activeSeoHref — longest-prefix matching', () => {
     expect(activeSeoHref('/pixie-lab/seo/pages')).toBe('/pixie-lab/seo/pages');
   });
 
-  it('history page exact match', () => {
-    expect(activeSeoHref('/pixie-lab/seo/history')).toBe('/pixie-lab/seo/history');
-  });
-
   it('connections page exact match', () => {
     expect(activeSeoHref('/pixie-lab/seo/connections')).toBe('/pixie-lab/seo/connections');
   });
 
   it('reports page exact match', () => {
     expect(activeSeoHref('/pixie-lab/seo/reports')).toBe('/pixie-lab/seo/reports');
+  });
+
+  it('backlinks exact match', () => {
+    expect(activeSeoHref('/pixie-lab/seo/backlinks')).toBe('/pixie-lab/seo/backlinks');
+  });
+
+  it('outreach exact match', () => {
+    expect(activeSeoHref('/pixie-lab/seo/outreach')).toBe('/pixie-lab/seo/outreach');
+  });
+
+  it('local exact match', () => {
+    expect(activeSeoHref('/pixie-lab/seo/local')).toBe('/pixie-lab/seo/local');
+  });
+
+  it('locations exact match', () => {
+    expect(activeSeoHref('/pixie-lab/seo/locations')).toBe('/pixie-lab/seo/locations');
+  });
+
+  it('reviews exact match', () => {
+    expect(activeSeoHref('/pixie-lab/seo/reviews')).toBe('/pixie-lab/seo/reviews');
+  });
+
+  it('citations exact match', () => {
+    expect(activeSeoHref('/pixie-lab/seo/citations')).toBe('/pixie-lab/seo/citations');
   });
 
   it('returns empty string for a non-SEO route', () => {

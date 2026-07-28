@@ -14,6 +14,10 @@ import type {
   SeoCompetitor, SeoCompetitorGapItem,
   SeoOpportunity, SeoOptimiseResult, SeoBrief, SeoAlert,
   SeoGoogleConnection, SeoGoogleProperty, SeoIntegrationStatus,
+  SeoBacklink, SeoBacklinkOverview, SeoReferringDomain, SeoAnchorText, SeoLinkGapItem,
+  SeoLocalOverview, SeoLocation, SeoReview, SeoReviewSummary, SeoCitation,
+  SeoOutreachContact, SeoOutreachCampaign, SeoOutreachDraft, SeoLinkPlacement,
+  SeoSchedulerHealth,
   PageSpeedData,
   MetaStatus, MetaInboxItem, MetaContentItem,
   MetaAdAccount, MetaCampaign, MetaAdInsights, MetaDiagnostics, MetaAdsAnalysis, BrandBrain,
@@ -303,6 +307,158 @@ export const seoApi = {
   // ── Upgraded connections integrations status ───────────────────────────────
   integrations: () =>
     req<{ integrations: SeoIntegrationStatus[] }>('/api/lab/seo/integrations'),
+
+  // ── Backlinks ──────────────────────────────────────────────────────────────
+  backlinkSync: (site_id: string) =>
+    post<{ job_id?: string; status?: string }>('/api/lab/seo/backlinks/sync', { site_id }),
+  backlinkOverview: (site_id?: string) => {
+    const qs = site_id ? `?site_id=${encodeURIComponent(site_id)}` : '';
+    return req<{ overview: SeoBacklinkOverview }>(`/api/lab/seo/backlinks/overview${qs}`);
+  },
+  backlinks: (opts?: {
+    site_id?: string; status?: string; follow?: boolean; source_domain?: string;
+    target_url?: string; anchor?: string; risk?: string; limit?: number; offset?: number;
+  }) => {
+    const params = new URLSearchParams();
+    if (opts?.site_id) params.set('site_id', opts.site_id);
+    if (opts?.status) params.set('status', opts.status);
+    if (opts?.follow != null) params.set('follow', String(opts.follow));
+    if (opts?.source_domain) params.set('source_domain', opts.source_domain);
+    if (opts?.target_url) params.set('target_url', opts.target_url);
+    if (opts?.anchor) params.set('anchor', opts.anchor);
+    if (opts?.risk) params.set('risk', opts.risk);
+    if (opts?.limit != null) params.set('limit', String(opts.limit));
+    if (opts?.offset != null) params.set('offset', String(opts.offset));
+    const qs = params.toString();
+    return req<{ backlinks: SeoBacklink[]; total?: number }>(`/api/lab/seo/backlinks${qs ? `?${qs}` : ''}`);
+  },
+  referringDomains: (site_id?: string) => {
+    const qs = site_id ? `?site_id=${encodeURIComponent(site_id)}` : '';
+    return req<{ domains: SeoReferringDomain[] }>(`/api/lab/seo/backlinks/referring-domains${qs}`);
+  },
+  backlinksNewLost: (site_id?: string) => {
+    const qs = site_id ? `?site_id=${encodeURIComponent(site_id)}` : '';
+    return req<{ new: SeoBacklink[]; lost: SeoBacklink[] }>(`/api/lab/seo/backlinks/new-lost${qs}`);
+  },
+  anchorTexts: (site_id?: string) => {
+    const qs = site_id ? `?site_id=${encodeURIComponent(site_id)}` : '';
+    return req<{ anchors: SeoAnchorText[] }>(`/api/lab/seo/backlinks/anchors${qs}`);
+  },
+  backlinkRisk: (site_id?: string) => {
+    const qs = site_id ? `?site_id=${encodeURIComponent(site_id)}` : '';
+    return req<{ high_risk: SeoBacklink[]; medium_risk: SeoBacklink[] }>(`/api/lab/seo/backlinks/risk${qs}`);
+  },
+  linkGap: (site_id: string, competitor_domains?: string[]) =>
+    post<{ gap: SeoLinkGapItem[] }>('/api/lab/seo/backlinks/gap', { site_id, competitor_domains }),
+  backlinkOpportunities: (site_id?: string) => {
+    const qs = site_id ? `?site_id=${encodeURIComponent(site_id)}` : '';
+    return req<{ opportunities: SeoLinkGapItem[] }>(`/api/lab/seo/backlinks/opportunities${qs}`);
+  },
+  exportBacklinks: (site_id?: string) => {
+    const qs = site_id ? `?site_id=${encodeURIComponent(site_id)}` : '';
+    return req<{ csv: string }>(`/api/lab/seo/backlinks/export${qs}`);
+  },
+
+  // ── Local SEO ──────────────────────────────────────────────────────────────
+  localOverview: () =>
+    req<{ overview: SeoLocalOverview }>('/api/lab/seo/local'),
+  localRankings: (location_id?: string) => {
+    const qs = location_id ? `?location_id=${encodeURIComponent(location_id)}` : '';
+    return req<{ rankings: Array<{ keyword: string; rank?: number | null; grid?: unknown }> }>(`/api/lab/seo/local-rank${qs}`);
+  },
+  locations: () =>
+    req<{ locations: SeoLocation[] }>('/api/lab/seo/locations'),
+  createLocation: (p: Omit<SeoLocation, 'id' | 'tenant_id' | 'created_at' | 'updated_at'>) =>
+    post<{ location: SeoLocation }>('/api/lab/seo/locations', p as Record<string, unknown>),
+  updateLocation: (id: string, patch: Partial<SeoLocation>) =>
+    req<{ location: SeoLocation }>(`/api/lab/seo/locations/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(patch),
+    }),
+  archiveLocation: (id: string) =>
+    req<{ archived: string }>(`/api/lab/seo/locations/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  reviews: (opts?: { location_id?: string; status?: string; limit?: number; offset?: number }) => {
+    const params = new URLSearchParams();
+    if (opts?.location_id) params.set('location_id', opts.location_id);
+    if (opts?.status) params.set('status', opts.status);
+    if (opts?.limit != null) params.set('limit', String(opts.limit));
+    if (opts?.offset != null) params.set('offset', String(opts.offset));
+    const qs = params.toString();
+    return req<{ reviews: SeoReview[]; summary?: SeoReviewSummary }>(`/api/lab/seo/reviews${qs ? `?${qs}` : ''}`);
+  },
+  draftReviewResponse: (review_id: string) =>
+    post<{ draft: string; approval_id?: string }>('/api/lab/seo/reviews', { review_id, action: 'draft_response' }),
+  approveReviewResponse: (review_id: string, approval_id: string) =>
+    post<{ review: SeoReview }>('/api/lab/seo/reviews', { review_id, approval_id, action: 'approve_response' }),
+  citations: (opts?: { location_id?: string; consistent?: boolean; claimed?: boolean }) => {
+    const params = new URLSearchParams();
+    if (opts?.location_id) params.set('location_id', opts.location_id);
+    if (opts?.consistent != null) params.set('consistent', String(opts.consistent));
+    if (opts?.claimed != null) params.set('claimed', String(opts.claimed));
+    const qs = params.toString();
+    return req<{ citations: SeoCitation[] }>(`/api/lab/seo/citations${qs ? `?${qs}` : ''}`);
+  },
+  importCitations: (location_id: string, csv_content: string) =>
+    post<{ imported: number; errors?: string[] }>('/api/lab/seo/citations', { location_id, csv_content, action: 'import' }),
+  exportCitations: (location_id?: string) => {
+    const qs = location_id ? `?location_id=${encodeURIComponent(location_id)}` : '';
+    return req<{ csv: string }>(`/api/lab/seo/citations/export${qs}`);
+  },
+  checkCitationConsistency: (location_id: string) =>
+    post<{ checked: number; inconsistent: number }>('/api/lab/seo/citations', { location_id, action: 'check_consistency' }),
+
+  // ── Outreach ──────────────────────────────────────────────────────────────
+  outreachContacts: (opts?: { status?: string; limit?: number; offset?: number }) => {
+    const params = new URLSearchParams();
+    if (opts?.status) params.set('status', opts.status);
+    if (opts?.limit != null) params.set('limit', String(opts.limit));
+    if (opts?.offset != null) params.set('offset', String(opts.offset));
+    const qs = params.toString();
+    return req<{ contacts: SeoOutreachContact[]; total?: number }>(`/api/lab/seo/outreach/contacts${qs ? `?${qs}` : ''}`);
+  },
+  importOutreachContacts: (csv_content: string) =>
+    post<{ imported: number; errors?: string[] }>('/api/lab/seo/outreach/contacts', { csv_content, action: 'import' }),
+  exportOutreachContacts: () =>
+    req<{ csv: string }>('/api/lab/seo/outreach/contacts/export'),
+  suppressOutreachContact: (id: string) =>
+    post<{ contact: SeoOutreachContact }>('/api/lab/seo/outreach/contacts', { id, action: 'suppress' }),
+  outreachCampaigns: () =>
+    req<{ campaigns: SeoOutreachCampaign[] }>('/api/lab/seo/outreach/campaigns'),
+  createOutreachCampaign: (p: { name: string; contact_ids?: string[] }) =>
+    post<{ campaign: SeoOutreachCampaign }>('/api/lab/seo/outreach/campaigns', p as Record<string, unknown>),
+  updateOutreachCampaign: (id: string, patch: Partial<SeoOutreachCampaign>) =>
+    post<{ campaign: SeoOutreachCampaign }>('/api/lab/seo/outreach/campaigns', { id, ...patch, action: 'update' }),
+  outreachDrafts: (campaign_id?: string) => {
+    const qs = campaign_id ? `?campaign_id=${encodeURIComponent(campaign_id)}` : '';
+    return req<{ drafts: SeoOutreachDraft[] }>(`/api/lab/seo/outreach/drafts${qs}`);
+  },
+  generateOutreachDraft: (campaign_id: string, contact_id: string) =>
+    post<{ draft: SeoOutreachDraft }>('/api/lab/seo/outreach/drafts', { campaign_id, contact_id, action: 'generate' }),
+  approveOutreachDraft: (draft_id: string) =>
+    post<{ draft: SeoOutreachDraft }>('/api/lab/seo/outreach/drafts', { draft_id, action: 'approve' }),
+  sendOutreachDraft: (draft_id: string) =>
+    post<{ sent: boolean; draft: SeoOutreachDraft }>('/api/lab/seo/outreach/send', { draft_id }),
+  linkPlacements: (campaign_id?: string) => {
+    const qs = campaign_id ? `?campaign_id=${encodeURIComponent(campaign_id)}` : '';
+    return req<{ placements: SeoLinkPlacement[] }>(`/api/lab/seo/outreach/placements${qs}`);
+  },
+
+  // ── Scheduler health (admin) ────────────────────────────────────────────────
+  schedulerHealth: () =>
+    req<{ health: SeoSchedulerHealth }>('/api/lab/seo/scheduler/health'),
+  schedulerTick: () =>
+    post<{ ticked: boolean }>('/api/lab/seo/scheduler/tick', {}),
+  schedulerRetryJob: (job_id: string) =>
+    post<{ retried: boolean }>('/api/lab/seo/scheduler/retry', { job_id }),
+  schedulerPauseType: (job_type: string) =>
+    post<{ paused: boolean }>('/api/lab/seo/scheduler/pause', { job_type }),
+  schedulerResumeType: (job_type: string) =>
+    post<{ resumed: boolean }>('/api/lab/seo/scheduler/resume', { job_type }),
+
+  // ── Reports: PDF export ───────────────────────────────────────────────────
+  exportReportPdf: (site_id?: string, crawl_job_id?: string, audience?: 'client' | 'internal') =>
+    post<{ report_id: string; download_url: string }>('/api/lab/seo/reports/pdf', { site_id, crawl_job_id, audience }),
 };
 
 /* ------------------------------ Meta / Marketing ------------------------------ */

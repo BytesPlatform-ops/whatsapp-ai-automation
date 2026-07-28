@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { Download, Printer } from 'lucide-react';
+import { Download, Printer, FileDown, Loader2 } from 'lucide-react';
 import { seoApi } from '@/lib/pixie-lab/servicesClient';
 import type { SeoCrawlReport, SeoCrawlIssue } from '@/lib/pixie-lab/serviceTypes';
 import { EmptyState, OfflineState, LoadingCards } from '@/components/pixie-lab/services/ServiceStates';
@@ -108,6 +108,8 @@ export function SeoReportsPanel({
   const [status, setStatus] = useState<'loading' | 'done' | 'offline' | 'empty'>('loading');
   const [report, setReport] = useState<SeoCrawlReport | null>(null);
   const [issues, setIssues] = useState<SeoCrawlIssue[]>([]);
+  const [pdfBusy, setPdfBusy] = useState(false);
+  const [audience, setAudience] = useState<'client' | 'internal'>('client');
 
   const load = useCallback(async () => {
     setStatus('loading');
@@ -171,7 +173,7 @@ export function SeoReportsPanel({
           )}
         </div>
         {/* Export + print actions */}
-        <div className="no-print flex items-center gap-2 self-start">
+        <div className="no-print flex flex-wrap items-center gap-2 self-start">
           <button
             onClick={() => exportCsv(report, issues)}
             className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--pl-border)] px-3 py-1.5 text-[12.5px] font-semibold text-[var(--pl-text-soft)] transition hover:text-[var(--pl-text)]"
@@ -189,6 +191,27 @@ export function SeoReportsPanel({
             className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--pl-border)] px-3 py-1.5 text-[12.5px] font-semibold text-[var(--pl-text-soft)] transition hover:text-[var(--pl-text)]"
           >
             <Printer size={13} /> Print
+          </button>
+          {/* PDF export with audience toggle */}
+          <select
+            value={audience}
+            onChange={(e) => setAudience(e.target.value as 'client' | 'internal')}
+            className="rounded-lg border border-[var(--pl-border)] bg-[var(--pl-surface)] px-2 py-1.5 text-[12px] text-[var(--pl-text)] outline-none"
+          >
+            <option value="client">Client</option>
+            <option value="internal">Internal</option>
+          </select>
+          <button
+            onClick={async () => {
+              setPdfBusy(true);
+              const env = await seoApi.exportReportPdf(report.site_id, report.crawl_job_id, audience);
+              setPdfBusy(false);
+              if (env.download_url) window.open(env.download_url, '_blank');
+            }}
+            disabled={pdfBusy}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--pl-border)] px-3 py-1.5 text-[12.5px] font-semibold text-[var(--pl-text-soft)] transition hover:text-[var(--pl-text)] disabled:opacity-60"
+          >
+            {pdfBusy ? <Loader2 size={13} className="animate-spin" /> : <FileDown size={13} />} PDF
           </button>
         </div>
       </div>

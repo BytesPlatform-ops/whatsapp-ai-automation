@@ -396,6 +396,198 @@ export interface SeoIntegrationStatus {
   notes?: string | null;
 }
 
+// ── Backlinks ─────────────────────────────────────────────────────────────────
+
+export interface SeoBacklinkOverview {
+  site_id?: string;
+  total_backlinks?: number | null;
+  referring_domains?: number | null;
+  new_last_30d?: number | null;
+  lost_last_30d?: number | null;
+  follow_count?: number | null;
+  nofollow_count?: number | null;
+  avg_domain_rating?: number | null;
+  last_synced_at?: string | null;
+}
+
+export interface SeoBacklink {
+  id: string;
+  site_id?: string;
+  source_url?: string;
+  source_domain?: string;
+  target_url?: string;
+  anchor_text?: string | null;
+  follow?: boolean;
+  first_seen?: string | null;
+  last_seen?: string | null;
+  status?: 'active' | 'lost';
+  risk?: 'low' | 'medium' | 'high' | null;
+  domain_rating?: number | null;
+  page_rating?: number | null;
+}
+
+export interface SeoReferringDomain {
+  domain: string;
+  backlink_count?: number;
+  follow_count?: number;
+  nofollow_count?: number;
+  domain_rating?: number | null;
+  first_seen?: string | null;
+  last_seen?: string | null;
+}
+
+export interface SeoAnchorText {
+  anchor: string;
+  count?: number;
+  follow_count?: number;
+}
+
+export interface SeoLinkGapItem {
+  domain: string;
+  links_to_competitor?: string | null;
+  links_to_us?: boolean;
+  opportunity_score?: number | null;
+}
+
+// ── Local SEO ─────────────────────────────────────────────────────────────────
+
+export interface SeoLocalOverview {
+  location_count?: number;
+  avg_rating?: number | null;
+  total_reviews?: number;
+  unanswered_reviews?: number;
+  citation_count?: number;
+  inconsistent_citations?: number;
+  local_rank_avg?: number | null;
+}
+
+export interface SeoLocation {
+  id: string;
+  tenant_id?: string;
+  name: string;
+  address?: string | null;
+  city?: string | null;
+  state?: string | null;
+  country?: string | null;
+  phone?: string | null;
+  website?: string | null;
+  google_place_id?: string | null;
+  status?: 'active' | 'archived';
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface SeoReview {
+  id: string;
+  location_id?: string;
+  platform?: string;
+  author?: string | null;
+  rating?: number | null;
+  body?: string | null;
+  status?: 'unanswered' | 'answered' | 'ignored';
+  sentiment?: 'positive' | 'neutral' | 'negative' | null;
+  response_draft?: string | null;
+  response_approval_id?: string | null;
+  published_at?: string | null;
+  created_at?: string;
+}
+
+export interface SeoReviewSummary {
+  total?: number;
+  avg_rating?: number | null;
+  unanswered?: number;
+  distribution?: Record<string, number>;
+}
+
+export interface SeoCitation {
+  id: string;
+  location_id?: string;
+  directory?: string;
+  name_on_listing?: string | null;
+  address_on_listing?: string | null;
+  phone_on_listing?: string | null;
+  website_on_listing?: string | null;
+  claimed?: boolean | null;
+  consistent?: boolean | null;
+  listing_url?: string | null;
+  last_checked_at?: string | null;
+  created_at?: string;
+}
+
+// ── Outreach ──────────────────────────────────────────────────────────────────
+
+export interface SeoOutreachContact {
+  id: string;
+  tenant_id?: string;
+  name?: string | null;
+  email?: string | null;
+  website?: string | null;
+  domain?: string | null;
+  tags?: string[];
+  status?: 'active' | 'suppressed';
+  created_at?: string;
+}
+
+export type OutreachCampaignStatus =
+  | 'draft'
+  | 'active'
+  | 'paused'
+  | 'completed'
+  | 'cancelled';
+
+export interface SeoOutreachCampaign {
+  id: string;
+  tenant_id?: string;
+  name: string;
+  status?: OutreachCampaignStatus;
+  contact_count?: number;
+  sent_count?: number;
+  reply_count?: number;
+  placement_count?: number;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface SeoOutreachDraft {
+  id: string;
+  campaign_id?: string;
+  contact_id?: string;
+  subject?: string | null;
+  body?: string | null;
+  status?: 'pending' | 'approved' | 'rejected' | 'sent';
+  approval_id?: string | null;
+  created_at?: string;
+}
+
+export interface SeoLinkPlacement {
+  id: string;
+  campaign_id?: string;
+  contact_id?: string;
+  target_url?: string | null;
+  anchor?: string | null;
+  source_domain?: string | null;
+  status?: 'pending' | 'confirmed' | 'lost';
+  confirmed_at?: string | null;
+  created_at?: string;
+}
+
+// ── Scheduler Health ──────────────────────────────────────────────────────────
+
+export interface SeoSchedulerHealth {
+  enabled?: boolean;
+  instance_id?: string | null;
+  last_heartbeat?: string | null;
+  jobs_claimed?: number;
+  jobs_completed?: number;
+  jobs_failed?: number;
+  jobs_retried?: number;
+  jobs_running?: number;
+  oldest_due?: string | null;
+  quota_errors?: number;
+  stale_lock_recoveries?: number;
+  job_types?: string[];
+}
+
 /** Core Web Vitals / PageSpeed data stored per-page. */
 export interface PageSpeedData {
   url?: string;
