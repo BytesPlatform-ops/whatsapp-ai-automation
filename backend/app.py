@@ -67,6 +67,7 @@ from seo.intelligence.routes import router as seo_intelligence_router
 from seo.fix_verify_routes import router as seo_fix_verify_router
 from seo.backlinks.routes import router as seo_backlinks_router
 from seo.scheduler.routes import router as seo_scheduler_router
+from seo.reporting.routes import router as seo_pdf_router
 from receptionist.campaigns.api import router as campaigns_router
 from receptionist.onboarding.api import router as onboarding_router
 from content_creator.router import router as content_creator_router
@@ -136,6 +137,7 @@ app.include_router(seo_intelligence_router)  # /api/agents/seo/* — competitors
 app.include_router(seo_fix_verify_router)  # /api/agents/seo/fix-verify/* — durable fix verification
 app.include_router(seo_backlinks_router)  # /api/agents/seo/backlinks/* — backlink profile, risk, gaps
 app.include_router(seo_scheduler_router)  # /api/agents/seo/scheduler/* — internal scheduler admin
+app.include_router(seo_pdf_router)  # /api/agents/seo/reports/pdf/* — safe PDF report export
 app.include_router(onboarding_router)
 app.include_router(campaigns_router)
 app.include_router(seo_router, deprecated=True)  # DEPRECATED /api/seo/* (in-memory); use /api/agents/seo/*
