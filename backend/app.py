@@ -70,6 +70,7 @@ from seo.scheduler.routes import router as seo_scheduler_router
 from seo.reporting.routes import router as seo_pdf_router
 from seo.outreach.routes import router as seo_outreach_router
 from seo.local.routes import router as seo_local_router
+from seo.ops.routes import router as seo_ops_router
 from receptionist.campaigns.api import router as campaigns_router
 from receptionist.onboarding.api import router as onboarding_router
 from content_creator.router import router as content_creator_router
@@ -142,6 +143,7 @@ app.include_router(seo_scheduler_router)  # /api/agents/seo/scheduler/* — inte
 app.include_router(seo_pdf_router)  # /api/agents/seo/reports/pdf/* — safe PDF report export
 app.include_router(seo_outreach_router)  # /api/agents/seo/outreach/* — outreach contacts/campaigns
 app.include_router(seo_local_router)  # /api/agents/seo/* — local SEO, GBP, reviews, citations
+app.include_router(seo_ops_router)  # /api/agents/seo/ops/* — internal health, metrics, readiness, alerts
 app.include_router(onboarding_router)
 app.include_router(campaigns_router)
 app.include_router(seo_router, deprecated=True)  # DEPRECATED /api/seo/* (in-memory); use /api/agents/seo/*
