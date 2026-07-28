@@ -13,6 +13,44 @@ Design
   checking whether the lock is free/expired before writing.  In the rare race
   a second worker sets the same lock; a re-read after write confirms ownership.
 
+Scheduler sources and their due-job logic
+-----------------------------------------
+Each source has a dedicated ``due_<source>`` helper that is used by the registry
+wrappers in ``registry.py``.  All Supabase-mode paths issue indexed PostgREST
+filters; no Python-side full-table scan is performed.
+
+Sources:
+  gsc_sync          → seo_gsc_sync_jobs       (status, next_run/queued_at)
+  ga4_sync          → seo_analytics_sync_jobs (status, next_run/queued_at)
+  rank              → seo_rank_jobs           (status, next_run, priority)
+  alert_gen         → seo_alerts_schedule     (scheduling row per site;
+                       see "alert_gen approach" note below)
+  crawl_recovery    → seo_crawl_jobs          (status, lock_expires_at;
+                       see "crawl_recovery approach" note below)
+  fix_verify        → seo_fix_verification    (result/status)
+  backlink_sync     → seo_backlink_projects   (next_run, status)
+  gbp_sync          → seo_gbp_sync_jobs       (status, next_run)
+  citation_checks   → seo_citation_jobs       (status, next_run)
+  outreach_followups→ seo_outreach_followups  (status, scheduled_for)
+  link_verification → seo_link_placements     (status, next_check_at)
+  scheduled_reports → seo_report_schedules    (status, next_run)
+
+alert_gen approach
+------------------
+Instead of scanning *all* sites/tenants in memory and calling generate_alerts
+for everyone, we maintain a lightweight ``seo_alert_schedule`` scheduling table
+where each (tenant_id, site_id) pair has a ``next_run`` field.  ``due_alert_gen``
+queries that table for rows whose ``next_run <= now`` — a single indexed query.
+The registry wrapper calls ``generate_alerts`` only for the returned rows, then
+updates ``next_run`` to now+interval. This is fully Supabase-safe (no full scan).
+
+crawl_recovery approach
+-----------------------
+``due_crawl_recovery`` queries ``seo_crawl_jobs`` directly for rows in
+queued/running status whose ``lock_expires_at`` is absent or in the past — again
+a single indexed PostgREST query.  The registry wrapper groups results by
+tenant_id and calls ``poll_once`` per tenant.  No full-table scan in Python.
+
 Index hints
 -----------
 For Supabase deployments, add the following expression indexes on each job table
@@ -22,8 +60,13 @@ so PostgREST filtering on ``data->>'status'`` and ``data->>'next_run'`` stays fa
     CREATE INDEX ON <table> ((data->>'next_run'));
     CREATE INDEX ON <table> ((data->>'lock_expires_at'));
 
+See supabase/migrations/20260803_seo_scheduler_indexes.sql for the full set.
+
 Tables expected: seo_rank_jobs, seo_gsc_sync_jobs, seo_analytics_sync_jobs,
-                 seo_fix_verification, seo_alerts (read-only for alert gen).
+                 seo_fix_verification, seo_alerts (read-only for alert gen),
+                 seo_alert_schedule (scheduling rows for alert_gen),
+                 seo_backlink_projects, seo_gbp_sync_jobs, seo_citation_jobs,
+                 seo_outreach_followups, seo_link_placements, seo_report_schedules.
 """
 
 from __future__ import annotations
@@ -96,6 +139,9 @@ def due_jobs(
     next_run_before: Optional[str] = None,
     lock_expired_before: Optional[str] = None,
     provider: Optional[str] = None,
+    tenant_id: Optional[str] = None,
+    retry_count_lte: Optional[int] = None,
+    priority_gte: Optional[int] = None,
     limit: int = 25,
     order: str = "next_run",
     _memory_repo=None,
@@ -112,6 +158,9 @@ def due_jobs(
     lock_expired_before: Only rows whose lock is absent or expired before this
                         ISO timestamp (defaults to ``now``).
     provider:           Optional filter on ``data->>'provider'``.
+    tenant_id:          Optional filter to restrict to one tenant.
+    retry_count_lte:    Optional upper bound on ``data->>'retry_count'`` (int).
+    priority_gte:       Optional lower bound on ``data->>'priority'`` (int).
     limit:              Maximum rows returned.
     order:              Field name to order ascending (``next_run`` default).
     _memory_repo:       Injected persistence._MemoryRepo for tests (skip DB).
@@ -134,6 +183,9 @@ def due_jobs(
             lock_cutoff=lock_cutoff,
             status_in=status_in,
             provider=provider,
+            tenant_id=tenant_id,
+            retry_count_lte=retry_count_lte,
+            priority_gte=priority_gte,
             limit=limit,
             order=order,
             _memory_repo=_memory_repo,
@@ -145,6 +197,9 @@ def due_jobs(
         lock_cutoff=lock_cutoff,
         status_in=status_in,
         provider=provider,
+        tenant_id=tenant_id,
+        retry_count_lte=retry_count_lte,
+        priority_gte=priority_gte,
         limit=limit,
         order=order,
     )
@@ -158,6 +213,9 @@ def _due_jobs_memory(
     lock_cutoff: str,
     status_in: List[str],
     provider: Optional[str],
+    tenant_id: Optional[str],
+    retry_count_lte: Optional[int],
+    priority_gte: Optional[int],
     limit: int,
     order: str,
     _memory_repo=None,
@@ -199,13 +257,19 @@ def _due_jobs_memory(
             except Exception:
                 data = {}
 
+        # Tenant filter
+        if tenant_id is not None:
+            row_tenant = row.get("tenant_id", "")
+            if row_tenant != tenant_id:
+                continue
+
         # Status filter
         row_status = data.get("status") or row.get("status", "")
         if row_status not in status_in:
             continue
 
         # next_run / scheduled_for filter
-        nxt = data.get("next_run") or data.get("scheduled_for") or ""
+        nxt = data.get("next_run") or data.get("scheduled_for") or data.get("queued_at") or ""
         if nxt and cutoff_dt:
             nxt_dt = _parse_dt(nxt)
             if nxt_dt and nxt_dt > cutoff_dt:
@@ -224,6 +288,24 @@ def _due_jobs_memory(
             row_provider = data.get("provider") or row.get("provider", "")
             if row_provider != provider:
                 continue
+
+        # retry_count filter
+        if retry_count_lte is not None:
+            rc = data.get("retry_count", 0)
+            try:
+                if int(rc) > retry_count_lte:
+                    continue
+            except (ValueError, TypeError):
+                pass
+
+        # priority filter (gte: only include rows with priority >= threshold)
+        if priority_gte is not None:
+            p = data.get("priority", 0)
+            try:
+                if int(p) < priority_gte:
+                    continue
+            except (ValueError, TypeError):
+                pass
 
         results.append(dict(row))
 
@@ -250,6 +332,9 @@ def _due_jobs_supabase(
     lock_cutoff: str,
     status_in: List[str],
     provider: Optional[str],
+    tenant_id: Optional[str],
+    retry_count_lte: Optional[int],
+    priority_gte: Optional[int],
     limit: int,
     order: str,
 ) -> List[Dict[str, Any]]:
@@ -270,14 +355,23 @@ def _due_jobs_supabase(
     params: Dict[str, Any] = {
         "data->>status": f"in.({status_csv})",
         "limit": str(limit),
-        "order": f"data->>{ order }.asc.nullsfirst",
+        "order": f"data->>{order}.asc.nullsfirst",
     }
 
-    # next_run cutoff
+    # next_run cutoff — use or.() to handle multiple field aliases
     params[f"data->>{order}"] = f"lte.{cutoff}"
 
     if provider is not None:
         params["data->>provider"] = f"eq.{provider}"
+
+    if tenant_id is not None:
+        params["tenant_id"] = f"eq.{tenant_id}"
+
+    if retry_count_lte is not None:
+        params["data->>retry_count"] = f"lte.{retry_count_lte}"
+
+    if priority_gte is not None:
+        params["data->>priority"] = f"gte.{priority_gte}"
 
     try:
         with httpx.Client(timeout=15) as http:
@@ -499,3 +593,386 @@ def _claim_job_supabase(
         _log.warning("claim_job supabase error for %s/%s: %s", table, row_id, exc)
 
     return False
+
+
+# ── complete_job ──────────────────────────────────────────────────────────────
+
+def complete_job(
+    table: str,
+    row_id: str,
+    worker_id: str,
+    *,
+    tenant_id: str = "",
+    new_status: str = "completed",
+    next_run_offset_s: Optional[int] = None,
+    _memory_repo=None,
+) -> bool:
+    """Mark a job complete: clear lock, set status, optionally advance next_run.
+
+    Idempotent: if the row already has the target status (set by a previous run
+    of the same worker), returns True without re-writing.
+
+    Parameters
+    ----------
+    worker_id:           Must match lock_owner; otherwise returns False (safety).
+    new_status:          Target status string (default ``"completed"``).
+    next_run_offset_s:   If set, updates ``next_run`` = now + this many seconds
+                         (for recurring jobs).
+    """
+    b = _backend()
+    if _memory_repo is not None or b != "supabase":
+        return _complete_job_memory(
+            table=table,
+            row_id=row_id,
+            tenant_id=tenant_id,
+            worker_id=worker_id,
+            new_status=new_status,
+            next_run_offset_s=next_run_offset_s,
+            _memory_repo=_memory_repo,
+        )
+    return _complete_job_supabase(
+        table=table,
+        row_id=row_id,
+        tenant_id=tenant_id,
+        worker_id=worker_id,
+        new_status=new_status,
+        next_run_offset_s=next_run_offset_s,
+    )
+
+
+def _complete_job_memory(
+    *,
+    table: str,
+    row_id: str,
+    tenant_id: str,
+    worker_id: str,
+    new_status: str,
+    next_run_offset_s: Optional[int],
+    _memory_repo=None,
+) -> bool:
+    if _memory_repo is None:
+        try:
+            import persistence
+            _memory_repo = persistence.table(table)
+        except Exception as exc:
+            _log.warning("complete_job: cannot open memory table %s: %s", table, exc)
+            return False
+
+    raw = _memory_repo.get(tenant_id, row_id) if tenant_id else _find_by_id(_memory_repo, row_id)
+    if not raw:
+        return False
+
+    data = dict(raw.get("data") or {})
+    if isinstance(data, str):
+        try:
+            import json
+            data = json.loads(data)
+        except Exception:
+            data = {}
+
+    # Idempotency: already in target status
+    if data.get("status") == new_status and not data.get("lock_owner"):
+        return True
+
+    # Ownership check (relaxed: allow if lock expired)
+    current_owner = data.get("lock_owner", "")
+    current_expiry = data.get("lock_expires_at", "")
+    now_dt = datetime.now(timezone.utc)
+    if current_owner and current_owner != worker_id:
+        exp_dt = _parse_dt(current_expiry)
+        if exp_dt and exp_dt > now_dt:
+            _log.debug("complete_job: row %s owned by %s, not %s", row_id, current_owner, worker_id)
+            return False
+
+    data["status"] = new_status
+    data["lock_owner"] = ""
+    data["lock_expires_at"] = ""
+    data["finished_at"] = _now_iso()
+
+    if next_run_offset_s is not None:
+        next_run = (now_dt + timedelta(seconds=next_run_offset_s)).isoformat(timespec="microseconds")
+        data["next_run"] = next_run
+        data["status"] = "queued"  # reset for recurring jobs
+
+    updated_row = dict(raw)
+    updated_row["data"] = data
+    try:
+        _memory_repo.upsert(updated_row)
+        return True
+    except Exception as exc:
+        _log.warning("complete_job: upsert failed for %s: %s", row_id, exc)
+        return False
+
+
+def _complete_job_supabase(
+    *,
+    table: str,
+    row_id: str,
+    tenant_id: str,
+    worker_id: str,
+    new_status: str,
+    next_run_offset_s: Optional[int],
+) -> bool:
+    import httpx
+
+    url = _sb_rest(table)
+    params: Dict[str, str] = {"id": f"eq.{row_id}"}
+    if tenant_id:
+        params["tenant_id"] = f"eq.{tenant_id}"
+
+    now_dt = datetime.now(timezone.utc)
+
+    try:
+        with httpx.Client(timeout=15) as http:
+            r = http.get(url, headers=_sb_headers(), params={**params, "limit": "1"})
+            if r.status_code != 200 or not r.json():
+                return False
+
+            row = r.json()[0]
+            data = dict(row.get("data") or {})
+
+            # Idempotency
+            if data.get("status") == new_status and not data.get("lock_owner"):
+                return True
+
+            # Ownership check
+            current_owner = data.get("lock_owner", "")
+            current_expiry = data.get("lock_expires_at", "")
+            if current_owner and current_owner != worker_id:
+                exp_dt = _parse_dt(current_expiry)
+                if exp_dt and exp_dt > now_dt:
+                    return False
+
+            data["status"] = new_status
+            data["lock_owner"] = ""
+            data["lock_expires_at"] = ""
+            data["finished_at"] = now_dt.isoformat(timespec="microseconds")
+
+            if next_run_offset_s is not None:
+                next_run = (now_dt + timedelta(seconds=next_run_offset_s)).isoformat(timespec="microseconds")
+                data["next_run"] = next_run
+                data["status"] = "queued"
+
+            pw = http.patch(
+                url,
+                headers=_sb_headers({"Prefer": "return=representation"}),
+                params=params,
+                json={"data": data},
+            )
+            return pw.status_code < 300
+
+    except Exception as exc:
+        _log.warning("complete_job supabase error for %s/%s: %s", table, row_id, exc)
+
+    return False
+
+
+# ── Source-specific due-job helpers ───────────────────────────────────────────
+# Each function is a thin wrapper around due_jobs with source-appropriate
+# table + field names. Used by registry.py wrappers.
+
+def due_gsc_sync(*, limit: int = 25, now: Optional[str] = None, _memory_repo=None) -> List[Dict[str, Any]]:
+    """Due GSC sync jobs (QUEUED or RUNNING, no unexpired lock)."""
+    return due_jobs(
+        "seo_gsc_sync_jobs",
+        now=now,
+        status_in=["queued", "running"],
+        order="queued_at",
+        limit=limit,
+        _memory_repo=_memory_repo,
+    )
+
+
+def due_ga4_sync(*, limit: int = 25, now: Optional[str] = None, _memory_repo=None) -> List[Dict[str, Any]]:
+    """Due GA4 sync jobs (QUEUED or RUNNING, no unexpired lock)."""
+    return due_jobs(
+        "seo_analytics_sync_jobs",
+        now=now,
+        status_in=["queued", "running"],
+        order="queued_at",
+        limit=limit,
+        _memory_repo=_memory_repo,
+    )
+
+
+def due_rank_jobs(
+    *,
+    limit: int = 25,
+    now: Optional[str] = None,
+    provider: Optional[str] = None,
+    _memory_repo=None,
+) -> List[Dict[str, Any]]:
+    """Due rank check jobs (QUEUED, ordered by next_run/priority)."""
+    return due_jobs(
+        "seo_rank_jobs",
+        now=now,
+        status_in=["queued", "running"],
+        order="next_run",
+        provider=provider,
+        limit=limit,
+        _memory_repo=_memory_repo,
+    )
+
+
+def due_alert_gen(
+    *,
+    limit: int = 25,
+    now: Optional[str] = None,
+    _memory_repo=None,
+) -> List[Dict[str, Any]]:
+    """Due alert-generation scheduling rows.
+
+    Queries seo_alert_schedule (not seo_alerts) for rows whose next_run <= now.
+    Each row is a lightweight scheduling envelope: {tenant_id, site_id, next_run}.
+    Only these due rows trigger generate_alerts — no full-scan of all sites.
+    """
+    return due_jobs(
+        "seo_alert_schedule",
+        now=now,
+        status_in=["pending", "queued"],
+        order="next_run",
+        limit=limit,
+        _memory_repo=_memory_repo,
+    )
+
+
+def due_crawl_recovery(
+    *,
+    limit: int = 25,
+    now: Optional[str] = None,
+    _memory_repo=None,
+) -> List[Dict[str, Any]]:
+    """Due crawl-recovery jobs: crawl_jobs that are RUNNING with expired lock or QUEUED.
+
+    This is a direct indexed query — NOT a full scan of all sites in Python.
+    Returns individual job rows; the registry groups them by tenant_id.
+    """
+    return due_jobs(
+        "seo_crawl_jobs",
+        now=now,
+        status_in=["queued", "running"],
+        order="created_at",
+        limit=limit,
+        _memory_repo=_memory_repo,
+    )
+
+
+def due_fix_verify(
+    *,
+    limit: int = 25,
+    now: Optional[str] = None,
+    _memory_repo=None,
+) -> List[Dict[str, Any]]:
+    """Due fix-verification rows (result == pending)."""
+    return due_jobs(
+        "seo_fix_verification",
+        now=now,
+        status_in=["pending"],
+        order="created_at",
+        limit=limit,
+        _memory_repo=_memory_repo,
+    )
+
+
+def due_backlink_sync(
+    *,
+    limit: int = 25,
+    now: Optional[str] = None,
+    provider: Optional[str] = None,
+    _memory_repo=None,
+) -> List[Dict[str, Any]]:
+    """Due backlink-sync project rows (next_run <= now, status queued/running)."""
+    return due_jobs(
+        "seo_backlink_projects",
+        now=now,
+        status_in=["queued", "running", "active"],
+        order="next_run",
+        provider=provider,
+        limit=limit,
+        _memory_repo=_memory_repo,
+    )
+
+
+def due_gbp_sync(
+    *,
+    limit: int = 25,
+    now: Optional[str] = None,
+    _memory_repo=None,
+) -> List[Dict[str, Any]]:
+    """Due GBP (Google Business Profile) sync jobs."""
+    return due_jobs(
+        "seo_gbp_sync_jobs",
+        now=now,
+        status_in=["queued", "running"],
+        order="next_run",
+        limit=limit,
+        _memory_repo=_memory_repo,
+    )
+
+
+def due_citation_checks(
+    *,
+    limit: int = 25,
+    now: Optional[str] = None,
+    _memory_repo=None,
+) -> List[Dict[str, Any]]:
+    """Due citation-check jobs."""
+    return due_jobs(
+        "seo_citation_jobs",
+        now=now,
+        status_in=["queued", "running", "pending"],
+        order="next_run",
+        limit=limit,
+        _memory_repo=_memory_repo,
+    )
+
+
+def due_outreach_followups(
+    *,
+    limit: int = 25,
+    now: Optional[str] = None,
+    _memory_repo=None,
+) -> List[Dict[str, Any]]:
+    """Due outreach follow-up rows (scheduled_for <= now, status pending/queued)."""
+    return due_jobs(
+        "seo_outreach_followups",
+        now=now,
+        status_in=["pending", "queued", "scheduled"],
+        order="scheduled_for",
+        limit=limit,
+        _memory_repo=_memory_repo,
+    )
+
+
+def due_link_verification(
+    *,
+    limit: int = 25,
+    now: Optional[str] = None,
+    _memory_repo=None,
+) -> List[Dict[str, Any]]:
+    """Due link-placement verification rows (next_check_at <= now)."""
+    return due_jobs(
+        "seo_link_placements",
+        now=now,
+        status_in=["pending", "active", "queued"],
+        order="next_check_at",
+        limit=limit,
+        _memory_repo=_memory_repo,
+    )
+
+
+def due_scheduled_reports(
+    *,
+    limit: int = 25,
+    now: Optional[str] = None,
+    _memory_repo=None,
+) -> List[Dict[str, Any]]:
+    """Due scheduled-report rows (next_run <= now, status active/queued)."""
+    return due_jobs(
+        "seo_report_schedules",
+        now=now,
+        status_in=["active", "queued", "pending"],
+        order="next_run",
+        limit=limit,
+        _memory_repo=_memory_repo,
+    )
