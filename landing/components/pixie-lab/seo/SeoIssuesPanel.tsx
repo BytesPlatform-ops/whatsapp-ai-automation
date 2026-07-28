@@ -238,8 +238,10 @@ export function SeoIssuesPanel({
       {/* Filters bar */}
       <div className="flex flex-wrap items-center gap-2">
         <div className="flex flex-1 min-w-[180px] items-center gap-2 rounded-xl border border-[var(--pl-border)] bg-[var(--pl-surface-soft)] px-3 py-2">
-          <Search size={14} className="text-[var(--pl-text-muted)]" />
+          <Search size={14} className="text-[var(--pl-text-muted)]" aria-hidden="true" />
+          <label className="sr-only" htmlFor="issues-search">Search issues</label>
           <input
+            id="issues-search"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search issues…"
@@ -247,7 +249,9 @@ export function SeoIssuesPanel({
           />
         </div>
 
+        <label className="sr-only" htmlFor="issues-severity-filter">Severity filter</label>
         <select
+          id="issues-severity-filter"
           value={severity}
           onChange={(e) => setSeverity(e.target.value)}
           className="rounded-xl border border-[var(--pl-border)] bg-[var(--pl-surface-soft)] px-3 py-2 text-[13px] text-[var(--pl-text)] outline-none"
@@ -255,7 +259,9 @@ export function SeoIssuesPanel({
           {SEVERITIES.map((s) => <option key={s} value={s}>{s === 'all' ? 'All severities' : s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
         </select>
 
+        <label className="sr-only" htmlFor="issues-status-filter">Status filter</label>
         <select
+          id="issues-status-filter"
           value={issueStatus}
           onChange={(e) => setIssueStatus(e.target.value)}
           className="rounded-xl border border-[var(--pl-border)] bg-[var(--pl-surface-soft)] px-3 py-2 text-[13px] text-[var(--pl-text)] outline-none"
@@ -264,14 +270,18 @@ export function SeoIssuesPanel({
         </select>
 
         {categories.length > 0 && (
-          <select
-            value={category}
-            onChange={(e) => setCategory(e.target.value)}
-            className="rounded-xl border border-[var(--pl-border)] bg-[var(--pl-surface-soft)] px-3 py-2 text-[13px] text-[var(--pl-text)] outline-none"
-          >
-            <option value="all">All categories</option>
-            {categories.map((c) => <option key={c} value={c}>{c.replace(/_/g, ' ')}</option>)}
-          </select>
+          <>
+            <label className="sr-only" htmlFor="issues-category-filter">Category filter</label>
+            <select
+              id="issues-category-filter"
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
+              className="rounded-xl border border-[var(--pl-border)] bg-[var(--pl-surface-soft)] px-3 py-2 text-[13px] text-[var(--pl-text)] outline-none"
+            >
+              <option value="all">All categories</option>
+              {categories.map((c) => <option key={c} value={c}>{c.replace(/_/g, ' ')}</option>)}
+            </select>
+          </>
         )}
 
         <button onClick={load} aria-label="Refresh issues" className="rounded-xl border border-[var(--pl-border)] p-2 text-[var(--pl-text-muted)] transition hover:text-[var(--pl-text)]">
@@ -279,8 +289,8 @@ export function SeoIssuesPanel({
         </button>
       </div>
 
-      {/* Result count */}
-      <p className="text-[12.5px] text-[var(--pl-text-muted)]">
+      {/* Result count — also serves as an aria-live status announcement */}
+      <p role="status" aria-live="polite" aria-atomic="true" className="text-[12.5px] text-[var(--pl-text-muted)]">
         {filtered.length} issue{filtered.length !== 1 ? 's' : ''}
         {search.trim() ? ` matching "${search}"` : ''}
       </p>

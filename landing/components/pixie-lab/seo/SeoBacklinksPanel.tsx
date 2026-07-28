@@ -81,15 +81,19 @@ function BacklinksTable({ backlinks }: { backlinks: SeoBacklink[] }) {
       {/* Filters row */}
       <div className="flex flex-wrap items-center gap-2">
         <div className="flex items-center gap-1.5 rounded-lg border border-[var(--pl-border)] bg-[var(--pl-surface)] px-3 py-1.5">
-          <Search size={13} style={{ color: ACCENT }} />
+          <Search size={13} style={{ color: ACCENT }} aria-hidden="true" />
+          <label className="sr-only" htmlFor="backlinks-search">Search backlinks</label>
           <input
+            id="backlinks-search"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search backlinks…"
             className="w-40 bg-transparent text-[12.5px] text-[var(--pl-text)] outline-none placeholder:text-[var(--pl-text-muted)]"
           />
         </div>
+        <label className="sr-only" htmlFor="bl-status-filter">Status filter</label>
         <select
+          id="bl-status-filter"
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}
           className="rounded-lg border border-[var(--pl-border)] bg-[var(--pl-surface)] px-2.5 py-1.5 text-[12.5px] text-[var(--pl-text)] outline-none"
@@ -98,7 +102,9 @@ function BacklinksTable({ backlinks }: { backlinks: SeoBacklink[] }) {
           <option value="active">Active</option>
           <option value="lost">Lost</option>
         </select>
+        <label className="sr-only" htmlFor="bl-follow-filter">Follow type filter</label>
         <select
+          id="bl-follow-filter"
           value={followFilter}
           onChange={(e) => setFollowFilter(e.target.value as typeof followFilter)}
           className="rounded-lg border border-[var(--pl-border)] bg-[var(--pl-surface)] px-2.5 py-1.5 text-[12.5px] text-[var(--pl-text)] outline-none"
@@ -115,11 +121,11 @@ function BacklinksTable({ backlinks }: { backlinks: SeoBacklink[] }) {
       ) : (
         <div className="overflow-hidden rounded-xl border border-[var(--pl-border)]">
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[640px] text-[12.5px]">
+            <table className="w-full min-w-[640px] text-[12.5px]" aria-label="Backlinks table">
               <thead>
                 <tr className="border-b border-[var(--pl-border)] bg-[var(--pl-surface-soft)]">
                   {['Source Domain', 'Anchor', 'Target URL', 'Follow', 'Status', 'Risk', 'DR', 'First seen'].map((h) => (
-                    <th key={h} className="px-3 py-2 text-left font-semibold text-[var(--pl-text-muted)]">{h}</th>
+                    <th key={h} scope="col" className="px-3 py-2 text-left font-semibold text-[var(--pl-text-muted)]">{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -186,11 +192,11 @@ function DomainsTable({ domains }: { domains: SeoReferringDomain[] }) {
   return (
     <div className="overflow-hidden rounded-xl border border-[var(--pl-border)]">
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[480px] text-[12.5px]">
+        <table className="w-full min-w-[480px] text-[12.5px]" aria-label="Referring domains">
           <thead>
             <tr className="border-b border-[var(--pl-border)] bg-[var(--pl-surface-soft)]">
               {['Domain', 'Backlinks', 'Follow', 'Nofollow', 'DR', 'First seen'].map((h) => (
-                <th key={h} className="px-3 py-2 text-left font-semibold text-[var(--pl-text-muted)]">{h}</th>
+                <th key={h} scope="col" className="px-3 py-2 text-left font-semibold text-[var(--pl-text-muted)]">{h}</th>
               ))}
             </tr>
           </thead>

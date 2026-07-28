@@ -1,7 +1,10 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { Plus, Trash2, Search, Upload, Download, Loader2, RefreshCw, ChevronDown, ChevronRight } from 'lucide-react';
+import {
+  Plus, Trash2, Search, Upload, Download, Loader2, RefreshCw,
+  ChevronDown, ChevronRight, ChevronLeft,
+} from 'lucide-react';
 import { seoApi } from '@/lib/pixie-lab/servicesClient';
 import type { SeoKeywordProject, SeoKeyword, SeoResearchKeyword } from '@/lib/pixie-lab/serviceTypes';
 import { EmptyState, OfflineState, LoadingCards } from '@/components/pixie-lab/services/ServiceStates';
@@ -190,6 +193,8 @@ function KeywordRow({ kw, onDelete }: { kw: SeoKeyword; onDelete: () => void }) 
   );
 }
 
+const KW_PAGE_SIZE = 50;
+
 function ProjectSection({
   project,
   defaultOpen,
@@ -199,20 +204,32 @@ function ProjectSection({
 }) {
   const [open, setOpen] = useState(defaultOpen);
   const [keywords, setKeywords] = useState<SeoKeyword[]>([]);
+  const [kwTotal, setKwTotal] = useState(0);
+  const [kwOffset, setKwOffset] = useState(0);
   const [kwStatus, setKwStatus] = useState<'idle' | 'loading' | 'done' | 'offline'>('idle');
   const [showResearch, setShowResearch] = useState(false);
+  const [kwAnnouncement, setKwAnnouncement] = useState('');
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (off: number) => {
     setKwStatus('loading');
-    const d = await seoApi.keywords(project.id);
+    const d = await seoApi.keywords(project.id, { limit: KW_PAGE_SIZE, offset: off });
     if (!d.backendUp) { setKwStatus('offline'); return; }
-    setKeywords(d.keywords ?? []);
+    const kws = d.keywords ?? [];
+    setKeywords(kws);
+    // `total` may be absent from older proxy versions — fall back to a best-effort value.
+    const tot = d.total ?? (kws.length < KW_PAGE_SIZE ? off + kws.length : off + kws.length + 1);
+    setKwTotal(tot);
+    setKwOffset(off);
     setKwStatus('done');
+    setKwAnnouncement(`${tot} keyword${tot !== 1 ? 's' : ''}.`);
   }, [project.id]);
 
   useEffect(() => {
-    if (open && kwStatus === 'idle') load();
+    if (open && kwStatus === 'idle') load(0);
   }, [open, kwStatus, load]);
+
+  const kwTotalPages = Math.ceil(kwTotal / KW_PAGE_SIZE);
+  const kwCurrentPage = Math.floor(kwOffset / KW_PAGE_SIZE) + 1;
 
   async function exportCsv() {
     const d = await seoApi.exportKeywordsCsv(project.id);
@@ -257,37 +274,77 @@ function ProjectSection({
 
       {open && (
         <div className="border-t border-[var(--pl-border)] px-4 pb-4 pt-3 space-y-3">
-          <AddKeywordForm projectId={project.id} onAdded={load} />
+          {/* Screen reader live region */}
+          <div role="status" aria-live="polite" aria-atomic="true" className="sr-only">{kwAnnouncement}</div>
+
+          <AddKeywordForm projectId={project.id} onAdded={() => load(0)} />
           <div className="flex items-center gap-2">
             <button
               onClick={() => setShowResearch((s) => !s)}
+              aria-expanded={showResearch}
+              aria-controls={`research-${project.id}`}
               className="inline-flex items-center gap-1 text-[12px] font-semibold"
               style={{ color: ACCENT }}
             >
-              <Search size={12} /> {showResearch ? 'Hide research' : 'Research keywords'}
+              <Search size={12} aria-hidden="true" /> {showResearch ? 'Hide research' : 'Research keywords'}
             </button>
             <button
-              onClick={load}
+              onClick={() => load(kwOffset)}
               disabled={kwStatus === 'loading'}
+              aria-label="Refresh keywords"
               className="ml-auto inline-flex items-center gap-1 text-[12px] text-[var(--pl-text-muted)] hover:text-[var(--pl-text)]"
             >
-              <RefreshCw size={11} className={kwStatus === 'loading' ? 'animate-spin' : ''} /> Refresh
+              <RefreshCw size={11} className={kwStatus === 'loading' ? 'animate-spin' : ''} aria-hidden="true" /> Refresh
             </button>
           </div>
 
-          {showResearch && <ResearchDrawer projectId={project.id} onImport={load} />}
+          {showResearch && (
+            <div id={`research-${project.id}`}>
+              <ResearchDrawer projectId={project.id} onImport={() => load(0)} />
+            </div>
+          )}
 
           {kwStatus === 'loading' && <LoadingCards count={3} height="h-14" />}
-          {kwStatus === 'offline' && <p className="text-[12.5px] text-amber-500">Could not load keywords — service offline.</p>}
+          {kwStatus === 'offline' && (
+            <p className="text-[12.5px] text-amber-500">Could not load keywords — service offline.</p>
+          )}
           {kwStatus === 'done' && keywords.length === 0 && (
             <p className="text-[13px] text-[var(--pl-text-muted)]">No keywords yet. Add one above or use Research.</p>
           )}
           {kwStatus === 'done' && keywords.length > 0 && (
-            <div className="space-y-2">
-              {keywords.map((kw) => (
-                <KeywordRow key={kw.id} kw={kw} onDelete={load} />
-              ))}
-            </div>
+            <>
+              <div className="space-y-2">
+                {keywords.map((kw) => (
+                  <KeywordRow key={kw.id} kw={kw} onDelete={() => load(kwOffset)} />
+                ))}
+              </div>
+              {/* Keyword pagination */}
+              {kwTotalPages > 1 && (
+                <nav aria-label={`Keywords pagination for ${project.name}`} className="flex items-center justify-between gap-2 pt-1">
+                  <span className="text-[11.5px] text-[var(--pl-text-muted)]">
+                    Page {kwCurrentPage} of {kwTotalPages}
+                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      onClick={() => load(kwOffset - KW_PAGE_SIZE)}
+                      disabled={kwOffset === 0}
+                      aria-label="Previous keyword page"
+                      className="rounded-lg border border-[var(--pl-border)] p-1.5 text-[var(--pl-text-muted)] disabled:opacity-40 transition hover:text-[var(--pl-text)]"
+                    >
+                      <ChevronLeft size={14} aria-hidden="true" />
+                    </button>
+                    <button
+                      onClick={() => load(kwOffset + KW_PAGE_SIZE)}
+                      disabled={kwOffset + KW_PAGE_SIZE >= kwTotal}
+                      aria-label="Next keyword page"
+                      className="rounded-lg border border-[var(--pl-border)] p-1.5 text-[var(--pl-text-muted)] disabled:opacity-40 transition hover:text-[var(--pl-text)]"
+                    >
+                      <ChevronRight size={14} aria-hidden="true" />
+                    </button>
+                  </div>
+                </nav>
+              )}
+            </>
           )}
         </div>
       )}

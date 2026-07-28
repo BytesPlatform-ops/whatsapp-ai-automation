@@ -171,10 +171,13 @@ export function SeoRankingsPanel({ initialProjectId }: { initialProjectId?: stri
     <div className="mt-6 space-y-5">
       <div className="flex flex-wrap items-center gap-3">
         {/* Project selector */}
+        <label className="sr-only" htmlFor="rankings-project-select">Select keyword project</label>
         <select
+          id="rankings-project-select"
           value={selectedProject ?? ''}
           onChange={(e) => setSelectedProject(e.target.value)}
           className="rounded-lg border border-[var(--pl-border)] bg-[var(--pl-surface)] px-3 py-2 text-[13px] text-[var(--pl-text)] outline-none focus:border-[var(--pl-green)]"
+          aria-label="Select keyword project"
         >
           {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
         </select>
