@@ -41,14 +41,12 @@ from .stores import (
 
 _log = logging.getLogger("pixie.seo.outreach.sending")
 
-# ── Rate limit helpers ────────────────────────────────────────────────────────
+# ── Rate limit helpers (durable counters) ────────────────────────────────────
 
 _DEFAULT_DAILY_SEND_LIMIT = 50
 
-# In-process daily counter. Keyed by (tenant_id, date_str).
-# Production deployments should use a durable counter (Redis/DB);
-# this in-process dict is sufficient for single-instance + tests.
-_daily_counters: Dict[str, int] = {}
+# Durable counter key used with seo.scheduler.counters.
+_OUTREACH_COUNTER_KEY = "outreach_sends"
 
 
 def _today_str() -> str:
@@ -56,23 +54,36 @@ def _today_str() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
 
-def _daily_key(tenant_id: str) -> str:
-    return f"{tenant_id}:{_today_str()}"
-
-
 def _get_daily_count(tenant_id: str) -> int:
-    return _daily_counters.get(_daily_key(tenant_id), 0)
+    """Return the durable daily outreach send count for this tenant (UTC day)."""
+    try:
+        from seo.scheduler.counters import get_count
+        return get_count(tenant_id, _OUTREACH_COUNTER_KEY)
+    except Exception:
+        return 0
 
 
-def _increment_daily(tenant_id: str) -> int:
-    key = _daily_key(tenant_id)
-    _daily_counters[key] = _daily_counters.get(key, 0) + 1
-    return _daily_counters[key]
+def _increment_daily(tenant_id: str, idempotency_key: str = "") -> int:
+    """Increment the durable daily outreach send counter. Returns new count."""
+    try:
+        from seo.scheduler.counters import increment
+        result = increment(tenant_id, _OUTREACH_COUNTER_KEY, idempotency_key=idempotency_key)
+        return result.new_count
+    except Exception:
+        return 0
 
 
 def reset_daily_counters() -> None:
-    """Clear in-process daily counters (useful in tests)."""
-    _daily_counters.clear()
+    """Reset the durable daily outreach counter for all tenants (tests only).
+
+    In durable mode this resets the in-memory store; in Supabase mode it has
+    no persistent effect (rows remain in DB) — use only in hermetic tests.
+    """
+    try:
+        from seo.scheduler import counters as _c
+        _c._MEM_STORE.clear()
+    except Exception:
+        pass
 
 
 def _daily_limit() -> int:
@@ -137,11 +148,16 @@ def _send_via_provider(
         return {"status": "error", "mode": "real", "reason": str(exc)}
 
 
-# ── Idempotency ───────────────────────────────────────────────────────────────
+# ── Idempotency (durable) ─────────────────────────────────────────────────────
 
-# Tracks (tenant_id, campaign_id, contact_id, sequence_index) that have been sent.
-# Production should use a DB-backed set; this covers in-process + tests.
-_sent_keys: set = set()
+# Idempotency is now backed by the durable counter's idempotency_keys list.
+# The counter increment with an idempotency_key is a no-op if the key was
+# already seen, which is exactly the "already sent" check.
+# For reads, we need an additional lookup; we keep a fast in-process set as a
+# first-pass cache to avoid extra DB reads on hot paths (safe to be cleared
+# on restart — the durable counter still deduplicates on write).
+
+_sent_keys: set = set()  # fast in-process cache; cleared on restart (durable check on write)
 
 
 def _idempotency_key(tenant_id: str, campaign_id: str, contact_id: str, sequence_index: int) -> str:
@@ -149,15 +165,37 @@ def _idempotency_key(tenant_id: str, campaign_id: str, contact_id: str, sequence
 
 
 def _already_sent(tenant_id: str, campaign_id: str, contact_id: str, sequence_index: int) -> bool:
-    return _idempotency_key(tenant_id, campaign_id, contact_id, sequence_index) in _sent_keys
+    """Check whether this (campaign, contact, sequence) was already sent.
+
+    Fast path: in-process cache.
+    Slow path: durable counter idempotency_keys list (survives restarts).
+    """
+    ikey = _idempotency_key(tenant_id, campaign_id, contact_id, sequence_index)
+    if ikey in _sent_keys:
+        return True
+    # Check durable store
+    try:
+        from seo.scheduler.counters import get_count, _read_row, _today_utc
+        row = _read_row(tenant_id, _OUTREACH_COUNTER_KEY, _today_utc())
+        if row:
+            data = row.get("data") or {}
+            if ikey in (data.get("idempotency_keys") or []):
+                _sent_keys.add(ikey)  # cache hit
+                return True
+    except Exception:
+        pass
+    return False
 
 
 def _mark_sent(tenant_id: str, campaign_id: str, contact_id: str, sequence_index: int) -> None:
-    _sent_keys.add(_idempotency_key(tenant_id, campaign_id, contact_id, sequence_index))
+    """Mark as sent in both the in-process cache and the durable counter."""
+    ikey = _idempotency_key(tenant_id, campaign_id, contact_id, sequence_index)
+    _sent_keys.add(ikey)
+    # Durable mark happens via _increment_daily with idempotency_key (called after)
 
 
 def reset_idempotency_store() -> None:
-    """Clear in-process idempotency set (tests)."""
+    """Clear in-process idempotency cache (tests). Durable store is unaffected."""
     _sent_keys.clear()
 
 
@@ -277,8 +315,10 @@ def send_outreach_email(
 
     if send_result.get("status") in ("success", "pending_manual"):
         # Mark idempotency and update counters.
+        ikey = _idempotency_key(tenant_id, campaign_id, contact_id, sequence_index)
         _mark_sent(tenant_id, campaign_id, contact_id, sequence_index)
-        _increment_daily(tenant_id)
+        # Durable increment with idempotency_key so a duplicate retry won't double-count.
+        _increment_daily(tenant_id, idempotency_key=ikey)
 
         # Update contact relationship status.
         contact_repo.update(tenant_id, contact_id,
