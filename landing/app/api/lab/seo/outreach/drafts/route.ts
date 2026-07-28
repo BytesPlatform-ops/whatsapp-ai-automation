@@ -24,10 +24,20 @@ export async function POST(req: Request) {
   if (!g.ok) return g.response;
   const b = (await req.json().catch(() => ({}))) as Record<string, unknown>;
   const action = String(b.action ?? 'generate');
-  const path = action === 'approve'
-    ? '/api/agents/seo/outreach/drafts/approve'
-    : '/api/agents/seo/outreach/drafts/generate';
-  const r = await backendSend('POST', path, g.tenant, b);
+  // Backend routes (seo/outreach/routes.py):
+  //   POST /outreach/drafts/generate            — generate a draft
+  //   POST /outreach/drafts/{draft_id}/approve  — approve (not /drafts/approve)
+  if (action === 'approve') {
+    const draft_id = String(b.draft_id ?? '');
+    if (!draft_id) {
+      return NextResponse.json({ backendUp: true, error: 'draft_id is required for approve' }, { status: 400 });
+    }
+    const r = await backendSend('POST', `/api/agents/seo/outreach/drafts/${encodeURIComponent(draft_id)}/approve`, g.tenant, b);
+    if (!r.backendUp) return degraded();
+    return NextResponse.json({ backendUp: true, ...(r.data as object ?? {}) }, { headers: { 'Cache-Control': 'no-store' } });
+  }
+  // generate
+  const r = await backendSend('POST', '/api/agents/seo/outreach/drafts/generate', g.tenant, b);
   if (!r.backendUp) return degraded();
   return NextResponse.json({ backendUp: true, ...(r.data as object ?? {}) }, { headers: { 'Cache-Control': 'no-store' } });
 }

@@ -186,14 +186,17 @@ export const seoApi = {
     post<{ keyword: SeoKeyword }>('/api/lab/seo/keywords', { project_id, keyword, ...extras }),
   deleteKeyword: (keyword_id: string) =>
     req<{ deleted: string }>(`/api/lab/seo/keywords/${encodeURIComponent(keyword_id)}`, { method: 'DELETE' }),
-  research: (seed: string, opts?: { country?: string; language?: string; project_id?: string }) =>
-    post<{ keywords: SeoResearchKeyword[]; seed: string }>('/api/lab/seo/keywords/research', { seed, ...opts }),
+  /** @param seed_keyword - was previously called ; renamed to match backend ResearchBody */
+  research: (seed_keyword: string, opts?: { country?: string; language?: string; project_id?: string; domain?: string }) =>
+    post<{ keywords: SeoResearchKeyword[]; seed_keyword: string }>('/api/lab/seo/keywords/research', { seed_keyword, ...opts }),
   clusters: (project_id: string) =>
     req<{ clusters: SeoKeywordCluster[] }>(`/api/lab/seo/keywords/clusters?project_id=${encodeURIComponent(project_id)}`),
-  createClusters: (project_id: string) =>
-    post<{ clusters: SeoKeywordCluster[] }>(`/api/lab/seo/keywords/projects/${encodeURIComponent(project_id)}/clusters`, {}),
-  importKeywordsCsv: (project_id: string, csv_content: string) =>
-    post<{ imported: number; errors?: string[] }>('/api/lab/seo/keywords/import', { project_id, csv_content }),
+  /** Trigger auto-cluster for a project. The proxy calls /clusters/auto on the backend. */
+  createClusters: (project_id: string, ai_assist?: boolean) =>
+    post<{ clusters: SeoKeywordCluster[] }>(`/api/lab/seo/keywords/projects/${encodeURIComponent(project_id)}/clusters`, { ai_assist: ai_assist ?? false }),
+  /** @param csv_text - was previously called csv_content; renamed to match backend CsvImportBody */
+  importKeywordsCsv: (project_id: string, csv_text: string) =>
+    post<{ parsed_count?: number; added_count?: number; imported?: number; errors?: string[] }>('/api/lab/seo/keywords/import', { project_id, csv_text }),
   exportKeywordsCsv: (project_id: string) =>
     req<{ csv: string }>(`/api/lab/seo/keywords/export?project_id=${encodeURIComponent(project_id)}`),
 
@@ -223,8 +226,14 @@ export const seoApi = {
     post<{ competitor: SeoCompetitor }>('/api/lab/seo/competitors', p),
   deleteCompetitor: (competitor_id: string) =>
     req<{ deleted: string }>(`/api/lab/seo/competitors/${encodeURIComponent(competitor_id)}`, { method: 'DELETE' }),
-  competitorGap: (site_id: string, competitor_ids?: string[]) =>
-    post<{ gap: SeoCompetitorGapItem[]; site_id: string }>('/api/lab/seo/competitors/gap', { site_id, competitor_ids }),
+  /** Keyword gap analysis vs a competitor. Backend: GET /competitors/gap?project_id=&competitor_domain= */
+  competitorGap: (project_id: string, competitor_domain?: string, opts?: { min_volume?: number }) => {
+    const params = new URLSearchParams();
+    params.set('project_id', project_id);
+    if (competitor_domain) params.set('competitor_domain', competitor_domain);
+    if (opts?.min_volume != null) params.set('min_volume', String(opts.min_volume));
+    return req<{ gap?: SeoCompetitorGapItem[]; keyword_gap: SeoCompetitorGapItem[]; keyword_overlap: SeoCompetitorGapItem[]; competitor_top_pages: unknown[] }>(`/api/lab/seo/competitors/gap?${params}`);
+  },
 
   // ── Search Intelligence: Opportunities ────────────────────────────────────
   opportunities: (site_id?: string) => {
@@ -256,10 +265,15 @@ export const seoApi = {
     const qs = params.toString();
     return req<{ briefs: SeoBrief[] }>(`/api/lab/seo/briefs${qs ? `?${qs}` : ''}`);
   },
-  createBrief: (p: { keyword: string; site_id?: string; project_id?: string; title?: string; notes?: string }) =>
-    post<{ brief: SeoBrief }>('/api/lab/seo/briefs', p),
-  generateBrief: (brief_id: string) =>
-    post<{ brief: SeoBrief }>('/api/lab/seo/briefs/generate', { brief_id }),
+  /** Create/generate a brief from keyword inputs. Routes to /briefs/generate on backend.
+   *  Accepts both new { primary_keyword } and legacy { keyword } field names. */
+  createBrief: (p: { primary_keyword?: string; keyword?: string; title?: string; site_id?: string; project_id?: string; secondary_keywords?: string[]; search_intent?: string; target_audience?: string; word_count_min?: number; word_count_max?: number; cta_direction?: string }) =>
+    post<{ brief: SeoBrief }>('/api/lab/seo/briefs', { ...p as Record<string, unknown>, primary_keyword: (p as Record<string,unknown>).primary_keyword ?? (p as Record<string,unknown>).keyword }),
+  /** Generate content outline for a brief. Accepts brief_id string (legacy) or full params object. */
+  generateBrief: (p: string | { primary_keyword?: string; brief_id?: string; site_id?: string; project_id?: string; secondary_keywords?: string[] }) => {
+    const body: Record<string, unknown> = typeof p === 'string' ? { brief_id: p } : { ...p as Record<string, unknown> };
+    return post<{ brief: SeoBrief }>('/api/lab/seo/briefs/generate', body);
+  },
   approveBrief: (brief_id: string) =>
     post<{ brief: SeoBrief }>(`/api/lab/seo/briefs/${encodeURIComponent(brief_id)}/approve`, {}),
   archiveBrief: (brief_id: string) =>
@@ -360,12 +374,17 @@ export const seoApi = {
   },
 
   // ── Local SEO ──────────────────────────────────────────────────────────────
-  localOverview: () =>
-    req<{ overview: SeoLocalOverview }>('/api/lab/seo/local'),
-  localRankings: (location_id?: string) => {
-    const qs = location_id ? `?location_id=${encodeURIComponent(location_id)}` : '';
-    return req<{ rankings: Array<{ keyword: string; rank?: number | null; grid?: unknown }> }>(`/api/lab/seo/local-rank${qs}`);
+  /** Local SEO overview - proxied to /locations list on backend (no flat /local endpoint). */
+  localOverview: (site_id?: string) => {
+    const qs = site_id ? `?site_id=${encodeURIComponent(site_id)}` : '';
+    return req<{ overview: SeoLocalOverview }>(`/api/lab/seo/local${qs}`);
   },
+  /** Get local rank overview for a location (GET). location_id required. */
+  localRankings: (location_id: string) =>
+    req<{ rankings: Array<{ keyword: string; rank?: number | null; grid?: unknown }> }>(`/api/lab/seo/local-rank?location_id=${encodeURIComponent(location_id)}`),
+  /** Trigger a local rank check for a location (POST). */
+  checkLocalRank: (p: { location_id: string; keywords: string[]; city?: string; device?: string }) =>
+    post<{ results: unknown[] }>('/api/lab/seo/local-rank', p as Record<string, unknown>),
   locations: () =>
     req<{ locations: SeoLocation[] }>('/api/lab/seo/locations'),
   createLocation: (p: Omit<SeoLocation, 'id' | 'tenant_id' | 'created_at' | 'updated_at'>) =>
@@ -378,19 +397,20 @@ export const seoApi = {
     }),
   archiveLocation: (id: string) =>
     req<{ archived: string }>(`/api/lab/seo/locations/${encodeURIComponent(id)}`, { method: 'DELETE' }),
-  reviews: (opts?: { location_id?: string; status?: string; limit?: number; offset?: number }) => {
+  /** List reviews for a location. location_id is required by the backend proxy. */
+  reviews: (opts: { location_id?: string; status?: string; handled?: boolean }) => {
     const params = new URLSearchParams();
-    if (opts?.location_id) params.set('location_id', opts.location_id);
-    if (opts?.status) params.set('status', opts.status);
-    if (opts?.limit != null) params.set('limit', String(opts.limit));
-    if (opts?.offset != null) params.set('offset', String(opts.offset));
-    const qs = params.toString();
-    return req<{ reviews: SeoReview[]; summary?: SeoReviewSummary }>(`/api/lab/seo/reviews${qs ? `?${qs}` : ''}`);
+    if (opts.location_id) params.set('location_id', opts.location_id);
+    if (opts.status) params.set('status', opts.status);
+    if (opts.handled != null) params.set('handled', String(opts.handled));
+    return req<{ reviews: SeoReview[]; workspace?: SeoReviewSummary; summary?: SeoReviewSummary }>(`/api/lab/seo/reviews?${params}`);
   },
-  draftReviewResponse: (review_id: string) =>
-    post<{ draft: string; approval_id?: string }>('/api/lab/seo/reviews', { review_id, action: 'draft_response' }),
-  approveReviewResponse: (review_id: string, approval_id: string) =>
-    post<{ review: SeoReview }>('/api/lab/seo/reviews', { review_id, approval_id, action: 'approve_response' }),
+  /** Draft an AI reply for a review. location_id required. */
+  draftReviewResponse: (review_id: string, location_id?: string) =>
+    post<{ draft: string; approval_id?: string }>('/api/lab/seo/reviews', { review_id, location_id, action: 'draft' }),
+  /** Approve a drafted review reply. */
+  approveReviewResponse: (review_id: string, approved_by?: string) =>
+    post<{ review: SeoReview }>('/api/lab/seo/reviews', { review_id, approved_by, action: 'approve' }),
   citations: (opts?: { location_id?: string; consistent?: boolean; claimed?: boolean }) => {
     const params = new URLSearchParams();
     if (opts?.location_id) params.set('location_id', opts.location_id);
@@ -399,12 +419,13 @@ export const seoApi = {
     const qs = params.toString();
     return req<{ citations: SeoCitation[] }>(`/api/lab/seo/citations${qs ? `?${qs}` : ''}`);
   },
-  importCitations: (location_id: string, csv_content: string) =>
-    post<{ imported: number; errors?: string[] }>('/api/lab/seo/citations', { location_id, csv_content, action: 'import' }),
-  exportCitations: (location_id?: string) => {
-    const qs = location_id ? `?location_id=${encodeURIComponent(location_id)}` : '';
-    return req<{ csv: string }>(`/api/lab/seo/citations/export${qs}`);
-  },
+  /** Import citations from CSV for a location. Body: { location_id, csv_text } */
+  importCitations: (location_id: string, csv_text: string) =>
+    post<{ imported: number; errors?: string[] }>('/api/lab/seo/citations', { location_id, csv_text, action: 'import' }),
+  /** Export citations CSV for a location. location_id is required by the backend. */
+  exportCitations: (location_id: string) =>
+    req<{ csv: string }>(`/api/lab/seo/citations/export?location_id=${encodeURIComponent(location_id)}`),
+  /** Trigger citation check-all for a location. */
   checkCitationConsistency: (location_id: string) =>
     post<{ checked: number; inconsistent: number }>('/api/lab/seo/citations', { location_id, action: 'check_consistency' }),
 
@@ -437,6 +458,10 @@ export const seoApi = {
     post<{ draft: SeoOutreachDraft }>('/api/lab/seo/outreach/drafts', { campaign_id, contact_id, action: 'generate' }),
   approveOutreachDraft: (draft_id: string) =>
     post<{ draft: SeoOutreachDraft }>('/api/lab/seo/outreach/drafts', { draft_id, action: 'approve' }),
+  /** Send an approved draft. Backend requires campaign_id + contact_id (approval-gated). */
+  sendOutreach: (campaign_id: string, contact_id: string, opts?: { sequence_index?: number; is_mock?: boolean }) =>
+    post<{ sent: boolean; status?: string }>('/api/lab/seo/outreach/send', { campaign_id, contact_id, ...opts }),
+  /** @deprecated Use sendOutreach(campaign_id, contact_id) — backend no longer accepts draft_id */
   sendOutreachDraft: (draft_id: string) =>
     post<{ sent: boolean; draft: SeoOutreachDraft }>('/api/lab/seo/outreach/send', { draft_id }),
   linkPlacements: (campaign_id?: string) => {
@@ -449,16 +474,32 @@ export const seoApi = {
     req<{ health: SeoSchedulerHealth }>('/api/lab/seo/scheduler/health'),
   schedulerTick: () =>
     post<{ ticked: boolean }>('/api/lab/seo/scheduler/tick', {}),
-  schedulerRetryJob: (job_id: string) =>
-    post<{ retried: boolean }>('/api/lab/seo/scheduler/retry', { job_id }),
+  /** Retry a scheduler job. Backend: POST /scheduler/jobs/{job_id}/retry */
+  schedulerRetryJob: (job_id: string, source?: string) =>
+    post<{ ok: boolean; status?: string }>('/api/lab/seo/scheduler/retry', { job_id, source }),
   schedulerPauseType: (job_type: string) =>
     post<{ paused: boolean }>('/api/lab/seo/scheduler/pause', { job_type }),
   schedulerResumeType: (job_type: string) =>
     post<{ resumed: boolean }>('/api/lab/seo/scheduler/resume', { job_type }),
 
   // ── Reports: PDF export ───────────────────────────────────────────────────
-  exportReportPdf: (site_id?: string, crawl_job_id?: string, audience?: 'client' | 'internal') =>
-    post<{ report_id: string; download_url: string }>('/api/lab/seo/reports/pdf', { site_id, crawl_job_id, audience }),
+  /** Generate a PDF report. Accepts new object form or legacy positional args (site_id, crawl_job_id, audience). */
+  exportReportPdf: (
+    p: string | { site_id: string; kind?: string; date_from?: string; date_to?: string; workspace_name?: string; crawl_job_id?: string },
+    crawl_job_id?: string,
+    audience?: string,
+  ) => {
+    const body: Record<string, unknown> =
+      typeof p === 'string'
+        ? { site_id: p, crawl_job_id, kind: audience ?? 'full', date_from: new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10), date_to: new Date().toISOString().slice(0, 10) }
+        : { ...p as Record<string, unknown>, crawl_job_id: (p as Record<string,unknown>).crawl_job_id ?? crawl_job_id };
+    return post<{ report_id: string; download_url: string; byte_size?: number; sha256?: string; expires_at?: string }>('/api/lab/seo/reports/pdf', body);
+  },
+  /** List previously generated PDF reports for a site. */
+  listReportPdfs: (site_id?: string) => {
+    const qs = site_id ? `?site_id=${encodeURIComponent(site_id)}` : '';
+    return req<{ reports: Array<{ report_id: string; download_url: string; kind: string; status: string }> }>(`/api/lab/seo/reports/pdf${qs}`);
+  },
 };
 
 /* ------------------------------ Meta / Marketing ------------------------------ */

@@ -26,8 +26,10 @@ export async function POST(req: Request) {
   if (!g.ok) return g.response;
   const b = (await req.json().catch(() => ({}))) as Record<string, unknown>;
   const action = String(b.action ?? '');
+  // Backend: POST /outreach/suppress (not /contacts/suppress)
+  // Backend: POST /outreach/contacts/import (correct)
   const path = action === 'suppress'
-    ? '/api/agents/seo/outreach/contacts/suppress'
+    ? '/api/agents/seo/outreach/suppress'
     : '/api/agents/seo/outreach/contacts/import';
   const r = await backendSend('POST', path, g.tenant, b);
   if (!r.backendUp) return degraded();

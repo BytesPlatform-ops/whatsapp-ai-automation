@@ -22,10 +22,18 @@ export async function POST(req: Request) {
   const g = await guard('seo.manage');
   if (!g.ok) return g.response;
   const b = (await req.json().catch(() => ({}))) as Record<string, unknown>;
-  const path = b.action === 'update'
-    ? '/api/agents/seo/outreach/campaigns/update'
-    : '/api/agents/seo/outreach/campaigns';
-  const r = await backendSend('POST', path, g.tenant, b);
+  // Backend: PATCH /outreach/campaigns/{id} for updates (no /campaigns/update endpoint)
+  if (b.action === 'update') {
+    const campaign_id = String(b.id ?? '');
+    if (!campaign_id) {
+      return NextResponse.json({ backendUp: true, error: 'id is required for update' }, { status: 400 });
+    }
+    const r = await backendSend('PATCH', `/api/agents/seo/outreach/campaigns/${encodeURIComponent(campaign_id)}`, g.tenant, b);
+    if (!r.backendUp) return degraded();
+    return NextResponse.json({ backendUp: true, ...(r.data as object ?? {}) }, { headers: { 'Cache-Control': 'no-store' } });
+  }
+  // Create: POST /outreach/campaigns
+  const r = await backendSend('POST', '/api/agents/seo/outreach/campaigns', g.tenant, b);
   if (!r.backendUp) return degraded();
   return NextResponse.json({ backendUp: true, ...(r.data as object ?? {}) }, { headers: { 'Cache-Control': 'no-store' } });
 }
