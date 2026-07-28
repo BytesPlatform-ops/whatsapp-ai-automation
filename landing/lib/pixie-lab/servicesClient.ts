@@ -9,6 +9,12 @@
 import type {
   SeoAuditResult, SeoConnectionPlatform, SeoHistoryAudit,
   SeoDurableSite, SeoCrawlJob, SeoCrawledPageSummary, SeoCrawlIssue, SeoCrawlReport,
+  SeoKeywordProject, SeoKeyword, SeoKeywordCluster, SeoResearchKeyword,
+  SeoRankJob, SeoRankHistoryPoint, SeoRankOverview,
+  SeoCompetitor, SeoCompetitorGapItem,
+  SeoOpportunity, SeoOptimiseResult, SeoBrief, SeoAlert,
+  SeoGoogleConnection, SeoGoogleProperty, SeoIntegrationStatus,
+  PageSpeedData,
   MetaStatus, MetaInboxItem, MetaContentItem,
   MetaAdAccount, MetaCampaign, MetaAdInsights, MetaDiagnostics, MetaAdsAnalysis, BrandBrain,
   ContentIdea, IdeaGenerateResult, CalendarItem, CalendarResult,
@@ -156,6 +162,147 @@ export const seoApi = {
     if (opts.crawl_job_id) params.set('crawl_job_id', opts.crawl_job_id);
     return req<{ report: SeoCrawlReport | null }>(`/api/lab/seo/reports?${params}`);
   },
+
+  // ── Search Intelligence: Keywords ──────────────────────────────────────────
+  keywordProjects: (site_id?: string) => {
+    const qs = site_id ? `?site_id=${encodeURIComponent(site_id)}` : '';
+    return req<{ projects: SeoKeywordProject[] }>(`/api/lab/seo/keywords/projects${qs}`);
+  },
+  createKeywordProject: (p: { name: string; site_id?: string; country?: string; language?: string }) =>
+    post<{ project: SeoKeywordProject }>('/api/lab/seo/keywords/projects', p),
+  deleteKeywordProject: (project_id: string) =>
+    req<{ deleted: string }>(`/api/lab/seo/keywords/projects/${encodeURIComponent(project_id)}`, { method: 'DELETE' }),
+  keywords: (project_id: string, opts?: { limit?: number; offset?: number }) => {
+    const params = new URLSearchParams({ project_id });
+    if (opts?.limit != null) params.set('limit', String(opts.limit));
+    if (opts?.offset != null) params.set('offset', String(opts.offset));
+    return req<{ keywords: SeoKeyword[]; total?: number }>(`/api/lab/seo/keywords?${params}`);
+  },
+  addKeyword: (project_id: string, keyword: string, extras?: Partial<SeoKeyword>) =>
+    post<{ keyword: SeoKeyword }>('/api/lab/seo/keywords', { project_id, keyword, ...extras }),
+  deleteKeyword: (keyword_id: string) =>
+    req<{ deleted: string }>(`/api/lab/seo/keywords/${encodeURIComponent(keyword_id)}`, { method: 'DELETE' }),
+  research: (seed: string, opts?: { country?: string; language?: string; project_id?: string }) =>
+    post<{ keywords: SeoResearchKeyword[]; seed: string }>('/api/lab/seo/keywords/research', { seed, ...opts }),
+  clusters: (project_id: string) =>
+    req<{ clusters: SeoKeywordCluster[] }>(`/api/lab/seo/keywords/clusters?project_id=${encodeURIComponent(project_id)}`),
+  createClusters: (project_id: string) =>
+    post<{ clusters: SeoKeywordCluster[] }>(`/api/lab/seo/keywords/projects/${encodeURIComponent(project_id)}/clusters`, {}),
+  importKeywordsCsv: (project_id: string, csv_content: string) =>
+    post<{ imported: number; errors?: string[] }>('/api/lab/seo/keywords/import', { project_id, csv_content }),
+  exportKeywordsCsv: (project_id: string) =>
+    req<{ csv: string }>(`/api/lab/seo/keywords/export?project_id=${encodeURIComponent(project_id)}`),
+
+  // ── Search Intelligence: Rankings ─────────────────────────────────────────
+  rankCheck: (project_id: string, keyword_ids?: string[]) =>
+    post<{ job: SeoRankJob }>('/api/lab/seo/rankings/check', { project_id, keyword_ids }),
+  rankJobs: (project_id?: string) => {
+    const qs = project_id ? `?project_id=${encodeURIComponent(project_id)}` : '';
+    return req<{ jobs: SeoRankJob[] }>(`/api/lab/seo/rankings/jobs${qs}`);
+  },
+  rankHistory: (keyword_id: string, days?: number) => {
+    const params = new URLSearchParams({ keyword_id });
+    if (days != null) params.set('days', String(days));
+    return req<{ history: SeoRankHistoryPoint[] }>(`/api/lab/seo/rankings/history?${params}`);
+  },
+  rankOverview: (project_id: string) =>
+    req<SeoRankOverview>(`/api/lab/seo/rankings/overview?project_id=${encodeURIComponent(project_id)}`),
+  rankKeyword: (keyword_id: string) =>
+    req<{ keyword: SeoKeyword; history: SeoRankHistoryPoint[] }>(`/api/lab/seo/rankings/keyword/${encodeURIComponent(keyword_id)}`),
+
+  // ── Search Intelligence: Competitors ──────────────────────────────────────
+  competitors: (site_id?: string) => {
+    const qs = site_id ? `?site_id=${encodeURIComponent(site_id)}` : '';
+    return req<{ competitors: SeoCompetitor[] }>(`/api/lab/seo/competitors${qs}`);
+  },
+  addCompetitor: (p: { domain: string; site_id?: string; project_id?: string; display_name?: string; notes?: string }) =>
+    post<{ competitor: SeoCompetitor }>('/api/lab/seo/competitors', p),
+  deleteCompetitor: (competitor_id: string) =>
+    req<{ deleted: string }>(`/api/lab/seo/competitors/${encodeURIComponent(competitor_id)}`, { method: 'DELETE' }),
+  competitorGap: (site_id: string, competitor_ids?: string[]) =>
+    post<{ gap: SeoCompetitorGapItem[]; site_id: string }>('/api/lab/seo/competitors/gap', { site_id, competitor_ids }),
+
+  // ── Search Intelligence: Opportunities ────────────────────────────────────
+  opportunities: (site_id?: string) => {
+    const qs = site_id ? `?site_id=${encodeURIComponent(site_id)}` : '';
+    return req<{ opportunities: SeoOpportunity[] }>(`/api/lab/seo/opportunities${qs}`);
+  },
+  generateOpportunities: (site_id: string, project_id?: string) =>
+    post<{ opportunities: SeoOpportunity[]; generated: number }>('/api/lab/seo/opportunities/generate', { site_id, project_id }),
+  dismissOpportunity: (opportunity_id: string) =>
+    post<{ opportunity: SeoOpportunity }>(`/api/lab/seo/opportunities/${encodeURIComponent(opportunity_id)}/dismiss`, {}),
+  actionOpportunity: (opportunity_id: string) =>
+    post<{ opportunity: SeoOpportunity }>(`/api/lab/seo/opportunities/${encodeURIComponent(opportunity_id)}/action`, {}),
+
+  // ── Search Intelligence: Optimise ─────────────────────────────────────────
+  optimisePage: (opts: { site_id?: string; page_id?: string; keyword?: string; url?: string }) => {
+    const params = new URLSearchParams();
+    if (opts.site_id) params.set('site_id', opts.site_id);
+    if (opts.page_id) params.set('page_id', opts.page_id);
+    if (opts.keyword) params.set('keyword', opts.keyword);
+    if (opts.url) params.set('url', opts.url);
+    return req<SeoOptimiseResult>(`/api/lab/seo/optimise?${params}`);
+  },
+
+  // ── Search Intelligence: Briefs ───────────────────────────────────────────
+  briefs: (site_id?: string, project_id?: string) => {
+    const params = new URLSearchParams();
+    if (site_id) params.set('site_id', site_id);
+    if (project_id) params.set('project_id', project_id);
+    const qs = params.toString();
+    return req<{ briefs: SeoBrief[] }>(`/api/lab/seo/briefs${qs ? `?${qs}` : ''}`);
+  },
+  createBrief: (p: { keyword: string; site_id?: string; project_id?: string; title?: string; notes?: string }) =>
+    post<{ brief: SeoBrief }>('/api/lab/seo/briefs', p),
+  generateBrief: (brief_id: string) =>
+    post<{ brief: SeoBrief }>('/api/lab/seo/briefs/generate', { brief_id }),
+  approveBrief: (brief_id: string) =>
+    post<{ brief: SeoBrief }>(`/api/lab/seo/briefs/${encodeURIComponent(brief_id)}/approve`, {}),
+  archiveBrief: (brief_id: string) =>
+    post<{ brief: SeoBrief }>(`/api/lab/seo/briefs/${encodeURIComponent(brief_id)}/archive`, {}),
+  duplicateBrief: (brief_id: string) =>
+    post<{ brief: SeoBrief }>(`/api/lab/seo/briefs/${encodeURIComponent(brief_id)}/duplicate`, {}),
+  handoffBrief: (brief_id: string) =>
+    post<{ brief: SeoBrief; handoff_url?: string }>(`/api/lab/seo/briefs/${encodeURIComponent(brief_id)}/handoff`, {}),
+
+  // ── Search Intelligence: Alerts ───────────────────────────────────────────
+  alerts: (site_id?: string) => {
+    const qs = site_id ? `?site_id=${encodeURIComponent(site_id)}` : '';
+    return req<{ alerts: SeoAlert[] }>(`/api/lab/seo/alerts${qs}`);
+  },
+  generateAlerts: (site_id?: string) =>
+    post<{ alerts: SeoAlert[]; generated: number }>('/api/lab/seo/alerts/generate', { site_id }),
+  readAlert: (alert_id: string) =>
+    post<{ alert: SeoAlert }>(`/api/lab/seo/alerts/${encodeURIComponent(alert_id)}/read`, {}),
+  dismissAlert: (alert_id: string) =>
+    post<{ alert: SeoAlert }>(`/api/lab/seo/alerts/${encodeURIComponent(alert_id)}/dismiss`, {}),
+
+  // ── Search Intelligence: Google Connections ────────────────────────────────
+  googleConnections: () =>
+    req<{ connections: SeoGoogleConnection[] }>('/api/lab/seo/google/connections'),
+  googleConnect: () =>
+    post<{ auth_url: string; state?: string }>('/api/lab/seo/google/connect', {}),
+  googleProperties: (connection_id: string) =>
+    req<{ properties: SeoGoogleProperty[] }>(`/api/lab/seo/google/properties?connection_id=${encodeURIComponent(connection_id)}`),
+  selectGoogleProperty: (connection_id: string, property_id: string) =>
+    post<{ connection: SeoGoogleConnection }>('/api/lab/seo/google/properties/select', { connection_id, property_id }),
+  syncGoogleConnection: (connection_id: string) =>
+    post<{ syncing: boolean }>(`/api/lab/seo/google/connections/${encodeURIComponent(connection_id)}/sync`, {}),
+  disconnectGoogle: (connection_id: string) =>
+    post<{ disconnected: string }>(`/api/lab/seo/google/connections/${encodeURIComponent(connection_id)}/disconnect`, {}),
+
+  // ── Per-page Core Web Vitals ───────────────────────────────────────────────
+  pageSpeed: (opts: { page_id?: string; url?: string; site_id?: string }) => {
+    const params = new URLSearchParams();
+    if (opts.page_id) params.set('page_id', opts.page_id);
+    if (opts.url) params.set('url', opts.url);
+    if (opts.site_id) params.set('site_id', opts.site_id);
+    return req<PageSpeedData>(`/api/lab/seo/pagespeed?${params}`);
+  },
+
+  // ── Upgraded connections integrations status ───────────────────────────────
+  integrations: () =>
+    req<{ integrations: SeoIntegrationStatus[] }>('/api/lab/seo/integrations'),
 };
 
 /* ------------------------------ Meta / Marketing ------------------------------ */

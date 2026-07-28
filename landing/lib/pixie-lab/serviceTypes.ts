@@ -179,6 +179,244 @@ export interface SeoHistoryAudit {
   created_at?: string;
 }
 
+// ── Search Intelligence types ──────────────────────────────────────────────
+
+/** A keyword project (container for tracked keywords). */
+export interface SeoKeywordProject {
+  id: string;
+  tenant_id?: string;
+  site_id?: string;
+  name: string;
+  country?: string;
+  language?: string;
+  created_at?: string;
+  updated_at?: string;
+  keyword_count?: number;
+}
+
+/** A tracked keyword inside a project. */
+export interface SeoKeyword {
+  id: string;
+  project_id: string;
+  keyword: string;
+  search_volume?: number | null;
+  difficulty?: number | null;
+  cpc?: number | null;
+  intent?: string | null;
+  current_rank?: number | null;
+  previous_rank?: number | null;
+  rank_change?: number | null;
+  url?: string | null;
+  cluster_id?: string | null;
+  tags?: string[];
+  created_at?: string;
+  updated_at?: string;
+}
+
+/** A cluster of semantically related keywords. */
+export interface SeoKeywordCluster {
+  id: string;
+  project_id: string;
+  name: string;
+  pillar_keyword?: string;
+  keyword_count?: number;
+  avg_volume?: number | null;
+  avg_difficulty?: number | null;
+  created_at?: string;
+}
+
+/** Keyword research result item. */
+export interface SeoResearchKeyword {
+  keyword: string;
+  search_volume?: number | null;
+  difficulty?: number | null;
+  cpc?: number | null;
+  intent?: string | null;
+  competition?: string | null;
+}
+
+/** A rank-check job. */
+export interface SeoRankJob {
+  id: string;
+  project_id?: string;
+  site_id?: string;
+  status: 'queued' | 'running' | 'completed' | 'failed';
+  keyword_count?: number;
+  checked_count?: number;
+  created_at?: string;
+  finished_at?: string | null;
+}
+
+/** Rank history for a single keyword. */
+export interface SeoRankHistoryPoint {
+  date: string;
+  rank: number | null;
+  url?: string | null;
+}
+
+/** Summary of current rankings for a project. */
+export interface SeoRankOverview {
+  project_id?: string;
+  total_keywords?: number;
+  top_3?: number;
+  top_10?: number;
+  top_100?: number;
+  not_ranked?: number;
+  avg_rank?: number | null;
+  rank_distribution?: Record<string, number>;
+  last_checked_at?: string | null;
+}
+
+/** A competitor domain entry. */
+export interface SeoCompetitor {
+  id: string;
+  site_id?: string;
+  project_id?: string;
+  domain: string;
+  display_name?: string;
+  notes?: string | null;
+  created_at?: string;
+}
+
+/** Competitor keyword gap item. */
+export interface SeoCompetitorGapItem {
+  keyword: string;
+  competitor_domain: string;
+  competitor_rank?: number | null;
+  our_rank?: number | null;
+  search_volume?: number | null;
+  difficulty?: number | null;
+  opportunity_score?: number | null;
+}
+
+/** A content/SEO opportunity. */
+export interface SeoOpportunity {
+  id: string;
+  site_id?: string;
+  project_id?: string;
+  type: string;
+  title: string;
+  description?: string;
+  keyword?: string | null;
+  priority?: 'high' | 'medium' | 'low';
+  status?: 'open' | 'actioned' | 'dismissed';
+  estimated_traffic_gain?: number | null;
+  created_at?: string;
+}
+
+/** On-page optimisation recommendation for a specific page + keyword. */
+export interface SeoOptimiseResult {
+  site_id?: string;
+  page_id?: string;
+  url?: string;
+  keyword?: string;
+  recommendations?: SeoOptimiseRecommendation[];
+  current_score?: number | null;
+  potential_score?: number | null;
+  generated_at?: string;
+}
+
+export interface SeoOptimiseRecommendation {
+  type: string;
+  priority: 'high' | 'medium' | 'low';
+  current_value?: string | null;
+  suggested_value?: string | null;
+  explanation?: string;
+}
+
+/** A content brief for a target keyword/topic. */
+export interface SeoBrief {
+  id: string;
+  site_id?: string;
+  project_id?: string;
+  keyword?: string;
+  title?: string;
+  status?: 'draft' | 'approved' | 'archived' | 'handed_off';
+  target_word_count?: number | null;
+  outline?: SeoBriefSection[];
+  notes?: string | null;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface SeoBriefSection {
+  heading: string;
+  level?: number;
+  notes?: string;
+}
+
+/** An SEO alert event (ranking drop, new opportunity, etc). */
+export interface SeoAlert {
+  id: string;
+  site_id?: string;
+  project_id?: string;
+  type: string;
+  title: string;
+  body?: string;
+  severity?: 'info' | 'warning' | 'critical';
+  read?: boolean;
+  dismissed?: boolean;
+  created_at?: string;
+}
+
+/** Google Search Console / Analytics connection. */
+export interface SeoGoogleConnection {
+  id: string;
+  site_id?: string;
+  provider: 'search_console' | 'analytics' | 'google';
+  status: 'connected' | 'disconnected' | 'expired' | 'error' | 'pending';
+  display_name?: string | null;
+  email?: string | null;
+  selected_property?: string | null;
+  last_synced_at?: string | null;
+  created_at?: string;
+}
+
+/** A Google property (GSC site / GA4 property) the user can select. */
+export interface SeoGoogleProperty {
+  id: string;
+  name: string;
+  url?: string;
+  provider: string;
+}
+
+/** Detailed integration status for the Connections page. */
+export interface SeoIntegrationStatus {
+  platform: string;
+  name: string;
+  description?: string;
+  status: 'connected' | 'not_connected' | 'needs_attention' | 'token_expired' | 'permission_missing' | 'sync_running';
+  connected_as?: string | null;
+  last_synced_at?: string | null;
+  can_optimize?: boolean;
+  can_connect?: boolean;
+  can_reconnect?: boolean;
+  can_disconnect?: boolean;
+  can_configure?: boolean;
+  notes?: string | null;
+}
+
+/** Core Web Vitals / PageSpeed data stored per-page. */
+export interface PageSpeedData {
+  url?: string;
+  source?: 'pagespeed' | 'crux' | 'lab' | string;
+  collected_at?: string | null;
+  field_data_available?: boolean;
+  provider_error?: string | null;
+  mobile?: PageSpeedMetrics;
+  desktop?: PageSpeedMetrics;
+}
+
+export interface PageSpeedMetrics {
+  performance_score?: number | null;
+  lcp_ms?: number | null;
+  cls?: number | null;
+  inp_ms?: number | null;
+  fcp_ms?: number | null;
+  tbt_ms?: number | null;
+  ttfb_ms?: number | null;
+}
+
 /* ----------------------------- Meta / Marketing ----------------------------- */
 
 export type MetaPermState = 'available' | 'app_review_needed' | 'missing';

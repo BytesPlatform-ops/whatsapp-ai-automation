@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { SEO_NAV, seoRoutes, isSeoRoute, activeSeoHref } from './seoRoutes';
 
 describe('seoRoutes registry', () => {
-  it('exposes exactly the nine SEO sections', () => {
+  it('exposes all SEO sections (nine core + seven search-intelligence)', () => {
     expect(SEO_NAV.map((n) => n.label)).toEqual([
       'Overview',
       'Sites',
@@ -13,6 +13,14 @@ describe('seoRoutes registry', () => {
       'History',
       'Connections',
       'Reports',
+      // Search Intelligence
+      'Keywords',
+      'Rankings',
+      'Competitors',
+      'Opportunities',
+      'Optimise',
+      'Briefs',
+      'Alerts',
     ]);
   });
 
@@ -27,6 +35,14 @@ describe('seoRoutes registry', () => {
       '/pixie-lab/seo/history',
       '/pixie-lab/seo/connections',
       '/pixie-lab/seo/reports',
+      // Search Intelligence
+      '/pixie-lab/seo/keywords',
+      '/pixie-lab/seo/rankings',
+      '/pixie-lab/seo/competitors',
+      '/pixie-lab/seo/opportunities',
+      '/pixie-lab/seo/optimise',
+      '/pixie-lab/seo/briefs',
+      '/pixie-lab/seo/alerts',
     ]);
   });
 

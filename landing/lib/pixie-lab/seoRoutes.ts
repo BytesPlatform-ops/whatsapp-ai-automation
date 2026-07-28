@@ -40,6 +40,37 @@ export const seoRoutes = {
     const qs = p.toString();
     return qs ? `${SEO}/reports?${qs}` : `${SEO}/reports`;
   },
+  // ── Search Intelligence ─────────────────────────────────────────────────────
+  keywords: (opts?: { project_id?: string; site_id?: string }) => {
+    const p = new URLSearchParams();
+    if (opts?.project_id) p.set('project_id', opts.project_id);
+    if (opts?.site_id) p.set('site_id', opts.site_id);
+    const qs = p.toString();
+    return qs ? `${SEO}/keywords?${qs}` : `${SEO}/keywords`;
+  },
+  rankings: (opts?: { project_id?: string }) =>
+    opts?.project_id ? `${SEO}/rankings?project_id=${encodeURIComponent(opts.project_id)}` : `${SEO}/rankings`,
+  competitors: (opts?: { site_id?: string }) =>
+    opts?.site_id ? `${SEO}/competitors?site_id=${encodeURIComponent(opts.site_id)}` : `${SEO}/competitors`,
+  opportunities: (opts?: { site_id?: string }) =>
+    opts?.site_id ? `${SEO}/opportunities?site_id=${encodeURIComponent(opts.site_id)}` : `${SEO}/opportunities`,
+  optimise: (opts?: { site_id?: string; page_id?: string; keyword?: string }) => {
+    const p = new URLSearchParams();
+    if (opts?.site_id) p.set('site_id', opts.site_id);
+    if (opts?.page_id) p.set('page_id', opts.page_id);
+    if (opts?.keyword) p.set('keyword', opts.keyword);
+    const qs = p.toString();
+    return qs ? `${SEO}/optimise?${qs}` : `${SEO}/optimise`;
+  },
+  briefs: (opts?: { site_id?: string; project_id?: string }) => {
+    const p = new URLSearchParams();
+    if (opts?.site_id) p.set('site_id', opts.site_id);
+    if (opts?.project_id) p.set('project_id', opts.project_id);
+    const qs = p.toString();
+    return qs ? `${SEO}/briefs?${qs}` : `${SEO}/briefs`;
+  },
+  alerts: (opts?: { site_id?: string }) =>
+    opts?.site_id ? `${SEO}/alerts?site_id=${encodeURIComponent(opts.site_id)}` : `${SEO}/alerts`,
 } as const;
 
 export type SeoRouteKey = keyof typeof seoRoutes;
@@ -62,6 +93,14 @@ export const SEO_NAV: SeoNavItem[] = [
   { label: 'History', href: seoRoutes.history() },
   { label: 'Connections', href: seoRoutes.connections() },
   { label: 'Reports', href: seoRoutes.reports() },
+  // ── Search Intelligence ──────────────────────────────────────────────────
+  { label: 'Keywords', href: seoRoutes.keywords() },
+  { label: 'Rankings', href: seoRoutes.rankings() },
+  { label: 'Competitors', href: seoRoutes.competitors() },
+  { label: 'Opportunities', href: seoRoutes.opportunities() },
+  { label: 'Optimise', href: seoRoutes.optimise() },
+  { label: 'Briefs', href: seoRoutes.briefs() },
+  { label: 'Alerts', href: seoRoutes.alerts() },
 ];
 
 /** True when the pathname is inside the SEO workspace. */
