@@ -63,6 +63,7 @@ from seo.agent_routes import router as seo_agent_router
 from seo.google.routes import router as seo_google_router
 from seo.keywords.project_routes import router as keyword_router
 from seo.rank.routes import router as seo_rank_router
+from seo.intelligence.routes import router as seo_intelligence_router
 from receptionist.campaigns.api import router as campaigns_router
 from receptionist.onboarding.api import router as onboarding_router
 from content_creator.router import router as content_creator_router
@@ -128,6 +129,7 @@ app.include_router(seo_agent_router)  # /api/agents/seo — platform-aware audit
 app.include_router(seo_google_router)  # /api/agents/seo/google/* — GSC + GA4 connect/sync/views
 app.include_router(keyword_router)  # /api/agents/seo/keywords/* — projects, research, clustering
 app.include_router(seo_rank_router)  # /api/agents/seo/rank/* — durable rank tracking
+app.include_router(seo_intelligence_router)  # /api/agents/seo/* — competitors, opportunities, briefs, alerts
 app.include_router(onboarding_router)
 app.include_router(campaigns_router)
 app.include_router(seo_router, deprecated=True)  # DEPRECATED /api/seo/* (in-memory); use /api/agents/seo/*
