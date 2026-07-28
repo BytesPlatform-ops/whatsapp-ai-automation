@@ -91,6 +91,8 @@ class Site:
     sitemap_urls: List[str]        = field(default_factory=list)
     included_paths: List[str]      = field(default_factory=list)
     excluded_paths: List[str]      = field(default_factory=list)
+    archived: bool                 = False
+    archived_at: str               = ""
     created_at: str                = ""
     updated_at: str                = ""
 
@@ -240,6 +242,8 @@ class SiteRepository(_Repo):
             sitemap_urls       = d.get("sitemap_urls", []),
             included_paths     = d.get("included_paths", []),
             excluded_paths     = d.get("excluded_paths", []),
+            archived           = d.get("archived", False),
+            archived_at        = d.get("archived_at", ""),
             created_at         = row.get("created_at", ""),
             updated_at         = row.get("updated_at", ""),
         )
@@ -271,9 +275,20 @@ class SiteRepository(_Repo):
     def delete(self, tenant_id: str, site_id: str) -> bool:
         return self._repo.delete(tenant_id, site_id)
 
-    def list(self, tenant_id: str) -> List[Tuple[str, Site]]:
+    def archive(self, tenant_id: str, site_id: str) -> Optional[Tuple[str, "Site"]]:
+        """Soft-delete: set archived=True and archived_at=now."""
+        return self.update(tenant_id, site_id, archived=True, archived_at=_now())
+
+    def restore(self, tenant_id: str, site_id: str) -> Optional[Tuple[str, "Site"]]:
+        """Restore a soft-deleted site: set archived=False and archived_at=''."""
+        return self.update(tenant_id, site_id, archived=False, archived_at="")
+
+    def list(self, tenant_id: str, include_archived: bool = False) -> List[Tuple[str, "Site"]]:
         pairs = [self._build(r) for r in self._rows(tenant_id)]
-        return [p for p in pairs if p]
+        pairs = [p for p in pairs if p]
+        if not include_archived:
+            pairs = [(sid, s) for sid, s in pairs if not s.archived]
+        return pairs
 
 
 # ── CrawlJobRepository ────────────────────────────────────────────────────────
@@ -579,8 +594,8 @@ def get_report_repository() -> ReportRepository:
 
 # ── Convenience query helpers ─────────────────────────────────────────────────
 
-def list_sites(tenant_id: str) -> List[Tuple[str, Site]]:
-    return get_site_repository().list(tenant_id)
+def list_sites(tenant_id: str, include_archived: bool = False) -> List[Tuple[str, Site]]:
+    return get_site_repository().list(tenant_id, include_archived=include_archived)
 
 
 def get_site(tenant_id: str, site_id: str) -> Optional[Tuple[str, Site]]:

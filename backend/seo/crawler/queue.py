@@ -245,6 +245,21 @@ def _claim_in_tenant(
         return None
 
     _, site = site_result
+    # Do not process crawl jobs for archived sites — skip and fail the job.
+    if getattr(site, "archived", False):
+        logger.info(
+            "queue: site %s is archived — marking job %s failed",
+            claimed_job.site_id, job_id,
+        )
+        repo.update(
+            tenant_id, job_id,
+            status=CrawlStatus.FAILED,
+            finished_at=_now_str(),
+            error_category="site_archived",
+            lock_owner="",
+            lock_expires_at="",
+        )
+        return None
     logger.info(
         "queue: claimed job %s (tenant=%s site=%s stale=%s)",
         job_id, tenant_id, claimed_job.site_id, is_stale,

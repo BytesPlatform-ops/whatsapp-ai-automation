@@ -116,6 +116,60 @@ def audit_pages(
     return {"pages": aa.list_pages(tenant, audit_id)}
 
 
+@router.post("/audit/{audit_id}/save-site")
+def audit_save_site(
+    audit_id: str,
+    _header_tenant: Optional[str] = Depends(resolve_tenant_header),
+    tenant_id: Optional[str] = Query(default=None),
+) -> dict:
+    """Promote an ad-hoc audit into a tracked Site.
+
+    Reads the audit's domain; if a Site for that domain+tenant already exists,
+    returns it with ``created=false`` (no duplicates). Otherwise creates a new
+    Site from the audited URL and returns it with ``created=true``.
+
+    The same server-side crawl_limit cap (CRAWL_LIMIT_MAX) is applied.
+    """
+    from urllib.parse import urlsplit as _urlsplit
+
+    tenant = effective_tenant(_header_tenant, tenant_id)
+    audit = aa.get_audit(tenant, audit_id)
+    if not audit:
+        raise HTTPException(status_code=404, detail={"error": "audit_not_found"})
+
+    # Extract the bare domain from the final_url / website_url.
+    raw_url = audit.get("final_url") or audit.get("website_url") or ""
+    if not raw_url.startswith(("http://", "https://")):
+        raw_url = "https://" + raw_url
+    parsed = _urlsplit(raw_url)
+    domain = parsed.netloc or parsed.path.split("/")[0]
+    if not domain:
+        raise HTTPException(status_code=422, detail={"error": "cannot_determine_domain"})
+
+    canonical_base_url = f"{parsed.scheme}://{domain}"
+
+    # Check for an existing Site with the same domain for this tenant
+    # (compare against all sites including archived ones so we never accidentally
+    #  create a duplicate for a soft-deleted site).
+    site_repo = get_site_repository()
+    existing_pairs = site_repo.list(tenant, include_archived=True)
+    for sid, s in existing_pairs:
+        if s.domain == domain:
+            return {"created": False, "site": _site_to_dict(sid, s)}
+
+    # No existing site — create one from the audit.
+    site = Site(
+        tenant_id=tenant,
+        domain=domain,
+        canonical_base_url=canonical_base_url,
+        display_name=domain,
+        connection_status=ConnectionStatus.PENDING,
+        crawl_limit=CRAWL_LIMIT_MAX,
+    )
+    site_id, saved = site_repo.create(site)
+    return {"created": True, "site": _site_to_dict(site_id, saved)}
+
+
 @router.get("/platform-detect")
 def platform_detect(url: str = Query(...)) -> dict:
     u = url if url.startswith(("http://", "https://")) else "https://" + url
@@ -217,6 +271,8 @@ def _site_to_dict(site_id: str, site: Site) -> dict:
         "sitemap_urls": site.sitemap_urls,
         "included_paths": site.included_paths,
         "excluded_paths": site.excluded_paths,
+        "archived": site.archived,
+        "archived_at": site.archived_at,
         "created_at": site.created_at,
         "updated_at": site.updated_at,
     }
@@ -332,22 +388,49 @@ def create_site(
 
 
 @router.get("/sites")
-def list_sites_endpoint(tenant: str = Depends(resolve_tenant)) -> dict:
-    """List all sites for the tenant."""
-    pairs = list_sites(tenant)
+def list_sites_endpoint(
+    archived: Optional[str] = Query(default=None),
+    include_archived: Optional[str] = Query(default=None),
+    tenant: str = Depends(resolve_tenant),
+) -> dict:
+    """List sites for the tenant.
+
+    ?archived=true           — return ONLY archived sites (Archived filter).
+    ?include_archived=true   — return both active and archived.
+    (default)                — return only non-archived sites.
+    """
+    archived_only = (archived or "").lower() in ("true", "1", "yes")
+    include_both = (include_archived or "").lower() in ("true", "1", "yes")
+
+    if archived_only:
+        pairs = list_sites(tenant, include_archived=True)
+        pairs = [(sid, s) for sid, s in pairs if s.archived]
+    elif include_both:
+        pairs = list_sites(tenant, include_archived=True)
+    else:
+        pairs = list_sites(tenant, include_archived=False)
     return {"sites": [_site_to_dict(sid, s) for sid, s in pairs]}
 
 
 @router.get("/sites/{site_id}")
 def get_site_endpoint(
     site_id: str,
+    include_archived: Optional[str] = Query(default=None),
     tenant: str = Depends(resolve_tenant),
 ) -> dict:
-    """Get a single site by ID (tenant-scoped)."""
+    """Get a single site by ID (tenant-scoped).
+
+    Archived sites return 404 by default (same as if they were deleted).
+    Pass ?include_archived=true to retrieve an archived site explicitly.
+    """
     result = get_site(tenant, site_id)
     if not result:
         raise HTTPException(status_code=404, detail={"error": "site_not_found"})
     sid, site = result
+    # Archived sites are invisible by default (contract: same as hard-delete from callers' view)
+    allow_archived = (include_archived or "").lower() in ("true", "1", "yes")
+    if site.archived and not allow_archived:
+        raise HTTPException(status_code=404, detail={"error": "site_not_found"})
     return {"site": _site_to_dict(sid, site)}
 
 
@@ -396,15 +479,65 @@ def patch_site(
 @router.delete("/sites/{site_id}")
 def delete_site(
     site_id: str,
+    permanent: Optional[str] = Query(default=None),
     tenant: str = Depends(resolve_tenant),
 ) -> dict:
-    """Delete (archive) a site. Returns 404 if not found."""
+    """Soft-archive a site (default). Hard-delete only when ?permanent=true.
+
+    Default (no ?permanent): sets archived=True.  Historical crawl/issue/report
+    rows are preserved; the site is hidden from the normal list.
+    ?permanent=true: permanently deletes the site row (irreversible).
+    """
     result = get_site(tenant, site_id)
     if not result:
         raise HTTPException(status_code=404, detail={"error": "site_not_found"})
     repo = get_site_repository()
-    repo.delete(tenant, site_id)
-    return {"deleted": site_id}
+    is_permanent = (permanent or "").lower() in ("true", "1", "yes")
+    if is_permanent:
+        repo.delete(tenant, site_id)
+        return {"deleted": site_id}
+    # Soft archive: site row is preserved with archived=True
+    archived_result = repo.archive(tenant, site_id)
+    if not archived_result:
+        raise HTTPException(status_code=404, detail={"error": "site_not_found"})
+    _aid, archived_site = archived_result
+    return {"archived": True, "site": _site_to_dict(_aid, archived_site)}
+
+
+@router.post("/sites/{site_id}/archive")
+def archive_site(
+    site_id: str,
+    _header_tenant: Optional[str] = Depends(resolve_tenant_header),
+    tenant_id: Optional[str] = Query(default=None),
+) -> dict:
+    """Soft-archive a site (same effect as DELETE without ?permanent)."""
+    tenant = effective_tenant(_header_tenant, tenant_id)
+    repo = get_site_repository()
+    result = repo.archive(tenant, site_id)
+    if not result:
+        raise HTTPException(status_code=404, detail={"error": "site_not_found"})
+    sid, site = result
+    return {"archived": True, "site": _site_to_dict(sid, site)}
+
+
+@router.post("/sites/{site_id}/restore")
+def restore_site(
+    site_id: str,
+    _header_tenant: Optional[str] = Depends(resolve_tenant_header),
+    tenant_id: Optional[str] = Query(default=None),
+) -> dict:
+    """Restore an archived site back to active."""
+    tenant = effective_tenant(_header_tenant, tenant_id)
+    repo = get_site_repository()
+    # Must use include_archived=True to find the archived site
+    result = repo.get(tenant, site_id)
+    if not result:
+        raise HTTPException(status_code=404, detail={"error": "site_not_found"})
+    restored = repo.restore(tenant, site_id)
+    if not restored:
+        raise HTTPException(status_code=404, detail={"error": "site_not_found"})
+    sid, site = restored
+    return {"archived": False, "site": _site_to_dict(sid, site)}
 
 
 # ── Crawl endpoints ────────────────────────────────────────────────────────────
