@@ -6,6 +6,14 @@ pydantic>=2.7,<3.0
 # Real AI brain — OpenAI provider (models/openai.py). Server-side only.
 openai>=1.40,<3.0
 
+# Authenticated encryption for Google/GBP OAuth tokens at rest (seo/google/crypto.py).
+# REQUIRED in production (SEO_REQUIRE_TOKEN_ENCRYPTION=1 fails fast without it).
+cryptography>=42.0,<46.0
+
+# Safe server-side PDF report generation (seo/reports PDF). Programmatic (no HTML
+# rendering, no remote asset fetch) so it has no SSRF/HTML-injection surface.
+reportlab>=4.0,<5.0
+
 # Real short-form video provider — Content Creator's Higgsfield connector
 # (content_creator/providers/higgsfield.py). Imported lazily; only exercised when
 # CONTENT_CREATOR_MOCK=false with real HIGGSFIELD_* credentials. httpx-based.

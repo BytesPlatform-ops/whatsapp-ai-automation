@@ -32,6 +32,16 @@ _OBF_PREFIX = "obf:"
 _WARNED = False  # log the no-key warning only once per process
 
 
+def require_encryption() -> bool:
+    """True when real authenticated encryption is REQUIRED (production).
+
+    Set SEO_REQUIRE_TOKEN_ENCRYPTION=1 in production. When required and no valid
+    Fernet key is available, seal() fails closed (raises) instead of silently
+    obfuscating, and assert_token_encryption_ready() fails at startup. Dev/tests
+    leave it unset → the labelled obfuscation fallback remains available."""
+    return os.getenv("SEO_REQUIRE_TOKEN_ENCRYPTION", "").strip().lower() in ("1", "true", "yes", "on")
+
+
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
 def _fernet_instance():
@@ -79,10 +89,44 @@ def seal(plaintext: str) -> str:
             _log.error("seo.google.crypto: Fernet seal failed: %s", exc)
             raise
 
+    # No usable Fernet key. In production (SEO_REQUIRE_TOKEN_ENCRYPTION=1) this is
+    # fatal — fail closed rather than store an insecurely-obfuscated token.
+    if require_encryption():
+        raise RuntimeError(
+            "seo.google.crypto: token encryption is REQUIRED "
+            "(SEO_REQUIRE_TOKEN_ENCRYPTION=1) but no valid GOOGLE_TOKEN_ENCRYPTION_KEY "
+            "is configured (or the 'cryptography' package is missing) — refusing to "
+            "store an unencrypted token."
+        )
+
     # Fallback: obfuscation only (NOT secure — dev/test only)
     _warn_no_key()
     obf = base64.urlsafe_b64encode(plaintext.encode("utf-8")).decode("utf-8")
     return _OBF_PREFIX + obf
+
+
+# ── Startup / health ───────────────────────────────────────────────────────────
+
+def encryption_status() -> dict:
+    """Non-secret status for health/observability (never exposes the key)."""
+    active = _fernet_instance() is not None
+    return {
+        "required": require_encryption(),
+        "active": active,
+        "mode": "fernet" if active else ("insecure_obfuscation" if not require_encryption() else "unavailable"),
+    }
+
+
+def assert_token_encryption_ready() -> None:
+    """Call at application startup. Raises when encryption is required but a valid
+    Fernet key / the cryptography package is unavailable, so a misconfigured
+    production deploy fails fast instead of silently degrading to obfuscation."""
+    if require_encryption() and _fernet_instance() is None:
+        raise RuntimeError(
+            "seo.google.crypto: SEO_REQUIRE_TOKEN_ENCRYPTION=1 but Google token "
+            "encryption is not available — set a valid GOOGLE_TOKEN_ENCRYPTION_KEY "
+            "(URL-safe base64 32-byte Fernet key) and ensure 'cryptography' is installed."
+        )
 
 
 def unseal(sealed: str) -> str:

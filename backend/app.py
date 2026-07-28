@@ -173,6 +173,13 @@ async def _content_config_startup() -> None:
 
     log_content_config()
 
+    # Fail fast when Google/GBP token encryption is REQUIRED (SEO_REQUIRE_TOKEN_ENCRYPTION=1)
+    # but unavailable — a misconfigured production deploy must not silently store
+    # obfuscated (non-encrypted) OAuth tokens. No-op in dev/tests (flag unset).
+    from seo.google.crypto import assert_token_encryption_ready
+
+    assert_token_encryption_ready()
+
     # Publishing worker — opt-in (PUBLISH_WORKER_ENABLED). Dry-run by default; a
     # no-op when disabled. Runs in a daemon thread, not the browser.
     from publishing.worker import start_worker
