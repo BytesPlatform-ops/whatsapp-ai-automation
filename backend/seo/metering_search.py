@@ -185,6 +185,105 @@ def record_page_optimisation(tenant_id: str, *, page_ref: str, is_mock: bool) ->
     )
 
 
+# ── Final-phase meters: backlinks, local SEO / GBP, citations, outreach ─────────
+# All attribute to product seo_agent via the two operation_types products.py maps
+# to it (seo_keyword_research = data/provider pulls; seo_fix = AI analysis). Email
+# sending and AI drafting are SEPARATE operations so they are billed distinctly.
+MICRO_USD_PER_BACKLINK_SYNC     = 6_000    # $0.006 per backlink provider sync (paginated pull)
+MICRO_USD_PER_BACKLINK_GAP      = 6_000    # $0.006 per backlink gap/intersection report
+MICRO_USD_PER_GBP_SYNC          = 2_000    # $0.002 per GBP location sync run
+MICRO_USD_PER_REVIEW_RESPONSE   = 3_000    # $0.003 per AI review-response draft
+MICRO_USD_PER_CITATION_CHECK    = 1_500    # $0.0015 per citation listing check
+MICRO_USD_PER_LOCAL_RANK_CHECK  = 5_000    # $0.005 per local rank check (per keyword/location)
+MICRO_USD_PER_OUTREACH_DRAFT    = 4_000    # $0.004 per AI outreach email draft
+MICRO_USD_PER_EMAIL_SEND        = 500      # $0.0005 per outreach email actually sent
+MICRO_USD_PER_LINK_VERIFY       = 300      # $0.0003 per earned-link verification fetch
+MICRO_USD_PER_GEO_GRID_CHECK    = 8_000    # $0.008 per geo-grid local rank check point-set
+
+
+def record_backlink_sync(tenant_id: str, *, job_id: str, is_mock: bool, pages: int = 1) -> dict:
+    return _record(
+        tenant_id, operation_type="seo_keyword_research",
+        micro_usd=MICRO_USD_PER_BACKLINK_SYNC * max(1, pages),
+        operation_id=f"seo_blsync:{job_id}", source_object_id=job_id,
+        created_by="seo_backlink_sync", is_mock=is_mock, units=pages, meter="backlink_sync",
+    )
+
+
+def record_backlink_gap(tenant_id: str, *, report_id: str, is_mock: bool) -> dict:
+    return _record(
+        tenant_id, operation_type="seo_keyword_research",
+        micro_usd=MICRO_USD_PER_BACKLINK_GAP,
+        operation_id=f"seo_blgap:{report_id}", source_object_id=report_id,
+        created_by="seo_backlink_gap", is_mock=is_mock, units=1, meter="backlink_gap",
+    )
+
+
+def record_gbp_sync(tenant_id: str, *, job_id: str, is_mock: bool) -> dict:
+    return _record(
+        tenant_id, operation_type="seo_keyword_research",
+        micro_usd=MICRO_USD_PER_GBP_SYNC,
+        operation_id=f"seo_gbp:{job_id}", source_object_id=job_id,
+        created_by="seo_gbp_sync", is_mock=is_mock, units=1, meter="gbp_sync",
+    )
+
+
+def record_review_response(tenant_id: str, *, review_id: str, is_mock: bool) -> dict:
+    return _record(
+        tenant_id, operation_type="seo_fix",
+        micro_usd=MICRO_USD_PER_REVIEW_RESPONSE,
+        operation_id=f"seo_review:{review_id}", source_object_id=review_id,
+        created_by="seo_review_response", is_mock=is_mock, units=1, meter="review_response",
+    )
+
+
+def record_citation_check(tenant_id: str, *, job_id: str, listing_count: int, is_mock: bool) -> dict:
+    return _record(
+        tenant_id, operation_type="seo_keyword_research",
+        micro_usd=MICRO_USD_PER_CITATION_CHECK * max(1, listing_count),
+        operation_id=f"seo_cite:{job_id}:{listing_count}", source_object_id=job_id,
+        created_by="seo_citation_check", is_mock=is_mock, units=listing_count, meter="citation_check",
+    )
+
+
+def record_local_rank_check(tenant_id: str, *, job_id: str, keyword_count: int,
+                            is_mock: bool, geo_grid: bool = False) -> dict:
+    unit_cost = MICRO_USD_PER_GEO_GRID_CHECK if geo_grid else MICRO_USD_PER_LOCAL_RANK_CHECK
+    return _record(
+        tenant_id, operation_type="seo_keyword_research",
+        micro_usd=unit_cost * max(1, keyword_count),
+        operation_id=f"seo_localrank:{job_id}:{keyword_count}", source_object_id=job_id,
+        created_by="seo_local_rank", is_mock=is_mock, units=keyword_count, meter="local_rank_check",
+    )
+
+
+def record_outreach_draft(tenant_id: str, *, draft_id: str, is_mock: bool) -> dict:
+    return _record(
+        tenant_id, operation_type="seo_fix",
+        micro_usd=MICRO_USD_PER_OUTREACH_DRAFT,
+        operation_id=f"seo_odraft:{draft_id}", source_object_id=draft_id,
+        created_by="seo_outreach_draft", is_mock=is_mock, units=1, meter="outreach_draft",
+    )
+
+
+def record_email_send(tenant_id: str, *, campaign_id: str, email_count: int, is_mock: bool) -> dict:
+    return _record(
+        tenant_id, operation_type="seo_keyword_research",
+        micro_usd=MICRO_USD_PER_EMAIL_SEND * max(1, email_count),
+        operation_id=f"seo_osend:{campaign_id}:{email_count}", source_object_id=campaign_id,
+        created_by="seo_outreach_send", is_mock=is_mock, units=email_count, meter="email_send",
+    )
+
+
+def record_link_verification(tenant_id: str, *, job_id: str, link_count: int, is_mock: bool) -> dict:
+    return _record(
+        tenant_id, operation_type="seo_keyword_research",
+        micro_usd=MICRO_USD_PER_LINK_VERIFY * max(1, link_count),
+        operation_id=f"seo_linkverify:{job_id}:{link_count}", source_object_id=job_id,
+        created_by="seo_link_verify", is_mock=is_mock, units=link_count, meter="link_verification",
+    )
+
+
 # ── Server-authoritative plan limits ────────────────────────────────────────────
 # Reuses credits.plans.check_limit so admins define caps in the plan catalog. When
 # a key has no cap the check returns UNLIMITED/allowed; enforcement only blocks
@@ -201,6 +300,25 @@ LIMIT_GA4_PROPERTIES     = "seo_ga4_properties"
 LIMIT_CONTENT_BRIEFS     = "seo_content_briefs"
 LIMIT_REPORTS            = "seo_reports"
 LIMIT_AI_RECOMMENDATIONS = "seo_ai_recommendations"
+# Backlinks
+LIMIT_BACKLINK_SITES     = "seo_backlink_sites"
+LIMIT_BACKLINK_STORED    = "seo_backlink_stored"
+LIMIT_BACKLINK_COMPETITORS = "seo_backlink_competitors"
+LIMIT_BACKLINK_GAP_REPORTS = "seo_backlink_gap_reports"
+# Local SEO / GBP
+LIMIT_LOCATIONS          = "seo_locations"
+LIMIT_GBP_CONNECTIONS    = "seo_gbp_connections"
+LIMIT_LOCAL_KEYWORDS     = "seo_local_keywords"
+LIMIT_GEO_GRID_CHECKS    = "seo_geo_grid_checks"
+LIMIT_REVIEWS_PROCESSED  = "seo_reviews_processed"
+LIMIT_CITATION_CHECKS    = "seo_citation_checks"
+# Outreach
+LIMIT_OUTREACH_CONTACTS  = "seo_outreach_contacts"
+LIMIT_OUTREACH_CAMPAIGNS = "seo_outreach_campaigns"
+LIMIT_OUTREACH_DRAFTS    = "seo_outreach_drafts"
+LIMIT_OUTREACH_EMAILS    = "seo_outreach_emails"
+LIMIT_OUTREACH_FOLLOWUPS = "seo_outreach_followups"
+LIMIT_OUTREACH_VERIFICATIONS = "seo_outreach_verifications"
 
 
 def check_seo_limit(tenant_id: str, key: str, used: int) -> dict:
