@@ -60,6 +60,7 @@ from meta.brand_routes import router as meta_brand_router
 from meta.planner_routes import router as meta_planner_router
 from content.routes import router as content_router
 from seo.agent_routes import router as seo_agent_router
+from seo.google.routes import router as seo_google_router
 from receptionist.campaigns.api import router as campaigns_router
 from receptionist.onboarding.api import router as onboarding_router
 from content_creator.router import router as content_creator_router
@@ -122,6 +123,7 @@ app.include_router(meta_brand_router)  # /api/meta/brand-brain — Brand Brain f
 app.include_router(meta_planner_router)  # /api/meta/ideas|calendar — Idea Curator + Content Calendar
 app.include_router(content_router)  # /api/content/assets — media upload (Supabase Storage)
 app.include_router(seo_agent_router)  # /api/agents/seo — platform-aware audit + one-tap optimize
+app.include_router(seo_google_router)  # /api/agents/seo/google/* — GSC + GA4 connect/sync/views
 app.include_router(onboarding_router)
 app.include_router(campaigns_router)
 app.include_router(seo_router, deprecated=True)  # DEPRECATED /api/seo/* (in-memory); use /api/agents/seo/*
