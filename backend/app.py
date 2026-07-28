@@ -66,6 +66,7 @@ from seo.rank.routes import router as seo_rank_router
 from seo.intelligence.routes import router as seo_intelligence_router
 from seo.fix_verify_routes import router as seo_fix_verify_router
 from seo.backlinks.routes import router as seo_backlinks_router
+from seo.scheduler.routes import router as seo_scheduler_router
 from receptionist.campaigns.api import router as campaigns_router
 from receptionist.onboarding.api import router as onboarding_router
 from content_creator.router import router as content_creator_router
@@ -134,6 +135,7 @@ app.include_router(seo_rank_router)  # /api/agents/seo/rank/* — durable rank t
 app.include_router(seo_intelligence_router)  # /api/agents/seo/* — competitors, opportunities, briefs, alerts
 app.include_router(seo_fix_verify_router)  # /api/agents/seo/fix-verify/* — durable fix verification
 app.include_router(seo_backlinks_router)  # /api/agents/seo/backlinks/* — backlink profile, risk, gaps
+app.include_router(seo_scheduler_router)  # /api/agents/seo/scheduler/* — internal scheduler admin
 app.include_router(onboarding_router)
 app.include_router(campaigns_router)
 app.include_router(seo_router, deprecated=True)  # DEPRECATED /api/seo/* (in-memory); use /api/agents/seo/*
@@ -192,6 +194,20 @@ async def _content_config_startup() -> None:
     # Skipped under pytest (PYTEST_CURRENT_TEST is set by pytest itself) and
     # when SEO_SWEEPER_DISABLED=1 so integration tests stay hermetic.
     _start_seo_sweeper()
+
+    # SEO scheduler runtime — durable due-job loop (GSC/GA4/rank/alerts/crawl-recovery/
+    # fix-verify …). Off by default; SEO_SCHEDULER_ENABLED=1 to enable. Skipped under
+    # pytest. Single daemon thread with per-instance ownership + job-level locks.
+    from seo.scheduler.startup import start_scheduler
+
+    start_scheduler()
+
+
+@app.on_event("shutdown")
+async def _seo_scheduler_shutdown() -> None:
+    from seo.scheduler.startup import stop_scheduler
+
+    stop_scheduler()
 
 
 def _start_seo_sweeper() -> None:
