@@ -53,6 +53,56 @@ LIMIT_KEYS = (
 )
 
 
+# ── SEO Agent plan limits (server-authoritative; keys match seo/metering_search.py) ──
+# UNLIMITED (-1) never blocks. Free is intentionally minimal; off-site + outreach are
+# gated to paid tiers. Callers pass these keys to check_limit()/enforce_seo_limit().
+_SEO_LIMITS_FREE = {
+    "seo_sites": 1, "seo_pages_per_crawl": 50, "seo_crawls_per_period": 5,
+    "seo_crawl_history": 5, "seo_pagespeed_checks": 20, "seo_history_retention_days": 30,
+    "seo_keyword_projects": 1, "seo_keywords_per_project": 25, "seo_tracked_keywords": 10,
+    "seo_rank_check_frequency_days": 30, "seo_competitors": 1,
+    "seo_gsc_properties": 1, "seo_ga4_properties": 1,
+    "seo_content_briefs": 2, "seo_ai_recommendations": 10, "seo_reports": 3,
+    "seo_backlink_sites": 0, "seo_backlink_stored": 0, "seo_backlink_competitors": 0,
+    "seo_backlink_gap_reports": 0, "seo_backlink_sync_frequency_days": 0,
+    "seo_locations": 1, "seo_gbp_connections": 0, "seo_local_keywords": 5,
+    "seo_local_rank_checks": 10, "seo_geo_grid_checks": 0, "seo_reviews_processed": 0,
+    "seo_citation_checks": 5, "seo_schema_proposals": 2,
+    "seo_outreach_contacts": 0, "seo_outreach_campaigns": 0, "seo_outreach_drafts": 0,
+    "seo_outreach_emails": 0, "seo_outreach_followups": 0, "seo_outreach_verifications": 0,
+}
+_SEO_LIMITS_STARTER = {
+    "seo_sites": 3, "seo_pages_per_crawl": 500, "seo_crawls_per_period": 50,
+    "seo_crawl_history": 50, "seo_pagespeed_checks": 200, "seo_history_retention_days": 180,
+    "seo_keyword_projects": 5, "seo_keywords_per_project": 200, "seo_tracked_keywords": 100,
+    "seo_rank_check_frequency_days": 7, "seo_competitors": 3,
+    "seo_gsc_properties": 3, "seo_ga4_properties": 3,
+    "seo_content_briefs": 25, "seo_ai_recommendations": 200, "seo_reports": 50,
+    "seo_backlink_sites": 1, "seo_backlink_stored": 5000, "seo_backlink_competitors": 3,
+    "seo_backlink_gap_reports": 10, "seo_backlink_sync_frequency_days": 7,
+    "seo_locations": 3, "seo_gbp_connections": 3, "seo_local_keywords": 50,
+    "seo_local_rank_checks": 200, "seo_geo_grid_checks": 0, "seo_reviews_processed": 500,
+    "seo_citation_checks": 50, "seo_schema_proposals": 25,
+    "seo_outreach_contacts": 500, "seo_outreach_campaigns": 10, "seo_outreach_drafts": 100,
+    "seo_outreach_emails": 50, "seo_outreach_followups": 100, "seo_outreach_verifications": 100,
+}
+_SEO_LIMITS_PRO = {
+    "seo_sites": 25, "seo_pages_per_crawl": 5000, "seo_crawls_per_period": UNLIMITED,
+    "seo_crawl_history": UNLIMITED, "seo_pagespeed_checks": UNLIMITED, "seo_history_retention_days": UNLIMITED,
+    "seo_keyword_projects": UNLIMITED, "seo_keywords_per_project": UNLIMITED, "seo_tracked_keywords": 2000,
+    "seo_rank_check_frequency_days": 1, "seo_competitors": 25,
+    "seo_gsc_properties": 25, "seo_ga4_properties": 25,
+    "seo_content_briefs": UNLIMITED, "seo_ai_recommendations": UNLIMITED, "seo_reports": UNLIMITED,
+    "seo_backlink_sites": 25, "seo_backlink_stored": 100000, "seo_backlink_competitors": 25,
+    "seo_backlink_gap_reports": UNLIMITED, "seo_backlink_sync_frequency_days": 1,
+    "seo_locations": 50, "seo_gbp_connections": 50, "seo_local_keywords": 1000,
+    "seo_local_rank_checks": UNLIMITED, "seo_geo_grid_checks": 1000, "seo_reviews_processed": UNLIMITED,
+    "seo_citation_checks": 1000, "seo_schema_proposals": UNLIMITED,
+    "seo_outreach_contacts": 10000, "seo_outreach_campaigns": UNLIMITED, "seo_outreach_drafts": UNLIMITED,
+    "seo_outreach_emails": 500, "seo_outreach_followups": UNLIMITED, "seo_outreach_verifications": UNLIMITED,
+}
+
+
 PLAN_CATALOG: Dict[str, Plan] = {
     "free": Plan(
         id="free", name="Free", monthly_credits=0,
@@ -62,7 +112,7 @@ PLAN_CATALOG: Dict[str, Plan] = {
         limits={"monthly_text_generations": 10, "monthly_video_generations": 0, "max_documents": 20,
                 "max_variations": 1, "connected_accounts": 1, "scheduled_jobs": 3,
                 "active_influencer_profiles": 0, "concurrent_provider_jobs": 1,
-                "version_history_depth": 3, "team_members": 1},
+                "version_history_depth": 3, "team_members": 1, **_SEO_LIMITS_FREE},
     ),
     "starter": Plan(
         id="starter", name="Starter", monthly_credits=2000,
@@ -72,7 +122,7 @@ PLAN_CATALOG: Dict[str, Plan] = {
         limits={"monthly_text_generations": 200, "monthly_video_generations": 10, "max_documents": 200,
                 "max_variations": 3, "connected_accounts": 3, "scheduled_jobs": 50,
                 "active_influencer_profiles": 1, "concurrent_provider_jobs": 2,
-                "version_history_depth": 20, "team_members": 2},
+                "version_history_depth": 20, "team_members": 2, **_SEO_LIMITS_STARTER},
     ),
     "pro": Plan(
         id="pro", name="Pro", monthly_credits=10000,
@@ -83,7 +133,7 @@ PLAN_CATALOG: Dict[str, Plan] = {
         limits={"monthly_text_generations": UNLIMITED, "monthly_video_generations": 100, "max_documents": UNLIMITED,
                 "max_variations": 5, "connected_accounts": 10, "scheduled_jobs": UNLIMITED,
                 "active_influencer_profiles": 5, "concurrent_provider_jobs": 5,
-                "version_history_depth": UNLIMITED, "team_members": 10},
+                "version_history_depth": UNLIMITED, "team_members": 10, **_SEO_LIMITS_PRO},
     ),
 }
 
