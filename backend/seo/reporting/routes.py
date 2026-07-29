@@ -197,8 +197,9 @@ async def generate_pdf_report(
     # Persist metadata + cache bytes
     import time
     from datetime import datetime, timezone, timedelta
+    from seo.env import env_int
 
-    expires_dt = datetime.now(timezone.utc) + timedelta(seconds=int(os.getenv("SEO_PDF_TOKEN_TTL", "300")))
+    expires_dt = datetime.now(timezone.utc) + timedelta(seconds=env_int("SEO_PDF_TOKEN_TTL", 300))
     expires_at = expires_dt.isoformat(timespec="microseconds")
 
     repo = get_generated_report_repository()

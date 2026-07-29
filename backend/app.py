@@ -245,7 +245,8 @@ def _start_seo_sweeper() -> None:
     if os.getenv("SEO_SWEEPER_DISABLED", "").strip().lower() in ("1", "true", "yes"):
         return
 
-    interval_s = int(os.getenv("SEO_SWEEPER_INTERVAL_S", "60"))
+    from seo.env import env_int
+    interval_s = env_int("SEO_SWEEPER_INTERVAL_S", 60)
 
     def _sweep():
         from seo.crawler.worker import poll_once

@@ -54,7 +54,8 @@ except ImportError:
 
 MAX_TABLE_ROWS = 50          # max rows per individual table
 MAX_PAGES = 60               # safety cap on total pages
-PDF_TIMEOUT_SECONDS = int(os.getenv("SEO_PDF_TIMEOUT_SECONDS", "30"))
+from seo.env import env_int
+PDF_TIMEOUT_SECONDS = env_int("SEO_PDF_TIMEOUT_SECONDS", 30)  # tolerates an empty env value
 
 # Allowlist for local logo paths (SSRF guard: only explicitly listed dirs allowed)
 _LOGO_ALLOWED_DIRS: tuple = (
