@@ -171,6 +171,43 @@ const CONTRACT: ContractRow[] = [
     note: 'location_id required as ?location_id=' },
   { method: 'POST',   proxy: '/api/lab/seo/local-rank',           backend: 'POST /api/agents/seo/local-rank/check' },
 
+  // ── Local: GBP ────────────────────────────────────────────────────────────
+  { method: 'GET',    proxy: '/api/lab/seo/gbp/connect',          backend: 'GET /api/agents/seo/gbp/connect' },
+  { method: 'POST',   proxy: '/api/lab/seo/gbp/callback',         backend: 'POST /api/agents/seo/gbp/callback' },
+  { method: 'GET',    proxy: '/api/lab/seo/gbp/connections',      backend: 'GET /api/agents/seo/gbp/connections' },
+  { method: 'GET',    proxy: '/api/lab/seo/gbp/connections/{id}/accounts', backend: 'GET /api/agents/seo/gbp/connections/{connection_id}/accounts',
+    note: 'also lists that account\'s locations via ?account= (backend :path segment)' },
+  { method: 'POST',   proxy: '/api/lab/seo/gbp/connections/{id}', backend: 'POST /api/agents/seo/gbp/connections/{connection_id}/refresh',
+    note: 'refresh access token' },
+  { method: 'DELETE', proxy: '/api/lab/seo/gbp/connections/{id}', backend: 'DELETE /api/agents/seo/gbp/connections/{connection_id}' },
+  { method: 'POST',   proxy: '/api/lab/seo/gbp/map-location',     backend: 'POST /api/agents/seo/gbp/map-location' },
+  { method: 'POST',   proxy: '/api/lab/seo/gbp/sync',            backend: 'POST /api/agents/seo/gbp/sync' },
+
+  // ── Local: NAP Audit ──────────────────────────────────────────────────────
+  { method: 'GET',    proxy: '/api/lab/seo/nap',                  backend: 'GET /api/agents/seo/locations/{location_id}/nap',
+    note: 'location_id required as ?location_id=' },
+  { method: 'POST',   proxy: '/api/lab/seo/nap',                  backend: 'POST /api/agents/seo/locations/{location_id}/nap/audit',
+    note: 'default action=audit; action=confirm_variant → POST /nap/{audit_id}/confirm-variant' },
+
+  // ── Local: Schema ─────────────────────────────────────────────────────────
+  { method: 'GET',    proxy: '/api/lab/seo/schema',               backend: 'GET /api/agents/seo/locations/{location_id}/schema',
+    note: 'location_id required; ?view=audit → /schema/audit' },
+  { method: 'POST',   proxy: '/api/lab/seo/schema',               backend: 'POST /api/agents/seo/locations/{location_id}/schema/propose',
+    note: 'default action=propose; approve→/schema/{id}/approve, published→/schema/{id}/published' },
+
+  // ── Local: Local Competitors ──────────────────────────────────────────────
+  { method: 'GET',    proxy: '/api/lab/seo/local-competitors',    backend: 'GET /api/agents/seo/locations/{location_id}/competitors',
+    note: 'location_id required; ?view=opportunities → /opportunities' },
+  { method: 'POST',   proxy: '/api/lab/seo/local-competitors',    backend: 'POST /api/agents/seo/locations/{location_id}/competitors' },
+  { method: 'DELETE', proxy: '/api/lab/seo/local-competitors',    backend: 'DELETE /api/agents/seo/competitors/{comp_id}',
+    note: 'comp_id required as ?comp_id=' },
+
+  // ── Local: Location Pages ─────────────────────────────────────────────────
+  { method: 'GET',    proxy: '/api/lab/seo/location-pages',       backend: 'GET /api/agents/seo/locations/{location_id}/page-opportunities',
+    note: 'location_id required as ?location_id=' },
+  { method: 'POST',   proxy: '/api/lab/seo/location-pages',       backend: 'POST /api/agents/seo/location-pages/handoff',
+    note: 'action=handoff — billed as a separate Content operation' },
+
   // ── Outreach: Contacts ────────────────────────────────────────────────────
   { method: 'GET',    proxy: '/api/lab/seo/outreach/contacts',    backend: 'GET /api/agents/seo/outreach/contacts' },
   { method: 'POST',   proxy: '/api/lab/seo/outreach/contacts',    backend: 'POST /api/agents/seo/outreach/contacts',

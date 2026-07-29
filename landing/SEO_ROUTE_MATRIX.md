@@ -179,12 +179,19 @@ at `landing/lib/pixie-lab/__tests__/seoBackendEndpoints.fixture.ts`.
 | `/api/lab/seo/reviews` | POST (action=approve) | `POST /api/agents/seo/reviews/{review_id}/approve` | seo.manage | FIXED (review_id now path param) |
 | `/api/lab/seo/reviews` | POST (action=handled) | `POST /api/agents/seo/reviews/{review_id}/handled` | seo.manage | FIXED (new action, review_id path param) |
 
+**Response-field aliasing (FIXED):** the reviews proxy now normalises GBP-native
+backend fields to the names `SeoReview` / `SeoReviewsPanel` consume — `author`←`reviewer_display_name`,
+`body`←`review_text`, `response_draft`←`reply_text`, `status`←(`reply_status`/`handled`),
+`summary`←`workspace`, and on draft `draft`←`draft_text`. Original backend fields are preserved
+alongside the aliases, so neither side has to know the other's vocabulary and cards never render blank.
+
 ## Local: NAP Audit
 
 | Proxy path | Method | Backend endpoint | Auth | Status |
 |---|---|---|---|---|
-| *(no dedicated proxy yet)* | — | `POST /api/agents/seo/locations/{id}/nap/audit` | seo.manage | — |
-| *(no dedicated proxy yet)* | — | `GET /api/agents/seo/locations/{id}/nap` | seo.view | — |
+| `/api/lab/seo/nap` | GET | `GET /api/agents/seo/locations/{location_id}/nap` | seo.view | FIXED (dedicated proxy added; `?location_id=`) |
+| `/api/lab/seo/nap` | POST (action=audit) | `POST /api/agents/seo/locations/{location_id}/nap/audit` | seo.manage | FIXED (dedicated proxy added) |
+| `/api/lab/seo/nap` | POST (action=confirm_variant) | `POST /api/agents/seo/nap/{audit_id}/confirm-variant` | seo.manage | FIXED (confirm intended variation) |
 
 ## Local: Citations
 
@@ -206,17 +213,28 @@ at `landing/lib/pixie-lab/__tests__/seoBackendEndpoints.fixture.ts`.
 
 | Proxy path | Method | Backend endpoint | Auth | Status |
 |---|---|---|---|---|
-| *(no dedicated proxy yet)* | — | `GET /api/agents/seo/gbp/connect` | — | — |
-| *(no dedicated proxy yet)* | — | `POST /api/agents/seo/gbp/callback` | — | — |
-| *(no dedicated proxy yet)* | — | `GET /api/agents/seo/gbp/connections` | — | — |
+| `/api/lab/seo/gbp/connect` | GET | `GET /api/agents/seo/gbp/connect` | seo.manage | FIXED (dedicated proxy added) |
+| `/api/lab/seo/gbp/callback` | POST | `POST /api/agents/seo/gbp/callback` | seo.manage | FIXED (forwards structured 400 for reconnect UX) |
+| `/api/lab/seo/gbp/connections` | GET | `GET /api/agents/seo/gbp/connections` | seo.view | FIXED (dedicated proxy added; tokens redacted server-side) |
+| `/api/lab/seo/gbp/connections/{id}/accounts` | GET | `GET /api/agents/seo/gbp/connections/{connection_id}/accounts` | seo.view | FIXED (`?account=` lists that account's locations) |
+| `/api/lab/seo/gbp/connections/{id}` | POST | `POST /api/agents/seo/gbp/connections/{connection_id}/refresh` | seo.manage | FIXED (token refresh) |
+| `/api/lab/seo/gbp/connections/{id}` | DELETE | `DELETE /api/agents/seo/gbp/connections/{connection_id}` | seo.manage | FIXED (disconnect + purge tokens) |
+| `/api/lab/seo/gbp/map-location` | POST | `POST /api/agents/seo/gbp/map-location` | seo.manage | FIXED (forwards 403 cross_workspace) |
+| `/api/lab/seo/gbp/sync` | POST | `POST /api/agents/seo/gbp/sync` | seo.manage | FIXED (profile + review pull) |
 
 ## Local: Local Competitors, Schema, Page Opportunities
 
 | Proxy path | Method | Backend endpoint | Auth | Status |
 |---|---|---|---|---|
-| *(no dedicated proxy yet)* | — | `GET /api/agents/seo/locations/{id}/competitors` | — | — |
-| *(no dedicated proxy yet)* | — | `GET /api/agents/seo/locations/{id}/schema` | — | — |
-| *(no dedicated proxy yet)* | — | `GET /api/agents/seo/locations/{id}/page-opportunities` | — | — |
+| `/api/lab/seo/local-competitors` | GET | `GET /api/agents/seo/locations/{location_id}/competitors` | seo.view | FIXED (`?view=opportunities` → `/opportunities`) |
+| `/api/lab/seo/local-competitors` | POST | `POST /api/agents/seo/locations/{location_id}/competitors` | seo.manage | FIXED (add competitor) |
+| `/api/lab/seo/local-competitors` | DELETE | `DELETE /api/agents/seo/competitors/{comp_id}` | seo.manage | FIXED (`?comp_id=`) |
+| `/api/lab/seo/schema` | GET | `GET /api/agents/seo/locations/{location_id}/schema` | seo.view | FIXED (`?view=audit` → `/schema/audit`) |
+| `/api/lab/seo/schema` | POST (propose) | `POST /api/agents/seo/locations/{location_id}/schema/propose` | seo.manage | FIXED (generate local schema) |
+| `/api/lab/seo/schema` | POST (approve) | `POST /api/agents/seo/schema/{schema_id}/approve` | seo.manage | FIXED |
+| `/api/lab/seo/schema` | POST (published) | `POST /api/agents/seo/schema/{schema_id}/published` | seo.manage | FIXED |
+| `/api/lab/seo/location-pages` | GET | `GET /api/agents/seo/locations/{location_id}/page-opportunities` | seo.view | FIXED (location-page opportunities) |
+| `/api/lab/seo/location-pages` | POST (handoff) | `POST /api/agents/seo/location-pages/handoff` | seo.manage | FIXED (Content Agent handoff — billed separately) |
 
 ## Outreach: Contacts
 
@@ -315,14 +333,26 @@ There are no `/api/seo/*` routes in `landing/app/api/`. All routes were already 
 | Google/GSC/GA4 | 6 | 0 | 6 | 0 |
 | Backlinks | 10 | 1 | 9 | 0 |
 | Local (locations) | 6 | 1 | 5 | 0 |
+| GBP | 8 | 8 | 0 | 0 |
 | Reviews | 4 | 4 | 0 | 0 |
+| NAP | 3 | 3 | 0 | 0 |
 | Citations | 4 | 4 | 0 | 0 |
 | Local Rank | 2 | 2 | 0 | 0 |
+| Local Competitors | 3 | 3 | 0 | 0 |
+| Schema | 4 | 4 | 0 | 0 |
+| Location Pages | 2 | 2 | 0 | 0 |
 | Outreach (all) | 8 | 4 | 4 | 0 |
 | Scheduler | 5 | 1 | 4 | 0 |
 | PDF Reports | 2 | 2 | 0 | 0 |
 | Page Speed | 1 | 0 | 1 | 0 |
 | Deprecated/Internal | 4 | — | — | 4 |
-| **TOTAL** | **96** | **27** | **64** | **5** |
+| **TOTAL** | **120** | **51** | **64** | **5** |
+
+**Remaining proxy gaps: 0** — every SEO feature area (Sites, Audits, Crawls, Pages, Issues,
+Reports, GSC, GA4, Keywords, Rankings, Competitors, Opportunities, Optimisation, Briefs, Alerts,
+Backlinks, Locations, GBP, Reviews, NAP, Citations, Local Rankings, Local Competitors, Location
+Pages, Local Schema, Outreach, Scheduler, PDF, Billing) has a real, contract-tested proxy. The
+only rows not mapped 1:1 are the 4 documented `LEGACY` proxies, each dependent on a deprecated or
+aggregate backend surface (not a missing provider).
 
 **Tenant isolation**: No client-supplied `tenant_id` is accepted. All proxy route handlers call `guard(perm)` which resolves the tenant server-side from the session. `backendSend`/`backendGet` inject `tenant_id` from `g.tenant` only.
