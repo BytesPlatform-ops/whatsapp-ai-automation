@@ -44,6 +44,28 @@ export async function setupSeoPage(page: Page, cfg: MockConfig = {}): Promise<vo
     }
   });
 
+  // Unlock the SEO agent. The Pixie Lab shell gates every service behind
+  // /api/lab/entitlements (useEntitlements). Without this the workspace renders
+  // the "Unlock SEO" trial paywall instead of the panels, so every data test
+  // would fail on the gate rather than the feature. Return all agents active so
+  // the workspace and its sub-tools render; SEO specifically must be unlocked.
+  await page.route('**/api/lab/entitlements**', async (r) => {
+    if (r.request().method() !== 'GET') {
+      await r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ backendUp: true, ok: true }) });
+      return;
+    }
+    await r.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        backendUp: true,
+        entitlements: ['website', 'receptionist', 'seo', 'marketing', 'content'].map((agent) => ({
+          agent, state: 'active',
+        })),
+      }),
+    });
+  });
+
   // Mock the /api/lab/seo/* proxy routes.
   await installSeoMocks(page, cfg);
 

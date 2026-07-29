@@ -44,7 +44,7 @@
     --pl-border-strong: #C7DED2;
     --pl-text: #102018;
     --pl-text-soft: #35473C;
-    --pl-text-muted: #65756B;
+    --pl-text-muted: #5C6B61; /* a11y: darkened from #65756B so 12–13px muted text clears WCAG AA 4.5:1 on --pl-surface-soft (#EEF8F1) */
     --pl-green: #16A34A;
     --pl-green-dark: #15803D;
     --pl-green-soft: #DCFCE7;
