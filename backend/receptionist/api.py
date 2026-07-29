@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
@@ -21,6 +21,7 @@ from schemas import UsageEvent, UsageEventType
 
 from .actions import run_action
 from .channels import WebChatAdapter
+from .context import resolve_tenant
 from .core import ReceptionEngine
 
 router = APIRouter(prefix="/receptionist", tags=["receptionist"])
@@ -42,8 +43,8 @@ async def page() -> FileResponse:
 
 
 @router.post("/chat")
-async def chat(body: ChatIn) -> dict:
-    req = _adapter.to_request(body.tenant_id, body.model_dump())
+async def chat(body: ChatIn, tenant_id: str = Depends(resolve_tenant)) -> dict:
+    req = _adapter.to_request(tenant_id, body.model_dump())
     reply, result = await ReceptionEngine().handle(req)
 
     # Run the real side-effect for the parsed action (booking → calendar, etc.).
@@ -51,7 +52,7 @@ async def chat(body: ChatIn) -> dict:
 
     # Bill the model call (model/tokens/latency/cost).
     get_recorder().record(UsageEvent(
-        tenant_id=req.tenant_id,
+        tenant_id=tenant_id,
         event_type=UsageEventType.RECEPTION,
         model=result.model,
         tier=result.tier,

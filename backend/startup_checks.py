@@ -35,19 +35,38 @@ def _truthy(name: str) -> bool:
 
 
 def validate_internal_secret() -> None:
-    """Fail fast when PIXIE_REQUIRE_INTERNAL_SECRET is set but no secret is configured.
+    """Fail fast when the internal secret is required but not configured.
 
-    When the flag is OFF (tests / local dev) this is a no-op.  NEVER logs the
-    secret value — only its presence is checked.
+    Honoured flags (either forces the check): ``PIXIE_REQUIRE_INTERNAL_SECRET``
+    (whole backend) and ``AI_RECEPTIONIST_REQUIRE_INTERNAL_SECRET`` (receptionist-
+    specific, so the receptionist can demand proxy-only access independently).
+    When both are OFF (tests / local dev) this is a no-op. NEVER logs the secret
+    value — only its presence is checked.
     """
-    if not _truthy("PIXIE_REQUIRE_INTERNAL_SECRET"):
+    if not (_truthy("PIXIE_REQUIRE_INTERNAL_SECRET")
+            or _truthy("AI_RECEPTIONIST_REQUIRE_INTERNAL_SECRET")):
         return
     secret = os.getenv("PIXIE_INTERNAL_API_SECRET", "").strip()
     if not secret:
         raise StartupConfigError(
-            "PIXIE_REQUIRE_INTERNAL_SECRET is set but PIXIE_INTERNAL_API_SECRET is "
-            "empty or unset. Set PIXIE_INTERNAL_API_SECRET to a strong random value "
+            "An internal-secret requirement flag is set but PIXIE_INTERNAL_API_SECRET "
+            "is empty or unset. Set PIXIE_INTERNAL_API_SECRET to a strong random value "
             "so the backend only accepts requests from the trusted Next.js proxy."
+        )
+
+
+def validate_receptionist_config() -> None:
+    """Fail fast on an unsafe AI Receptionist production configuration.
+
+    When ``AI_RECEPTIONIST_REQUIRE_DURABLE`` is set, the receptionist refuses to
+    boot on in-memory persistence (conversations / leads / bookings would be lost
+    on restart). Off by default so tests and local dev keep using memory.
+    """
+    if _truthy("AI_RECEPTIONIST_REQUIRE_DURABLE") and not persistence.enabled():
+        raise StartupConfigError(
+            "AI_RECEPTIONIST_REQUIRE_DURABLE is set but PIXIE_PERSIST is 'memory'. "
+            "Set PIXIE_PERSIST=supabase (+ SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY) "
+            "so receptionist conversations, leads and bookings survive restarts."
         )
 
 
@@ -87,6 +106,7 @@ def validate_content_config() -> dict:
 def log_content_config() -> dict:
     """Validate + emit the boot summary (secret-free). Called once at app startup."""
     validate_internal_secret()
+    validate_receptionist_config()
     s = validate_content_config()
     log.info(
         "[content] persistence=%s durable=%s ai_mock=%s dry_run_posting=%s "

@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import os
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from integrations import integration_status
@@ -26,13 +26,15 @@ from schemas import ModelTier
 
 from .agent import AGENT_SLUG, run_receptionist
 from .agent_schemas import ReceptionSignal, RunResponse
+from .context import resolve_tenant
 
 agent_router = APIRouter(prefix="/api/agents/ai-receptionist", tags=["ai-receptionist"])
 integrations_router = APIRouter(prefix="/api/integrations", tags=["integrations"])
 
 
 @agent_router.post("/run", response_model=RunResponse)
-async def run(signal: ReceptionSignal) -> RunResponse:
+async def run(signal: ReceptionSignal, tenant_id: str = Depends(resolve_tenant)) -> RunResponse:
+    signal.tenant_id = tenant_id
     try:
         return await run_receptionist(signal)
     except RuntimeError as exc:
@@ -58,9 +60,13 @@ class GmailRunBody(BaseModel):
 
 
 @agent_router.post("/run-from-gmail", response_model=RunResponse)
-async def run_from_gmail(body: GmailRunBody) -> RunResponse:
+async def run_from_gmail(
+    body: GmailRunBody,
+    tenant_id: str = Depends(resolve_tenant),
+) -> RunResponse:
+    body.tenant_id = tenant_id
     # Real mode needs a live Gmail read connection; fail closed if absent.
-    if execution_mode().value == "real" and not find_active_connection(body.tenant_id, "email_read"):
+    if execution_mode().value == "real" and not find_active_connection(tenant_id, "email_read"):
         raise HTTPException(
             status_code=409,
             detail="missing_connection: Gmail is not connected for this tenant. "
@@ -68,7 +74,7 @@ async def run_from_gmail(body: GmailRunBody) -> RunResponse:
         )
     # Mock mode (or test): use a seeded Gmail message so the flow is exercisable.
     signal = ReceptionSignal(
-        tenant_id=body.tenant_id, user_id=body.user_id, source="gmail", now=body.now,
+        tenant_id=tenant_id, user_id=body.user_id, source="gmail", now=body.now,
         **_MOCK_GMAIL_MESSAGE,
     )
     try:
