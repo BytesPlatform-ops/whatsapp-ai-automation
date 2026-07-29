@@ -301,6 +301,24 @@ def _run_message_inner(*, tenant_id: str, message: str, channel: str,
     ).model_dump()
     stores.actions().put(tenant_id, action_rec)
 
+    # ── D: build + persist a schema-validated response plan for this turn ──────
+    # Additive + guarded: a plan-building failure must never break the turn.
+    plan_version = ""
+    try:
+        from .response_plan import build_plan_from_classification, persist_plan
+        _plan = build_plan_from_classification(
+            cls.intent, dict(fields), reply,
+            confidence=float(cls.confidence), handler_action=handler_result.action,
+            handler_status=handler_result.status, record_type=handler_result.record_type,
+            record_id=handler_result.record_id or "", provider=cls.provider, model=cls.model,
+            escalation_recommendation=bool(handler_result.escalate),
+        )
+        persist_plan(_plan, action_record=action_rec, conversation=conv)
+        stores.actions().put(tenant_id, action_rec)
+        plan_version = _plan.plan_version
+    except Exception:
+        plan_version = ""
+
     # ── A: update conversation with durable rolling summary ───────────────────
     conv["last_intent"] = cls.intent
     conv["last_action"] = handler_result.action
@@ -341,6 +359,7 @@ def _run_message_inner(*, tenant_id: str, message: str, channel: str,
         "provider_status": handler_result.provider_status,
         "escalated": handler_result.escalate,
         "action_id": action_rec["id"],
+        "response_plan_version": plan_version,
     }
 
 
