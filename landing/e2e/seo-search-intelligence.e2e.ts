@@ -214,13 +214,16 @@ test.describe('SEO – Rankings', () => {
     await setupSeoPage(page, { keywordsTotal: 20 });
     await page.goto(`${BASE}/rankings`, { waitUntil: 'domcontentloaded' });
 
-    await expect(page.getByText(/main keyword project|top 3|top 10/i).first()).toBeVisible({ timeout: 6_000 });
+    // Target the visible rank-overview stat labels. (The project name also
+    // appears inside a hidden <select><option>, so matching it with .first()
+    // would resolve to a hidden node.)
+    await expect(page.getByText(/^top 3$|^top 10$/i).first()).toBeVisible({ timeout: 6_000 });
   });
 
   test('check ranks button triggers POST', async ({ page }) => {
     let rankCheckCalled = false;
     await setupSeoPage(page, { keywordsTotal: 5 });
-    await page.route('**/api/lab/seo/rankings', async (r) => {
+    await page.route('**/api/lab/seo/rankings/check**', async (r) => {
       if (r.request().method() === 'POST') {
         rankCheckCalled = true;
         await r.fulfill({

@@ -314,6 +314,7 @@ export function SeoPagesPanel({ initialCrawlJobId }: { initialCrawlJobId?: strin
           <button
             onClick={() => load(offset - PAGE_SIZE)}
             disabled={offset === 0}
+            aria-label="Previous page"
             className="rounded-lg border border-[var(--pl-border)] p-2 text-[var(--pl-text-muted)] disabled:opacity-40 transition hover:text-[var(--pl-text)]"
           >
             <ChevronLeft size={16} />
@@ -322,6 +323,7 @@ export function SeoPagesPanel({ initialCrawlJobId }: { initialCrawlJobId?: strin
           <button
             onClick={() => load(offset + PAGE_SIZE)}
             disabled={offset + PAGE_SIZE >= total}
+            aria-label="Next page"
             className="rounded-lg border border-[var(--pl-border)] p-2 text-[var(--pl-text-muted)] disabled:opacity-40 transition hover:text-[var(--pl-text)]"
           >
             <ChevronRight size={16} />

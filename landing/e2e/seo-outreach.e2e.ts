@@ -65,8 +65,8 @@ test.describe('SEO – Outreach Contacts', () => {
   test('suppress contact triggers API', async ({ page }) => {
     let suppressCalled = false;
     await setupSeoPage(page, { contactsTotal: 3 });
-    await page.route('**/api/lab/seo/outreach-contacts/**', async (r) => {
-      if (r.request().url().includes('/suppress') || r.request().method() === 'POST') {
+    await page.route('**/api/lab/seo/outreach/contacts**', async (r) => {
+      if (r.request().url().includes('suppress') || r.request().method() === 'POST') {
         suppressCalled = true;
         await r.fulfill({
           status: 200,

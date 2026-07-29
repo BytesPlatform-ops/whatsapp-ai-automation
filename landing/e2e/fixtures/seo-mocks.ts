@@ -34,6 +34,7 @@ export function makePages(total: number, offset: number, limit: number) {
   const slice = range(Math.min(limit, Math.max(0, total - offset)));
   return {
     backendUp: true,
+    total,
     pages: slice.map((i) => ({
       id: `page-${offset + i}`,
       site_id: SITE_ID,
@@ -57,6 +58,7 @@ export function makeKeywords(total: number, offset: number, limit: number) {
   const slice = range(Math.min(limit, Math.max(0, total - offset)));
   return {
     backendUp: true,
+    total,
     keywords: slice.map((i) => ({
       id: `kw-${offset + i}`,
       keyword: `keyword phrase ${offset + i}`,
@@ -102,6 +104,7 @@ export function makeCitations(total: number, offset: number, limit: number) {
   const dirs = ['Google', 'Yelp', 'Bing Places', 'Apple Maps', 'TripAdvisor', 'Yellow Pages'];
   return {
     backendUp: true,
+    total,
     citations: slice.map((i) => ({
       id: `cit-${offset + i}`,
       directory: pick(dirs),
@@ -124,6 +127,7 @@ export function makeContacts(total: number, offset: number, limit: number) {
   const slice = range(Math.min(limit, Math.max(0, total - offset)));
   return {
     backendUp: true,
+    total,
     contacts: slice.map((i) => ({
       id: `contact-${offset + i}`,
       name: `Contact Name ${offset + i}`,
@@ -362,11 +366,17 @@ export const MOCK_REVIEWS = {
     location_id: LOC_ID,
     platform: pick(['google', 'yelp']),
     rating: 3 + (i % 3),
-    text: `Review text for review ${i}. Great service!`,
-    reviewer_name: `Reviewer ${i}`,
+    // Frontend-shape fields the SeoReviewsPanel actually reads (author/body/status).
+    // The proxy normalises these from GBP-native names; the browser mock provides
+    // them directly so cards render without going through the proxy.
+    author: `Reviewer ${i}`,
+    body: `Review text for review ${i}. Great service!`,
+    status: i % 2 === 0 ? 'answered' : 'unanswered',
+    sentiment: pick(['positive', 'neutral', 'negative']),
+    response_draft: i % 2 === 0 ? 'Thank you for your review!' : null,
     created_at: new Date(Date.now() - i * 86_400_000 * 7).toISOString(),
-    reply_text: i % 2 === 0 ? 'Thank you for your review!' : null,
   })),
+  summary: { total: 5, avg_rating: 4.2, unanswered: 2, distribution: { '5': 2, '4': 1, '3': 2 } },
 };
 
 export const MOCK_LOCAL_OVERVIEW = {
@@ -549,15 +559,42 @@ export async function installSeoMocks(page: Page, cfg: MockConfig = {}): Promise
     else await fulfill(r, { backendUp: true, project: MOCK_KEYWORD_PROJECTS.projects[0] });
   });
 
-  /* Keywords — paginated */
+  /* Keywords — paginated. Also handles the real slash sub-paths that live under
+     /api/lab/seo/keywords/* (projects, research, clusters, export) since this
+     glob catches them all. Dispatch by pathname. */
   await page.route('**/api/lab/seo/keywords**', async (r) => {
     const method = r.request().method();
+    const url = new URL(r.request().url());
+    const path = url.pathname;
+
+    // Keyword projects: /api/lab/seo/keywords/projects[/...]
+    if (path.includes('/keywords/projects')) {
+      if (method === 'GET') await fulfill(r, MOCK_KEYWORD_PROJECTS);
+      else if (method === 'DELETE') await fulfill(r, { backendUp: true, deleted: PROJ_ID });
+      else await fulfill(r, { backendUp: true, project: MOCK_KEYWORD_PROJECTS.projects[0] });
+      return;
+    }
+    // Keyword research: /api/lab/seo/keywords/research
+    if (path.includes('/keywords/research')) {
+      await fulfill(r, MOCK_RESEARCH_KEYWORDS);
+      return;
+    }
+    // Clusters: /api/lab/seo/keywords/clusters
+    if (path.includes('/clusters')) {
+      await fulfill(r, { backendUp: true, clusters: [] });
+      return;
+    }
+    // Export: /api/lab/seo/keywords/export
+    if (path.includes('/export')) {
+      await fulfill(r, { backendUp: true, csv: 'keyword,volume\ntest,100\n' });
+      return;
+    }
+
     if (method === 'POST') {
       await fulfill(r, { backendUp: true, keyword: { id: 'kw-new', keyword: 'new keyword' } });
     } else if (method === 'DELETE') {
       await fulfill(r, { backendUp: true, status: 'deleted' });
     } else {
-      const url = new URL(r.request().url());
       const offset = parseInt(url.searchParams.get('offset') ?? '0', 10);
       const limit = parseInt(url.searchParams.get('limit') ?? '50', 10);
       await fulfill(r, makeKeywords(kTotal, offset, limit));
@@ -727,6 +764,40 @@ export async function installSeoMocks(page: Page, cfg: MockConfig = {}): Promise
     await fulfill(r, { backendUp: true, placements: [] });
   });
 
+  /* Outreach — real slash paths (/api/lab/seo/outreach/*): contacts, campaigns,
+     drafts, send, placements. The client migrated off the hyphenated paths. */
+  await page.route('**/api/lab/seo/outreach/**', async (r) => {
+    const method = r.request().method();
+    const path = new URL(r.request().url()).pathname;
+    if (path.includes('/contacts')) {
+      if (path.includes('/export')) { await fulfill(r, { backendUp: true, csv: 'name,email\nTest,test@test.com\n' }); return; }
+      if (method === 'GET') {
+        const url = new URL(r.request().url());
+        const offset = parseInt(url.searchParams.get('offset') ?? '0', 10);
+        const limit = parseInt(url.searchParams.get('limit') ?? '50', 10);
+        await fulfill(r, makeContacts(ctTotal, offset, limit));
+      } else {
+        await fulfill(r, MOCK_SUPPRESS_CONTACT);
+      }
+      return;
+    }
+    if (path.includes('/campaigns')) {
+      if (method === 'GET') await fulfill(r, MOCK_OUTREACH_CAMPAIGNS);
+      else await fulfill(r, MOCK_CREATE_CAMPAIGN);
+      return;
+    }
+    if (path.includes('/drafts')) {
+      if (path.includes('/approve')) { await fulfill(r, MOCK_DRAFT_APPROVE); return; }
+      if (method === 'GET') await fulfill(r, MOCK_OUTREACH_DRAFTS);
+      else await fulfill(r, { backendUp: true, draft: MOCK_OUTREACH_DRAFTS.drafts[0] });
+      return;
+    }
+    if (path.includes('/send')) { await fulfill(r, MOCK_DRAFT_SEND); return; }
+    if (path.includes('/placements')) { await fulfill(r, { backendUp: true, placements: [] }); return; }
+    if (path.includes('/suppress')) { await fulfill(r, MOCK_SUPPRESS_CONTACT); return; }
+    await fulfill(r, { backendUp: true });
+  });
+
   /* Resolve issue */
   await page.route('**/api/lab/seo/issues/*/resolve**', async (r) => {
     await fulfill(r, MOCK_RESOLVE_ISSUE);
@@ -745,6 +816,18 @@ export async function installSeoMocks(page: Page, cfg: MockConfig = {}): Promise
     }
   });
 
+  /* Integrations status (new endpoint the Connections panel tries first) */
+  await page.route('**/api/lab/seo/integrations**', async (r) => {
+    await fulfill(r, {
+      backendUp: true,
+      integrations: [
+        { platform: 'google_search_console', status: 'connected', connected_as: 'sc-domain:example.com' },
+        { platform: 'google_analytics', status: 'connected', connected_as: 'GA4 · example.com' },
+        { platform: 'wordpress', status: 'connected', connected_as: 'admin' },
+      ],
+    });
+  });
+
   /* Connections & Google */
   await page.route('**/api/lab/seo/connections**', async (r) => {
     if (r.request().method() === 'GET') await fulfill(r, MOCK_CONNECTIONS);
@@ -758,6 +841,37 @@ export async function installSeoMocks(page: Page, cfg: MockConfig = {}): Promise
   });
   await page.route('**/api/lab/seo/gsc-sync**', async (r) => {
     await fulfill(r, { backendUp: true, status: 'syncing' });
+  });
+
+  /* Google / GSC / GA4 — real slash paths (/api/lab/seo/google/*).
+     The client uses google/connections, google/properties, google/connect,
+     google/properties/select and google/connections/{id}/sync|disconnect. */
+  await page.route('**/api/lab/seo/google/**', async (r) => {
+    const method = r.request().method();
+    const path = new URL(r.request().url()).pathname;
+    if (path.includes('/properties')) {
+      if (method === 'GET') await fulfill(r, MOCK_GOOGLE_PROPERTIES);
+      else await fulfill(r, { backendUp: true, connection: { id: 'gconn-1', selected_property: 'sc-domain:example.com' } });
+      return;
+    }
+    if (path.includes('/connections')) {
+      if (method === 'GET') {
+        await fulfill(r, {
+          backendUp: true,
+          connections: [
+            { id: 'gconn-1', email: 'test@example.com', status: 'connected', selected_property: 'sc-domain:example.com', properties: MOCK_GOOGLE_PROPERTIES.properties },
+          ],
+        });
+      } else {
+        await fulfill(r, { backendUp: true, syncing: true });
+      }
+      return;
+    }
+    if (path.includes('/connect')) {
+      await fulfill(r, { backendUp: true, auth_url: 'https://accounts.google.com/o/oauth2/mock' });
+      return;
+    }
+    await fulfill(r, { backendUp: true });
   });
 
   /* History */

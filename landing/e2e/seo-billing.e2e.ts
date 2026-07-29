@@ -67,7 +67,9 @@ test.describe('SEO – Billing Usage Panel', () => {
     await setupSeoPage(page);
     await page.goto(`${BASE}/billing-usage`, { waitUntil: 'domcontentloaded' });
 
-    await expect(page.getByText(/2025-01|period|jan/i).first()).toBeVisible({ timeout: 6_000 });
+    // The panel renders the period via toLocaleDateString(), whose format is
+    // locale-dependent (e.g. "1/1/2025"); the year is the locale-robust anchor.
+    await expect(page.getByText(/2025|period/i).first()).toBeVisible({ timeout: 6_000 });
   });
 });
 
