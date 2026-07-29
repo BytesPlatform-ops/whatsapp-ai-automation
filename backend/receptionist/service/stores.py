@@ -12,11 +12,13 @@ scale. `find_or_create_contact` is the CRM identity resolver every handler uses.
 
 from __future__ import annotations
 
+import os
+from datetime import datetime, timezone
 from typing import Optional
 
 import persistence
 
-from .ids import now_iso
+from .ids import new_id, now_iso
 from .schemas import Contact
 
 # ── table names (SQL migration + tests reference this list) ───────────────────
@@ -40,12 +42,14 @@ T_OPTOUTS = "receptionist_optouts"
 T_BUSINESS_PROFILE = "receptionist_business_profile"
 T_KNOWLEDGE = "receptionist_knowledge"
 T_CAMPAIGN_REPLIES = "receptionist_campaign_replies"
+T_MESSAGE_INDEX = "receptionist_message_index"
+T_LOCKS = "receptionist_locks"
 
 ALL_TABLES = [
     T_CONVERSATIONS, T_MESSAGES, T_ACTIONS, T_CONTACTS, T_COMPANIES, T_BOOKINGS,
     T_QUOTES, T_CALLBACKS, T_VOICEMAILS, T_WAITLIST, T_PAYMENTS, T_TICKETS,
     T_ESCALATIONS, T_TASKS, T_REMINDERS, T_OPTOUTS, T_BUSINESS_PROFILE,
-    T_KNOWLEDGE, T_CAMPAIGN_REPLIES,
+    T_KNOWLEDGE, T_CAMPAIGN_REPLIES, T_MESSAGE_INDEX, T_LOCKS,
 ]
 
 
@@ -202,3 +206,68 @@ def add_contact_activity(tenant_id: str, contact_id: Optional[str], note: str) -
         return
     c.setdefault("activity", []).append({"at": now_iso(), "note": note})
     contacts().put(tenant_id, c)
+
+
+# Named accessors for new stores
+def message_index() -> RecordStore: return store(T_MESSAGE_INDEX)
+def locks() -> RecordStore: return store(T_LOCKS)
+
+
+# ── durable per-conversation lock ─────────────────────────────────────────────
+
+def _lock_record_id(tenant_id: str, conversation_id: str) -> str:
+    """Composite key for a lock record: tenant+conv pair."""
+    return f"{tenant_id}::{conversation_id}"
+
+
+def acquire_lock(tenant_id: str, conversation_id: str, owner: str = "",
+                 ttl_seconds: Optional[int] = None) -> bool:
+    """Try to acquire a durable lock for this conversation.
+
+    Returns True if the lock was acquired (or was already owned by `owner`).
+    Returns False if another active (non-expired) lock exists.
+    Stale (expired) locks are reclaimed.
+
+    NOTE: this is best-effort serialization: there is no atomic compare-and-swap
+    at the persistence layer, so a tiny race window exists under concurrent
+    access. It significantly reduces duplicates but is not a strict mutex.
+    """
+    ttl = ttl_seconds if ttl_seconds is not None else int(
+        os.environ.get("AI_RECEPTIONIST_LOCK_TTL_SECONDS", "30")
+    )
+    record_id = _lock_record_id(tenant_id, conversation_id)
+    existing = locks().get(tenant_id, record_id)
+    now = now_iso()
+
+    if existing is not None:
+        # Check whether the existing lock is still active
+        expires_at = existing.get("expires_at", "")
+        if expires_at and expires_at > now:
+            # Active lock owned by someone else → cannot acquire
+            if owner and existing.get("owner") == owner:
+                return True  # same owner — idempotent
+            return False
+        # Stale/expired lock — fall through to overwrite
+
+    from datetime import datetime as _dt, timezone as _tz, timedelta as _td
+    expires_at = (_dt.now(_tz.utc) + _td(seconds=ttl)).isoformat(timespec="seconds")
+    lock_rec = {
+        "id": record_id,
+        "tenant_id": tenant_id,
+        "conversation_id": conversation_id,
+        "owner": owner or new_id("lock"),
+        "expires_at": expires_at,
+        "created_at": now,
+    }
+    locks().put(tenant_id, lock_rec)
+    return True
+
+
+def release_lock(tenant_id: str, conversation_id: str) -> None:
+    """Release a lock by clearing its expiry (marks it expired)."""
+    record_id = _lock_record_id(tenant_id, conversation_id)
+    existing = locks().get(tenant_id, record_id)
+    if existing is not None:
+        # Set expires_at to epoch so it's immediately stale
+        existing["expires_at"] = "1970-01-01T00:00:00+00:00"
+        locks().put(tenant_id, existing)

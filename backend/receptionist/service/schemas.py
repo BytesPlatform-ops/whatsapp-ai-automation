@@ -69,12 +69,20 @@ class Conversation(_Base):
     contact_id: str | None = None
     channel: str = Channel.WEB_CHAT.value
     subject: str = ""
-    status: str = "open"  # open | closed | escalated
+    # status: open | closed | escalated | waiting_for_human | assigned_to_human | human_active | resolved
+    status: str = "open"
     last_intent: str = "unknown"
     last_action: str = "none"
     sentiment: str = "neutral"  # positive | neutral | negative
     summary: str = ""
+    summary_version: int = 0
+    summary_updated_at: str = ""
     message_count: int = 0
+    # Human handoff fields
+    ai_paused: bool = False
+    assigned_to: str = ""
+    sla_due_at: str = ""
+    audit: list[dict] = Field(default_factory=list)
     created_at: str = Field(default_factory=now_iso)
     updated_at: str = Field(default_factory=now_iso)
 
@@ -83,7 +91,7 @@ class Message(_Base):
     id: str = Field(default_factory=lambda: new_id("msg"))
     tenant_id: str
     conversation_id: str
-    role: str = "customer"  # customer | assistant | system
+    role: str = "customer"  # customer | assistant | system | human
     text: str = ""
     channel: str = Channel.WEB_CHAT.value
     intent: str = "unknown"

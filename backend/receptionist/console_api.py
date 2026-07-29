@@ -35,7 +35,7 @@ from .service import analytics, business_profile as bp, engine, stores
 from .service.handlers import registered_intents
 from .service.ids import now_iso
 from .service.schemas import (
-    Booking, Escalation, Intent, PaymentRequest, Quote, Reminder, Task, Ticket,
+    Booking, Escalation, Intent, Message, PaymentRequest, Quote, Reminder, Task, Ticket,
 )
 
 AGENT_SLUG = "ai-receptionist"
@@ -75,6 +75,8 @@ class MessageBody(BaseModel):
     company: Optional[str] = None
     campaign_id: str = ""
     now: str = ""
+    idempotency_key: str = ""
+    provider_message_id: str = ""
 
 
 def _run_body(tenant_id: str, body: MessageBody) -> dict:
@@ -84,6 +86,8 @@ def _run_body(tenant_id: str, body: MessageBody) -> dict:
         tenant_id=tenant_id, message=body.message, channel=body.channel,
         conversation_id=body.conversation_id, overrides={k: v for k, v in overrides.items() if v},
         campaign_id=body.campaign_id, now=body.now or now_iso(),
+        idempotency_key=body.idempotency_key,
+        provider_message_id=body.provider_message_id,
     )
 
 
@@ -178,9 +182,120 @@ def escalate_conversation(
         pass
     esc["notified"] = notified
     stores.escalations().put(tenant_id, esc)
-    conv["status"] = "escalated"
+
+    # Transition conversation to human handoff state machine
+    _now = body.now or now_iso()
+    engine._apply_escalation_to_conv(conv, by="console", now=_now)
     stores.conversations().put(tenant_id, conv)
-    return {"escalation": esc}
+    return {"escalation": esc, "conversation_status": conv["status"],
+            "ai_paused": conv.get("ai_paused", True),
+            "sla_due_at": conv.get("sla_due_at", "")}
+
+
+# ── human handoff state machine endpoints ─────────────────────────────────────
+
+class AssignBody(BaseModel):
+    assignee: str
+    tenant_id: str = "demo_tenant"
+
+
+class HumanReplyBody(BaseModel):
+    message: str
+    author: str = ""
+    tenant_id: str = "demo_tenant"
+
+
+@console_router.post("/conversations/{conversation_id}/assign")
+def assign_conversation(
+    conversation_id: str,
+    body: AssignBody,
+    tenant_id: str = Depends(resolve_tenant),
+) -> dict:
+    """Assign a conversation to a human agent → status: assigned_to_human."""
+    conv = _require(stores.conversations(), tenant_id, conversation_id, "conversation")
+    _now = now_iso()
+    from_status = conv.get("status", "open")
+    conv["status"] = "assigned_to_human"
+    conv["assigned_to"] = body.assignee
+    conv["ai_paused"] = True
+    engine._append_audit(conv, from_status, "assigned_to_human", body.assignee, _now)
+    stores.conversations().put(tenant_id, conv)
+    return {"conversation": conv}
+
+
+@console_router.post("/conversations/{conversation_id}/accept")
+def accept_conversation(
+    conversation_id: str,
+    body: AssignBody,
+    tenant_id: str = Depends(resolve_tenant),
+) -> dict:
+    """Human agent accepts ownership → status: human_active."""
+    conv = _require(stores.conversations(), tenant_id, conversation_id, "conversation")
+    _now = now_iso()
+    from_status = conv.get("status", "open")
+    conv["status"] = "human_active"
+    conv["assigned_to"] = body.assignee
+    conv["ai_paused"] = True
+    engine._append_audit(conv, from_status, "human_active", body.assignee, _now)
+    stores.conversations().put(tenant_id, conv)
+    return {"conversation": conv}
+
+
+@console_router.post("/conversations/{conversation_id}/human-reply")
+def human_reply(
+    conversation_id: str,
+    body: HumanReplyBody,
+    tenant_id: str = Depends(resolve_tenant),
+) -> dict:
+    """Persist a human-agent reply message. Does NOT run the AI."""
+    conv = _require(stores.conversations(), tenant_id, conversation_id, "conversation")
+    msg = Message(
+        tenant_id=tenant_id, conversation_id=conversation_id,
+        role="human", text=body.message, channel=conv.get("channel", "web_chat"),
+        intent="unknown",
+    ).model_dump()
+    stores.messages().put(tenant_id, msg)
+    conv["message_count"] = int(conv.get("message_count", 0)) + 1
+    stores.conversations().put(tenant_id, conv)
+    return {"message": msg, "conversation_status": conv.get("status")}
+
+
+@console_router.post("/conversations/{conversation_id}/resolve")
+def resolve_conversation(
+    conversation_id: str,
+    body: TenantBody,
+    tenant_id: str = Depends(resolve_tenant),
+) -> dict:
+    """Mark conversation resolved (still human-owned, AI still paused)."""
+    conv = _require(stores.conversations(), tenant_id, conversation_id, "conversation")
+    _now = now_iso()
+    from_status = conv.get("status", "open")
+    conv["status"] = "resolved"
+    engine._append_audit(conv, from_status, "resolved", "console", _now)
+    stores.conversations().put(tenant_id, conv)
+    return {"conversation": conv}
+
+
+@console_router.post("/conversations/{conversation_id}/resume-ai")
+def resume_ai(
+    conversation_id: str,
+    body: TenantBody,
+    tenant_id: str = Depends(resolve_tenant),
+) -> dict:
+    """Explicitly re-enable the AI for this conversation → status: ai_active.
+
+    This is the ONLY path that clears ai_paused. Refreshes the summary.
+    """
+    conv = _require(stores.conversations(), tenant_id, conversation_id, "conversation")
+    _now = now_iso()
+    from_status = conv.get("status", "open")
+    conv["status"] = "ai_active"
+    conv["ai_paused"] = False
+    # Refresh summary to reflect human-handoff period ended
+    engine._update_summary(conv, "resume_ai", "[AI resumed by operator]", _now)
+    engine._append_audit(conv, from_status, "ai_active", "console", _now)
+    stores.conversations().put(tenant_id, conv)
+    return {"conversation": conv}
 
 
 # ── CRM / leads ───────────────────────────────────────────────────────────────

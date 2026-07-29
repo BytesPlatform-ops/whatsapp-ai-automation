@@ -157,7 +157,21 @@ def _profile_brief(profile: dict) -> str:
     return "\n".join(bits) or "(no business profile configured)"
 
 
-def _llm_classify(message: str, *, channel: str, profile: dict) -> ClassifierResult | None:
+def _history_snippet(history: list[dict]) -> str:
+    """Render a bounded conversation history list as a compact text snippet for
+    inclusion in an LLM prompt. Each entry should have 'role' and 'text' keys."""
+    if not history:
+        return ""
+    lines = []
+    for turn in history:
+        role = turn.get("role", "unknown")
+        text = (turn.get("text") or "")[:300]
+        lines.append(f"{role}: {text}")
+    return "\n".join(lines)
+
+
+def _llm_classify(message: str, *, channel: str, profile: dict,
+                  history: list[dict] | None = None) -> ClassifierResult | None:
     """Strict-JSON extraction via the real model. None on any failure."""
     try:
         import asyncio
@@ -169,6 +183,12 @@ def _llm_classify(message: str, *, channel: str, profile: dict) -> ClassifierRes
         if router.mode != "openai":
             return None  # fake provider won't honour our JSON schema — use heuristic
 
+        history_block = ""
+        if history:
+            snippet = _history_snippet(history)
+            if snippet:
+                history_block = f"\n\nConversation history (oldest to newest):\n{snippet}"
+
         system = (
             "You are the intent+entity extractor for an AI receptionist. "
             "Return ONLY compact JSON with keys: intent, confidence (0-1), sentiment "
@@ -178,7 +198,7 @@ def _llm_classify(message: str, *, channel: str, profile: dict) -> ClassifierRes
             "budget, quantity, scope, location, timeline, urgency, preferred_time, reason, "
             "amount, currency, reference, remind_at, question, sentiment, notes. "
             "Only include fields you are confident about. Do not invent business facts.\n\n"
-            "Business context:\n" + _profile_brief(profile)
+            "Business context:\n" + _profile_brief(profile) + history_block
         )
         req = ModelRequest(tier=ModelTier.SMALL, task="reception_extract",
                            system=system, user=message, expects_json=True,
@@ -201,10 +221,12 @@ def _llm_classify(message: str, *, channel: str, profile: dict) -> ClassifierRes
 
 
 def classify(message: str, *, channel: str = "web_chat",
-             profile: dict | None = None) -> ClassifierResult:
-    """Classify a message. Tries the real LLM, falls back to the heuristic."""
+             profile: dict | None = None,
+             history: list[dict] | None = None) -> ClassifierResult:
+    """Classify a message. Tries the real LLM (with optional history), falls back
+    to the deterministic heuristic. The heuristic path is unaffected by history."""
     profile = profile or {}
-    llm = _llm_classify(message, channel=channel, profile=profile)
+    llm = _llm_classify(message, channel=channel, profile=profile, history=history)
     if llm is not None:
         # merge any regex-found fields the model missed (belt and suspenders)
         for k, v in _extract_fields(message or "").items():
