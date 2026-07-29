@@ -210,12 +210,61 @@ async def _content_config_startup() -> None:
 
     start_scheduler()
 
+    # Receptionist worker — durable job loop for reminders, follow-ups, escalation
+    # notify, analytics aggregation, etc. Off by default (AI_RECEPTIONIST_WORKER_ENABLED).
+    # Never starts under pytest (PYTEST_CURRENT_TEST guard in runtime.py).
+    _start_receptionist_worker()
+
 
 @app.on_event("shutdown")
 async def _seo_scheduler_shutdown() -> None:
     from seo.scheduler.startup import stop_scheduler
 
     stop_scheduler()
+
+    # Stop the receptionist worker gracefully.
+    _stop_receptionist_worker()
+
+
+def _start_receptionist_worker() -> None:
+    """Start the receptionist durable job worker when enabled.
+
+    Guards
+    ------
+    - AI_RECEPTIONIST_WORKER_ENABLED must be set to a truthy value (1/true/yes/on).
+    - Not started under pytest (PYTEST_CURRENT_TEST env var is set by pytest).
+    - Never logs secrets; no side effects when disabled.
+    """
+    import os as _os
+
+    if _os.getenv("PYTEST_CURRENT_TEST"):
+        return
+    val = _os.getenv("AI_RECEPTIONIST_WORKER_ENABLED", "").strip().lower()
+    if val not in ("1", "true", "yes", "on"):
+        return
+
+    try:
+        from receptionist.worker.runtime import start_worker
+        started = start_worker()
+        if started:
+            import logging as _logging
+            _logging.getLogger("pixie.receptionist.worker").info(
+                "receptionist worker: started via app startup hook"
+            )
+    except Exception as exc:
+        import logging as _logging
+        _logging.getLogger("pixie.receptionist.worker").error(
+            "receptionist worker: failed to start: %s", exc
+        )
+
+
+def _stop_receptionist_worker() -> None:
+    """Stop the receptionist worker if it is running."""
+    try:
+        from receptionist.worker.runtime import stop_worker
+        stop_worker()
+    except Exception:
+        pass
 
 
 def _start_seo_sweeper() -> None:

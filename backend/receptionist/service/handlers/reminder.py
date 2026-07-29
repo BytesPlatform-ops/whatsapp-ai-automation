@@ -1,10 +1,13 @@
 """Reminder handler.
 
-Schedules a reminder for the customer (title + when + channel). We store it
-`scheduled`; actual SMS/email delivery at `remind_at` is handled by the provider
-abstraction (SMS/notify) when a scheduler/worker is wired up — this handler only
-records the intent, it never claims to have sent anything. Missing `remind_at`
-→ saved and we ask when they'd like the nudge.
+Schedules a reminder for the customer (title + when + channel). We store the
+reminder record `scheduled` and enqueue a durable `reminder_process` job in the
+worker queue. The job is what actually attempts delivery at `remind_at` via the
+provider abstraction (SMS/email).
+
+Status returned to the caller is always `queued` — we NEVER claim the message
+was sent until a provider confirms it. If `remind_at` is unspecified the job is
+enqueued for immediate processing and the reply asks when they'd like the nudge.
 """
 
 from __future__ import annotations
@@ -30,15 +33,37 @@ def handle_reminder(ctx: HandlerContext) -> HandlerResult:
 
     reminders().put(ctx.tenant_id, reminder)
 
+    # Enqueue a durable job so actual delivery is handled by the worker.
+    # run_at = remind_at when available; otherwise now (immediate due).
+    job_id: str = ""
+    try:
+        from receptionist.worker.jobs_store import enqueue
+        job_id = enqueue(
+            tenant_id=ctx.tenant_id,
+            job_type="reminder_process",
+            payload={
+                "reminder_id": reminder["id"],
+                "contact_id": ctx.contact_id or "",
+                "conversation_id": ctx.conversation_id or "",
+                "channel": channel,
+                "title": title,
+                "job_created_at": ctx.now,
+            },
+            run_at=remind_at or None,
+        )
+    except Exception:
+        pass  # fail-safe: the reminder record already exists; worker may retry
+
     who = ctx.f("name") or "there"
     if remind_at:
-        reply = (f"Done, {who} — I've set a reminder for \"{title}\" at {remind_at}. "
+        reply = (f"Done, {who} — I've scheduled a reminder for \"{title}\" at {remind_at}. "
                  f"We'll nudge you via {channel}.")
     else:
         reply = (f"Happy to set that reminder, {who}. When would you like to be "
                  "reminded?")
+
     return HandlerResult(
-        reply=reply, action="reminder", status="executed",
+        reply=reply, action="reminder", status="queued",
         record_type="reminder", record_id=reminder["id"], record=reminder,
-        detail=f"remind_at={remind_at or 'unspecified'} channel={channel}",
+        detail=f"remind_at={remind_at or 'unspecified'} channel={channel} job_id={job_id}",
     )
