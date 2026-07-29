@@ -68,6 +68,10 @@ def validate_receptionist_config() -> None:
             "Set PIXIE_PERSIST=supabase (+ SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY) "
             "so receptionist conversations, leads and bookings survive restarts."
         )
+    # Fail closed when token encryption is required but no valid key is available,
+    # so receptionist Gmail/Calendar/Meta tokens are never stored insecurely.
+    from integrations import token_crypto
+    token_crypto.assert_token_encryption_ready()
 
 
 def content_config_summary() -> dict:

@@ -18,7 +18,7 @@ from typing import Callable, Optional
 from runtime.mode import execution_mode, is_test_mode
 
 from . import connectors as C
-from .connections import find_active_connection
+from .connections import find_active_connection, find_active_connection_unsealed
 from meta import connectors as _meta
 
 # capability -> connectors. real_fn takes (payload, connection).
@@ -99,8 +99,10 @@ def resolve_connector(tenant_id: str, capability: str) -> Resolution:
     if is_test_mode():
         return _mock(capability, spec, "mock_available")
 
-    # Production: a real connection means we go real.
-    connection = find_active_connection(tenant_id, capability)
+    # Production: a real connection means we go real. Use the UNSEALED descriptor
+    # so the real connector receives plaintext OAuth tokens (they are sealed at
+    # rest via integrations.token_crypto). This branch never runs in test mode.
+    connection = find_active_connection_unsealed(tenant_id, capability)
     if connection is not None:
         provider, real_fn = spec["real"]
         bound = lambda payload, _conn=connection: real_fn(payload, _conn)  # noqa: E731
