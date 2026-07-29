@@ -44,12 +44,13 @@ T_KNOWLEDGE = "receptionist_knowledge"
 T_CAMPAIGN_REPLIES = "receptionist_campaign_replies"
 T_MESSAGE_INDEX = "receptionist_message_index"
 T_LOCKS = "receptionist_locks"
+T_ACTION_EXECUTIONS = "receptionist_action_executions"
 
 ALL_TABLES = [
     T_CONVERSATIONS, T_MESSAGES, T_ACTIONS, T_CONTACTS, T_COMPANIES, T_BOOKINGS,
     T_QUOTES, T_CALLBACKS, T_VOICEMAILS, T_WAITLIST, T_PAYMENTS, T_TICKETS,
     T_ESCALATIONS, T_TASKS, T_REMINDERS, T_OPTOUTS, T_BUSINESS_PROFILE,
-    T_KNOWLEDGE, T_CAMPAIGN_REPLIES, T_MESSAGE_INDEX, T_LOCKS,
+    T_KNOWLEDGE, T_CAMPAIGN_REPLIES, T_MESSAGE_INDEX, T_LOCKS, T_ACTION_EXECUTIONS,
 ]
 
 
@@ -211,6 +212,7 @@ def add_contact_activity(tenant_id: str, contact_id: Optional[str], note: str) -
 # Named accessors for new stores
 def message_index() -> RecordStore: return store(T_MESSAGE_INDEX)
 def locks() -> RecordStore: return store(T_LOCKS)
+def action_executions() -> RecordStore: return store(T_ACTION_EXECUTIONS)
 
 
 # ── durable per-conversation lock ─────────────────────────────────────────────

@@ -1,10 +1,21 @@
-"""Payment-link handler.
+"""Payment-link handler (Wave 4 update).
 
-Creates a real Stripe payment link when the payment provider is configured; when
-it isn't (pending/disabled) the request is parked and the reply promises the team
-will send a link — we NEVER invent a link. Amount is required to create one, so a
-missing amount saves the request `pending` and asks for it. Fires the
-`payment.created` webhook best-effort so external systems can track it.
+Payment-link creation now goes through the approval gating path: a pending
+approval is filed via the shared approvals system and no live Stripe link is
+created inline. The reply is honest about this state.
+
+Wave 1-3 behaviour preserved:
+  - If amount is missing, the request is parked with status=pending and the
+    user is asked for the amount (no change).
+  - The `payment.created` webhook is still fired best-effort.
+  - The HandlerContext / HandlerResult contract is unchanged.
+  - `payments()` store still gets a record stamped with status="pending".
+
+New in Wave 4:
+  - When amount IS present, the action goes through `execute_action` with
+    action_type="create_payment_link" which requires_approval=True.
+    This files a shared approval and returns status="approval_required".
+    The reply is honest: "pending review", not "here's your link".
 """
 
 from __future__ import annotations
@@ -42,55 +53,54 @@ def handle_payment(ctx: HandlerContext) -> HandlerResult:
     if not amount:
         payments().put(ctx.tenant_id, payment)
         _emit(payment)
-        reply = (f"Happy to send a payment link, {who}. How much should it be for?")
+        reply = f"Happy to send a payment link, {who}. How much should it be for?"
         return HandlerResult(
             reply=reply, action="payment_link", status="pending",
             record_type="payment", record_id=payment["id"], record=payment,
             detail="missing amount",
         )
 
-    provider_status = None
-    status = "pending"
-    reply = ""
-    try:
-        from ...providers import create_payment_link
-
-        result = create_payment_link(
-            amount=amount, currency=currency,
-            description=description, customer_email=email)
-        provider_status = result.to_dict()
-
-        if result.status == "success":
-            payment["status"] = "link_created"
-            payment["payment_link"] = result.data.get("payment_link", "")
-            payment["provider"] = "stripe"
-            payment["provider_ref"] = result.data.get("provider_ref", "")
-            status = "executed"
-            reply = (f"Here's your secure payment link for {amount} {currency}, {who}: "
-                     f"{payment['payment_link']}")
-        elif result.status in ("pending", "disabled"):
-            payment["status"] = "pending"
-            status = "pending"
-            reply = (f"Thanks {who} — the team will send you a payment link for "
-                     f"{amount} {currency} shortly.")
-        else:  # error
-            payment["status"] = "failed"
-            status = "failed"
-            reply = ("Sorry — I wasn't able to generate a payment link just now. "
-                     "The team will follow up with one shortly.")
-    except Exception:
-        payment["status"] = "failed"
-        status = "failed"
-        provider_status = None
-        reply = ("Sorry — I wasn't able to generate a payment link just now. "
-                 "The team will follow up with one shortly.")
-
+    # Amount is present — route through the approval-gated action registry.
+    # No live Stripe call; the payment record is stored as pending.
     payments().put(ctx.tenant_id, payment)
     _emit(payment)
+
+    try:
+        from ..registry import execute_action
+
+        reg_result = execute_action(
+            ctx.tenant_id, "create_payment_link",
+            {
+                "contact_id": ctx.contact_id or "",
+                "name": ctx.f("name"),
+                "email": email,
+                "amount": amount,
+                "currency": currency,
+                "description": description,
+                "source": ctx.channel,
+            },
+            conversation_id=ctx.conversation_id,
+            idempotency_key=f"pay_{ctx.conversation_id}_{amount}_{currency}",
+        )
+        status = reg_result.get("status", "pending")
+    except Exception:
+        status = "pending"
+        reg_result = {"detail": "approval gating unavailable"}
+
+    # Honest reply: approval_required → tell the user it's under review
+    if status == "approval_required":
+        reply = (
+            f"Thanks {who} — I've noted your payment request for {amount} {currency}. "
+            "This is being reviewed and you'll receive the payment link shortly."
+        )
+    else:
+        reply = (
+            f"Thanks {who} — your payment request for {amount} {currency} has been "
+            "recorded. The team will follow up with a payment link."
+        )
 
     return HandlerResult(
         reply=reply, action="payment_link", status=status,
         record_type="payment", record_id=payment["id"], record=payment,
-        provider_status=provider_status,
         detail=f"amount={amount} {currency} status={payment['status']}",
     )

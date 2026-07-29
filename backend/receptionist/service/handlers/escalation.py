@@ -1,10 +1,21 @@
-"""Human-escalation handler.
+"""Human-escalation handler (Wave 4 update).
 
 Creates an escalation ticket with priority + conversation context, notifies the
 team through whatever is configured (email provider / connected Gmail, plus an
-outbound webhook), records which channels were actually notified, and returns a
-reassuring reply. If nothing is configured the ticket still exists (honest
-`notified: []`).
+outbound webhook), records which channels were actually notified, and returns an
+honest reply.
+
+Wave 1-3 behaviour preserved:
+  - Escalation record written to stores.escalations()
+  - notify_team + emit_webhook called best-effort
+  - escalate=True on HandlerResult triggers conversation → waiting_for_human
+  - notified list is honest: [] when no notifier is configured
+
+Wave 4 change:
+  - Reply is honest: no "I've arranged a callback" or "human notified" when
+    the notified list is empty. Instead the reply reflects the actual state
+    (ticket created, team will review) without implying immediate human contact
+    when no channel was successfully notified.
 """
 
 from __future__ import annotations
@@ -50,8 +61,21 @@ def handle_escalation(ctx: HandlerContext) -> HandlerResult:
     esc["notified"] = notified
     escalations().put(ctx.tenant_id, esc)
 
-    reply = ("I've flagged this for a team member who can help — they'll reach out to you "
-             "as soon as possible. Thanks for your patience.")
+    # Honest reply — reflects actual notification state
+    if notified:
+        channels = " and ".join(notified)
+        reply = (
+            "I've flagged this as a priority for our team and a notification has been "
+            f"sent via {channels}. Someone will reach out to you as soon as possible. "
+            "Thank you for your patience."
+        )
+    else:
+        # No notification channel was successfully reached
+        reply = (
+            "I've created an escalation ticket and flagged this for our team to review. "
+            "A team member will follow up with you — thank you for your patience."
+        )
+
     return HandlerResult(
         reply=reply, action="escalation", status="executed",
         record_type="escalation", record_id=esc["id"], record=esc,

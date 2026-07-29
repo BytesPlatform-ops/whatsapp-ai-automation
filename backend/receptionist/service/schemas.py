@@ -403,3 +403,61 @@ class CampaignReply(_Base):
     action_record_id: str = ""
     status: str = "new"  # new | handled
     created_at: str = Field(default_factory=now_iso)
+
+
+# ── response plan (Wave 4) ────────────────────────────────────────────────────
+
+class ProposedAction(_Base):
+    """A single action the engine proposes to perform."""
+    action_type: str
+    arguments: dict = Field(default_factory=dict)
+    reason: str = ""
+    requires_approval: bool = False
+    estimated_cost: float = 0.0
+    idempotency_key: str = ""
+
+
+# Valid execution statuses returned by the action registry
+ACTION_STATUSES = frozenset({
+    "completed", "pending", "approval_required", "queued",
+    "provider_unavailable", "not_connected", "not_supported", "failed",
+})
+
+
+class ResponsePlan(_Base):
+    """Validated, schema-checked plan for a receptionist turn."""
+    intent: str = "fallback"
+    confidence: float = 0.0
+    reply: str = ""
+    missing_fields: list[str] = Field(default_factory=list)
+    knowledge_source_ids: list[str] = Field(default_factory=list)
+    proposed_actions: list[ProposedAction] = Field(default_factory=list)
+    # approval_requirement: none | recommended | required
+    approval_requirement: str = "none"
+    escalation_recommendation: bool = False
+    safety_flags: list[str] = Field(default_factory=list)
+    conversation_updates: dict = Field(default_factory=dict)
+    follow_up_recommendation: str = ""
+    plan_version: str = "1.0"
+    prompt_version: str = ""
+    model: str = ""
+    provider: str = ""
+
+
+# ── action execution record (Wave 4) ─────────────────────────────────────────
+
+class ActionExecution(_Base):
+    """Durable record of a single registry action execution."""
+    id: str = Field(default_factory=lambda: new_id("axe"))
+    tenant_id: str
+    action_type: str
+    arguments: dict = Field(default_factory=dict)
+    idempotency_key: str = ""
+    status: str = "completed"  # see ACTION_STATUSES
+    detail: str = ""
+    record_type: str = ""
+    record_id: str = ""
+    data: dict = Field(default_factory=dict)
+    conversation_id: str = ""
+    created_at: str = Field(default_factory=now_iso)
+    updated_at: str = Field(default_factory=now_iso)
