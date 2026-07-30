@@ -36,6 +36,7 @@ CONFIG_FIELDS: list[str] = [
     "restricted_subjects", "contact_details", "faqs",
     "phone", "email", "website", "address", "industry",
     "policies", "process", "custom_instructions",
+    "gmail_reply_mode",  # Gmail channel policy (Wave 8)
 ]
 
 # Configuration is "configured enough to answer" once these are present.

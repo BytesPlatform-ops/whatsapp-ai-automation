@@ -217,3 +217,152 @@ def analytics_range(tenant_id: str = Depends(resolve_tenant),
                     preset: str = Query("", description="today|7d|30d|90d|mtd")) -> dict:
     from .service import analytics
     return analytics.range_summary(tenant_id, start=start, end=end, preset=preset)
+
+
+# ── Gmail provider endpoints (Wave 8) ─────────────────────────────────────────
+
+def _run_async(coro):
+    import asyncio
+    try:
+        return asyncio.new_event_loop().run_until_complete(coro)
+    except Exception:  # pragma: no cover
+        raise
+
+
+@ops_router.get("/gmail/status")
+def gmail_status(tenant_id: str = Depends(resolve_tenant)) -> dict:
+    from .providers import gmail
+    from .service import gmail_sync
+    v = _run_async(gmail.validate_connection(tenant_id))
+    st = gmail_sync.get_sync_state(tenant_id)
+    return {"connection": v, "reply_mode": gmail_sync.reply_mode(tenant_id),
+            "last_history_id": st.get("last_history_id", ""), "last_sync_at": st.get("last_sync_at", "")}
+
+
+class GmailSettingsIn(BaseModel):
+    gmail_reply_mode: str | None = None
+
+
+@ops_router.post("/gmail/settings")
+def gmail_settings(body: GmailSettingsIn, tenant_id: str = Depends(resolve_tenant)) -> dict:
+    from .service import config_repo, gmail_sync
+    if body.gmail_reply_mode in gmail_sync.REPLY_MODES:
+        config_repo.save(tenant_id, {"gmail_reply_mode": body.gmail_reply_mode}, updated_by="settings")
+    return {"reply_mode": gmail_sync.reply_mode(tenant_id)}
+
+
+class GmailSyncIn(BaseModel):
+    mode: str = "incremental"   # initial | incremental
+    batch_size: int | None = None
+
+
+@ops_router.post("/gmail/sync")
+def gmail_sync_start(body: GmailSyncIn, tenant_id: str = Depends(resolve_tenant)) -> dict:
+    from .worker import jobs_store
+    job_type = "gmail_initial_sync" if body.mode == "initial" else "gmail_incremental_sync"
+    jid = jobs_store.enqueue(tenant_id, job_type, {"batch_size": body.batch_size})
+    return {"enqueued": True, "job_id": jid, "job_type": job_type}
+
+
+@ops_router.get("/gmail/drafts")
+def gmail_drafts(tenant_id: str = Depends(resolve_tenant)) -> dict:
+    from .service import gmail_sync
+    return {"drafts": gmail_sync.list_drafts(tenant_id)}
+
+
+@ops_router.post("/gmail/drafts/{draft_id}/retry")
+def gmail_draft_retry(draft_id: str, tenant_id: str = Depends(resolve_tenant)) -> dict:
+    from .worker import jobs_store
+    jid = jobs_store.enqueue(tenant_id, "gmail_send_retry", {"draft_id": draft_id})
+    return {"enqueued": True, "job_id": jid}
+
+
+@ops_router.post("/gmail/drafts/{draft_id}/reconcile")
+def gmail_draft_reconcile(draft_id: str, tenant_id: str = Depends(resolve_tenant)) -> dict:
+    from .worker import jobs_store
+    jid = jobs_store.enqueue(tenant_id, "gmail_send_reconcile", {"draft_id": draft_id})
+    return {"enqueued": True, "job_id": jid}
+
+
+# ── Calendar provider endpoints ───────────────────────────────────────────────
+
+@ops_router.get("/calendar/status")
+def calendar_status(tenant_id: str = Depends(resolve_tenant)) -> dict:
+    from .providers import gcal
+    from .service import booking
+    v = _run_async(gcal.validate_connection(tenant_id))
+    cfg = booking.get_config(tenant_id)
+    return {"connection": v, "configured": bool(cfg.get("configured")),
+            "calendar_id": cfg.get("calendar_id", ""), "timezone": cfg.get("timezone", "UTC"),
+            "services": cfg.get("services", {})}
+
+
+@ops_router.get("/calendar/list")
+def calendar_list(tenant_id: str = Depends(resolve_tenant)) -> dict:
+    from .providers import gcal
+    try:
+        return {"calendars": _run_async(gcal.list_calendars(tenant_id))}
+    except Exception as e:  # typed provider error
+        raise HTTPException(status_code=400, detail={"reason": getattr(e, "category", "provider_error")})
+
+
+@ops_router.post("/calendar/config")
+def calendar_config_save(patch: dict, tenant_id: str = Depends(resolve_tenant)) -> dict:
+    from .service import booking
+    return {"config": booking.save_config(tenant_id, patch or {})}
+
+
+@ops_router.get("/calendar/availability")
+def calendar_availability(tenant_id: str = Depends(resolve_tenant),
+                          service: str = Query(...), days: int = Query(7, ge=1, le=60)) -> dict:
+    from .service import booking
+    return booking.availability(tenant_id, service=service, days=days)
+
+
+@ops_router.get("/calendar/bookings")
+def calendar_bookings(tenant_id: str = Depends(resolve_tenant),
+                      status: str = Query("")) -> dict:
+    from .service import stores
+    rows = stores.bookings().list(tenant_id)
+    if status:
+        rows = [b for b in rows if b.get("status") == status]
+    return {"bookings": rows}
+
+
+class RescheduleIn(BaseModel):
+    start: str
+    end: str
+
+
+@ops_router.post("/calendar/bookings/{booking_id}/reschedule")
+def calendar_reschedule(booking_id: str, body: RescheduleIn, tenant_id: str = Depends(resolve_tenant)) -> dict:
+    from .service import booking
+    return booking.reschedule_booking(tenant_id, booking_id, new_start=body.start, new_end=body.end)
+
+
+@ops_router.post("/calendar/bookings/{booking_id}/cancel")
+def calendar_cancel(booking_id: str, tenant_id: str = Depends(resolve_tenant)) -> dict:
+    from .service import booking
+    return booking.cancel_booking(tenant_id, booking_id)
+
+
+@ops_router.post("/calendar/bookings/{booking_id}/reconcile")
+def calendar_reconcile(booking_id: str, tenant_id: str = Depends(resolve_tenant)) -> dict:
+    from .service import booking
+    return booking.reconcile_event(tenant_id, booking_id)
+
+
+# ── Widget endpoints ──────────────────────────────────────────────────────────
+
+@ops_router.get("/widget/config")
+def widget_config(tenant_id: str = Depends(resolve_tenant)) -> dict:
+    from .service import widget
+    cfg = widget.get_or_create_config(tenant_id)
+    return {"config": {k: v for k, v in cfg.items() if k != "tenant_id"}}
+
+
+@ops_router.post("/widget/config")
+def widget_config_save(patch: dict, tenant_id: str = Depends(resolve_tenant)) -> dict:
+    from .service import widget
+    cfg = widget.save_config(tenant_id, patch or {})
+    return {"config": {k: v for k, v in cfg.items() if k != "tenant_id"}}

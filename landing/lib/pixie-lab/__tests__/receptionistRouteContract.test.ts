@@ -57,6 +57,17 @@ const KNOWN_BACKEND = new Set<string>([
   '/api/agents/ai-receptionist/integrations/status',
   '/api/agents/ai-receptionist/integrations/test',
   '/api/agents/ai-receptionist/run',
+  // Wave 8: Gmail / Calendar / Widget provider endpoints
+  '/api/agents/ai-receptionist/gmail/status',
+  '/api/agents/ai-receptionist/gmail/settings',
+  '/api/agents/ai-receptionist/gmail/sync',
+  '/api/agents/ai-receptionist/gmail/drafts',
+  '/api/agents/ai-receptionist/calendar/status',
+  '/api/agents/ai-receptionist/calendar/list',
+  '/api/agents/ai-receptionist/calendar/config',
+  '/api/agents/ai-receptionist/calendar/availability',
+  '/api/agents/ai-receptionist/calendar/bookings',
+  '/api/agents/ai-receptionist/widget/config',
   '/api/approvals',
 ]);
 
@@ -85,6 +96,9 @@ const REQUIRED_PROXIES: string[] = [
   'health/route.ts',
   'overview/route.ts',
   'integrations/route.ts',
+  'gmail/route.ts',
+  'calendar/route.ts',
+  'widget/route.ts',
 ];
 
 function read(file: string): string {
