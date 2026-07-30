@@ -267,9 +267,17 @@ def delete_source(tenant_id: str, source_id: str) -> bool:
 
 # ── ingest: PDF ───────────────────────────────────────────────────────────────
 
+def _enforce_source_limits(tenant_id: str) -> None:
+    """Block new knowledge sources / monthly ingestions when over plan limit."""
+    from . import limits
+    limits.enforce(tenant_id, "knowledge_source")
+    limits.enforce(tenant_id, "knowledge_ingestion")
+
+
 def ingest_pdf(tenant_id: str, filename: str, data: bytes) -> dict:
     """Validate + extract + chunk + persist a PDF knowledge source. Invalid/rejected
     files write nothing and cost zero."""
+    _enforce_source_limits(tenant_id)  # plan-limit gate BEFORE any parse/storage
     validate_pdf(data)  # raises IngestionError before any storage
     fname = safe_filename(filename)
     source_id = new_id("ksrc")
@@ -294,12 +302,22 @@ def ingest_pdf(tenant_id: str, filename: str, data: bytes) -> dict:
     _store_source(tenant_id, source)
     if chunks:
         _store_chunks(tenant_id, source, chunks)
+    _count_ingestion(tenant_id, source_id)
     return source
+
+
+def _count_ingestion(tenant_id: str, source_id: str) -> None:
+    try:
+        from . import usage
+        usage.increment(tenant_id, "knowledge_ingestions", idempotency_key=f"ingest:{source_id}")
+    except Exception:
+        pass
 
 
 # ── ingest: text ──────────────────────────────────────────────────────────────
 
 def ingest_text(tenant_id: str, title: str, content: str) -> dict:
+    _enforce_source_limits(tenant_id)
     source_id = new_id("ksrc")
     version = now_iso()
     chunks = _chunk(content)
@@ -312,6 +330,7 @@ def ingest_text(tenant_id: str, title: str, content: str) -> dict:
     _store_source(tenant_id, source)
     if chunks:
         _store_chunks(tenant_id, source, chunks)
+    _count_ingestion(tenant_id, source_id)
     return source
 
 
@@ -358,6 +377,7 @@ def ingest_website(tenant_id: str, url: str, *, crawl: bool = False,
     extract main text, chunk and persist. All fetches go through the SSRF guard."""
     if not (url.startswith("http://") or url.startswith("https://")):
         raise IngestionError("bad_scheme")
+    _enforce_source_limits(tenant_id)
     max_pages = min(max_pages or max_crawl_pages(), max_crawl_pages())
     max_depth = min(max_depth if max_depth is not None else max_crawl_depth(), max_crawl_depth())
     root_domain = urlsplit(url).netloc.lower()
@@ -426,6 +446,7 @@ def ingest_website(tenant_id: str, url: str, *, crawl: bool = False,
     _store_source(tenant_id, source)
     if all_chunks:
         _store_chunks(tenant_id, source, all_chunks)
+    _count_ingestion(tenant_id, source_id)
     return source
 
 
