@@ -26,6 +26,9 @@ import type {
   RcpRunResult, RcpOverview, RcpIntegrationStatus, RcpConversation, RcpConversationDetail,
   RcpContact, RcpBooking, RcpQuote, RcpTask, RcpTicket, RcpEscalation, RcpPayment,
   RcpCampaign, RcpCampaignReply, RcpBusinessProfile, RcpKnowledgeItem, RcpHealth,
+  RcpKnowledgeSource, RcpIngestionJob, RcpRetrievalResult, RcpConfig, RcpConfigVersion,
+  RcpWorkerJob, RcpWorkerHealth, RcpReminder, RcpUsageSummary, RcpLimit, RcpApproval,
+  RcpAnalyticsRange,
 } from './serviceTypes';
 
 async function req<T>(url: string, init?: RequestInit): Promise<Envelope<T>> {
@@ -641,4 +644,47 @@ export const receptionistApi = {
   createKnowledge: (p: { title: string; content: string; category?: string; tags?: string[] }) => post<{ item: RcpKnowledgeItem }>(`${R}/knowledge`, { action: 'create', ...p }),
   updateKnowledge: (id: string, patch: Partial<RcpKnowledgeItem>) => post<{ item: RcpKnowledgeItem }>(`${R}/knowledge`, { action: 'update', id, ...patch }),
   deleteKnowledge: (id: string) => post<{ deleted: boolean }>(`${R}/knowledge`, { action: 'delete', id }),
+
+  // ── knowledge sources + ingestion (PDF / website / text) ──────────────────
+  getKnowledgeSources: () => req<{ sources: RcpKnowledgeSource[] }>(`${R}/knowledge-sources`),
+  addTextSource: (title: string, content: string) => post<{ source: RcpKnowledgeSource }>(`${R}/knowledge-sources`, { action: 'text', title, content }),
+  addWebsiteSource: (url: string, crawl?: boolean, max_pages?: number) => post<{ job: RcpIngestionJob }>(`${R}/knowledge-sources`, { action: 'website', url, crawl: !!crawl, max_pages }),
+  reindexSource: (id: string) => post<{ source: RcpKnowledgeSource }>(`${R}/knowledge-sources`, { action: 'reindex', id }),
+  archiveSource: (id: string) => post<{ ok: boolean }>(`${R}/knowledge-sources`, { action: 'archive', id }),
+  deleteSource: (id: string) => post<{ ok: boolean }>(`${R}/knowledge-sources`, { action: 'delete', id }),
+  uploadPdfSource: (file: File) =>
+    req<{ source: RcpKnowledgeSource }>(`${R}/knowledge-sources/pdf?filename=${encodeURIComponent(file.name || 'document.pdf')}`,
+      { method: 'POST', headers: { 'Content-Type': 'application/pdf' }, body: file }),
+  retrievalTest: (query: string) => post<RcpRetrievalResult>(`${R}/knowledge/retrieval-test`, { query }),
+
+  // ── versioned configuration (settings) ────────────────────────────────────
+  getConfig: () => req<{ config: RcpConfig; missing_required: string[] }>(`${R}/config`),
+  saveConfig: (patch: Partial<RcpConfig>) => post<{ config: RcpConfig }>(`${R}/config`, { action: 'save', ...patch }),
+  getConfigVersions: () => req<{ versions: RcpConfigVersion[] }>(`${R}/config?view=versions`),
+  rollbackConfig: (version_id: string) => post<{ config: RcpConfig }>(`${R}/config`, { action: 'rollback', version_id }),
+  previewConfig: (message: string) => post<{ reply: string; intent: string }>(`${R}/config`, { action: 'preview', message }),
+
+  // ── worker / operations ───────────────────────────────────────────────────
+  getWorkerHealth: () => req<RcpWorkerHealth>(`${R}/worker`),
+  getWorkerJobs: (status?: string) => req<{ jobs: RcpWorkerJob[] }>(`${R}/worker?view=jobs${status ? `&status=${encodeURIComponent(status)}` : ''}`),
+  retryWorkerJob: (id: string) => post<{ ok: boolean }>(`${R}/worker`, { action: 'retry', id }),
+  cancelWorkerJob: (id: string) => post<{ ok: boolean }>(`${R}/worker`, { action: 'cancel', id }),
+
+  // ── approvals / follow-ups ────────────────────────────────────────────────
+  getApprovals: () => req<{ items: RcpApproval[] }>(`${R}/approvals`),
+  approveApproval: (id: string) => post<{ status: string }>(`${R}/approvals`, { action: 'approve', id }),
+  rejectApproval: (id: string) => post<{ status: string }>(`${R}/approvals`, { action: 'reject', id }),
+  getFollowUps: () => req<{ follow_ups: RcpTask[]; reminders: RcpReminder[] }>(`${R}/follow-ups`),
+  cancelFollowUp: (id: string) => post<{ ok: boolean }>(`${R}/follow-ups`, { action: 'cancel', id }),
+
+  // ── usage / limits / analytics ────────────────────────────────────────────
+  getUsage: () => req<RcpUsageSummary>(`${R}/usage`),
+  getLimits: () => req<{ limits: Record<string, RcpLimit> }>(`${R}/limits`),
+  getAnalyticsRange: (preset?: string, start?: string, end?: string) => {
+    const qs = new URLSearchParams();
+    if (preset) qs.set('preset', preset);
+    if (start) qs.set('start', start);
+    if (end) qs.set('end', end);
+    return req<RcpAnalyticsRange>(`${R}/analytics${qs.toString() ? `?${qs.toString()}` : ''}`);
+  },
 };

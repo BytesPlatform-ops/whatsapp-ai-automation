@@ -11,6 +11,7 @@ import { CrmPanel } from './CrmPanel';
 import { OperationsPanel } from './OperationsPanel';
 import { IntegrationsPanel } from './IntegrationsPanel';
 import { KnowledgePanel } from './KnowledgePanel';
+import KnowledgeSourcesPanel from './KnowledgeSourcesPanel';
 
 export type RcpTab = 'dashboard' | 'console' | 'conversations' | 'crm' | 'operations' | 'integrations' | 'knowledge';
 
@@ -63,7 +64,12 @@ export function ReceptionistWorkspace({ tab, tenant }: { tab: RcpTab; tenant: st
           {tab === 'crm' && <CrmPanel />}
           {tab === 'operations' && <OperationsPanel />}
           {tab === 'integrations' && <IntegrationsPanel />}
-          {tab === 'knowledge' && <KnowledgePanel />}
+          {tab === 'knowledge' && (
+            <div className="space-y-8">
+              <KnowledgePanel />
+              <KnowledgeSourcesPanel />
+            </div>
+          )}
         </div>
       </main>
     </ServiceGate>

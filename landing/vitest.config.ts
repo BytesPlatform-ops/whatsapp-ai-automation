@@ -20,6 +20,7 @@ export default defineConfig({
       'components/pixie-lab/billing/**/*.test.{ts,tsx}',
       'components/pixie-lab/services/**/*.test.{ts,tsx}',
       'components/pixie-lab/seo/**/*.test.{ts,tsx}',
+      'components/pixie-lab/receptionist/**/*.test.{ts,tsx}',
       'components/pixie-lab/*.test.{ts,tsx}',
     ],
     css: false,

@@ -969,6 +969,52 @@ export interface RcpBusinessProfile {
   faqs?: { q?: string; a?: string }[]; updated_at?: string;
 }
 export interface RcpKnowledgeItem { id: string; title?: string; content?: string; category?: string; tags?: string[]; created_at?: string; }
+
+// ── Wave 6: knowledge sources, config versions, worker, usage, analytics ─────
+export interface RcpKnowledgeSource {
+  id: string; source_type: 'pdf' | 'website' | 'text'; title?: string; url?: string;
+  filename?: string; status?: string; index_status?: string; chunk_count?: number;
+  page_count?: number; pages_indexed?: number; failed_pages?: number; version?: string;
+  created_at?: string; updated_at?: string;
+}
+export interface RcpIngestionJob { id: string; kind?: string; url?: string; status?: string; source_id?: string; error?: string; }
+export interface RcpEvidence {
+  source_id: string; chunk_id: string; source_type?: string; source_title?: string;
+  url?: string; page?: number | null; text: string; score: number; method: string;
+  version?: string; freshness?: number;
+}
+export interface RcpRetrievalResult { confident: boolean; method: string; outcome: string; answer: string; evidence: RcpEvidence[]; }
+export interface RcpConfig {
+  tenant_id?: string; business_name?: string; assistant_name?: string; tone?: string;
+  languages?: string; hours?: string; timezone?: string; prices?: string; services?: string | string[];
+  cancellation_policy?: string; refund_policy?: string; payment_policy?: string; booking_rules?: string;
+  policies?: string; escalation_triggers?: string; handoff_rules?: string; escalation_contacts?: string;
+  restricted_subjects?: string; config_version?: number; updated_at?: string; updated_by?: string;
+  [k: string]: unknown;
+}
+export interface RcpConfigVersion { id: string; version: number; status: string; updated_by?: string; created_at?: string; }
+export interface RcpWorkerJob {
+  id: string; job_type?: string; status?: string; run_at?: string; attempts?: number;
+  max_attempts?: number; priority?: number; last_error?: string; lock_owner?: string; updated_at?: string;
+}
+export interface RcpWorkerHealth {
+  worker?: Record<string, unknown>; due_count?: number; tenant_jobs?: Record<string, number>;
+}
+export interface RcpReminder { id: string; title?: string; remind_at?: string; channel?: string; status?: string; contact_id?: string; }
+export interface RcpUsageSummary {
+  period?: { start?: string; end?: string; fallback?: boolean };
+  counters?: Record<string, number>; gauges?: Record<string, number>;
+}
+export interface RcpLimit { limit_key?: string; used?: number; limit?: number; remaining?: number; within_limit?: boolean; allowed?: boolean; }
+export interface RcpApproval {
+  id: string; agent?: string; title?: string; action_type?: string; status?: string;
+  description?: string; risk_level?: string; prepared_output?: Record<string, unknown>;
+  execution_result?: Record<string, unknown> | null; preview?: string; created_at?: string;
+}
+export interface RcpAnalyticsRange {
+  range?: { start?: string; end?: string; preset?: string }; generated_at?: string;
+  metrics?: Record<string, number>; rates?: Record<string, number>; top_intents?: Record<string, number>;
+}
 export interface RcpHealth {
   status?: string; agent_slug?: string; llm_provider?: string; model?: string; handlers?: number;
   persistence?: { backend?: string; durable?: boolean; supabase_configured?: boolean };
