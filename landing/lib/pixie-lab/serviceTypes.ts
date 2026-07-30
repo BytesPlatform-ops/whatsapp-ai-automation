@@ -1062,6 +1062,27 @@ export interface RcpWhatsAppDraft {
   provider_message_id?: string; approval_id?: string; template_required?: boolean;
   window_open?: boolean; provider_error?: string; updated_at?: string;
 }
+export interface RcpMetaConnection {
+  connected?: boolean; channel?: string; state?: string; can_send?: boolean;
+  webhook_subscribed?: boolean; last_inbound_at?: string; last_send_at?: string; last_error?: string;
+  // instagram
+  instagram_account_id?: string; username?: string; linked_page_id?: string; account_type?: string;
+  // messenger
+  page_id?: string; page_name?: string;
+}
+export interface RcpMetaChannelStatus { connection?: RcpMetaConnection; reply_mode?: string; }
+export interface RcpMetaMessagingStatus {
+  instagram?: RcpMetaChannelStatus; messenger?: RcpMetaChannelStatus;
+}
+export interface RcpMetaAsset {
+  instagram_account_id?: string; username?: string; account_type?: string; linked_page_id?: string;
+  page_id?: string; page_name?: string; category?: string; messaging_capability?: boolean;
+}
+export interface RcpMetaDraft {
+  id: string; channel?: string; sender_id?: string; asset_id?: string; text?: string;
+  message_type?: string; status?: string; provider_message_id?: string; approval_id?: string;
+  tag_required?: boolean; window_open?: boolean; provider_error?: string; updated_at?: string;
+}
 export interface RcpHealth {
   status?: string; agent_slug?: string; llm_provider?: string; model?: string; handlers?: number;
   persistence?: { backend?: string; durable?: boolean; supabase_configured?: boolean };

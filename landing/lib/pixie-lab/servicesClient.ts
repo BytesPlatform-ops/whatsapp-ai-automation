@@ -31,6 +31,7 @@ import type {
   RcpAnalyticsRange, RcpGmailStatus, RcpGmailDraft, RcpCalendarStatus, RcpCalendar,
   RcpSlot, RcpBookingRow, RcpWidgetConfig, RcpWidgetVerification,
   RcpWhatsAppStatus, RcpWhatsAppTemplate, RcpWhatsAppDraft,
+  RcpMetaMessagingStatus, RcpMetaAsset, RcpMetaDraft, RcpMetaConnection,
 } from './serviceTypes';
 
 async function req<T>(url: string, init?: RequestInit): Promise<Envelope<T>> {
@@ -724,4 +725,18 @@ export const receptionistApi = {
   editWhatsAppDraft: (id: string, text: string) => post<{ draft: RcpWhatsAppDraft }>(`${R}/whatsapp`, { action: 'edit', id, text }),
   retryWhatsAppDraft: (id: string) => post<{ job_id: string }>(`${R}/whatsapp`, { action: 'retry', id }),
   reconcileWhatsAppDraft: (id: string) => post<{ job_id: string }>(`${R}/whatsapp`, { action: 'reconcile', id }),
+
+  // ── Meta Messaging: Instagram + Messenger (Wave 13) ───────────────────────
+  getMetaMessagingStatus: () => req<RcpMetaMessagingStatus>(`${R}/meta-messaging`),
+  getMetaAccounts: () => req<{ accounts: RcpMetaAsset[] }>(`${R}/meta-messaging?view=instagram-accounts`),
+  getMetaPages: () => req<{ pages: RcpMetaAsset[] }>(`${R}/meta-messaging?view=messenger-pages`),
+  getMetaDrafts: (channel?: string) => req<{ drafts: RcpMetaDraft[] }>(`${R}/meta-messaging?view=drafts${channel ? `&channel=${channel}` : ''}`),
+  selectMetaAsset: (channel: string, assetId: string) => post<{ status: string; connection: RcpMetaConnection }>(`${R}/meta-messaging`, { action: 'select', channel, asset_id: assetId }),
+  setMetaReplyMode: (channel: string, mode: string) => post<{ reply_mode: string }>(`${R}/meta-messaging`, { action: 'settings', channel, reply_mode: mode }),
+  testMetaConnection: () => post<RcpMetaMessagingStatus>(`${R}/meta-messaging`, { action: 'test' }),
+  runMetaHealth: () => post<{ job_id: string }>(`${R}/meta-messaging`, { action: 'health' }),
+  disconnectMeta: (channel: string) => post<{ status: string }>(`${R}/meta-messaging`, { action: 'disconnect', channel }),
+  editMetaDraft: (id: string, text: string) => post<{ draft: RcpMetaDraft }>(`${R}/meta-messaging`, { action: 'edit', id, text }),
+  retryMetaDraft: (id: string) => post<{ job_id: string }>(`${R}/meta-messaging`, { action: 'retry', id }),
+  reconcileMetaDraft: (id: string) => post<{ job_id: string }>(`${R}/meta-messaging`, { action: 'reconcile', id }),
 };
