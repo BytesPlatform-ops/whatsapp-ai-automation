@@ -32,11 +32,17 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import threading
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
 import persistence
+
+# Serializes claim writes within a process so two threads (memory/file mode) can
+# never both win the same job. In supabase mode a DB-level conditional UPDATE
+# provides cross-instance atomicity; this lock is defence-in-depth there.
+_CLAIM_LOCK = threading.RLock()
 
 _log = logging.getLogger("pixie.receptionist.worker.jobs_store")
 
@@ -159,11 +165,13 @@ def enqueue(
     payload: Dict[str, Any],
     run_at: Optional[str] = None,
     max_attempts: int = DEFAULT_MAX_ATTEMPTS,
+    priority: int = 0,
 ) -> str:
     """Enqueue a new durable job. Returns the new job_id.
 
     run_at defaults to now (immediately due). Pass an ISO timestamp to schedule
-    for a future time (e.g. reminder at remind_at).
+    for a future time (e.g. reminder at remind_at). Higher ``priority`` is claimed
+    first (deterministic claim order).
     """
     job_id = f"rj_{uuid.uuid4().hex[:12]}"
     now = _now_iso()
@@ -174,6 +182,7 @@ def enqueue(
         "status": STATUS_QUEUED,
         "payload": payload,
         "run_at": run_at or now,
+        "priority": int(priority),
         "attempts": 0,
         "max_attempts": max_attempts,
         "lock_owner": "",
@@ -213,48 +222,75 @@ def _is_due(run_at_str: str, now_dt: datetime) -> bool:
     return run_at_str <= now_str
 
 
+def _due_sort_key(job: dict) -> tuple:
+    """Deterministic claim order: higher priority first, then earliest run_at, then
+    oldest created_at. Keeps ordering stable across instances (tenant fairness is
+    applied by the runtime's per-tenant interleave)."""
+    return (-int(job.get("priority", 0) or 0), job.get("run_at", ""), job.get("created_at", ""))
+
+
 def due_jobs(now: Optional[datetime] = None, limit: int = 20) -> List[Tuple[str, dict]]:
     """Return jobs that are due to run (run_at <= now, status queued or retry,
-    or claimed/running with expired lock).
+    or claimed/running with expired lock), ordered by priority then due time.
 
-    Returns a list of (job_id, job_dict) pairs.
+    In supabase mode the status + due-time filter runs IN THE DATABASE (indexed on
+    data->>'status' / data->>'run_at' / data->>'lock_expires_at') — no full-table
+    in-memory scan. Returns a list of (job_id, job_dict) pairs.
     """
     now_dt = now or _now_utc()
     now_str = now_dt.isoformat(timespec="seconds")
-    results: List[Tuple[str, dict]] = []
 
-    # Scan all tenants — same approach as receptionist stores.RecordStore.list()
-    repo = _jobs()
-    try:
-        all_rows = list(getattr(repo, "_rows", []))
-    except Exception:
-        all_rows = []
+    if persistence.backend() == "supabase":
+        rows = _supabase_due_rows(now_str, limit)
+    else:
+        repo = _jobs()
+        try:
+            rows = [r.get("data") or r for r in getattr(repo, "_rows", [])]
+        except Exception:
+            rows = []
 
-    for row in all_rows:
-        job = row.get("data") or row
+    candidates: List[dict] = []
+    for job in rows:
         if not isinstance(job, dict):
             continue
         status = job.get("status", "")
-        run_at = job.get("run_at", "")
-        lock_expires = job.get("lock_expires_at", "")
-
         if status in TERMINAL_STATUSES or status == STATUS_CANCELLED:
             continue
-
-        if not _is_due(run_at, now_dt):
+        if not _is_due(job.get("run_at", ""), now_dt):
             continue
-
         if status in (STATUS_QUEUED, STATUS_RETRY):
-            results.append((job["id"], dict(job)))
+            candidates.append(job)
         elif status in (STATUS_CLAIMED, STATUS_RUNNING):
-            # Stale lock — lock_expires_at is in the past
-            if lock_expires and lock_expires < now_str:
-                results.append((job["id"], dict(job)))
+            lock_expires = job.get("lock_expires_at", "")
+            if lock_expires and lock_expires < now_str:  # stale lock → reclaimable
+                candidates.append(job)
 
-        if len(results) >= limit:
-            break
+    candidates.sort(key=_due_sort_key)
+    return [(j["id"], dict(j)) for j in candidates[:limit]]
 
-    return results
+
+def _supabase_due_rows(now_str: str, limit: int) -> List[dict]:
+    """PostgREST query: rows that are queued/retry OR have an expired lock, run_at<=now.
+    Filtering happens in Postgres via the data->>'field' expression indexes."""
+    try:
+        import httpx
+        params = {
+            "select": "data",
+            "data->>run_at": f"lte.{now_str}",
+            "or": (
+                f"(data->>status.in.(\"{STATUS_QUEUED}\",\"{STATUS_RETRY}\"),"
+                f"and(data->>status.in.(\"{STATUS_CLAIMED}\",\"{STATUS_RUNNING}\"),"
+                f"data->>lock_expires_at.lt.{now_str}))"
+            ),
+            "limit": str(max(1, limit) * 4),  # over-fetch; sorted/bounded by caller
+        }
+        with httpx.Client(timeout=20) as http:
+            r = http.get(persistence._sb_rest(T_JOBS), headers=persistence._sb_headers(), params=params)
+            if r.status_code == 200:
+                return [row.get("data") or {} for row in r.json()]
+    except Exception as exc:  # pragma: no cover - network path
+        _log.warning("supabase due_jobs query failed: %s", exc)
+    return []
 
 
 def claim(
@@ -270,7 +306,56 @@ def claim(
       - status is claimed/running but lock_expires_at is in the past (stale lock reclaim).
 
     Returns True on success, False if another owner holds a live lock.
+
+    Atomicity: in supabase mode a conditional PATCH (UPDATE ... WHERE status is still
+    claimable) guarantees only one instance wins at the DB level. In memory/file mode
+    a process lock serializes the read-modify-write so two threads cannot both win.
     """
+    if persistence.backend() == "supabase":
+        return _supabase_atomic_claim(job_id, tenant_id, owner, ttl)
+
+    with _CLAIM_LOCK:
+        repo = _jobs()
+        now_str = _now_iso()
+        row = repo.get(tenant_id, job_id)
+        if row is None:
+            return False
+        job = row.get("data") or row
+        if not isinstance(job, dict):
+            return False
+
+        status = job.get("status", "")
+        lock_expires = job.get("lock_expires_at", "")
+
+        if status in TERMINAL_STATUSES:
+            return False
+
+        # Is the current lock live (owned by someone else)?
+        if status in (STATUS_CLAIMED, STATUS_RUNNING):
+            if lock_expires and lock_expires >= now_str:
+                if job.get("lock_owner") != owner:
+                    return False  # another live owner
+                return True  # same owner — idempotent success
+
+        expires_at = (_now_utc() + timedelta(seconds=ttl)).isoformat(timespec="seconds")
+        job["status"] = STATUS_CLAIMED
+        job["lock_owner"] = owner
+        job["lock_expires_at"] = expires_at
+        job["updated_at"] = now_str
+        repo.upsert(_job_row(job))
+
+        # Re-read to confirm ownership (defence-in-depth).
+        row2 = repo.get(tenant_id, job_id)
+        job2 = (row2.get("data") or row2) if row2 else None
+        return bool(isinstance(job2, dict) and job2.get("lock_owner") == owner)
+
+
+def _supabase_atomic_claim(job_id: str, tenant_id: str, owner: str, ttl: int) -> bool:
+    """Claim via a conditional PATCH: UPDATE the row only while it is still claimable
+    (queued/retry, or a stale expired lock). Postgres serializes concurrent UPDATEs,
+    so exactly one instance's WHERE matches → exactly one winner."""
+    import httpx
+
     repo = _jobs()
     now_str = _now_iso()
     row = repo.get(tenant_id, job_id)
@@ -279,41 +364,45 @@ def claim(
     job = row.get("data") or row
     if not isinstance(job, dict):
         return False
-
     status = job.get("status", "")
-    lock_expires = job.get("lock_expires_at", "")
-
     if status in TERMINAL_STATUSES:
         return False
-
-    # Is the current lock live (owned by someone else)?
     if status in (STATUS_CLAIMED, STATUS_RUNNING):
-        if lock_expires and lock_expires >= now_str:
-            if job.get("lock_owner") != owner:
-                return False  # another live owner
-            # same owner — idempotent success
-            return True
+        le = job.get("lock_expires_at", "")
+        if le and le >= now_str and job.get("lock_owner") != owner:
+            return False
 
-    # Write our claim
-    expires_at = (_now_utc() + timedelta(seconds=ttl)).isoformat(timespec="seconds")
-    job["status"] = STATUS_CLAIMED
-    job["lock_owner"] = owner
-    job["lock_expires_at"] = expires_at
-    job["updated_at"] = now_str
-    repo.upsert(_job_row(job))
+    new_job = dict(job)
+    new_job["status"] = STATUS_CLAIMED
+    new_job["lock_owner"] = owner
+    new_job["lock_expires_at"] = (_now_utc() + timedelta(seconds=ttl)).isoformat(timespec="seconds")
+    new_job["updated_at"] = now_str
 
-    # Re-read to verify we won the race
-    row2 = repo.get(tenant_id, job_id)
-    if row2 is None:
+    # Precondition filter: claimable = queued/retry OR (claimed/running AND lock expired).
+    params = {
+        "id": f"eq.{job_id}",
+        "tenant_id": f"eq.{tenant_id}",
+        "or": (
+            f"(data->>status.in.(\"{STATUS_QUEUED}\",\"{STATUS_RETRY}\"),"
+            f"and(data->>status.in.(\"{STATUS_CLAIMED}\",\"{STATUS_RUNNING}\"),"
+            f"data->>lock_expires_at.lt.{now_str}))"
+        ),
+    }
+    try:
+        with httpx.Client(timeout=20) as http:
+            r = http.patch(
+                persistence._sb_rest(T_JOBS),
+                headers=persistence._sb_headers({"Prefer": "return=representation"}),
+                params=params,
+                json={"data": new_job, "updated_at": now_str},
+            )
+            if r.status_code >= 300:
+                return False
+            updated = r.json()
+            return bool(updated)  # non-empty representation = we won the atomic UPDATE
+    except Exception as exc:  # pragma: no cover - network path
+        _log.warning("supabase atomic claim failed for %s: %s", job_id, exc)
         return False
-    job2 = row2.get("data") or row2
-    if not isinstance(job2, dict):
-        return False
-
-    if job2.get("lock_owner") != owner:
-        return False  # another writer overwrote us
-
-    return True
 
 
 def heartbeat(job_id: str, tenant_id: str, owner: str, ttl: int = 60) -> bool:
