@@ -111,6 +111,18 @@ CREATE TABLE IF NOT EXISTS "receptionist_worker_attempts" (
   "updated_at" timestamptz NOT NULL DEFAULT now(),
   "data" jsonb NOT NULL DEFAULT '{}'::jsonb);
 
+CREATE TABLE IF NOT EXISTS "receptionist_knowledge_sources" (
+  "id" text PRIMARY KEY, "tenant_id" text NOT NULL,
+  "created_at" timestamptz NOT NULL DEFAULT now(),
+  "updated_at" timestamptz NOT NULL DEFAULT now(),
+  "data" jsonb NOT NULL DEFAULT '{}'::jsonb);
+
+CREATE TABLE IF NOT EXISTS "receptionist_ingestion_jobs" (
+  "id" text PRIMARY KEY, "tenant_id" text NOT NULL,
+  "created_at" timestamptz NOT NULL DEFAULT now(),
+  "updated_at" timestamptz NOT NULL DEFAULT now(),
+  "data" jsonb NOT NULL DEFAULT '{}'::jsonb);
+
 -- ── Indexes ─────────────────────────────────────────────────────────────────
 
 -- backfill: the legacy business_profile table (id == tenant_id) had only a PK
@@ -178,6 +190,13 @@ CREATE INDEX IF NOT EXISTS "idx_rcp_wjobs_lock"   ON "receptionist_worker_jobs" 
 CREATE INDEX IF NOT EXISTS "idx_rcp_wattempts_tenant" ON "receptionist_worker_attempts" ("tenant_id");
 CREATE INDEX IF NOT EXISTS "idx_rcp_wattempts_job"    ON "receptionist_worker_attempts" ((data->>'job_id'));
 
+-- knowledge sources + ingestion jobs
+CREATE INDEX IF NOT EXISTS "idx_rcp_ksrc_tenant"  ON "receptionist_knowledge_sources" ("tenant_id");
+CREATE INDEX IF NOT EXISTS "idx_rcp_ksrc_type"    ON "receptionist_knowledge_sources" ((data->>'source_type'));
+CREATE INDEX IF NOT EXISTS "idx_rcp_ksrc_status"  ON "receptionist_knowledge_sources" ((data->>'index_status'));
+CREATE INDEX IF NOT EXISTS "idx_rcp_ingjobs_tenant" ON "receptionist_ingestion_jobs" ("tenant_id");
+CREATE INDEX IF NOT EXISTS "idx_rcp_ingjobs_status" ON "receptionist_ingestion_jobs" ((data->>'status'));
+
 -- ── Row Level Security (enable; deny-all for anon/authenticated) ─────────────
 
 ALTER TABLE "receptionist_message_index"      ENABLE ROW LEVEL SECURITY;
@@ -195,3 +214,5 @@ ALTER TABLE "receptionist_campaign_targets"   ENABLE ROW LEVEL SECURITY;  -- PII
 ALTER TABLE "receptionist_send_log"           ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "receptionist_worker_jobs"        ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "receptionist_worker_attempts"    ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "receptionist_knowledge_sources"  ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "receptionist_ingestion_jobs"     ENABLE ROW LEVEL SECURITY;

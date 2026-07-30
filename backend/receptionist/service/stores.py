@@ -51,6 +51,8 @@ T_CONSENT = "receptionist_consent"
 T_SUPPRESSION = "receptionist_suppression"
 T_USAGE_COUNTERS = "receptionist_usage_counters"
 T_DNC = "receptionist_dnc"
+T_KNOWLEDGE_SOURCES = "receptionist_knowledge_sources"
+T_INGESTION_JOBS = "receptionist_ingestion_jobs"
 T_CAMPAIGN_OPTOUTS = "receptionist_campaign_optouts"
 T_CAMPAIGNS = "receptionist_campaigns"
 T_CAMPAIGN_TARGETS = "receptionist_campaign_targets"
@@ -63,6 +65,7 @@ ALL_TABLES = [
     T_KNOWLEDGE, T_CAMPAIGN_REPLIES, T_MESSAGE_INDEX, T_LOCKS, T_ACTION_EXECUTIONS,
     T_CONFIGURATIONS, T_CONFIG_VERSIONS, T_CONSENT, T_SUPPRESSION, T_USAGE_COUNTERS,
     T_DNC, T_CAMPAIGN_OPTOUTS, T_CAMPAIGNS, T_CAMPAIGN_TARGETS, T_SEND_LOG,
+    T_KNOWLEDGE_SOURCES, T_INGESTION_JOBS,
 ]
 
 
@@ -230,6 +233,8 @@ def config_versions() -> RecordStore: return store(T_CONFIG_VERSIONS)
 def consent() -> RecordStore: return store(T_CONSENT)
 def suppression() -> RecordStore: return store(T_SUPPRESSION)
 def usage_counters() -> RecordStore: return store(T_USAGE_COUNTERS)
+def knowledge_sources() -> RecordStore: return store(T_KNOWLEDGE_SOURCES)
+def ingestion_jobs() -> RecordStore: return store(T_INGESTION_JOBS)
 
 
 # ── durable per-conversation lock ─────────────────────────────────────────────

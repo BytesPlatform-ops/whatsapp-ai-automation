@@ -147,16 +147,24 @@ def retrieve(tenant_id: str, query: str, *, max_chunks: Optional[int] = None) ->
                 "version": cfg_version, "freshness": 0.25,
             })
 
-    # 3) knowledge items (plain text / PDF pages / website pages)
+    # 3) knowledge chunks (plain text / PDF pages / website pages)
     for item in list_knowledge(tenant_id):
+        if item.get("archived"):
+            continue  # archived sources are never retrieved
         text = item.get("content", "") or ""
         s, method = _score(q_tokens, query, item.get("title", "") + " " + text)
         if s > 0:
             candidates.append({
-                "source_id": item.get("id", "knowledge"), "chunk_id": item.get("id", ""),
+                "source_id": item.get("source_id") or item.get("id", "knowledge"),
+                "chunk_id": item.get("chunk_id") or item.get("id", ""),
+                "source_type": item.get("source_type", "knowledge"),
+                "source_title": item.get("title", ""),
+                "url": item.get("url", ""),
+                "page": item.get("page"),
                 "text": text, "score": s + _freshness(item.get("updated_at", "")),
                 "method": method, "field": item.get("category", "knowledge"),
-                "version": str(item.get("updated_at", "")), "freshness": _freshness(item.get("updated_at", "")),
+                "version": str(item.get("version") or item.get("updated_at", "")),
+                "freshness": _freshness(item.get("updated_at", "")),
             })
 
     if not candidates:

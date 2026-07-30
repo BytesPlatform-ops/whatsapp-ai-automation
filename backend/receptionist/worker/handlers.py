@@ -449,3 +449,20 @@ def handle_retention_cleanup(job: dict) -> dict:
     # This is intentionally minimal — just returns completed so the worker
     # lifecycle is exercised. Real cleanup logic would be added per business rules.
     return {"status": "completed", "cleaned": 0}
+
+
+@register_handler("website_ingest")
+def handle_website_ingest(job: dict) -> dict:
+    """Run a durable website knowledge-ingestion job through its states. Idempotent:
+    a completed ingestion job is a no-op. Fetching is SSRF-safe (shared URL guard)."""
+    tenant_id = job.get("tenant_id", "")
+    payload = job.get("payload", {}) or {}
+    ingestion_job_id = payload.get("ingestion_job_id", "")
+    if not ingestion_job_id:
+        return {"status": "failed", "reason": "missing_ingestion_job_id"}
+    try:
+        from receptionist.service import ingestion
+        return ingestion.run_website_ingestion(tenant_id, ingestion_job_id)
+    except Exception as exc:  # never crash the worker loop
+        _log.warning("website_ingest job=%s: %s", job.get("id"), exc)
+        return {"status": "failed", "reason": str(exc)[:120]}
