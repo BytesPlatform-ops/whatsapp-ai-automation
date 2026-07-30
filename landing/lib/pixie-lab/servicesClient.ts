@@ -34,6 +34,7 @@ import type {
   RcpMetaMessagingStatus, RcpMetaAsset, RcpMetaDraft, RcpMetaConnection,
   RcpSmsStatus, RcpSmsNumber, RcpSmsDraft, RcpSmsQuietHours, RcpSmsConnection,
   RcpTelegramStatus, RcpTelegramConnection, RcpTelegramDraft,
+  RcpVoiceStatus, RcpVoiceConnection, RcpVoiceNumber, RcpVoiceCall, RcpVoiceCallDetail,
 } from './serviceTypes';
 
 async function req<T>(url: string, init?: RequestInit): Promise<Envelope<T>> {
@@ -772,4 +773,20 @@ export const receptionistApi = {
   editTelegramDraft: (id: string, text: string) => post<{ draft: RcpTelegramDraft }>(`${R}/telegram`, { action: 'edit', id, text }),
   retryTelegramDraft: (id: string) => post<{ job_id: string }>(`${R}/telegram`, { action: 'retry', id }),
   reconcileTelegramDraft: (id: string) => post<{ job_id: string }>(`${R}/telegram`, { action: 'reconcile', id }),
+
+  // ── Voice / telephony (Vapi) (Wave 16) ────────────────────────────────────
+  getVoiceStatus: () => req<RcpVoiceStatus>(`${R}/voice`),
+  getVoiceNumbers: () => req<{ numbers: RcpVoiceNumber[] }>(`${R}/voice?view=numbers`),
+  getVoiceCalls: () => req<{ calls: RcpVoiceCall[] }>(`${R}/voice?view=calls`),
+  getVoiceCall: (callId: string) => req<RcpVoiceCallDetail>(`${R}/voice?view=call&call_id=${encodeURIComponent(callId)}`),
+  getVoiceAssistant: () => req<{ assistant: Record<string, unknown> }>(`${R}/voice?view=assistant`),
+  connectVoice: (vapiApiKey: string, serverSecret: string) => post<{ status: string; account_id: string }>(`${R}/voice`, { action: 'connect', vapi_api_key: vapiApiKey, server_secret: serverSecret }),
+  validateVoice: () => post<{ account: Record<string, unknown> }>(`${R}/voice`, { action: 'validate' }),
+  setVoiceSettings: (opts: { inbound?: boolean; outbound?: boolean; recording?: boolean; default_number_id?: string }) => post<{ connection: RcpVoiceConnection }>(`${R}/voice`, { action: 'settings', ...opts }),
+  startVoiceOutbound: (to: string, numberId?: string) => post<{ status: string; record_id: string }>(`${R}/voice`, { action: 'outbound', to, number_id: numberId }),
+  scheduleVoiceCallback: (to: string, numberId?: string) => post<{ job_id: string }>(`${R}/voice`, { action: 'callback', to, number_id: numberId }),
+  reconcileVoiceCall: (callId: string) => post<{ job_id: string }>(`${R}/voice`, { action: 'reconcile', call_id: callId }),
+  editVoiceSummary: (callId: string, text: string) => post<{ summary: Record<string, unknown> }>(`${R}/voice`, { action: 'summary', call_id: callId, text }),
+  runVoiceHealth: () => post<{ job_id: string }>(`${R}/voice`, { action: 'health' }),
+  disconnectVoice: () => post<{ status: string }>(`${R}/voice`, { action: 'disconnect' }),
 };

@@ -24,8 +24,9 @@ import WhatsAppPanel from './WhatsAppPanel';
 import MetaMessagingPanel from './MetaMessagingPanel';
 import SmsPanel from './SmsPanel';
 import TelegramPanel from './TelegramPanel';
+import VoicePanel from './VoicePanel';
 
-export type RcpTab = 'dashboard' | 'console' | 'conversations' | 'crm' | 'operations' | 'integrations' | 'knowledge' | 'approvals' | 'providers' | 'analytics' | 'widget' | 'bookings' | 'followups' | 'calendar' | 'gmail' | 'whatsapp' | 'meta-messaging' | 'sms' | 'telegram';
+export type RcpTab = 'dashboard' | 'console' | 'conversations' | 'crm' | 'operations' | 'integrations' | 'knowledge' | 'approvals' | 'providers' | 'analytics' | 'widget' | 'bookings' | 'followups' | 'calendar' | 'gmail' | 'whatsapp' | 'meta-messaging' | 'sms' | 'telegram' | 'voice';
 
 const TABS = [
   { label: 'Overview', href: '/pixie-lab/receptionist' },
@@ -39,6 +40,7 @@ const TABS = [
   { label: 'Instagram & Messenger', href: '/pixie-lab/receptionist/meta-messaging' },
   { label: 'SMS', href: '/pixie-lab/receptionist/sms' },
   { label: 'Telegram', href: '/pixie-lab/receptionist/telegram' },
+  { label: 'Voice', href: '/pixie-lab/receptionist/voice' },
   { label: 'Providers', href: '/pixie-lab/receptionist/providers' },
   { label: 'Calendar', href: '/pixie-lab/receptionist/calendar' },
   { label: 'Bookings', href: '/pixie-lab/receptionist/bookings' },
@@ -62,6 +64,7 @@ const TITLES: Record<RcpTab, string> = {
   'meta-messaging': 'Instagram & Messenger',
   sms: 'SMS',
   telegram: 'Telegram',
+  voice: 'Voice & Telephony',
   calendar: 'Calendar Setup',
   bookings: 'Bookings',
   followups: 'Follow-Ups & Reminders',
@@ -105,6 +108,7 @@ export function ReceptionistWorkspace({ tab, tenant }: { tab: RcpTab; tenant: st
           {tab === 'meta-messaging' && <MetaMessagingPanel />}
           {tab === 'sms' && <SmsPanel />}
           {tab === 'telegram' && <TelegramPanel />}
+          {tab === 'voice' && <VoicePanel />}
           {tab === 'calendar' && <CalendarConfigPanel />}
           {tab === 'bookings' && <BookingsPanel />}
           {tab === 'followups' && <FollowUpsPanel />}

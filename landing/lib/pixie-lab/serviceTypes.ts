@@ -1123,6 +1123,33 @@ export interface RcpTelegramDraft {
   provider_message_id?: string; approval_id?: string; reply_to?: string;
   business_connection_id?: string; provider_error?: string; updated_at?: string;
 }
+export interface RcpVoiceConnection {
+  connected?: boolean; provider?: string; account_id?: string; default_number_id?: string;
+  inbound_enabled?: boolean; outbound_enabled?: boolean; server_auth?: boolean;
+  recording_enabled?: boolean; last_call_at?: string; last_error?: string; state?: string;
+}
+export interface RcpVoiceStatus {
+  connection?: RcpVoiceConnection;
+  recording_policy?: { mode?: string; enabled?: boolean; consent_version?: string };
+  transfer_destinations?: { department?: string; label?: string; verified?: boolean }[];
+  inbound_enabled?: boolean; outbound_enabled?: boolean;
+}
+export interface RcpVoiceNumber {
+  phone_number_id?: string; number?: string; source?: string; country?: string;
+  inbound_capable?: boolean; outbound_capable?: boolean;
+}
+export interface RcpVoiceCall {
+  id?: string; call_id?: string; direction?: string; caller_number?: string; recipient_number?: string;
+  contact_id?: string; conversation_id?: string; status?: string; ended_reason?: string;
+  ai_paused?: boolean; recording_state?: string; transfer_state?: string; duration_seconds?: number;
+  created_at?: string; updated_at?: string;
+}
+export interface RcpVoiceCallDetail {
+  call?: RcpVoiceCall;
+  transcript?: { sequence?: number; speaker?: string; text?: string; final?: boolean }[];
+  tool_calls?: { tool_name?: string; result?: Record<string, unknown> }[];
+  summary?: Record<string, unknown> | null;
+}
 export interface RcpHealth {
   status?: string; agent_slug?: string; llm_provider?: string; model?: string; handlers?: number;
   persistence?: { backend?: string; durable?: boolean; supabase_configured?: boolean };

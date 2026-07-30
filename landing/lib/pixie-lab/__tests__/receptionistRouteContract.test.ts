@@ -110,6 +110,17 @@ const KNOWN_BACKEND = new Set<string>([
   '/api/agents/ai-receptionist/telegram/test',
   '/api/agents/ai-receptionist/telegram/health',
   '/api/agents/ai-receptionist/telegram/disconnect',
+  // Wave 16: Voice / telephony endpoints
+  '/api/agents/ai-receptionist/voice/status',
+  '/api/agents/ai-receptionist/voice/numbers',
+  '/api/agents/ai-receptionist/voice/calls',
+  '/api/agents/ai-receptionist/voice/assistant',
+  '/api/agents/ai-receptionist/voice/connect',
+  '/api/agents/ai-receptionist/voice/validate',
+  '/api/agents/ai-receptionist/voice/settings',
+  '/api/agents/ai-receptionist/voice/callbacks',
+  '/api/agents/ai-receptionist/voice/health',
+  '/api/agents/ai-receptionist/voice/disconnect',
   '/api/approvals',
 ]);
 
@@ -145,6 +156,7 @@ const REQUIRED_PROXIES: string[] = [
   'meta-messaging/route.ts',
   'sms/route.ts',
   'telegram/route.ts',
+  'voice/route.ts',
 ];
 
 function read(file: string): string {
