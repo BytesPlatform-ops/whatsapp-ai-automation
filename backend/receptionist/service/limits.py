@@ -68,6 +68,12 @@ _RESOURCES: dict[str, tuple] = {
     "telegram_business_message": ("receptionist_telegram_monthly_business_messages", _monthly("telegram_business_send")),
     "telegram_callback": ("receptionist_telegram_monthly_callbacks", _monthly("telegram_callbacks")),
     "telegram_media": ("receptionist_telegram_monthly_media", _monthly("telegram_media")),
+    "voice_inbound_minutes": ("receptionist_voice_monthly_inbound_minutes", _monthly("voice_minutes")),
+    "voice_outbound_minutes": ("receptionist_voice_monthly_outbound_minutes", _monthly("voice_minutes")),
+    "voice_analysis": ("receptionist_voice_monthly_analyses", _monthly("voice_analyses")),
+    "voice_callback": ("receptionist_voice_monthly_callbacks", _monthly("voice_callbacks")),
+    "voice_number": ("receptionist_voice_numbers", lambda t: len(stores.voice_numbers().list(t))),
+    "stored_call": ("receptionist_voice_stored_calls", lambda t: stores.voice_sessions().count(t)),
 }
 
 

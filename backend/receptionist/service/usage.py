@@ -35,6 +35,8 @@ COUNTER_METRICS: list[str] = [
     "sms_inbound", "sms_reply", "sms_segments", "sms_mms", "sms_reminders",
     "telegram_inbound", "telegram_business_inbound", "telegram_send", "telegram_business_send",
     "telegram_callbacks", "telegram_media",
+    "voice_inbound_calls", "voice_outbound_calls", "voice_outbound_initiations", "voice_minutes",
+    "voice_transfers", "voice_recorded_minutes", "voice_analyses", "voice_callbacks",
 ]
 
 

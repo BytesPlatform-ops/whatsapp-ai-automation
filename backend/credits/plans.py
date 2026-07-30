@@ -134,6 +134,12 @@ _RECEPTIONIST_LIMITS_FREE = {
     "receptionist_telegram_monthly_business_messages": 0, "receptionist_telegram_monthly_callbacks": 0,
     "receptionist_telegram_monthly_media": 0, "receptionist_telegram_stored_conversations": 0,
     "receptionist_telegram_monthly_reminders": 0,
+    "receptionist_voice_accounts": 0, "receptionist_voice_numbers": 0,
+    "receptionist_voice_concurrent_calls": 0, "receptionist_voice_monthly_inbound_minutes": 0,
+    "receptionist_voice_monthly_outbound_minutes": 0, "receptionist_voice_monthly_transfer_minutes": 0,
+    "receptionist_voice_monthly_recorded_minutes": 0, "receptionist_voice_monthly_analyses": 0,
+    "receptionist_voice_monthly_callbacks": 0, "receptionist_voice_stored_calls": 0,
+    "receptionist_voice_max_call_seconds": 0,
 }
 _RECEPTIONIST_LIMITS_STARTER = {
     "receptionist_widget_sites": 3, "receptionist_monthly_conversations": 1000,
@@ -164,6 +170,12 @@ _RECEPTIONIST_LIMITS_STARTER = {
     "receptionist_telegram_monthly_business_messages": 1500, "receptionist_telegram_monthly_callbacks": 2000,
     "receptionist_telegram_monthly_media": 500, "receptionist_telegram_stored_conversations": 5000,
     "receptionist_telegram_monthly_reminders": 500,
+    "receptionist_voice_accounts": 1, "receptionist_voice_numbers": 1,
+    "receptionist_voice_concurrent_calls": 1, "receptionist_voice_monthly_inbound_minutes": 500,
+    "receptionist_voice_monthly_outbound_minutes": 100, "receptionist_voice_monthly_transfer_minutes": 100,
+    "receptionist_voice_monthly_recorded_minutes": 0, "receptionist_voice_monthly_analyses": 200,
+    "receptionist_voice_monthly_callbacks": 100, "receptionist_voice_stored_calls": 5000,
+    "receptionist_voice_max_call_seconds": 600,
 }
 _RECEPTIONIST_LIMITS_PRO = {
     "receptionist_widget_sites": 25, "receptionist_monthly_conversations": UNLIMITED,
@@ -194,6 +206,12 @@ _RECEPTIONIST_LIMITS_PRO = {
     "receptionist_telegram_monthly_business_messages": UNLIMITED, "receptionist_telegram_monthly_callbacks": UNLIMITED,
     "receptionist_telegram_monthly_media": UNLIMITED, "receptionist_telegram_stored_conversations": UNLIMITED,
     "receptionist_telegram_monthly_reminders": UNLIMITED,
+    "receptionist_voice_accounts": 1, "receptionist_voice_numbers": 5,
+    "receptionist_voice_concurrent_calls": 10, "receptionist_voice_monthly_inbound_minutes": UNLIMITED,
+    "receptionist_voice_monthly_outbound_minutes": UNLIMITED, "receptionist_voice_monthly_transfer_minutes": UNLIMITED,
+    "receptionist_voice_monthly_recorded_minutes": UNLIMITED, "receptionist_voice_monthly_analyses": UNLIMITED,
+    "receptionist_voice_monthly_callbacks": UNLIMITED, "receptionist_voice_stored_calls": UNLIMITED,
+    "receptionist_voice_max_call_seconds": 1800,
 }
 
 

@@ -63,6 +63,7 @@ _BILLABLE_OPERATIONS = {
     "sms_send": "receptionist_sms_op",
     "telegram_send": "receptionist_telegram_op",
     "telegram_business_send": "receptionist_telegram_op",
+    "voice_outbound_call": "receptionist_voice_op",
 }
 
 
@@ -996,6 +997,42 @@ def _h_messenger_send_interactive(tenant_id: str, args: dict, *, conversation_id
     return _meta_send_common(tenant_id, args, "messenger", send_fn, "messenger_interactive")
 
 
+# ── Voice outbound-call handler ───────────────────────────────────────────────
+
+def _h_voice_outbound_call(tenant_id: str, args: dict, *, conversation_id: str = "") -> dict:
+    """Place a single controlled outbound call (consent/DNC/quiet-hours/approval
+    checked here + at the policy layer). Never dials suppressed numbers; unknown
+    create-call outcome enters reconciliation. No bulk calling."""
+    from ..providers import voice_adapter as voice
+    from . import voice_policy, voice_sessions
+    to = args.get("to", "")
+    decision = voice_policy.evaluate_outbound_call(
+        tenant_id, to=to, purpose=args.get("purpose", "callback"),
+        responding_to_request=bool(args.get("responding_to_request")))
+    if not decision.get("allowed"):
+        return {"status": ("blocked_by_policy" if decision.get("blocked_reason") != "suppression_dnc" else "suppressed"),
+                "detail": f"voice_{decision.get('blocked_reason', 'blocked')}",
+                "record_type": "", "record_id": "", "data": decision}
+    number_id = args.get("number_id", "")
+    try:
+        result = voice.start_outbound_call(tenant_id, to=to, number_id=number_id,
+                                           assistant_id=args.get("assistant_id", ""),
+                                           metadata={"purpose": args.get("purpose", "callback")})
+    except voice.VoiceError as exc:
+        return {"status": ("not_connected" if exc.category == "not_connected" else "failed"),
+                "detail": f"voice_{exc.category}", "record_type": "", "record_id": "", "data": {}}
+    voice_sessions.create_session(tenant_id, call_id=result["call_id"], direction="outbound",
+                                  recipient_number=to, phone_number_id=number_id,
+                                  assistant_id=args.get("assistant_id", ""), status=result.get("status", "queued"))
+    try:
+        from . import usage
+        usage.increment(tenant_id, "voice_outbound_initiations", idempotency_key=f"vout:{result['call_id']}")
+    except Exception:
+        pass
+    return {"status": "queued", "detail": "outbound call queued with provider",
+            "record_type": "voice_call", "record_id": result["call_id"], "data": result}
+
+
 # ── Telegram send handlers (Bot + Business) ───────────────────────────────────
 
 def _tg_persist_send(tenant_id: str, args: dict, result: dict, *, status: str) -> None:
@@ -1265,6 +1302,7 @@ _REGISTRY: dict[str, ActionSpec] = {
     "sms_send":                       ActionSpec(_h_sms_send, requires_approval=True, provider_action=True),
     "telegram_send":                  ActionSpec(_h_telegram_send, requires_approval=True, provider_action=True),
     "telegram_business_send":         ActionSpec(_h_telegram_business_send, requires_approval=True, provider_action=True),
+    "voice_outbound_call":            ActionSpec(_h_voice_outbound_call, requires_approval=True, provider_action=True),
 }
 
 
