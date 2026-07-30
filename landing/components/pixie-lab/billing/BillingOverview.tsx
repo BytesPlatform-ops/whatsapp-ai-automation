@@ -22,6 +22,7 @@ import { EntitlementsPanel } from './EntitlementsPanel';
 import { UsageMeters } from './UsageMeters';
 import { TransactionHistory } from './TransactionHistory';
 import { AgentBillingSelector } from './AgentBillingSelector';
+import { ReceptionistBillingBreakdown } from './ReceptionistBillingBreakdown';
 import {
   getImplementedBillingProducts,
   validateBillingProductId,
@@ -228,6 +229,9 @@ export function BillingOverview() {
 
       {/* Usage meters */}
       {usage ? <UsageMeters usage={usage} /> : null}
+
+      {/* AI Receptionist provider breakdown — only when that agent is selected */}
+      {activeProduct === 'ai_receptionist' ? <ReceptionistBillingBreakdown /> : null}
 
       {/* Transaction history — filtered by product when a product is selected */}
       <TransactionHistory product={activeProduct ?? undefined} />
