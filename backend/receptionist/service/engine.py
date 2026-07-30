@@ -21,6 +21,7 @@ from typing import Optional
 
 from activity.router import log_activity
 
+from . import registry as _registry  # noqa: F401 — import registers the canonical approval executor
 from . import stores
 from .business_profile import get_profile
 from .classifier import classify

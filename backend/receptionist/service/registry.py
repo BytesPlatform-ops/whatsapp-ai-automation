@@ -114,7 +114,18 @@ def execute_approved_action(approval_item: Any) -> dict:  # type: ignore[type-ar
         return {"ok": False, "error": f"{status} approval cannot execute"}
 
     po = getattr(approval_item, "prepared_output", None) or {}
-    action_type = po.get("action_type") or getattr(approval_item, "action_type", "")
+
+    # Legacy /run payloads carry connector "execution_actions" instead of a canonical
+    # action_type. Route them through the single registered dispatcher (so there is
+    # never a second competing executor clobbering this slot by import order).
+    if "execution_actions" in po and "action_type" not in po:
+        try:
+            from .. import agent as _legacy_agent
+            return _legacy_agent._execute_receptionist(approval_item)
+        except Exception as exc:  # pragma: no cover
+            return {"ok": False, "error": f"legacy execution failed: {exc}"}
+
+    action_type = po.get("action_type") or ""
     args = po.get("arguments", {}) or {}
     conv_id = po.get("conversation_id", "")
     idem = po.get("idempotency_key", "")

@@ -19,7 +19,7 @@ from __future__ import annotations
 import json
 
 from activity.router import log_activity
-from approvals.router import ApprovalItem, create_approval, register_executor_for
+from approvals.router import ApprovalItem, create_approval
 from integrations import execute_action, resolve_connector
 from leads import upsert_lead
 from models import ModelRequest, get_router
@@ -180,5 +180,9 @@ def _execute_receptionist(item: ApprovalItem) -> dict:
     }
 
 
-# Own the execution path for AI Receptionist items without clobbering Omni's.
-register_executor_for(AGENT_SLUG, _execute_receptionist)
+# NOTE: this legacy connector executor is NOT registered directly anymore — that
+# would clobber the canonical registry executor by import order and let the legacy
+# /run path execute side effects outside the canonical pipeline. The single
+# canonical executor (`service.registry.execute_approved_action`) owns the
+# "ai-receptionist" slot and delegates legacy "execution_actions" payloads here, so
+# every approved receptionist action converges on one dispatcher.
