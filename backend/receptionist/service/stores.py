@@ -70,6 +70,17 @@ T_WA_TEMPLATES = "receptionist_whatsapp_templates"
 T_WA_MEDIA = "receptionist_whatsapp_media"
 T_WA_WINDOWS = "receptionist_whatsapp_windows"
 
+# Telegram (Bot + Business, one shared domain).
+T_TG_BUSINESS = "receptionist_telegram_business"
+T_TG_IDENTITY_MAP = "receptionist_telegram_identity_map"
+T_TG_THREAD_MAP = "receptionist_telegram_thread_map"
+T_TG_DRAFTS = "receptionist_telegram_drafts"
+T_TG_SEND_ATTEMPTS = "receptionist_telegram_send_attempts"
+T_TG_STATUSES = "receptionist_telegram_statuses"
+T_TG_CALLBACKS = "receptionist_telegram_callbacks"
+T_TG_MEDIA = "receptionist_telegram_media"
+T_TG_EDITS = "receptionist_telegram_edits"
+
 # SMS (Twilio-initial, replaceable provider).
 T_SMS_NUMBER_MAP = "receptionist_sms_number_map"
 T_SMS_THREAD_MAP = "receptionist_sms_thread_map"
@@ -110,6 +121,8 @@ ALL_TABLES = [
     T_META_SEND_ATTEMPTS, T_META_STATUSES, T_META_MEDIA, T_META_WINDOWS,
     T_SMS_NUMBER_MAP, T_SMS_THREAD_MAP, T_SMS_DRAFTS, T_SMS_SEND_ATTEMPTS,
     T_SMS_STATUSES, T_SMS_MEDIA, T_SMS_DELAYED,
+    T_TG_BUSINESS, T_TG_IDENTITY_MAP, T_TG_THREAD_MAP, T_TG_DRAFTS, T_TG_SEND_ATTEMPTS,
+    T_TG_STATUSES, T_TG_CALLBACKS, T_TG_MEDIA, T_TG_EDITS,
 ]
 
 
@@ -314,6 +327,17 @@ def sms_send_attempts() -> RecordStore: return store(T_SMS_SEND_ATTEMPTS)
 def sms_statuses() -> RecordStore: return store(T_SMS_STATUSES)
 def sms_media() -> RecordStore: return store(T_SMS_MEDIA)
 def sms_delayed() -> RecordStore: return store(T_SMS_DELAYED)
+
+
+def tg_business() -> RecordStore: return store(T_TG_BUSINESS)
+def tg_identity_map() -> RecordStore: return store(T_TG_IDENTITY_MAP)
+def tg_thread_map() -> RecordStore: return store(T_TG_THREAD_MAP)
+def tg_drafts() -> RecordStore: return store(T_TG_DRAFTS)
+def tg_send_attempts() -> RecordStore: return store(T_TG_SEND_ATTEMPTS)
+def tg_statuses() -> RecordStore: return store(T_TG_STATUSES)
+def tg_callbacks() -> RecordStore: return store(T_TG_CALLBACKS)
+def tg_media() -> RecordStore: return store(T_TG_MEDIA)
+def tg_edits() -> RecordStore: return store(T_TG_EDITS)
 
 
 # ── durable per-conversation lock ─────────────────────────────────────────────

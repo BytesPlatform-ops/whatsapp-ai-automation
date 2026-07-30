@@ -194,6 +194,37 @@ def find_tenant_by_sms_number(sender_number: str) -> Optional[str]:
     return None
 
 
+def find_tenant_by_telegram_webhook_id(webhook_id: str) -> Optional[str]:
+    """Resolve the workspace tenant that owns a Telegram bot via its opaque webhook
+    id (the routing segment in the webhook URL). Server-side only — never trusts the
+    payload. One webhook id maps to at most one active workspace."""
+    wid = (webhook_id or "").strip()
+    if not wid:
+        return None
+    for (t, c), descriptor in _CONNECTIONS.items():
+        if c not in ("telegram_read", "telegram_send"):
+            continue
+        d = unseal_descriptor(descriptor)
+        if str(d.get("webhook_id") or "") == wid:
+            return t
+    return None
+
+
+def find_tenant_by_telegram_business_connection(business_connection_id: str) -> Optional[str]:
+    """Resolve the workspace tenant that owns a Telegram Business connection.
+    Server-side only. One business connection maps to one verified workspace."""
+    bid = (business_connection_id or "").strip()
+    if not bid:
+        return None
+    for (t, c), descriptor in _CONNECTIONS.items():
+        if c not in ("telegram_read", "telegram_send"):
+            continue
+        d = unseal_descriptor(descriptor)
+        if str(d.get("business_connection_id") or "") == bid:
+            return t
+    return None
+
+
 def disconnect(tenant_id: str, capabilities: Optional[list[str]] = None) -> None:
     """Remove a tenant's connections (all, or a specific set of capabilities)."""
     for (t, c) in list(_CONNECTIONS.keys()):

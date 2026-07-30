@@ -43,6 +43,8 @@ CONFIG_FIELDS: list[str] = [
     "sms_reply_mode",  # SMS channel policy (Wave 14)
     "sms_quiet_hours",  # SMS quiet-hours config (Wave 14)
     "sms_promotional_enabled",  # SMS promotional gate (Wave 14)
+    "telegram_reply_mode",  # Telegram standard-bot policy (Wave 15)
+    "telegram_business_reply_mode",  # Telegram business policy (Wave 15)
 ]
 
 # Configuration is "configured enough to answer" once these are present.

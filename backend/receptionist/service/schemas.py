@@ -30,6 +30,7 @@ class Channel(str, Enum):
     FACEBOOK = "facebook"
     MESSENGER = "messenger"
     SMS = "sms"
+    TELEGRAM = "telegram"
     VOICE = "voice"
     MANUAL = "manual"
     API = "api"

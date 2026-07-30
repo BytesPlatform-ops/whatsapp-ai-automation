@@ -22,6 +22,7 @@ RECEPTIONIST_MIGRATIONS = [
     MIGRATIONS_DIR / "20260803_receptionist_whatsapp.sql",
     MIGRATIONS_DIR / "20260810_receptionist_meta_messaging.sql",
     MIGRATIONS_DIR / "20260817_receptionist_sms.sql",
+    MIGRATIONS_DIR / "20260824_receptionist_telegram.sql",
 ]
 
 
