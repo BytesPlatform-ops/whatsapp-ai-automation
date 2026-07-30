@@ -54,6 +54,24 @@ async function mockReceptionist(page: Page): Promise<void> {
       answer: 'We open 9am to 5pm', evidence: [{ source_id: 'profile:hours', chunk_id: 'hours', source_type: 'text',
         text: 'We open 9am to 5pm', score: 2.5, method: 'structured_field' }] }));
   });
+  // Meta Messaging panel: status (default), ?view=instagram-accounts|messenger-pages|drafts.
+  await page.route('**/api/lab/receptionist/meta-messaging**', async (r) => {
+    const url = r.request().url();
+    if (r.request().method() !== 'GET') { await r.fulfill(json({ backendUp: true, status: 'selected' })); return; }
+    if (url.includes('view=instagram-accounts')) {
+      await r.fulfill(json({ backendUp: true, accounts: [{ instagram_account_id: 'ig_1', username: 'acme.co' }] }));
+    } else if (url.includes('view=messenger-pages')) {
+      await r.fulfill(json({ backendUp: true, pages: [{ page_id: 'page_1', page_name: 'Acme Ltd' }] }));
+    } else if (url.includes('view=drafts')) {
+      await r.fulfill(json({ backendUp: true, drafts: [] }));
+    } else {
+      await r.fulfill(json({ backendUp: true,
+        instagram: { reply_mode: 'draft_only', connection: { connected: true, state: 'ready_for_replies',
+          username: 'acme.co', instagram_account_id: 'ig_1', can_send: true, webhook_subscribed: true } },
+        messenger: { reply_mode: 'draft_only', connection: { connected: true, state: 'ready_for_replies',
+          page_id: 'page_1', page_name: 'Acme Ltd', can_send: true, webhook_subscribed: true } } }));
+    }
+  });
   // WhatsApp panel: status (default view), ?view=templates, ?view=drafts.
   await page.route('**/api/lab/receptionist/whatsapp**', async (r) => {
     const url = r.request().url();
@@ -72,7 +90,8 @@ async function mockReceptionist(page: Page): Promise<void> {
 }
 
 test.describe('Receptionist navigation', () => {
-  const routes = ['', '/dashboard', '/conversations', '/crm', '/approvals', '/gmail', '/whatsapp', '/providers',
+  const routes = ['', '/dashboard', '/conversations', '/crm', '/approvals', '/gmail', '/whatsapp',
+                  '/meta-messaging', '/providers',
                   '/calendar', '/bookings', '/followups', '/analytics', '/widget',
                   '/operations', '/integrations', '/knowledge'];
   for (const path of routes) {
