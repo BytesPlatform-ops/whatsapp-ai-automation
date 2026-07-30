@@ -22,6 +22,7 @@ import WhatsAppPanel from './WhatsAppPanel';
 import MetaMessagingPanel from './MetaMessagingPanel';
 import SmsPanel from './SmsPanel';
 import TelegramPanel from './TelegramPanel';
+import VoicePanel from './VoicePanel';
 import BookingsPanel from './BookingsPanel';
 import FollowUpsPanel from './FollowUpsPanel';
 import CalendarConfigPanel from './CalendarConfigPanel';
@@ -36,6 +37,7 @@ const PANELS: [string, React.ComponentType][] = [
   ['MetaMessaging', MetaMessagingPanel],
   ['Sms', SmsPanel],
   ['Telegram', TelegramPanel],
+  ['Voice', VoicePanel],
   ['Bookings', BookingsPanel],
   ['FollowUps', FollowUpsPanel],
   ['CalendarConfig', CalendarConfigPanel],

@@ -54,6 +54,21 @@ async function mockReceptionist(page: Page): Promise<void> {
       answer: 'We open 9am to 5pm', evidence: [{ source_id: 'profile:hours', chunk_id: 'hours', source_type: 'text',
         text: 'We open 9am to 5pm', score: 2.5, method: 'structured_field' }] }));
   });
+  // Voice panel: status (default), ?view=numbers|calls.
+  await page.route('**/api/lab/receptionist/voice**', async (r) => {
+    const url = r.request().url();
+    if (r.request().method() !== 'GET') { await r.fulfill(json({ backendUp: true, status: 'connected', account_id: 'org_1' })); return; }
+    if (url.includes('view=numbers')) {
+      await r.fulfill(json({ backendUp: true, numbers: [{ phone_number_id: 'pn_v1', number: '+15550009999', source: 'vapi', inbound_capable: true, outbound_capable: true }] }));
+    } else if (url.includes('view=calls')) {
+      await r.fulfill(json({ backendUp: true, calls: [] }));
+    } else {
+      await r.fulfill(json({ backendUp: true, inbound_enabled: true, outbound_enabled: false,
+        recording_policy: { mode: 'no_recording', enabled: false }, transfer_destinations: [],
+        connection: { connected: true, state: 'ready_for_inbound', account_id: 'org_1',
+          inbound_enabled: true, outbound_enabled: false, recording_enabled: false, server_auth: true } }));
+    }
+  });
   // Telegram panel: status (default), ?view=drafts.
   await page.route('**/api/lab/receptionist/telegram**', async (r) => {
     const url = r.request().url();
@@ -120,7 +135,7 @@ async function mockReceptionist(page: Page): Promise<void> {
 
 test.describe('Receptionist navigation', () => {
   const routes = ['', '/dashboard', '/conversations', '/crm', '/approvals', '/gmail', '/whatsapp',
-                  '/meta-messaging', '/sms', '/telegram', '/providers',
+                  '/meta-messaging', '/sms', '/telegram', '/voice', '/providers',
                   '/calendar', '/bookings', '/followups', '/analytics', '/widget',
                   '/operations', '/integrations', '/knowledge'];
   for (const path of routes) {

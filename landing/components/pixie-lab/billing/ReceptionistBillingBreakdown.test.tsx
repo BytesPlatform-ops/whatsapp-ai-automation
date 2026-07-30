@@ -22,7 +22,8 @@ describe('ReceptionistBillingBreakdown', () => {
       period: { start: '2026-07-01T00:00:00', end: '2026-07-31T00:00:00', fallback: false },
       counters: { monthly_conversations: 12, gmail_replies: 4, bookings: 2, calendar_operations: 5,
         whatsapp_inbound: 9, whatsapp_freeform: 3, instagram_inbound: 6, messenger_reply: 2,
-        sms_inbound: 5, sms_segments: 8, telegram_inbound: 4, telegram_send: 3 },
+        sms_inbound: 5, sms_segments: 8, telegram_inbound: 4, telegram_send: 3,
+        voice_inbound_calls: 6, voice_minutes: 12 },
       gauges: { stored_contacts: 7, knowledge_sources: 1 } } as never);
     render(<ReceptionistBillingBreakdown />);
     expect(await screen.findByText('Gmail')).toBeInTheDocument();
@@ -31,9 +32,11 @@ describe('ReceptionistBillingBreakdown', () => {
     expect(screen.getByText('Messenger')).toBeInTheDocument();
     expect(screen.getByText('SMS')).toBeInTheDocument();
     expect(screen.getByText('Telegram')).toBeInTheDocument();
+    expect(screen.getByText('Voice')).toBeInTheDocument();
     expect(screen.getByText('Bookings')).toBeInTheDocument();
     expect(screen.getByText('Outbound segments').closest('div')?.textContent).toContain('8');
     expect(screen.getByText('Bot sends').closest('div')?.textContent).toContain('3');
+    expect(screen.getByText('Call minutes').closest('div')?.textContent).toContain('12');
     // real values shown
     expect(screen.getByText('Replies sent').closest('div')?.textContent).toContain('4');
     expect(screen.getByText('Inbound DMs').closest('div')?.textContent).toContain('6');
