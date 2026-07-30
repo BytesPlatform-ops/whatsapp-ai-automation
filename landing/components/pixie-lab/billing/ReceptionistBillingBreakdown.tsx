@@ -53,6 +53,14 @@ const GROUPS: { title: string; icon: React.ReactNode; rows: [string, string][] }
     ],
   },
   {
+    title: 'SMS', icon: <MessageSquare size={15} color="#635BFF" />, rows: [
+      ['sms_inbound', 'Inbound messages'],
+      ['sms_reply', 'AI replies'],
+      ['sms_segments', 'Outbound segments'],
+      ['sms_mms', 'MMS messages'],
+    ],
+  },
+  {
     title: 'Calendar', icon: <Calendar size={15} color="#4285f4" />, rows: [
       ['calendar_operations', 'Calendar operations'],
       ['bookings', 'Bookings'],
