@@ -308,3 +308,138 @@ def handle_whatsapp_connection_health(job: dict) -> dict:
     tenant_id = job.get("tenant_id", "")
     from receptionist.providers import whatsapp_cloud as wa
     return {"status": "completed", "health": wa.validate_connection(tenant_id)}
+
+
+# ── Meta Messaging (Instagram + Messenger) jobs ───────────────────────────────
+
+def _meta_inbound(job: dict, channel: str) -> dict:
+    tenant_id = job.get("tenant_id", "")
+    payload = job.get("payload", {}) or {}
+    try:
+        from receptionist.service import meta_messaging_sync
+        return meta_messaging_sync.process_message(
+            tenant_id, channel=channel, asset_id=payload.get("asset_id", ""),
+            event=payload.get("event", {}) or {})
+    except Exception as exc:  # pragma: no cover
+        return {"status": "failed", "reason": str(exc)[:120]}
+
+
+def _meta_status(job: dict, channel: str) -> dict:
+    tenant_id = job.get("tenant_id", "")
+    payload = job.get("payload", {}) or {}
+    from receptionist.service import meta_messaging_sync
+    return meta_messaging_sync.process_status(tenant_id, channel, payload.get("status", {}) or {})
+
+
+def _meta_send_retry(job: dict, channel: str) -> dict:
+    tenant_id = job.get("tenant_id", "")
+    payload = job.get("payload", {}) or {}
+    draft_id = payload.get("draft_id", "")
+    from receptionist.service import stores
+    d = stores.meta_drafts().get(tenant_id, draft_id)
+    if d is None:
+        return {"status": "failed", "reason": "draft_not_found"}
+    if d.get("status") in ("sent", "delivered", "read", "provider_pending"):
+        return {"status": "completed", "already_sent": True}
+    from receptionist.service.registry import execute_action
+    res = execute_action(tenant_id, f"{channel}_send", {
+        "to": d.get("sender_id", ""), "body": d.get("text", ""), "draft_id": draft_id,
+        "asset_id": d.get("asset_id", "")}, skip_approval=True,
+        idempotency_key=f"{channel}send:{draft_id}")
+    status = res.get("status")
+    if status == "provider_pending":
+        return {"status": "completed", "message_id": res.get("record_id", "")}
+    detail = str(res.get("detail", ""))
+    if status in ("suppressed", "blocked_by_policy") or "invalid_recipient" in detail or "missing_permission" in detail:
+        return {"status": "terminal", "reason": res.get("detail", status)}
+    return {"status": "failed", "reason": res.get("detail", status)}
+
+
+def _meta_reconcile(job: dict, channel: str) -> dict:
+    tenant_id = job.get("tenant_id", "")
+    payload = job.get("payload", {}) or {}
+    from receptionist.service import stores
+    d = stores.meta_drafts().get(tenant_id, payload.get("draft_id", ""))
+    if d is None:
+        return {"status": "failed", "reason": "draft_not_found"}
+    if d.get("provider_message_id"):
+        d["status"] = d.get("status") or "provider_pending"
+        stores.meta_drafts().put(tenant_id, d)
+        return {"status": "confirmed_accepted", "message_id": d["provider_message_id"]}
+    d["status"] = "reconciliation_required"
+    stores.meta_drafts().put(tenant_id, d)
+    return {"status": "reconciliation_required"}
+
+
+@register_handler("instagram_inbound")
+def handle_instagram_inbound(job: dict) -> dict:
+    return _meta_inbound(job, "instagram")
+
+
+@register_handler("instagram_status")
+def handle_instagram_status(job: dict) -> dict:
+    return _meta_status(job, "instagram")
+
+
+@register_handler("instagram_send_retry")
+def handle_instagram_send_retry(job: dict) -> dict:
+    return _meta_send_retry(job, "instagram")
+
+
+@register_handler("instagram_reconcile")
+def handle_instagram_reconcile(job: dict) -> dict:
+    return _meta_reconcile(job, "instagram")
+
+
+@register_handler("messenger_inbound")
+def handle_messenger_inbound(job: dict) -> dict:
+    return _meta_inbound(job, "messenger")
+
+
+@register_handler("messenger_status")
+def handle_messenger_status(job: dict) -> dict:
+    return _meta_status(job, "messenger")
+
+
+@register_handler("messenger_send_retry")
+def handle_messenger_send_retry(job: dict) -> dict:
+    return _meta_send_retry(job, "messenger")
+
+
+@register_handler("messenger_reconcile")
+def handle_messenger_reconcile(job: dict) -> dict:
+    return _meta_reconcile(job, "messenger")
+
+
+@register_handler("meta_media_fetch")
+def handle_meta_media_fetch(job: dict) -> dict:
+    tenant_id = job.get("tenant_id", "")
+    payload = job.get("payload", {}) or {}
+    channel = payload.get("channel", "instagram")
+    media_id = payload.get("media_id", "")
+    from receptionist.service import stores
+    if channel == "messenger":
+        from receptionist.providers import messenger as prov
+    else:
+        from receptionist.providers import instagram_messaging as prov
+    from receptionist.providers.meta_messaging_common import MetaMessagingError
+    try:
+        meta = prov.get_media_metadata(tenant_id, media_id)
+    except MetaMessagingError as exc:
+        return {"status": "failed", "reason": exc.category}
+    for m in stores.meta_media().list(tenant_id):
+        if m.get("media_id") == media_id:
+            m["mime_type"] = meta.get("mime_type", "")
+            m["file_size"] = meta.get("file_size", 0)
+            m["status"] = "fetched"
+            stores.meta_media().put(tenant_id, m)
+    return {"status": "completed", "media_id": media_id}
+
+
+@register_handler("meta_connection_health")
+def handle_meta_connection_health(job: dict) -> dict:
+    tenant_id = job.get("tenant_id", "")
+    from receptionist.providers import instagram_messaging as ig, messenger as fb
+    return {"status": "completed",
+            "instagram": ig.validate_connection(tenant_id),
+            "messenger": fb.validate_connection(tenant_id)}
