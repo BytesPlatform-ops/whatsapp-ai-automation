@@ -1105,6 +1105,24 @@ export interface RcpSmsDraft {
   approval_id?: string; quiet_hours_active?: boolean; delayed_until?: string;
   consent_decision?: string; provider_error?: string; updated_at?: string;
 }
+export interface RcpTelegramBusiness {
+  state?: string; business_connection_id?: string; business_user_id?: string;
+  can_reply?: boolean; paused?: boolean; last_inbound_at?: string; last_send_at?: string;
+}
+export interface RcpTelegramConnection {
+  connected?: boolean; provider?: string; bot_id?: string; bot_username?: string;
+  standard_enabled?: boolean; business_enabled?: boolean; webhook_subscribed?: boolean;
+  allowed_updates?: string[]; last_inbound_at?: string; last_send_at?: string; last_error?: string;
+  state?: string; business?: RcpTelegramBusiness;
+}
+export interface RcpTelegramStatus {
+  connection?: RcpTelegramConnection; reply_mode?: string; business_reply_mode?: string;
+}
+export interface RcpTelegramDraft {
+  id: string; mode?: string; chat_id?: string; user_id?: string; text?: string; status?: string;
+  provider_message_id?: string; approval_id?: string; reply_to?: string;
+  business_connection_id?: string; provider_error?: string; updated_at?: string;
+}
 export interface RcpHealth {
   status?: string; agent_slug?: string; llm_provider?: string; model?: string; handlers?: number;
   persistence?: { backend?: string; durable?: boolean; supabase_configured?: boolean };

@@ -33,6 +33,7 @@ import type {
   RcpWhatsAppStatus, RcpWhatsAppTemplate, RcpWhatsAppDraft,
   RcpMetaMessagingStatus, RcpMetaAsset, RcpMetaDraft, RcpMetaConnection,
   RcpSmsStatus, RcpSmsNumber, RcpSmsDraft, RcpSmsQuietHours, RcpSmsConnection,
+  RcpTelegramStatus, RcpTelegramConnection, RcpTelegramDraft,
 } from './serviceTypes';
 
 async function req<T>(url: string, init?: RequestInit): Promise<Envelope<T>> {
@@ -754,4 +755,21 @@ export const receptionistApi = {
   editSmsDraft: (id: string, text: string) => post<{ draft: RcpSmsDraft }>(`${R}/sms`, { action: 'edit', id, text }),
   retrySmsDraft: (id: string) => post<{ job_id: string }>(`${R}/sms`, { action: 'retry', id }),
   reconcileSmsDraft: (id: string) => post<{ job_id: string }>(`${R}/sms`, { action: 'reconcile', id }),
+
+  // ── Telegram: Bot + Business (Wave 15) ────────────────────────────────────
+  getTelegramStatus: () => req<RcpTelegramStatus>(`${R}/telegram`),
+  getTelegramDrafts: (mode?: string) => req<{ drafts: RcpTelegramDraft[] }>(`${R}/telegram?view=drafts${mode ? `&mode=${mode}` : ''}`),
+  getTelegramWebhookInfo: () => req<{ webhook: Record<string, unknown> }>(`${R}/telegram?view=webhook-info`),
+  connectTelegram: (botToken: string) => post<{ status: string; bot: { bot_username: string } }>(`${R}/telegram`, { action: 'connect', bot_token: botToken }),
+  validateTelegram: () => post<{ bot: Record<string, unknown> }>(`${R}/telegram`, { action: 'validate' }),
+  configureTelegramWebhook: (rotate?: boolean) => post<{ status: string }>(`${R}/telegram`, { action: 'webhook', rotate_secret: !!rotate }),
+  removeTelegramWebhook: () => post<{ status: string }>(`${R}/telegram`, { action: 'webhook-remove' }),
+  setTelegramMode: (opts: { standard?: boolean; business?: boolean }) => post<{ connection: RcpTelegramConnection }>(`${R}/telegram`, { action: 'mode', ...opts }),
+  setTelegramReplyMode: (mode: string, replyMode: string) => post<{ reply_mode: string }>(`${R}/telegram`, { action: 'settings', mode, reply_mode: replyMode }),
+  testTelegram: () => post<RcpTelegramStatus>(`${R}/telegram`, { action: 'test' }),
+  runTelegramHealth: () => post<{ job_id: string }>(`${R}/telegram`, { action: 'health' }),
+  disconnectTelegram: () => post<{ status: string }>(`${R}/telegram`, { action: 'disconnect' }),
+  editTelegramDraft: (id: string, text: string) => post<{ draft: RcpTelegramDraft }>(`${R}/telegram`, { action: 'edit', id, text }),
+  retryTelegramDraft: (id: string) => post<{ job_id: string }>(`${R}/telegram`, { action: 'retry', id }),
+  reconcileTelegramDraft: (id: string) => post<{ job_id: string }>(`${R}/telegram`, { action: 'reconcile', id }),
 };

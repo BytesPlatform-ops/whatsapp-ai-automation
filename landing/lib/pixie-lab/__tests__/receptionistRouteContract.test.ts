@@ -97,6 +97,19 @@ const KNOWN_BACKEND = new Set<string>([
   '/api/agents/ai-receptionist/sms/test',
   '/api/agents/ai-receptionist/sms/health',
   '/api/agents/ai-receptionist/sms/disconnect',
+  // Wave 15: Telegram endpoints
+  '/api/agents/ai-receptionist/telegram/status',
+  '/api/agents/ai-receptionist/telegram/webhook-info',
+  '/api/agents/ai-receptionist/telegram/connect',
+  '/api/agents/ai-receptionist/telegram/validate',
+  '/api/agents/ai-receptionist/telegram/webhook',
+  '/api/agents/ai-receptionist/telegram/business',
+  '/api/agents/ai-receptionist/telegram/mode',
+  '/api/agents/ai-receptionist/telegram/settings',
+  '/api/agents/ai-receptionist/telegram/drafts',
+  '/api/agents/ai-receptionist/telegram/test',
+  '/api/agents/ai-receptionist/telegram/health',
+  '/api/agents/ai-receptionist/telegram/disconnect',
   '/api/approvals',
 ]);
 
@@ -131,6 +144,7 @@ const REQUIRED_PROXIES: string[] = [
   'whatsapp/route.ts',
   'meta-messaging/route.ts',
   'sms/route.ts',
+  'telegram/route.ts',
 ];
 
 function read(file: string): string {
