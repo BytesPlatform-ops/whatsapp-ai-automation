@@ -210,3 +210,101 @@ def handle_calendar_reconciliation_sweep(job: dict) -> dict:
             jobs_store.enqueue(tenant_id, "calendar_event_reconcile", {"booking_id": b["id"]})
             n += 1
     return {"status": "completed", "enqueued": n}
+
+
+# ── WhatsApp jobs (Wave 12) ───────────────────────────────────────────────────
+
+@register_handler("whatsapp_inbound")
+def handle_whatsapp_inbound(job: dict) -> dict:
+    tenant_id = job.get("tenant_id", "")
+    payload = job.get("payload", {}) or {}
+    try:
+        from receptionist.service import whatsapp_sync
+        return whatsapp_sync.process_message(
+            tenant_id, phone_number_id=payload.get("phone_number_id", ""),
+            message=payload.get("message", {}) or {}, contacts=payload.get("contacts") or [])
+    except Exception as exc:  # pragma: no cover
+        return {"status": "failed", "reason": str(exc)[:120]}
+
+
+@register_handler("whatsapp_status")
+def handle_whatsapp_status(job: dict) -> dict:
+    tenant_id = job.get("tenant_id", "")
+    payload = job.get("payload", {}) or {}
+    from receptionist.service import whatsapp_sync
+    return whatsapp_sync.process_status(tenant_id, payload.get("status", {}) or {})
+
+
+@register_handler("whatsapp_send_retry")
+def handle_whatsapp_send_retry(job: dict) -> dict:
+    tenant_id = job.get("tenant_id", "")
+    payload = job.get("payload", {}) or {}
+    draft_id = payload.get("draft_id", "")
+    from receptionist.service import stores
+    d = stores.wa_drafts().get(tenant_id, draft_id)
+    if d is None:
+        return {"status": "failed", "reason": "draft_not_found"}
+    if d.get("status") in ("sent", "delivered", "read", "provider_pending"):
+        return {"status": "completed", "already_sent": True}
+    from receptionist.service.registry import execute_action
+    res = execute_action(tenant_id, "whatsapp_send", {
+        "to": d.get("wa_id", ""), "body": d.get("text", ""), "draft_id": draft_id,
+        "phone_number_id": d.get("phone_number_id", "")}, skip_approval=True,
+        idempotency_key=f"wasend:{draft_id}")
+    status = res.get("status")
+    if status == "provider_pending":
+        return {"status": "completed", "message_id": res.get("record_id", "")}
+    if status in ("suppressed", "template_required") or "invalid_recipient" in str(res.get("detail", "")) or "missing_permission" in str(res.get("detail", "")):
+        return {"status": "terminal", "reason": res.get("detail", status)}
+    return {"status": "failed", "reason": res.get("detail", status)}
+
+
+@register_handler("whatsapp_reconcile")
+def handle_whatsapp_reconcile(job: dict) -> dict:
+    tenant_id = job.get("tenant_id", "")
+    payload = job.get("payload", {}) or {}
+    from receptionist.service import stores
+    d = stores.wa_drafts().get(tenant_id, payload.get("draft_id", ""))
+    if d is None:
+        return {"status": "failed", "reason": "draft_not_found"}
+    if d.get("provider_message_id"):
+        d["status"] = d.get("status") or "provider_pending"
+        stores.wa_drafts().put(tenant_id, d)
+        return {"status": "confirmed_accepted", "message_id": d["provider_message_id"]}
+    d["status"] = "reconciliation_required"
+    stores.wa_drafts().put(tenant_id, d)
+    return {"status": "reconciliation_required"}
+
+
+@register_handler("whatsapp_template_sync")
+def handle_whatsapp_template_sync(job: dict) -> dict:
+    tenant_id = job.get("tenant_id", "")
+    from receptionist.service import whatsapp_templates
+    return whatsapp_templates.sync(tenant_id)
+
+
+@register_handler("whatsapp_media_fetch")
+def handle_whatsapp_media_fetch(job: dict) -> dict:
+    tenant_id = job.get("tenant_id", "")
+    payload = job.get("payload", {}) or {}
+    from receptionist.providers import whatsapp_cloud as wa
+    from receptionist.service import stores
+    media_id = payload.get("media_id", "")
+    try:
+        meta = wa.get_media_metadata(tenant_id, media_id)
+    except wa.WhatsAppError as exc:
+        return {"status": "failed", "reason": exc.category}
+    for m in stores.wa_media().list(tenant_id):
+        if m.get("media_id") == media_id:
+            m["mime_type"] = meta.get("mime_type", "")
+            m["file_size"] = meta.get("file_size", 0)
+            m["status"] = "fetched"
+            stores.wa_media().put(tenant_id, m)
+    return {"status": "completed", "media_id": media_id}
+
+
+@register_handler("whatsapp_connection_health")
+def handle_whatsapp_connection_health(job: dict) -> dict:
+    tenant_id = job.get("tenant_id", "")
+    from receptionist.providers import whatsapp_cloud as wa
+    return {"status": "completed", "health": wa.validate_connection(tenant_id)}

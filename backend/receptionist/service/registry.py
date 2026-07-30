@@ -53,6 +53,9 @@ _BILLABLE_OPERATIONS = {
     "calendar_create_event": "receptionist_calendar_op",
     "calendar_update_event": "receptionist_calendar_op",
     "calendar_cancel_event": "receptionist_calendar_op",
+    "whatsapp_send": "receptionist_whatsapp_op",
+    "whatsapp_send_template": "receptionist_whatsapp_op",
+    "whatsapp_send_interactive": "receptionist_whatsapp_op",
 }
 
 
@@ -800,6 +803,107 @@ def _is_suppressed(tenant_id: str, *, email: str = "", phone: str = "") -> bool:
     return False
 
 
+def _wa_persist_send(tenant_id: str, args: dict, result: dict) -> None:
+    draft_id = args.get("draft_id", "")
+    if not draft_id:
+        return
+    from . import whatsapp_sync
+    d = stores.wa_drafts().get(tenant_id, draft_id)
+    if d:
+        d["status"] = "provider_pending"
+        d["provider_message_id"] = result.get("message_id", "")
+        d["sent_at"] = now_iso()
+        whatsapp_sync.save_draft(tenant_id, d)
+
+
+def _h_whatsapp_send(tenant_id: str, args: dict, *, conversation_id: str = "") -> dict:
+    """Send a free-form WhatsApp text (window-gated, suppression-checked, provider-
+    confirmed). Never fabricates 'sent'; delivered/read come from status webhooks."""
+    from ..providers import whatsapp_cloud as wa
+    from . import whatsapp_sync, whatsapp_window
+    to = args.get("to", "")
+    if whatsapp_sync.is_suppressed(tenant_id, to):
+        return {"status": "suppressed", "detail": "recipient is suppressed/opted-out",
+                "record_type": "", "record_id": "", "data": {}}
+    pn = args.get("phone_number_id", "")
+    win = whatsapp_window.window_state(tenant_id, phone_number_id=pn, wa_id=to)
+    if not win["free_form_allowed"]:
+        return {"status": "template_required", "detail": "outside 24h window — template required",
+                "record_type": "", "record_id": "", "data": win}
+    try:
+        result = wa.send_text(tenant_id, to=to, body=args.get("body", ""))
+    except wa.WhatsAppError as exc:
+        return {"status": ("not_connected" if exc.category == "not_connected" else "failed"),
+                "detail": f"whatsapp_{exc.category}", "record_type": "", "record_id": "", "data": {}}
+    _wa_persist_send(tenant_id, args, result)
+    try:
+        from . import usage
+        usage.increment(tenant_id, "whatsapp_freeform", idempotency_key=f"wasend:{result.get('message_id','')}")
+    except Exception:
+        pass
+    return {"status": "provider_pending", "detail": "whatsapp message accepted by provider",
+            "record_type": "whatsapp_message", "record_id": result.get("message_id", ""), "data": result}
+
+
+def _h_whatsapp_send_template(tenant_id: str, args: dict, *, conversation_id: str = "") -> dict:
+    """Send an approved WhatsApp template (suppression-checked, variables validated)."""
+    from ..providers import whatsapp_cloud as wa
+    from . import whatsapp_sync, whatsapp_templates
+    to = args.get("to", "")
+    if whatsapp_sync.is_suppressed(tenant_id, to):
+        return {"status": "suppressed", "detail": "recipient is suppressed/opted-out",
+                "record_type": "", "record_id": "", "data": {}}
+    name = args.get("template_name", "")
+    variables = args.get("variables", []) or []
+    ok, reason = whatsapp_templates.validate_for_send(tenant_id, name, variables)
+    if not ok:
+        return {"status": "failed", "detail": f"template_{reason}", "record_type": "", "record_id": "", "data": {}}
+    tpl = whatsapp_templates.get_template(tenant_id, name)
+    try:
+        result = wa.send_template(tenant_id, to=to, name=name,
+                                  language=(tpl or {}).get("language", "en_US"), variables=variables)
+    except wa.WhatsAppError as exc:
+        return {"status": ("not_connected" if exc.category == "not_connected" else "failed"),
+                "detail": f"whatsapp_{exc.category}", "record_type": "", "record_id": "", "data": {}}
+    _wa_persist_send(tenant_id, args, result)
+    try:
+        from . import usage
+        usage.increment(tenant_id, "whatsapp_template", idempotency_key=f"watpl:{result.get('message_id','')}")
+    except Exception:
+        pass
+    return {"status": "provider_pending", "detail": "whatsapp template accepted by provider",
+            "record_type": "whatsapp_message", "record_id": result.get("message_id", ""), "data": result}
+
+
+def _h_whatsapp_send_interactive(tenant_id: str, args: dict, *, conversation_id: str = "") -> dict:
+    """Send a validated interactive (buttons/list) message inside the window."""
+    from ..providers import whatsapp_cloud as wa
+    from . import whatsapp_sync, whatsapp_window
+    to = args.get("to", "")
+    if whatsapp_sync.is_suppressed(tenant_id, to):
+        return {"status": "suppressed", "detail": "recipient suppressed", "record_type": "", "record_id": "", "data": {}}
+    win = whatsapp_window.window_state(tenant_id, phone_number_id=args.get("phone_number_id", ""), wa_id=to)
+    if not win["free_form_allowed"]:
+        return {"status": "template_required", "detail": "interactive needs an open window",
+                "record_type": "", "record_id": "", "data": win}
+    interactive = args.get("interactive") or {}
+    if not interactive.get("type") or not interactive.get("action"):
+        return {"status": "failed", "detail": "malformed_interactive", "record_type": "", "record_id": "", "data": {}}
+    try:
+        result = wa.send_interactive(tenant_id, to=to, interactive=interactive)
+    except wa.WhatsAppError as exc:
+        return {"status": ("not_connected" if exc.category == "not_connected" else "failed"),
+                "detail": f"whatsapp_{exc.category}", "record_type": "", "record_id": "", "data": {}}
+    _wa_persist_send(tenant_id, args, result)
+    try:
+        from . import usage
+        usage.increment(tenant_id, "whatsapp_interactive", idempotency_key=f"waint:{result.get('message_id','')}")
+    except Exception:
+        pass
+    return {"status": "provider_pending", "detail": "interactive accepted by provider",
+            "record_type": "whatsapp_message", "record_id": result.get("message_id", ""), "data": result}
+
+
 def _h_calendar_create_event(tenant_id: str, args: dict, *, conversation_id: str = "") -> dict:
     """Create a real Calendar booking via the booking service (mock transport in
     tests). Rechecks availability, requires provider confirmation, idempotent."""
@@ -928,6 +1032,9 @@ _REGISTRY: dict[str, ActionSpec] = {
     "calendar_create_event":          ActionSpec(_h_calendar_create_event, requires_approval=True, provider_action=True),
     "calendar_update_event":          ActionSpec(_h_calendar_update_event, requires_approval=True, provider_action=True),
     "calendar_cancel_event":          ActionSpec(_h_calendar_cancel_event, requires_approval=True, provider_action=True),
+    "whatsapp_send":                  ActionSpec(_h_whatsapp_send, requires_approval=True, provider_action=True),
+    "whatsapp_send_template":         ActionSpec(_h_whatsapp_send_template, requires_approval=True, provider_action=True),
+    "whatsapp_send_interactive":      ActionSpec(_h_whatsapp_send_interactive, requires_approval=True, provider_action=True),
 }
 
 
