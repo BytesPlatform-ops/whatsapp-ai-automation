@@ -51,6 +51,7 @@ T_CONSENT = "receptionist_consent"
 T_SUPPRESSION = "receptionist_suppression"
 T_USAGE_COUNTERS = "receptionist_usage_counters"
 T_DNC = "receptionist_dnc"
+T_CAMPAIGN_OPTOUTS = "receptionist_campaign_optouts"
 T_CAMPAIGNS = "receptionist_campaigns"
 T_CAMPAIGN_TARGETS = "receptionist_campaign_targets"
 T_SEND_LOG = "receptionist_send_log"
@@ -61,7 +62,7 @@ ALL_TABLES = [
     T_ESCALATIONS, T_TASKS, T_REMINDERS, T_OPTOUTS, T_BUSINESS_PROFILE,
     T_KNOWLEDGE, T_CAMPAIGN_REPLIES, T_MESSAGE_INDEX, T_LOCKS, T_ACTION_EXECUTIONS,
     T_CONFIGURATIONS, T_CONFIG_VERSIONS, T_CONSENT, T_SUPPRESSION, T_USAGE_COUNTERS,
-    T_DNC, T_CAMPAIGNS, T_CAMPAIGN_TARGETS, T_SEND_LOG,
+    T_DNC, T_CAMPAIGN_OPTOUTS, T_CAMPAIGNS, T_CAMPAIGN_TARGETS, T_SEND_LOG,
 ]
 
 

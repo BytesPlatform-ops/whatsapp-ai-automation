@@ -99,15 +99,13 @@ def list_consent(tenant_id: str) -> list[ConsentRecord]:
 def add_opt_out(o: OptOutEntry) -> OptOutEntry:
     row = json.loads(o.model_dump_json())
     row.setdefault("id", getattr(o, "id", None) or _new_id("optout"))
-    _put(_dstores.T_OPTOUTS, o.tenant_id, row)
+    _put(_dstores.T_CAMPAIGN_OPTOUTS, o.tenant_id, row)
     return o
 
 
 def list_opt_outs(tenant_id: str) -> list[OptOutEntry]:
-    # T_OPTOUTS is shared with the action-registry OptOut schema; validate defensively
-    # (extra fields are ignored; incompatible channel values are skipped, not fatal).
     out: list[OptOutEntry] = []
-    for r in _list(_dstores.T_OPTOUTS, tenant_id):
+    for r in _list(_dstores.T_CAMPAIGN_OPTOUTS, tenant_id):
         try:
             out.append(OptOutEntry.model_validate(r))
         except Exception:

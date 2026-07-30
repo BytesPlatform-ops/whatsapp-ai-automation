@@ -341,6 +341,21 @@ def _run_message_inner(*, tenant_id: str, message: str, channel: str,
     except Exception:
         pass
 
+    # ── durable usage counters (idempotent; never break the turn) ─────────────
+    try:
+        from . import usage
+        is_new_conv = int(conv.get("message_count", 0)) <= 2
+        if is_new_conv:
+            usage.increment(tenant_id, "monthly_conversations",
+                            idempotency_key=f"conv:{conv['id']}")
+        usage.increment(tenant_id, "monthly_ai_turns", idempotency_key=f"turn:{action_rec['id']}")
+        if handler_result.escalate:
+            usage.increment(tenant_id, "escalations", idempotency_key=f"esc:{action_rec['id']}")
+        if conv.get("summary_version"):
+            usage.increment(tenant_id, "summaries", idempotency_key=f"sum:{conv['id']}:{conv.get('summary_version')}")
+    except Exception:
+        pass
+
     return {
         "reply": reply,
         "intent": cls.intent,
