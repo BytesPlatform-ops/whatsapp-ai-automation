@@ -1033,3 +1033,148 @@ def voice_health(tenant_id: str = Depends(resolve_tenant)) -> dict:
 def voice_disconnect(tenant_id: str = Depends(resolve_tenant)) -> dict:
     from .service import voice_assets
     return voice_assets.disconnect(tenant_id)
+
+
+# ── Campaign endpoints (Wave 17) ──────────────────────────────────────────────
+
+@ops_router.get("/outbound-campaigns")
+def campaigns_list(tenant_id: str = Depends(resolve_tenant)) -> dict:
+    from .service import campaigns
+    return {"campaigns": campaigns.list_campaigns(tenant_id), "feature_enabled": campaigns.feature_enabled(),
+            "send_enabled": campaigns.send_enabled()}
+
+
+class CampaignCreateIn(BaseModel):
+    name: str
+    purpose: str = "support"
+    campaign_type: str = "one_time"
+    strategy: str = "single"
+    channels: list[str] | None = None
+
+
+@ops_router.post("/outbound-campaigns")
+def campaign_create(body: CampaignCreateIn, tenant_id: str = Depends(resolve_tenant)) -> dict:
+    from .service import campaigns
+    return {"campaign": campaigns.create(tenant_id, name=body.name, purpose=body.purpose,
+                                         campaign_type=body.campaign_type, strategy=body.strategy,
+                                         channels=body.channels or [])}
+
+
+@ops_router.get("/outbound-campaigns/{campaign_id}")
+def campaign_get(campaign_id: str, tenant_id: str = Depends(resolve_tenant)) -> dict:
+    from .service import campaigns, campaign_audience
+    c = campaigns.get(tenant_id, campaign_id)
+    if c is None:
+        raise HTTPException(status_code=404, detail="campaign not found")
+    return {"campaign": c, "steps": campaigns.list_steps(tenant_id, campaign_id),
+            "content": campaigns.list_content(tenant_id, campaign_id),
+            "audit": campaigns.list_audit(tenant_id, campaign_id),
+            "approval_valid": campaigns.approval_valid(tenant_id, campaign_id)}
+
+
+@ops_router.post("/outbound-campaigns/{campaign_id}/update")
+def campaign_update(campaign_id: str, body: dict, tenant_id: str = Depends(resolve_tenant)) -> dict:
+    from .service import campaigns
+    r = campaigns.update(tenant_id, campaign_id, body or {})
+    if r is None:
+        raise HTTPException(status_code=404, detail="campaign not found")
+    return {"campaign": r}
+
+
+class CampaignStepIn(BaseModel):
+    name: str
+    channel: str
+    order: int = 0
+    delay_seconds: int = 0
+    content_ref: str = ""
+    fallback_channel: str = ""
+    max_attempts: int = 3
+
+
+@ops_router.post("/outbound-campaigns/{campaign_id}/steps")
+def campaign_add_step(campaign_id: str, body: CampaignStepIn, tenant_id: str = Depends(resolve_tenant)) -> dict:
+    from .service import campaigns
+    try:
+        return {"step": campaigns.add_step(tenant_id, campaign_id, name=body.name, channel=body.channel,
+                                           order=body.order, delay_seconds=body.delay_seconds,
+                                           content_ref=body.content_ref, fallback_channel=body.fallback_channel,
+                                           max_attempts=body.max_attempts)}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+class CampaignContentIn(BaseModel):
+    channel: str
+    body: str = ""
+    subject: str = ""
+    template_ref: str = ""
+    variables: list[str] | None = None
+    interactive: dict | None = None
+    locale: str = "en"
+
+
+@ops_router.post("/outbound-campaigns/{campaign_id}/content")
+def campaign_set_content(campaign_id: str, body: CampaignContentIn, tenant_id: str = Depends(resolve_tenant)) -> dict:
+    from .service import campaigns
+    return {"content": campaigns.set_content(tenant_id, campaign_id, channel=body.channel, body=body.body,
+                                             subject=body.subject, template_ref=body.template_ref,
+                                             variables=body.variables or [], interactive=body.interactive or {},
+                                             locale=body.locale)}
+
+
+@ops_router.get("/outbound-campaigns/{campaign_id}/validate")
+def campaign_validate(campaign_id: str, tenant_id: str = Depends(resolve_tenant)) -> dict:
+    from .service import campaigns
+    return campaigns.validate(tenant_id, campaign_id)
+
+
+@ops_router.get("/outbound-campaigns/{campaign_id}/audience")
+def campaign_audience_estimate(campaign_id: str, tenant_id: str = Depends(resolve_tenant)) -> dict:
+    from .service import campaigns, campaign_audience
+    c = campaigns.get(tenant_id, campaign_id)
+    if c is None:
+        raise HTTPException(status_code=404, detail="campaign not found")
+    return {"estimate": campaign_audience.estimate(tenant_id, c)}
+
+
+@ops_router.get("/outbound-campaigns/{campaign_id}/recipients")
+def campaign_recipients(campaign_id: str, tenant_id: str = Depends(resolve_tenant)) -> dict:
+    from .service import campaign_audience
+    return {"recipients": campaign_audience.list_recipients(tenant_id, campaign_id)}
+
+
+@ops_router.get("/outbound-campaigns/{campaign_id}/analytics")
+def campaign_analytics_get(campaign_id: str, tenant_id: str = Depends(resolve_tenant)) -> dict:
+    from .service import campaign_analytics
+    return {"analytics": campaign_analytics.rollup(tenant_id, campaign_id)}
+
+
+class CampaignActionIn(BaseModel):
+    notes: str | None = None
+    schedule: dict | None = None
+
+
+@ops_router.post("/outbound-campaigns/{campaign_id}/{action}")
+def campaign_action(campaign_id: str, action: str, body: CampaignActionIn | None = None,
+                    tenant_id: str = Depends(resolve_tenant)) -> dict:
+    from .service import campaigns
+    b = body or CampaignActionIn()
+    if action == "request-approval":
+        return campaigns.request_approval(tenant_id, campaign_id)
+    if action == "approve":
+        return campaigns.approve(tenant_id, campaign_id, notes=b.notes or "")
+    if action == "reject":
+        return campaigns.reject(tenant_id, campaign_id, notes=b.notes or "")
+    if action == "schedule":
+        return campaigns.schedule(tenant_id, campaign_id, schedule_cfg=b.schedule or {})
+    if action == "start":
+        return campaigns.start(tenant_id, campaign_id)
+    if action == "pause":
+        return campaigns.pause(tenant_id, campaign_id)
+    if action == "resume":
+        return campaigns.resume(tenant_id, campaign_id)
+    if action == "cancel":
+        return campaigns.cancel(tenant_id, campaign_id)
+    if action == "archive":
+        return campaigns.archive(tenant_id, campaign_id)
+    raise HTTPException(status_code=400, detail="unknown action")
