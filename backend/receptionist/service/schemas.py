@@ -28,6 +28,7 @@ class Channel(str, Enum):
     WHATSAPP = "whatsapp"
     INSTAGRAM = "instagram"
     FACEBOOK = "facebook"
+    MESSENGER = "messenger"
     SMS = "sms"
     VOICE = "voice"
     MANUAL = "manual"

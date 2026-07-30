@@ -69,6 +69,16 @@ T_WA_SEND_ATTEMPTS = "receptionist_whatsapp_send_attempts"
 T_WA_TEMPLATES = "receptionist_whatsapp_templates"
 T_WA_MEDIA = "receptionist_whatsapp_media"
 T_WA_WINDOWS = "receptionist_whatsapp_windows"
+
+# Meta Messaging (Instagram + Messenger) — shared domain, channel-discriminated.
+T_META_ASSETS = "receptionist_meta_assets"
+T_META_IDENTITY_MAP = "receptionist_meta_identity_map"
+T_META_THREAD_MAP = "receptionist_meta_thread_map"
+T_META_DRAFTS = "receptionist_meta_drafts"
+T_META_SEND_ATTEMPTS = "receptionist_meta_send_attempts"
+T_META_STATUSES = "receptionist_meta_statuses"
+T_META_MEDIA = "receptionist_meta_media"
+T_META_WINDOWS = "receptionist_meta_windows"
 T_CAMPAIGN_OPTOUTS = "receptionist_campaign_optouts"
 T_CAMPAIGNS = "receptionist_campaigns"
 T_CAMPAIGN_TARGETS = "receptionist_campaign_targets"
@@ -87,6 +97,8 @@ ALL_TABLES = [
     T_WIDGET_DOMAINS, T_WIDGET_SESSIONS,
     T_WA_PHONE_MAP, T_WA_THREAD_MAP, T_WA_DRAFTS, T_WA_SEND_ATTEMPTS,
     T_WA_TEMPLATES, T_WA_MEDIA, T_WA_WINDOWS,
+    T_META_ASSETS, T_META_IDENTITY_MAP, T_META_THREAD_MAP, T_META_DRAFTS,
+    T_META_SEND_ATTEMPTS, T_META_STATUSES, T_META_MEDIA, T_META_WINDOWS,
 ]
 
 
@@ -272,6 +284,16 @@ def wa_send_attempts() -> RecordStore: return store(T_WA_SEND_ATTEMPTS)
 def wa_templates() -> RecordStore: return store(T_WA_TEMPLATES)
 def wa_media() -> RecordStore: return store(T_WA_MEDIA)
 def wa_windows() -> RecordStore: return store(T_WA_WINDOWS)
+
+
+def meta_assets() -> RecordStore: return store(T_META_ASSETS)
+def meta_identity_map() -> RecordStore: return store(T_META_IDENTITY_MAP)
+def meta_thread_map() -> RecordStore: return store(T_META_THREAD_MAP)
+def meta_drafts() -> RecordStore: return store(T_META_DRAFTS)
+def meta_send_attempts() -> RecordStore: return store(T_META_SEND_ATTEMPTS)
+def meta_statuses() -> RecordStore: return store(T_META_STATUSES)
+def meta_media() -> RecordStore: return store(T_META_MEDIA)
+def meta_windows() -> RecordStore: return store(T_META_WINDOWS)
 
 
 # ── durable per-conversation lock ─────────────────────────────────────────────

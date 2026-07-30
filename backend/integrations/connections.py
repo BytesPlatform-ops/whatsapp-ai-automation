@@ -131,6 +131,44 @@ def find_tenant_by_wa_phone_number_id(phone_number_id: str) -> Optional[str]:
     return None
 
 
+def find_tenant_by_instagram_account_id(ig_account_id: str) -> Optional[str]:
+    """Resolve the workspace tenant that owns an Instagram professional account.
+
+    Server-side only — used by the Meta messaging webhook to derive ownership from
+    the verified Instagram account id (never from the request body). One account
+    maps to at most one active workspace.
+    """
+    aid = (ig_account_id or "").strip()
+    if not aid:
+        return None
+    for (t, c), descriptor in _CONNECTIONS.items():
+        if c not in ("instagram_read", "instagram_send"):
+            continue
+        d = unseal_descriptor(descriptor)
+        if str(d.get("instagram_account_id") or "") == aid:
+            return t
+    return None
+
+
+def find_tenant_by_page_id(page_id: str) -> Optional[str]:
+    """Resolve the workspace tenant that owns a Facebook Page.
+
+    Server-side only — used by the Meta messaging webhook to derive ownership from
+    the verified Page id (never from the request body). One Page maps to at most
+    one active workspace.
+    """
+    pid = (page_id or "").strip()
+    if not pid:
+        return None
+    for (t, c), descriptor in _CONNECTIONS.items():
+        if c not in ("messenger_read", "messenger_send"):
+            continue
+        d = unseal_descriptor(descriptor)
+        if str(d.get("page_id") or "") == pid:
+            return t
+    return None
+
+
 def disconnect(tenant_id: str, capabilities: Optional[list[str]] = None) -> None:
     """Remove a tenant's connections (all, or a specific set of capabilities)."""
     for (t, c) in list(_CONNECTIONS.keys()):

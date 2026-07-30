@@ -38,6 +38,8 @@ CONFIG_FIELDS: list[str] = [
     "policies", "process", "custom_instructions",
     "gmail_reply_mode",  # Gmail channel policy (Wave 8)
     "whatsapp_reply_mode",  # WhatsApp channel policy (Wave 12)
+    "instagram_reply_mode",  # Instagram channel policy (Wave 13)
+    "messenger_reply_mode",  # Messenger channel policy (Wave 13)
 ]
 
 # Configuration is "configured enough to answer" once these are present.
