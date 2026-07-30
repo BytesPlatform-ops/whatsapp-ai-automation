@@ -112,6 +112,25 @@ def find_tenant_by_google_email(email: str, capability: str = "email_read") -> O
     return None
 
 
+def find_tenant_by_wa_phone_number_id(phone_number_id: str) -> Optional[str]:
+    """Resolve the workspace tenant that owns a WhatsApp business phone number.
+
+    Server-side only — used by the WhatsApp webhook to derive ownership from the
+    verified phone_number_id (never from the request body). One phone_number_id
+    maps to at most one active workspace.
+    """
+    pid = (phone_number_id or "").strip()
+    if not pid:
+        return None
+    for (t, c), descriptor in _CONNECTIONS.items():
+        if c not in ("whatsapp_read", "whatsapp_send"):
+            continue
+        d = unseal_descriptor(descriptor)
+        if str(d.get("phone_number_id") or "") == pid:
+            return t
+    return None
+
+
 def disconnect(tenant_id: str, capabilities: Optional[list[str]] = None) -> None:
     """Remove a tenant's connections (all, or a specific set of capabilities)."""
     for (t, c) in list(_CONNECTIONS.keys()):
