@@ -56,6 +56,10 @@ _BILLABLE_OPERATIONS = {
     "whatsapp_send": "receptionist_whatsapp_op",
     "whatsapp_send_template": "receptionist_whatsapp_op",
     "whatsapp_send_interactive": "receptionist_whatsapp_op",
+    "instagram_send": "receptionist_instagram_op",
+    "instagram_send_media": "receptionist_instagram_op",
+    "messenger_send": "receptionist_messenger_op",
+    "messenger_send_interactive": "receptionist_messenger_op",
 }
 
 
@@ -904,6 +908,91 @@ def _h_whatsapp_send_interactive(tenant_id: str, args: dict, *, conversation_id:
             "record_type": "whatsapp_message", "record_id": result.get("message_id", ""), "data": result}
 
 
+# ── Meta Messaging (Instagram + Messenger) send handlers ──────────────────────
+
+def _meta_persist_send(tenant_id: str, args: dict, result: dict) -> None:
+    draft_id = args.get("draft_id", "")
+    if not draft_id:
+        return
+    from . import meta_messaging_sync
+    d = stores.meta_drafts().get(tenant_id, draft_id)
+    if d:
+        d["status"] = "provider_pending"
+        d["provider_message_id"] = result.get("message_id", "")
+        d["sent_at"] = now_iso()
+        meta_messaging_sync.save_draft(tenant_id, d)
+
+
+def _meta_send_common(tenant_id: str, args: dict, channel: str, send_fn, usage_metric: str) -> dict:
+    """Shared: suppression → policy gate → provider send (confirmed) → persist →
+    usage. Never fabricates 'sent'; delivered/read come from status webhooks."""
+    from ..providers.meta_messaging_common import MetaMessagingError
+    from . import meta_messaging_sync, meta_messaging_policy
+    to = args.get("to", "")
+    asset_id = args.get("asset_id", "")
+    if meta_messaging_sync.is_suppressed(tenant_id, channel, to):
+        return {"status": "suppressed", "detail": "recipient is suppressed/opted-out",
+                "record_type": "", "record_id": "", "data": {}}
+    decision = meta_messaging_policy.evaluate_send(
+        tenant_id, channel=channel, asset_id=asset_id, sender_id=to,
+        message_type=args.get("message_type", "text"), tag=args.get("tag", ""))
+    if not decision.get("allowed"):
+        return {"status": "blocked_by_policy",
+                "detail": f"{channel}_{decision.get('blocked_reason', 'window_closed')}",
+                "record_type": "", "record_id": "", "data": decision}
+    try:
+        result = send_fn()
+    except MetaMessagingError as exc:
+        return {"status": ("not_connected" if exc.category == "not_connected" else "failed"),
+                "detail": f"{channel}_{exc.category}", "record_type": "", "record_id": "", "data": {}}
+    _meta_persist_send(tenant_id, args, result)
+    try:
+        from . import usage
+        usage.increment(tenant_id, usage_metric, idempotency_key=f"{channel}send:{result.get('message_id','')}")
+    except Exception:
+        pass
+    return {"status": "provider_pending", "detail": f"{channel} message accepted by provider",
+            "record_type": f"{channel}_message", "record_id": result.get("message_id", ""), "data": result}
+
+
+def _h_instagram_send(tenant_id: str, args: dict, *, conversation_id: str = "") -> dict:
+    from ..providers import instagram_messaging as ig
+    return _meta_send_common(tenant_id, args, "instagram",
+                             lambda: ig.send_text(tenant_id, to=args.get("to", ""), body=args.get("body", "")),
+                             "instagram_reply")
+
+
+def _h_instagram_send_media(tenant_id: str, args: dict, *, conversation_id: str = "") -> dict:
+    from ..providers import instagram_messaging as ig
+    return _meta_send_common(tenant_id, args, "instagram",
+                             lambda: ig.send_media(tenant_id, to=args.get("to", ""),
+                                                   media_type=args.get("media_type", "image"),
+                                                   url=args.get("url", "")),
+                             "instagram_media")
+
+
+def _h_messenger_send(tenant_id: str, args: dict, *, conversation_id: str = "") -> dict:
+    from ..providers import messenger as fb
+    return _meta_send_common(tenant_id, args, "messenger",
+                             lambda: fb.send_text(tenant_id, to=args.get("to", ""),
+                                                  body=args.get("body", ""), tag=args.get("tag", "")),
+                             "messenger_reply")
+
+
+def _h_messenger_send_interactive(tenant_id: str, args: dict, *, conversation_id: str = "") -> dict:
+    """Send validated Messenger quick replies or button template (payload IDs kept
+    separate from labels; unsupported structures rejected before send)."""
+    from ..providers import messenger as fb
+    kind = args.get("interactive_type", "quick_replies")
+    text = args.get("body", "")
+    options = args.get("options") or []
+    if kind == "buttons":
+        send_fn = lambda: fb.send_buttons(tenant_id, to=args.get("to", ""), text=text, buttons=options)
+    else:
+        send_fn = lambda: fb.send_quick_replies(tenant_id, to=args.get("to", ""), text=text, quick_replies=options)
+    return _meta_send_common(tenant_id, args, "messenger", send_fn, "messenger_interactive")
+
+
 def _h_calendar_create_event(tenant_id: str, args: dict, *, conversation_id: str = "") -> dict:
     """Create a real Calendar booking via the booking service (mock transport in
     tests). Rechecks availability, requires provider confirmation, idempotent."""
@@ -1035,6 +1124,10 @@ _REGISTRY: dict[str, ActionSpec] = {
     "whatsapp_send":                  ActionSpec(_h_whatsapp_send, requires_approval=True, provider_action=True),
     "whatsapp_send_template":         ActionSpec(_h_whatsapp_send_template, requires_approval=True, provider_action=True),
     "whatsapp_send_interactive":      ActionSpec(_h_whatsapp_send_interactive, requires_approval=True, provider_action=True),
+    "instagram_send":                 ActionSpec(_h_instagram_send, requires_approval=True, provider_action=True),
+    "instagram_send_media":           ActionSpec(_h_instagram_send_media, requires_approval=True, provider_action=True),
+    "messenger_send":                 ActionSpec(_h_messenger_send, requires_approval=True, provider_action=True),
+    "messenger_send_interactive":     ActionSpec(_h_messenger_send_interactive, requires_approval=True, provider_action=True),
 }
 
 

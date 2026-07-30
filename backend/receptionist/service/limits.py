@@ -51,6 +51,13 @@ _RESOURCES: dict[str, tuple] = {
     "whatsapp_freeform": ("receptionist_whatsapp_monthly_freeform", _monthly("whatsapp_freeform")),
     "whatsapp_template": ("receptionist_whatsapp_monthly_templates", _monthly("whatsapp_template")),
     "whatsapp_interactive": ("receptionist_whatsapp_monthly_interactive", _monthly("whatsapp_interactive")),
+    "instagram_inbound": ("receptionist_instagram_monthly_inbound", _monthly("instagram_inbound")),
+    "instagram_reply": ("receptionist_instagram_monthly_replies", _monthly("instagram_reply")),
+    "instagram_media": ("receptionist_instagram_monthly_media", _monthly("instagram_media")),
+    "messenger_inbound": ("receptionist_messenger_monthly_inbound", _monthly("messenger_inbound")),
+    "messenger_reply": ("receptionist_messenger_monthly_replies", _monthly("messenger_reply")),
+    "messenger_interactive": ("receptionist_messenger_monthly_interactive", _monthly("messenger_interactive")),
+    "messenger_media": ("receptionist_messenger_monthly_media", _monthly("messenger_media")),
 }
 
 

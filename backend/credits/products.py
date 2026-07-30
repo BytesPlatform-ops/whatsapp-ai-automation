@@ -109,7 +109,7 @@ PRODUCT_CATALOG: Dict[str, ProductSpec] = {
             "receptionist_approval_exec", "receptionist_escalation_notify",
             "receptionist_reminder_prep", "receptionist_follow_up_prep",
             "receptionist_worker_op", "receptionist_gmail_op", "receptionist_calendar_op",
-            "receptionist_whatsapp_op",
+            "receptionist_whatsapp_op", "receptionist_instagram_op", "receptionist_messenger_op",
         ],
         source_products=["ai_receptionist", "receptionist"],
         usage_counter_keys=[
