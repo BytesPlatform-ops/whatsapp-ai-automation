@@ -50,7 +50,9 @@ def quiet_hours_config(tenant_id: str) -> dict:
         "start_hour": int(q.get("start_hour", _DEFAULT_QUIET_START)),
         "end_hour": int(q.get("end_hour", _DEFAULT_QUIET_END)),
         "timezone": q.get("timezone") or cfg.get("timezone") or _DEFAULT_TZ,
-        "days": q.get("days") or [0, 1, 2, 3, 4, 5, 6],  # allowed weekdays (Mon=0)
+        # allowed weekdays (Mon=0); an explicit empty list means "no allowed days",
+        # so it is honoured rather than falling back to the all-days default.
+        "days": q["days"] if isinstance(q.get("days"), list) else [0, 1, 2, 3, 4, 5, 6],
     }
 
 
