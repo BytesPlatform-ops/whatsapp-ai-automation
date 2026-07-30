@@ -140,12 +140,15 @@ def _sign(payload: dict) -> str:
 def create_session(public_id: str, *, origin: str, visitor_id: str = "",
                    conversation_id: str = "", now: Optional[datetime] = None) -> dict:
     """Validate origin against the allowlist and mint a signed short-lived session.
-    Never returns or accepts a tenant id."""
+    Never returns or accepts a tenant id. A successful mint is durable evidence that
+    the widget loaded from an allowed origin (feeds installation verification)."""
     cfg = config_for_public_id(public_id)
     if cfg is None or not cfg.get("enabled"):
         raise WidgetError("widget_not_found")
     if not origin_allowed(cfg, origin):
+        record_verification(cfg["tenant_id"], origin=origin, ok=False, reason="origin_not_allowed")
         raise WidgetError("origin_not_allowed")
+    record_verification(cfg["tenant_id"], origin=origin, ok=True, evidence="signed_session")
     now = now or datetime.now(timezone.utc)
     vid = visitor_id or new_id("vis")
     exp = int(now.timestamp()) + session_ttl()
@@ -217,6 +220,49 @@ def check_rate(tenant_id: str, key: str, *, now: Optional[datetime] = None) -> b
     rec["count"] = int(rec.get("count", 0)) + 1
     stores.widget_sessions().put(tenant_id, rec)
     return rec["count"] <= _rate_limit()
+
+
+# ── installation verification (Part 8/11) ─────────────────────────────────────
+
+def _verify_id(tenant_id: str, domain: str) -> str:
+    return f"wverify::{tenant_id}::{normalise_domain(domain)}"
+
+
+def record_verification(tenant_id: str, *, origin: str = "", domain: str = "",
+                        ok: bool = True, evidence: str = "handshake", reason: str = "") -> dict:
+    """Record durable installation evidence from a real widget handshake / session.
+    Never trusts a frontend-only flag — only server-observed events call this."""
+    d = normalise_domain(domain or origin)
+    rec = stores.widget_sessions().get(tenant_id, _verify_id(tenant_id, d)) or {
+        "id": _verify_id(tenant_id, d), "tenant_id": tenant_id, "kind": "verification", "domain": d}
+    if ok:
+        rec["status"] = "installed"
+        rec["last_verified_at"] = now_iso()
+        rec["evidence"] = evidence
+        rec["last_failure"] = ""
+    else:
+        rec["last_failure"] = reason or "verification_failed"
+        rec.setdefault("status", "not_installed")
+    stores.widget_sessions().put(tenant_id, rec)
+    return rec
+
+
+def verification_status(tenant_id: str) -> dict:
+    """Honest installed/not-installed/error state per domain (no fake success)."""
+    cfg = get_or_create_config(tenant_id)
+    domains = cfg.get("allowed_domains") or []
+    out = []
+    for d in domains:
+        rec = stores.widget_sessions().get(tenant_id, _verify_id(tenant_id, d))
+        out.append({
+            "domain": d,
+            "status": (rec or {}).get("status", "not_installed"),
+            "last_verified_at": (rec or {}).get("last_verified_at", ""),
+            "last_failure": (rec or {}).get("last_failure", ""),
+            "evidence": (rec or {}).get("evidence", ""),
+        })
+    installed = any(x["status"] == "installed" for x in out)
+    return {"installed": installed, "domains": out}
 
 
 def validate_message(text: str) -> None:

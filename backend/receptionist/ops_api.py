@@ -366,3 +366,22 @@ def widget_config_save(patch: dict, tenant_id: str = Depends(resolve_tenant)) ->
     from .service import widget
     cfg = widget.save_config(tenant_id, patch or {})
     return {"config": {k: v for k, v in cfg.items() if k != "tenant_id"}}
+
+
+@ops_router.get("/widget/verification")
+def widget_verification(tenant_id: str = Depends(resolve_tenant)) -> dict:
+    from .service import widget
+    return widget.verification_status(tenant_id)
+
+
+class WidgetVerifyIn(BaseModel):
+    domain: str = ""
+    origin: str = ""
+
+
+@ops_router.post("/widget/verify")
+def widget_verify(body: WidgetVerifyIn, tenant_id: str = Depends(resolve_tenant)) -> dict:
+    """Operator-triggered check: reports the SERVER-OBSERVED handshake state for a
+    domain (never a frontend-only success). Returns the honest current status."""
+    from .service import widget
+    return widget.verification_status(tenant_id)
