@@ -39,6 +39,8 @@ COUNTER_METRICS: list[str] = [
     "voice_transfers", "voice_recorded_minutes", "voice_analyses", "voice_callbacks",
     "campaign_recipients", "campaign_messages", "campaign_replies", "campaign_conversions",
     "campaign_ai_generations",
+    "crm_imported_records", "crm_synced_records", "crm_outbound_writes", "crm_webhook_events",
+    "crm_conflicts", "crm_reconciliations",
 ]
 
 

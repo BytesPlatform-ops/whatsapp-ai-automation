@@ -144,6 +144,10 @@ _RECEPTIONIST_LIMITS_FREE = {
     "receptionist_campaign_monthly_messages": 0, "receptionist_campaign_sequence_steps": 0,
     "receptionist_campaign_audience_size": 0, "receptionist_campaign_saved_segments": 0,
     "receptionist_campaign_ai_generations": 0, "receptionist_campaign_monthly_voice_minutes": 0,
+    "receptionist_crm_connections": 0, "receptionist_crm_connections_per_provider": 0,
+    "receptionist_crm_monthly_imported": 0, "receptionist_crm_monthly_synced": 0,
+    "receptionist_crm_monthly_outbound_writes": 0, "receptionist_crm_field_mappings": 0,
+    "receptionist_crm_pipeline_mappings": 0, "receptionist_crm_stored_mappings": 0,
 }
 _RECEPTIONIST_LIMITS_STARTER = {
     "receptionist_widget_sites": 3, "receptionist_monthly_conversations": 1000,
@@ -184,6 +188,10 @@ _RECEPTIONIST_LIMITS_STARTER = {
     "receptionist_campaign_monthly_messages": 5000, "receptionist_campaign_sequence_steps": 5,
     "receptionist_campaign_audience_size": 1000, "receptionist_campaign_saved_segments": 10,
     "receptionist_campaign_ai_generations": 200, "receptionist_campaign_monthly_voice_minutes": 0,
+    "receptionist_crm_connections": 1, "receptionist_crm_connections_per_provider": 1,
+    "receptionist_crm_monthly_imported": 5000, "receptionist_crm_monthly_synced": 5000,
+    "receptionist_crm_monthly_outbound_writes": 0, "receptionist_crm_field_mappings": 25,
+    "receptionist_crm_pipeline_mappings": 3, "receptionist_crm_stored_mappings": 10000,
 }
 _RECEPTIONIST_LIMITS_PRO = {
     "receptionist_widget_sites": 25, "receptionist_monthly_conversations": UNLIMITED,
@@ -224,6 +232,10 @@ _RECEPTIONIST_LIMITS_PRO = {
     "receptionist_campaign_monthly_messages": UNLIMITED, "receptionist_campaign_sequence_steps": 10,
     "receptionist_campaign_audience_size": 25000, "receptionist_campaign_saved_segments": UNLIMITED,
     "receptionist_campaign_ai_generations": UNLIMITED, "receptionist_campaign_monthly_voice_minutes": 500,
+    "receptionist_crm_connections": 5, "receptionist_crm_connections_per_provider": 2,
+    "receptionist_crm_monthly_imported": UNLIMITED, "receptionist_crm_monthly_synced": UNLIMITED,
+    "receptionist_crm_monthly_outbound_writes": UNLIMITED, "receptionist_crm_field_mappings": UNLIMITED,
+    "receptionist_crm_pipeline_mappings": 25, "receptionist_crm_stored_mappings": UNLIMITED,
 }
 
 

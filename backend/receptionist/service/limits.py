@@ -80,6 +80,12 @@ _RESOURCES: dict[str, tuple] = {
     "campaign_active": ("receptionist_campaign_active",
                         lambda t: len([c for c in stores.cmp_campaigns().list(t)
                                        if c.get("status") in ("active", "scheduled", "preparing")])),
+    "crm_connection": ("receptionist_crm_connections", lambda t: len(stores.crm_capabilities().list(t))),
+    "crm_imported": ("receptionist_crm_monthly_imported", _monthly("crm_imported_records")),
+    "crm_synced": ("receptionist_crm_monthly_synced", _monthly("crm_synced_records")),
+    "crm_outbound_write": ("receptionist_crm_monthly_outbound_writes", _monthly("crm_outbound_writes")),
+    "crm_field_mapping": ("receptionist_crm_field_mappings", lambda t: len(stores.crm_field_mappings().list(t))),
+    "crm_stored_mapping": ("receptionist_crm_stored_mappings", lambda t: len(stores.crm_mappings().list(t))),
 }
 
 
