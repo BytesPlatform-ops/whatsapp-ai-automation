@@ -261,8 +261,10 @@ def test_send_handler_suppressed(env):
 def test_send_handler_quiet_hours_delayed(env):
     from receptionist.service import config_repo
     from receptionist.service.registry import _h_sms_send
+    # no allowed weekdays → always inside quiet hours, deterministic (time-of-day
+    # independent: a [start,end) hour window can never cover all 24 hours).
     config_repo.save("t_a", {"sms_quiet_hours": {"enabled": True, "start_hour": 0, "end_hour": 23,
-                                                 "timezone": "UTC", "days": [0, 1, 2, 3, 4, 5, 6]}}, updated_by="t")
+                                                 "timezone": "UTC", "days": []}}, updated_by="t")
     res = _h_sms_send("t_a", {"to": "+15559990000", "body": "hi", "sender_number": "+15550001111",
                               "responding_to_inbound": False})
     assert res["status"] == "delayed_quiet_hours"
