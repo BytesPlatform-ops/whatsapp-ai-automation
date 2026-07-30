@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Mail, Calendar, MessageSquare, MessageCircle, Instagram, BookOpen } from 'lucide-react';
+import { Mail, Calendar, MessageSquare, MessageCircle, Instagram, Send, BookOpen } from 'lucide-react';
 import { receptionistApi } from '@/lib/pixie-lab/servicesClient';
 import type { RcpUsageSummary, RcpLimit } from '@/lib/pixie-lab/serviceTypes';
 
@@ -58,6 +58,15 @@ const GROUPS: { title: string; icon: React.ReactNode; rows: [string, string][] }
       ['sms_reply', 'AI replies'],
       ['sms_segments', 'Outbound segments'],
       ['sms_mms', 'MMS messages'],
+    ],
+  },
+  {
+    title: 'Telegram', icon: <Send size={15} color="#229ED9" />, rows: [
+      ['telegram_inbound', 'Bot inbound'],
+      ['telegram_business_inbound', 'Business inbound'],
+      ['telegram_send', 'Bot sends'],
+      ['telegram_business_send', 'Business sends'],
+      ['telegram_callbacks', 'Callback ops'],
     ],
   },
   {

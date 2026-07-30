@@ -54,6 +54,19 @@ async function mockReceptionist(page: Page): Promise<void> {
       answer: 'We open 9am to 5pm', evidence: [{ source_id: 'profile:hours', chunk_id: 'hours', source_type: 'text',
         text: 'We open 9am to 5pm', score: 2.5, method: 'structured_field' }] }));
   });
+  // Telegram panel: status (default), ?view=drafts.
+  await page.route('**/api/lab/receptionist/telegram**', async (r) => {
+    const url = r.request().url();
+    if (r.request().method() !== 'GET') { await r.fulfill(json({ backendUp: true, status: 'connected', bot: { bot_username: 'acme_bot' } })); return; }
+    if (url.includes('view=drafts')) {
+      await r.fulfill(json({ backendUp: true, drafts: [] }));
+    } else {
+      await r.fulfill(json({ backendUp: true, reply_mode: 'draft_only', business_reply_mode: 'draft_only',
+        connection: { connected: true, state: 'standard_bot_ready', bot_username: 'acme_bot', bot_id: '111',
+          webhook_subscribed: true, allowed_updates: ['message'], business_enabled: false,
+          business: { state: 'business_mode_unavailable' } } }));
+    }
+  });
   // SMS panel: status (default), ?view=numbers|drafts.
   await page.route('**/api/lab/receptionist/sms**', async (r) => {
     const url = r.request().url();
@@ -107,7 +120,7 @@ async function mockReceptionist(page: Page): Promise<void> {
 
 test.describe('Receptionist navigation', () => {
   const routes = ['', '/dashboard', '/conversations', '/crm', '/approvals', '/gmail', '/whatsapp',
-                  '/meta-messaging', '/sms', '/providers',
+                  '/meta-messaging', '/sms', '/telegram', '/providers',
                   '/calendar', '/bookings', '/followups', '/analytics', '/widget',
                   '/operations', '/integrations', '/knowledge'];
   for (const path of routes) {
