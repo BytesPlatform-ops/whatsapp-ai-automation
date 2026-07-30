@@ -120,6 +120,10 @@ class Worker:
             _log.info("receptionist worker: disabled (AI_RECEPTIONIST_WORKER_ENABLED not set or pytest)")
             return False
 
+        # Fail fast on a misconfigured production deploy (durable required but memory).
+        from receptionist.service.durability import check_durability
+        check_durability()
+
         with _INSTANCE_LOCK:
             if _ACTIVE_INSTANCE is not None and _ACTIVE_INSTANCE is not self:
                 _log.warning(
