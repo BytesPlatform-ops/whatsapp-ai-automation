@@ -337,6 +337,16 @@ def get_or_create_worker() -> Worker:
     return _default_worker
 
 
+def get_active_worker_stats() -> dict:
+    """Health snapshot for the operator API. Uses the active instance if one is
+    running, else the module-level default (reports enabled=False when disabled)."""
+    inst = _ACTIVE_INSTANCE or _default_worker or get_or_create_worker()
+    try:
+        return inst.health()
+    except Exception as exc:  # pragma: no cover
+        return {"enabled": _worker_enabled(), "error": str(exc)[:120]}
+
+
 def start_worker() -> bool:
     """Start the module-level default worker. Returns True when started."""
     return get_or_create_worker().start()

@@ -586,3 +586,66 @@ def health() -> Dict[str, Any]:
         "counts": counts,
         "total": sum(counts.values()),
     }
+
+
+# ── operator queries (tenant-scoped; used by the ops API + admin UI) ──────────
+
+def _tenant_jobs(tenant_id: str) -> List[dict]:
+    repo = _jobs()
+    try:
+        rows = [r.get("data") or r for r in getattr(repo, "_rows", []) if (r.get("tenant_id") == tenant_id)]
+    except Exception:
+        rows = []
+    if rows:
+        return [j for j in rows if isinstance(j, dict)]
+    # supabase / non-memory backends: use the row repo's tenant listing
+    try:
+        return [r.get("data") or {} for r in repo.list_by_tenant(tenant_id)]
+    except Exception:
+        return []
+
+
+def list_jobs(tenant_id: str, *, status: Optional[str] = None, limit: int = 50) -> List[dict]:
+    """Tenant-scoped jobs, newest-first, optional status filter (no secrets)."""
+    jobs = _tenant_jobs(tenant_id)
+    if status:
+        jobs = [j for j in jobs if j.get("status") == status]
+    jobs.sort(key=lambda j: j.get("created_at", ""), reverse=True)
+    safe = []
+    for j in jobs[:limit]:
+        safe.append({
+            "id": j.get("id"), "job_type": j.get("job_type"), "status": j.get("status"),
+            "run_at": j.get("run_at"), "attempts": j.get("attempts", 0),
+            "max_attempts": j.get("max_attempts"), "priority": j.get("priority", 0),
+            "last_error": j.get("last_error", ""), "lock_owner": j.get("lock_owner", ""),
+            "lock_expires_at": j.get("lock_expires_at", ""), "updated_at": j.get("updated_at"),
+        })
+    return safe
+
+
+def count_by_status(tenant_id: str) -> Dict[str, int]:
+    counts: Dict[str, int] = {}
+    for j in _tenant_jobs(tenant_id):
+        s = j.get("status", "unknown")
+        counts[s] = counts.get(s, 0) + 1
+    return counts
+
+
+def requeue(job_id: str, tenant_id: str) -> bool:
+    """Manually re-queue a failed/cancelled job for another attempt (operator action)."""
+    repo = _jobs()
+    row = repo.get(tenant_id, job_id)
+    if row is None:
+        return False
+    job = row.get("data") or row
+    if not isinstance(job, dict):
+        return False
+    if job.get("status") not in (STATUS_FAILED, STATUS_CANCELLED, STATUS_RETRY):
+        return False
+    job["status"] = STATUS_QUEUED
+    job["lock_owner"] = ""
+    job["lock_expires_at"] = ""
+    job["run_at"] = _now_iso()
+    job["updated_at"] = _now_iso()
+    repo.upsert(_job_row(job))
+    return True
