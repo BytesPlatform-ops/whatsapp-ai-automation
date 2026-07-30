@@ -304,6 +304,58 @@ def handle_reminder_process(job: dict) -> dict:
         return {"status": "failed", "reason": str(exc)}
 
 
+def _deliver_reminder_via_gmail(tenant_id: str, reminder: dict, contact: dict):
+    """Deliver a booking/follow-up reminder as a real Gmail message when policy +
+    connection + scope + consent all permit. Returns a status string, or None to let
+    the caller fall back. Uses a VALIDATED template (no raw model text), requires
+    provider confirmation for 'sent', and is idempotent per reminder.
+    """
+    import os
+    if os.environ.get("AI_RECEPTIONIST_GMAIL_REMINDERS_ENABLED", "").strip().lower() not in ("1", "true", "yes", "on"):
+        return None
+    email = (contact or {}).get("email", "")
+    if not email:
+        return None
+
+    from receptionist.service import stores
+    from receptionist.service.registry import _is_suppressed
+    if _is_suppressed(tenant_id, email=email):
+        return "stopped_suppressed"
+
+    # require a Gmail send-capable connection
+    from receptionist.providers import gmail as gmail_adapter
+    try:
+        cap = _run_coro(gmail_adapter.validate_connection(tenant_id))
+    except Exception:
+        return None
+    if not (cap.get("connected") and cap.get("can_send")):
+        return "provider_not_connected"
+
+    # validated template (no unrestricted model text)
+    title = reminder.get("title", "Appointment reminder")
+    when = reminder.get("related_start") or ""
+    body = ("This is a reminder about your upcoming appointment"
+            + (f" on {when}" if when else "") + ".\n\nIf you need to reschedule, just reply to this email.")
+    from receptionist.service.registry import execute_action
+    res = execute_action(tenant_id, "gmail_send",
+                         {"to": email, "subject": f"Reminder: {title}", "body": body},
+                         idempotency_key=f"reminder:{reminder.get('id', '')}", skip_approval=True)
+    status = res.get("status")
+    if status == "sent":
+        reminder["provider_message_id"] = res.get("record_id", "")
+        return "sent"
+    if status == "suppressed":
+        return "stopped_suppressed"
+    if status in ("not_connected",):
+        return "provider_not_connected"
+    return "failed"  # retryable by the worker
+
+
+def _run_coro(coro):
+    import asyncio
+    return asyncio.new_event_loop().run_until_complete(coro)
+
+
 def _deliver_reminder(tenant_id: str, reminder: dict, channel: str) -> str:
     """Attempt to deliver a reminder via the configured provider.
 
@@ -332,6 +384,10 @@ def _deliver_reminder(tenant_id: str, reminder: dict, channel: str) -> str:
             return "provider_not_connected"
 
         elif channel in ("email",) and to:
+            # Prefer real Gmail delivery when connected + permitted (Wave 9).
+            gmail_status = _deliver_reminder_via_gmail(tenant_id, reminder, contact or {})
+            if gmail_status is not None:
+                return gmail_status
             from receptionist.providers import notify_team
             # Use the team notifier as a best-effort forward until a
             # customer-email provider is wired in.
