@@ -70,6 +70,20 @@ T_WA_TEMPLATES = "receptionist_whatsapp_templates"
 T_WA_MEDIA = "receptionist_whatsapp_media"
 T_WA_WINDOWS = "receptionist_whatsapp_windows"
 
+# External CRM marketplace + bidirectional sync (Wave 18).
+T_CRM_CONNECTIONS = "receptionist_crm_connections"
+T_CRM_CAPABILITIES = "receptionist_crm_capabilities"
+T_CRM_OBJECTS = "receptionist_crm_objects"
+T_CRM_MAPPINGS = "receptionist_crm_mappings"
+T_CRM_FIELD_MAPPINGS = "receptionist_crm_field_mappings"
+T_CRM_PIPELINE_MAPPINGS = "receptionist_crm_pipeline_mappings"
+T_CRM_CHECKPOINTS = "receptionist_crm_checkpoints"
+T_CRM_SYNC_RESULTS = "receptionist_crm_sync_results"
+T_CRM_WEBHOOK_EVENTS = "receptionist_crm_webhook_events"
+T_CRM_CONFLICTS = "receptionist_crm_conflicts"
+T_CRM_OUTBOUND = "receptionist_crm_outbound"
+T_CRM_AUDIT = "receptionist_crm_audit"
+
 # Advanced outbound campaigns (orchestration over existing channels, Wave 17).
 T_CMP_CAMPAIGNS = "receptionist_campaigns_v2"
 T_CMP_VERSIONS = "receptionist_campaign_versions"
@@ -153,6 +167,9 @@ ALL_TABLES = [
     T_VOICE_TOOLCALLS, T_VOICE_TRANSFERS, T_VOICE_RECORDINGS, T_VOICE_REPORTS, T_VOICE_CALLBACKS,
     T_CMP_CAMPAIGNS, T_CMP_VERSIONS, T_CMP_STEPS, T_CMP_CONTENT, T_CMP_APPROVALS, T_CMP_SEGMENTS,
     T_CMP_SNAPSHOTS, T_CMP_RECIPIENTS, T_CMP_EXECUTIONS, T_CMP_FREQCAPS, T_CMP_ATTRIBUTION, T_CMP_AUDIT,
+    T_CRM_CONNECTIONS, T_CRM_CAPABILITIES, T_CRM_OBJECTS, T_CRM_MAPPINGS, T_CRM_FIELD_MAPPINGS,
+    T_CRM_PIPELINE_MAPPINGS, T_CRM_CHECKPOINTS, T_CRM_SYNC_RESULTS, T_CRM_WEBHOOK_EVENTS,
+    T_CRM_CONFLICTS, T_CRM_OUTBOUND, T_CRM_AUDIT,
 ]
 
 
@@ -395,6 +412,20 @@ def cmp_executions() -> RecordStore: return store(T_CMP_EXECUTIONS)
 def cmp_freqcaps() -> RecordStore: return store(T_CMP_FREQCAPS)
 def cmp_attribution() -> RecordStore: return store(T_CMP_ATTRIBUTION)
 def cmp_audit() -> RecordStore: return store(T_CMP_AUDIT)
+
+
+def crm_connections() -> RecordStore: return store(T_CRM_CONNECTIONS)
+def crm_capabilities() -> RecordStore: return store(T_CRM_CAPABILITIES)
+def crm_objects() -> RecordStore: return store(T_CRM_OBJECTS)
+def crm_mappings() -> RecordStore: return store(T_CRM_MAPPINGS)
+def crm_field_mappings() -> RecordStore: return store(T_CRM_FIELD_MAPPINGS)
+def crm_pipeline_mappings() -> RecordStore: return store(T_CRM_PIPELINE_MAPPINGS)
+def crm_checkpoints() -> RecordStore: return store(T_CRM_CHECKPOINTS)
+def crm_sync_results() -> RecordStore: return store(T_CRM_SYNC_RESULTS)
+def crm_webhook_events() -> RecordStore: return store(T_CRM_WEBHOOK_EVENTS)
+def crm_conflicts() -> RecordStore: return store(T_CRM_CONFLICTS)
+def crm_outbound() -> RecordStore: return store(T_CRM_OUTBOUND)
+def crm_audit() -> RecordStore: return store(T_CRM_AUDIT)
 
 
 # ── durable per-conversation lock ─────────────────────────────────────────────

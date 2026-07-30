@@ -52,6 +52,8 @@ CONFIG_FIELDS: list[str] = [
     "campaign_settings",  # campaign feature/frequency-cap config (Wave 17)
     "campaign_promotional_enabled",  # promotional-campaign gate (Wave 17)
     "campaign_dynamic_enrolment_enabled",  # dynamic audience enrolment gate (Wave 17)
+    "crm_settings",  # CRM marketplace per-connection sync/mapping config (Wave 18)
+    "crm_consent_mapping",  # explicit external-consent → Pixie consent mapping (Wave 18)
 ]
 
 # Configuration is "configured enough to answer" once these are present.
