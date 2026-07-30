@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Mail, Calendar, MessageSquare, MessageCircle, BookOpen } from 'lucide-react';
+import { Mail, Calendar, MessageSquare, MessageCircle, Instagram, BookOpen } from 'lucide-react';
 import { receptionistApi } from '@/lib/pixie-lab/servicesClient';
 import type { RcpUsageSummary, RcpLimit } from '@/lib/pixie-lab/serviceTypes';
 
@@ -35,6 +35,21 @@ const GROUPS: { title: string; icon: React.ReactNode; rows: [string, string][] }
       ['whatsapp_freeform', 'Free-form replies'],
       ['whatsapp_template', 'Template sends'],
       ['whatsapp_interactive', 'Interactive sends'],
+    ],
+  },
+  {
+    title: 'Instagram', icon: <Instagram size={15} color="#E1306C" />, rows: [
+      ['instagram_inbound', 'Inbound DMs'],
+      ['instagram_reply', 'AI replies'],
+      ['instagram_media', 'Media operations'],
+    ],
+  },
+  {
+    title: 'Messenger', icon: <MessageCircle size={15} color="#0084FF" />, rows: [
+      ['messenger_inbound', 'Inbound messages'],
+      ['messenger_reply', 'AI replies'],
+      ['messenger_interactive', 'Interactive sends'],
+      ['messenger_media', 'Media operations'],
     ],
   },
   {
