@@ -54,6 +54,18 @@ async function mockReceptionist(page: Page): Promise<void> {
       answer: 'We open 9am to 5pm', evidence: [{ source_id: 'profile:hours', chunk_id: 'hours', source_type: 'text',
         text: 'We open 9am to 5pm', score: 2.5, method: 'structured_field' }] }));
   });
+  // Outbound campaigns panel: list (default), ?view=detail|analytics.
+  await page.route('**/api/lab/receptionist/outbound-campaigns**', async (r) => {
+    const url = r.request().url();
+    if (r.request().method() !== 'GET') { await r.fulfill(json({ backendUp: true, campaign: { id: 'cmp1', name: 'X' } })); return; }
+    if (url.includes('view=analytics')) {
+      await r.fulfill(json({ backendUp: true, analytics: { audience: 0, eligible: 0, sent: 0 } }));
+    } else if (url.includes('view=detail')) {
+      await r.fulfill(json({ backendUp: true, approval_valid: false, campaign: { id: 'cmp1', name: 'X', status: 'draft' }, steps: [], content: [] }));
+    } else {
+      await r.fulfill(json({ backendUp: true, feature_enabled: false, send_enabled: false, campaigns: [] }));
+    }
+  });
   // Voice panel: status (default), ?view=numbers|calls.
   await page.route('**/api/lab/receptionist/voice**', async (r) => {
     const url = r.request().url();
@@ -135,7 +147,7 @@ async function mockReceptionist(page: Page): Promise<void> {
 
 test.describe('Receptionist navigation', () => {
   const routes = ['', '/dashboard', '/conversations', '/crm', '/approvals', '/gmail', '/whatsapp',
-                  '/meta-messaging', '/sms', '/telegram', '/voice', '/providers',
+                  '/meta-messaging', '/sms', '/telegram', '/voice', '/campaigns', '/providers',
                   '/calendar', '/bookings', '/followups', '/analytics', '/widget',
                   '/operations', '/integrations', '/knowledge'];
   for (const path of routes) {
