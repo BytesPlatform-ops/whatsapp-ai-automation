@@ -33,6 +33,8 @@ COUNTER_METRICS: list[str] = [
     "instagram_inbound", "instagram_reply", "instagram_media",
     "messenger_inbound", "messenger_reply", "messenger_interactive", "messenger_media",
     "sms_inbound", "sms_reply", "sms_segments", "sms_mms", "sms_reminders",
+    "telegram_inbound", "telegram_business_inbound", "telegram_send", "telegram_business_send",
+    "telegram_callbacks", "telegram_media",
 ]
 
 

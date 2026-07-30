@@ -61,6 +61,8 @@ _BILLABLE_OPERATIONS = {
     "messenger_send": "receptionist_messenger_op",
     "messenger_send_interactive": "receptionist_messenger_op",
     "sms_send": "receptionist_sms_op",
+    "telegram_send": "receptionist_telegram_op",
+    "telegram_business_send": "receptionist_telegram_op",
 }
 
 
@@ -994,6 +996,72 @@ def _h_messenger_send_interactive(tenant_id: str, args: dict, *, conversation_id
     return _meta_send_common(tenant_id, args, "messenger", send_fn, "messenger_interactive")
 
 
+# ── Telegram send handlers (Bot + Business) ───────────────────────────────────
+
+def _tg_persist_send(tenant_id: str, args: dict, result: dict, *, status: str) -> None:
+    draft_id = args.get("draft_id", "")
+    if not draft_id:
+        return
+    from . import telegram_sync
+    d = stores.tg_drafts().get(tenant_id, draft_id)
+    if d:
+        d["status"] = status
+        if result:
+            d["provider_message_id"] = result.get("message_id", "")
+            d["sent_at"] = now_iso()
+        telegram_sync.save_draft(tenant_id, d)
+
+
+def _telegram_send_common(tenant_id: str, args: dict, mode: str) -> dict:
+    """Shared: suppression → policy (initiation/business rights) → provider send
+    (confirmed) → persist → meter. Never fabricates delivered/read; Telegram only
+    yields provider_confirmed."""
+    from ..providers import telegram_adapter as tg
+    from . import telegram_sync, telegram_policy
+    chat_id = args.get("chat_id", "")
+    user_id = args.get("user_id", "")
+    bcid = args.get("business_connection_id", "")
+    if telegram_sync.is_suppressed(tenant_id, user_id or chat_id):
+        _tg_persist_send(tenant_id, args, {}, status="blocked_by_policy")
+        return {"status": "suppressed", "detail": "recipient is suppressed/opted-out",
+                "record_type": "", "record_id": "", "data": {}}
+    decision = telegram_policy.evaluate_send(tenant_id, mode=mode, chat_id=chat_id, user_id=user_id,
+                                             business_connection_id=bcid)
+    if not decision.get("allowed"):
+        _tg_persist_send(tenant_id, args, {}, status="blocked_by_policy")
+        return {"status": "blocked_by_policy", "detail": f"telegram_{decision.get('blocked_reason','blocked')}",
+                "record_type": "", "record_id": "", "data": decision}
+    try:
+        if mode == "business":
+            result = tg.send_business_message(tenant_id, chat_id=chat_id, text=args.get("body", ""),
+                                              business_connection_id=bcid)
+        else:
+            result = tg.send_message(tenant_id, chat_id=chat_id, text=args.get("body", ""),
+                                     reply_to=args.get("reply_to", ""))
+    except tg.TelegramError as exc:
+        if exc.category in ("forbidden_chat", "chat_not_found"):
+            telegram_sync.record_terminal_suppression(tenant_id, user_id or chat_id, reason=exc.category)
+        return {"status": ("not_connected" if exc.category == "not_connected" else "failed"),
+                "detail": f"telegram_{exc.category}", "record_type": "", "record_id": "", "data": {}}
+    _tg_persist_send(tenant_id, args, result, status="provider_pending")
+    try:
+        from . import usage
+        metric = "telegram_business_send" if mode == "business" else "telegram_send"
+        usage.increment(tenant_id, metric, idempotency_key=f"tgsend:{result.get('message_id','')}")
+    except Exception:
+        pass
+    return {"status": "provider_pending", "detail": f"telegram {mode} message accepted by provider",
+            "record_type": "telegram_message", "record_id": result.get("message_id", ""), "data": result}
+
+
+def _h_telegram_send(tenant_id: str, args: dict, *, conversation_id: str = "") -> dict:
+    return _telegram_send_common(tenant_id, args, "bot")
+
+
+def _h_telegram_business_send(tenant_id: str, args: dict, *, conversation_id: str = "") -> dict:
+    return _telegram_send_common(tenant_id, args, "business")
+
+
 # ── SMS send handler ──────────────────────────────────────────────────────────
 
 def _sms_persist_send(tenant_id: str, args: dict, result: dict, *, status: str) -> None:
@@ -1195,6 +1263,8 @@ _REGISTRY: dict[str, ActionSpec] = {
     "messenger_send":                 ActionSpec(_h_messenger_send, requires_approval=True, provider_action=True),
     "messenger_send_interactive":     ActionSpec(_h_messenger_send_interactive, requires_approval=True, provider_action=True),
     "sms_send":                       ActionSpec(_h_sms_send, requires_approval=True, provider_action=True),
+    "telegram_send":                  ActionSpec(_h_telegram_send, requires_approval=True, provider_action=True),
+    "telegram_business_send":         ActionSpec(_h_telegram_business_send, requires_approval=True, provider_action=True),
 }
 
 

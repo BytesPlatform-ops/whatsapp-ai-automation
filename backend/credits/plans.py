@@ -129,6 +129,11 @@ _RECEPTIONIST_LIMITS_FREE = {
     "receptionist_sms_monthly_replies": 0, "receptionist_sms_monthly_segments": 0,
     "receptionist_sms_monthly_mms": 0, "receptionist_sms_stored_conversations": 0,
     "receptionist_sms_monthly_reminders": 0,
+    "receptionist_telegram_bots": 0, "receptionist_telegram_business_connections": 0,
+    "receptionist_telegram_monthly_inbound": 0, "receptionist_telegram_monthly_replies": 0,
+    "receptionist_telegram_monthly_business_messages": 0, "receptionist_telegram_monthly_callbacks": 0,
+    "receptionist_telegram_monthly_media": 0, "receptionist_telegram_stored_conversations": 0,
+    "receptionist_telegram_monthly_reminders": 0,
 }
 _RECEPTIONIST_LIMITS_STARTER = {
     "receptionist_widget_sites": 3, "receptionist_monthly_conversations": 1000,
@@ -154,6 +159,11 @@ _RECEPTIONIST_LIMITS_STARTER = {
     "receptionist_sms_monthly_replies": 1000, "receptionist_sms_monthly_segments": 3000,
     "receptionist_sms_monthly_mms": 100, "receptionist_sms_stored_conversations": 5000,
     "receptionist_sms_monthly_reminders": 500,
+    "receptionist_telegram_bots": 1, "receptionist_telegram_business_connections": 1,
+    "receptionist_telegram_monthly_inbound": 3000, "receptionist_telegram_monthly_replies": 1500,
+    "receptionist_telegram_monthly_business_messages": 1500, "receptionist_telegram_monthly_callbacks": 2000,
+    "receptionist_telegram_monthly_media": 500, "receptionist_telegram_stored_conversations": 5000,
+    "receptionist_telegram_monthly_reminders": 500,
 }
 _RECEPTIONIST_LIMITS_PRO = {
     "receptionist_widget_sites": 25, "receptionist_monthly_conversations": UNLIMITED,
@@ -179,6 +189,11 @@ _RECEPTIONIST_LIMITS_PRO = {
     "receptionist_sms_monthly_replies": UNLIMITED, "receptionist_sms_monthly_segments": UNLIMITED,
     "receptionist_sms_monthly_mms": UNLIMITED, "receptionist_sms_stored_conversations": UNLIMITED,
     "receptionist_sms_monthly_reminders": UNLIMITED,
+    "receptionist_telegram_bots": 5, "receptionist_telegram_business_connections": 5,
+    "receptionist_telegram_monthly_inbound": UNLIMITED, "receptionist_telegram_monthly_replies": UNLIMITED,
+    "receptionist_telegram_monthly_business_messages": UNLIMITED, "receptionist_telegram_monthly_callbacks": UNLIMITED,
+    "receptionist_telegram_monthly_media": UNLIMITED, "receptionist_telegram_stored_conversations": UNLIMITED,
+    "receptionist_telegram_monthly_reminders": UNLIMITED,
 }
 
 
