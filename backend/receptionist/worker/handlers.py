@@ -466,3 +466,7 @@ def handle_website_ingest(job: dict) -> dict:
     except Exception as exc:  # never crash the worker loop
         _log.warning("website_ingest job=%s: %s", job.get("id"), exc)
         return {"status": "failed", "reason": str(exc)[:120]}
+
+
+# Register Gmail/Calendar provider job handlers (Wave 8) at import.
+from . import gmail_jobs  # noqa: E402,F401

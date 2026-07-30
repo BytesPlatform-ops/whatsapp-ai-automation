@@ -145,6 +145,12 @@ async def cancel_event(tenant_id: str, calendar_id: str, event_id: str) -> dict:
     return {"event_id": event_id, "status": "cancelled", "provider": res.get("status", "cancelled")}
 
 
+async def get_event_normalised(tenant_id: str, calendar_id: str, event_id: str) -> dict:
+    conn = _connection(tenant_id)
+    tok = await _token(conn)
+    return normalise_event(_active_transport().get_event(tok, calendar_id, event_id))
+
+
 async def validate_connection(tenant_id: str) -> dict:
     from integrations.connections import find_active_connection_unsealed
     conn = find_active_connection_unsealed(tenant_id, "calendar_read") \

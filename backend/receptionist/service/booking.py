@@ -251,6 +251,7 @@ def create_booking(tenant_id: str, *, service: str, start: str, end: str, name: 
     booking["confirmed_at"] = now_iso()
     stores.bookings().put(tenant_id, booking)
     _link_provider_event(tenant_id, booking["id"], ev["event_id"])
+    schedule_reminders(tenant_id, booking)
     release_hold(tenant_id, hold["id"])
     try:
         from . import usage
@@ -280,6 +281,9 @@ def reschedule_booking(tenant_id: str, booking_id: str, *, new_start: str, new_e
     b["end"] = new_end
     b["updated_at"] = now_iso()
     stores.bookings().put(tenant_id, b)
+    # recalc reminders: cancel obsolete jobs, schedule replacements for the new time
+    cancel_booking_reminders(tenant_id, booking_id)
+    schedule_reminders(tenant_id, b)
     return {"status": "rescheduled", "booking": b, "event": ev}
 
 
@@ -299,12 +303,107 @@ def cancel_booking(tenant_id: str, booking_id: str, *, reason: str = "") -> dict
     b["cancel_reason"] = reason
     b["cancelled_at"] = now_iso()
     stores.bookings().put(tenant_id, b)
-    # stop reminders tied to this booking
-    for r in stores.reminders().query(tenant_id, related_id=booking_id):
-        if r.get("status") == "scheduled":
-            r["status"] = "cancelled"
-            stores.reminders().put(tenant_id, r)
+    cancel_booking_reminders(tenant_id, booking_id)  # stop all pending reminders
     return {"status": "cancelled", "booking": b}
+
+
+# ── reminders (Part 8) ────────────────────────────────────────────────────────
+
+def _reminder_offsets(cfg: dict) -> list[int]:
+    offs = cfg.get("reminder_offsets") or [1440, 60]  # minutes before start
+    try:
+        return [int(x) for x in offs if int(x) > 0]
+    except (TypeError, ValueError):
+        return [1440, 60]
+
+
+def schedule_reminders(tenant_id: str, booking: dict) -> list[dict]:
+    """Create durable reminder records at configured offsets. Idempotent per
+    (booking, offset): re-running replaces the set for the current start time."""
+    from .schemas import Reminder
+    cfg = get_config(tenant_id)
+    start = _parse(booking.get("start", ""))
+    created = []
+    for off in _reminder_offsets(cfg):
+        remind_at = (start - timedelta(minutes=off)).astimezone(timezone.utc).isoformat(timespec="seconds")
+        rid = f"rem::{booking['id']}::{off}"
+        existing = stores.reminders().get(tenant_id, rid)
+        rec = Reminder(tenant_id=tenant_id, contact_id=booking.get("contact_id"),
+                       conversation_id=booking.get("conversation_id", ""),
+                       title=f"Reminder: {booking.get('service_type', 'appointment')}",
+                       remind_at=remind_at, channel="email", related_type="booking",
+                       related_id=booking["id"], status="scheduled", source="calendar").model_dump()
+        rec["id"] = rid
+        rec["offset_minutes"] = off
+        if existing:
+            rec["attempts"] = existing.get("attempts", 0)  # preserve attempt history
+        created.append(stores.reminders().put(tenant_id, rec))
+    return created
+
+
+def cancel_booking_reminders(tenant_id: str, booking_id: str) -> int:
+    n = 0
+    for r in stores.reminders().list(tenant_id):
+        if r.get("related_id") == booking_id and r.get("status") in ("scheduled", "queued"):
+            r["status"] = "cancelled"
+            r["updated_at"] = now_iso()
+            stores.reminders().put(tenant_id, r)
+            n += 1
+    return n
+
+
+# ── reconciliation (Part 7) ───────────────────────────────────────────────────
+
+def reconcile_event(tenant_id: str, booking_id: str) -> dict:
+    """Reconcile one confirmed booking against its provider event. Provider state is
+    authoritative for confirmed external events; external cancellation updates the
+    internal booking; never recreates an externally cancelled event automatically."""
+    from ..providers import gcal
+    b = stores.bookings().get(tenant_id, booking_id)
+    if b is None:
+        return {"status": "not_found"}
+    event_id = b.get("provider_event_id", "")
+    if not event_id:
+        _set_recon(tenant_id, booking_id, "missing_provider_event")
+        return {"status": "reconciliation_required", "reason": "missing_provider_event"}
+    try:
+        ev = _run(gcal.get_event_normalised(tenant_id, b.get("calendar_id", "primary"), event_id))
+    except gcal.CalendarError as exc:
+        _set_recon(tenant_id, booking_id, f"provider_{exc.category}")
+        return {"status": "reconciliation_required", "reason": exc.category}
+    prov_status = ev.get("status", "")
+    if prov_status == "cancelled" and b.get("status") != "cancelled":
+        b["status"] = "cancelled"
+        b["cancel_reason"] = "external_cancellation"
+        b["cancelled_at"] = now_iso()
+        stores.bookings().put(tenant_id, b)
+        cancel_booking_reminders(tenant_id, booking_id)
+        _set_recon(tenant_id, booking_id, "external_cancellation")
+        return {"status": "reconciled", "change": "external_cancellation"}
+    if ev.get("start") and ev["start"] != b.get("start"):
+        b.setdefault("reschedule_history", []).append({"from": b.get("start"), "to": ev["start"],
+                                                       "at": now_iso(), "source": "external"})
+        b["start"] = ev["start"]
+        b["end"] = ev.get("end", b.get("end"))
+        stores.bookings().put(tenant_id, b)
+        cancel_booking_reminders(tenant_id, booking_id)
+        schedule_reminders(tenant_id, b)
+        _set_recon(tenant_id, booking_id, "external_reschedule")
+        return {"status": "reconciled", "change": "external_reschedule"}
+    _set_recon(tenant_id, booking_id, "in_sync")
+    return {"status": "reconciled", "change": "none"}
+
+
+def _set_recon(tenant_id: str, booking_id: str, status: str) -> None:
+    for pe in stores.provider_events().list(tenant_id):
+        if pe.get("booking_id") == booking_id:
+            pe["reconciliation_status"] = status
+            pe["last_checked_at"] = now_iso()
+            stores.provider_events().put(tenant_id, pe)
+            return
+    stores.provider_events().put(tenant_id, {
+        "id": new_id("pevt"), "tenant_id": tenant_id, "booking_id": booking_id,
+        "reconciliation_status": status, "last_checked_at": now_iso()})
 
 
 # ── helpers ───────────────────────────────────────────────────────────────────
