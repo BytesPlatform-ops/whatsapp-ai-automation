@@ -62,6 +62,13 @@ T_BOOKING_HOLDS = "receptionist_booking_holds"
 T_PROVIDER_EVENTS = "receptionist_provider_events"
 T_WIDGET_DOMAINS = "receptionist_widget_domains"
 T_WIDGET_SESSIONS = "receptionist_widget_sessions"
+T_WA_PHONE_MAP = "receptionist_whatsapp_phone_map"
+T_WA_THREAD_MAP = "receptionist_whatsapp_thread_map"
+T_WA_DRAFTS = "receptionist_whatsapp_drafts"
+T_WA_SEND_ATTEMPTS = "receptionist_whatsapp_send_attempts"
+T_WA_TEMPLATES = "receptionist_whatsapp_templates"
+T_WA_MEDIA = "receptionist_whatsapp_media"
+T_WA_WINDOWS = "receptionist_whatsapp_windows"
 T_CAMPAIGN_OPTOUTS = "receptionist_campaign_optouts"
 T_CAMPAIGNS = "receptionist_campaigns"
 T_CAMPAIGN_TARGETS = "receptionist_campaign_targets"
@@ -78,6 +85,8 @@ ALL_TABLES = [
     T_GMAIL_SYNC_STATE, T_GMAIL_THREAD_MAP, T_GMAIL_DRAFTS, T_GMAIL_SEND_ATTEMPTS,
     T_CALENDAR_CONFIG, T_BOOKING_HOLDS, T_PROVIDER_EVENTS,
     T_WIDGET_DOMAINS, T_WIDGET_SESSIONS,
+    T_WA_PHONE_MAP, T_WA_THREAD_MAP, T_WA_DRAFTS, T_WA_SEND_ATTEMPTS,
+    T_WA_TEMPLATES, T_WA_MEDIA, T_WA_WINDOWS,
 ]
 
 
@@ -256,6 +265,13 @@ def booking_holds() -> RecordStore: return store(T_BOOKING_HOLDS)
 def provider_events() -> RecordStore: return store(T_PROVIDER_EVENTS)
 def widget_domains() -> RecordStore: return store(T_WIDGET_DOMAINS)
 def widget_sessions() -> RecordStore: return store(T_WIDGET_SESSIONS)
+def wa_phone_map() -> RecordStore: return store(T_WA_PHONE_MAP)
+def wa_thread_map() -> RecordStore: return store(T_WA_THREAD_MAP)
+def wa_drafts() -> RecordStore: return store(T_WA_DRAFTS)
+def wa_send_attempts() -> RecordStore: return store(T_WA_SEND_ATTEMPTS)
+def wa_templates() -> RecordStore: return store(T_WA_TEMPLATES)
+def wa_media() -> RecordStore: return store(T_WA_MEDIA)
+def wa_windows() -> RecordStore: return store(T_WA_WINDOWS)
 
 
 # ── durable per-conversation lock ─────────────────────────────────────────────

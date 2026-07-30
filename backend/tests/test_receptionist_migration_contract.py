@@ -19,6 +19,7 @@ RECEPTIONIST_MIGRATIONS = [
     MIGRATIONS_DIR / "20260709_ai_receptionist.sql",
     MIGRATIONS_DIR / "20260730_receptionist_foundation.sql",
     MIGRATIONS_DIR / "20260802_receptionist_google.sql",
+    MIGRATIONS_DIR / "20260803_receptionist_whatsapp.sql",
 ]
 
 
