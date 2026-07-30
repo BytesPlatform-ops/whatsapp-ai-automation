@@ -402,3 +402,88 @@ def widget_verify(body: WidgetVerifyIn, tenant_id: str = Depends(resolve_tenant)
     domain (never a frontend-only success). Returns the honest current status."""
     from .service import widget
     return widget.verification_status(tenant_id)
+
+
+# ── WhatsApp provider endpoints (Wave 12) ─────────────────────────────────────
+
+@ops_router.get("/whatsapp/status")
+def whatsapp_status(tenant_id: str = Depends(resolve_tenant)) -> dict:
+    from .providers import whatsapp_cloud as wa
+    from .service import whatsapp_sync
+    return {"connection": wa.validate_connection(tenant_id),
+            "reply_mode": whatsapp_sync.reply_mode(tenant_id)}
+
+
+@ops_router.get("/whatsapp/wabas")
+def whatsapp_wabas(tenant_id: str = Depends(resolve_tenant)) -> dict:
+    from .providers import whatsapp_cloud as wa
+    try:
+        return {"wabas": wa.list_business_accounts(tenant_id)}
+    except wa.WhatsAppError as e:
+        raise HTTPException(status_code=400, detail={"reason": e.category})
+
+
+@ops_router.get("/whatsapp/phone-numbers")
+def whatsapp_phone_numbers(tenant_id: str = Depends(resolve_tenant), waba_id: str = Query(...)) -> dict:
+    from .providers import whatsapp_cloud as wa
+    try:
+        return {"phone_numbers": wa.list_phone_numbers(tenant_id, waba_id)}
+    except wa.WhatsAppError as e:
+        raise HTTPException(status_code=400, detail={"reason": e.category})
+
+
+class WhatsAppSettingsIn(BaseModel):
+    whatsapp_reply_mode: str | None = None
+
+
+@ops_router.post("/whatsapp/settings")
+def whatsapp_settings(body: WhatsAppSettingsIn, tenant_id: str = Depends(resolve_tenant)) -> dict:
+    from .service import config_repo, whatsapp_sync
+    if body.whatsapp_reply_mode in whatsapp_sync.REPLY_MODES:
+        config_repo.save(tenant_id, {"whatsapp_reply_mode": body.whatsapp_reply_mode}, updated_by="settings")
+    return {"reply_mode": whatsapp_sync.reply_mode(tenant_id)}
+
+
+@ops_router.get("/whatsapp/templates")
+def whatsapp_templates_list(tenant_id: str = Depends(resolve_tenant)) -> dict:
+    from .service import whatsapp_templates
+    return {"templates": whatsapp_templates.list_templates(tenant_id)}
+
+
+@ops_router.post("/whatsapp/templates/sync")
+def whatsapp_templates_sync(tenant_id: str = Depends(resolve_tenant)) -> dict:
+    from .service import whatsapp_templates
+    return whatsapp_templates.sync(tenant_id)
+
+
+@ops_router.get("/whatsapp/drafts")
+def whatsapp_drafts(tenant_id: str = Depends(resolve_tenant)) -> dict:
+    from .service import whatsapp_sync
+    return {"drafts": whatsapp_sync.list_drafts(tenant_id)}
+
+
+class WhatsAppDraftEditIn(BaseModel):
+    text: str | None = None
+
+
+@ops_router.post("/whatsapp/drafts/{draft_id}/edit")
+def whatsapp_draft_edit(draft_id: str, body: WhatsAppDraftEditIn, tenant_id: str = Depends(resolve_tenant)) -> dict:
+    from .service import whatsapp_sync
+    d = whatsapp_sync.edit_draft(tenant_id, draft_id, text=body.text)
+    if d is None:
+        raise HTTPException(status_code=404, detail="draft not found")
+    if d.get("status") == "locked":
+        raise HTTPException(status_code=409, detail="draft already sent")
+    return {"draft": d}
+
+
+@ops_router.post("/whatsapp/drafts/{draft_id}/retry")
+def whatsapp_draft_retry(draft_id: str, tenant_id: str = Depends(resolve_tenant)) -> dict:
+    from .worker import jobs_store
+    return {"enqueued": True, "job_id": jobs_store.enqueue(tenant_id, "whatsapp_send_retry", {"draft_id": draft_id})}
+
+
+@ops_router.post("/whatsapp/drafts/{draft_id}/reconcile")
+def whatsapp_draft_reconcile(draft_id: str, tenant_id: str = Depends(resolve_tenant)) -> dict:
+    from .worker import jobs_store
+    return {"enqueued": True, "job_id": jobs_store.enqueue(tenant_id, "whatsapp_reconcile", {"draft_id": draft_id})}
