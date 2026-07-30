@@ -85,6 +85,29 @@ describe('CalendarConfigPanel', () => {
     fireEvent.click(screen.getByRole('button', { name: /Preview slots/i }));
     expect(await screen.findByText(/provider unavailable/i)).toBeInTheDocument();
   });
+
+  it('rejects invalid working hours', async () => {
+    render(<CalendarConfigPanel />);
+    await screen.findByText('Ready for bookings');
+    fireEvent.change(screen.getByTestId('start-hour'), { target: { value: '18' } });
+    fireEvent.change(screen.getByTestId('end-hour'), { target: { value: '9' } });
+    fireEvent.click(screen.getByRole('button', { name: /Save settings/i }));
+    expect(await screen.findByText(/Working hours must be valid/i)).toBeInTheDocument();
+    expect(api.saveCalendarConfig).not.toHaveBeenCalled();
+  });
+
+  it('saves valid scheduling settings with a built working-hours map', async () => {
+    api.saveCalendarConfig.mockResolvedValue({ backendUp: true, config: {} } as never);
+    render(<CalendarConfigPanel />);
+    await screen.findByText('Ready for bookings');
+    fireEvent.change(screen.getByTestId('tz'), { target: { value: 'Europe/London' } });
+    fireEvent.click(screen.getByRole('button', { name: /Save settings/i }));
+    await waitFor(() => expect(api.saveCalendarConfig).toHaveBeenCalled());
+    const arg = api.saveCalendarConfig.mock.calls[0][0] as Record<string, unknown>;
+    expect(arg.timezone).toBe('Europe/London');
+    expect((arg.working_hours as Record<string, number[]>).mon).toEqual([9, 17]);
+    expect(arg.booking_policy).toBe('approval_required');
+  });
 });
 
 describe('GmailDraftsPanel', () => {
