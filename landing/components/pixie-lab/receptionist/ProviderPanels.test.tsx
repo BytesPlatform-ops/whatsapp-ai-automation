@@ -64,13 +64,33 @@ describe('AnalyticsRangePanel', () => {
     render(<AnalyticsRangePanel />);
     expect(await screen.findByText('Conversations')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '7 days' }));
-    await waitFor(() => expect(analytics).toHaveBeenCalledWith('7d'));
+    await waitFor(() => expect(analytics).toHaveBeenCalledWith('7d', undefined, undefined));
   });
 
   it('empty range shows an honest zero state', async () => {
     analytics.mockResolvedValue({ backendUp: true, range: { preset: 'today' }, metrics: { conversations: 0 } } as never);
     render(<AnalyticsRangePanel />);
     expect(await screen.findByText(/No activity in this range/i)).toBeInTheDocument();
+  });
+
+  it('rejects an invalid custom range (start after end)', async () => {
+    analytics.mockResolvedValue({ backendUp: true, range: { preset: '30d' }, metrics: { conversations: 1 } } as never);
+    render(<AnalyticsRangePanel />);
+    await screen.findByText('Conversations');
+    fireEvent.change(screen.getByTestId('custom-start'), { target: { value: '2026-08-10' } });
+    fireEvent.change(screen.getByTestId('custom-end'), { target: { value: '2026-08-01' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Custom' }));
+    expect(await screen.findByRole('alert')).toBeInTheDocument();
+  });
+
+  it('valid custom range calls the backend with start/end', async () => {
+    analytics.mockResolvedValue({ backendUp: true, range: {}, metrics: { conversations: 2 } } as never);
+    render(<AnalyticsRangePanel />);
+    await screen.findByText('Conversations');
+    fireEvent.change(screen.getByTestId('custom-start'), { target: { value: '2026-08-01' } });
+    fireEvent.change(screen.getByTestId('custom-end'), { target: { value: '2026-08-10' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Custom' }));
+    await waitFor(() => expect(analytics).toHaveBeenCalledWith('', '2026-08-01', '2026-08-10'));
   });
 });
 

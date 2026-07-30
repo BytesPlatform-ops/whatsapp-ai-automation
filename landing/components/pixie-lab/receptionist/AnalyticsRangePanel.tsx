@@ -28,16 +28,27 @@ export default function AnalyticsRangePanel() {
   const [status, setStatus] = useState<Status>('loading');
   const [data, setData] = useState<RcpAnalyticsRange | undefined>();
   const [preset, setPreset] = useState('30d');
+  const [customStart, setCustomStart] = useState('');
+  const [customEnd, setCustomEnd] = useState('');
+  const [rangeErr, setRangeErr] = useState('');
 
-  const load = useCallback(async (p: string) => {
+  const load = useCallback(async (p: string, s?: string, e?: string) => {
     setStatus('loading');
-    const r = await receptionistApi.getAnalyticsRange(p);
+    const r = await receptionistApi.getAnalyticsRange(p, s, e);
     if (!r.backendUp) { setStatus('offline'); return; }
     setData(r as RcpAnalyticsRange);
     setStatus('ready');
   }, []);
 
   useEffect(() => { void load(preset); }, [load, preset]);
+
+  function applyCustom() {
+    setRangeErr('');
+    if (!customStart || !customEnd) { setRangeErr('Pick both a start and end date.'); return; }
+    if (customStart > customEnd) { setRangeErr('Start date must be before end date.'); return; }
+    setPreset('');
+    void load('', customStart, customEnd);
+  }
 
   const m = data?.metrics || {};
 
@@ -51,7 +62,14 @@ export default function AnalyticsRangePanel() {
             {p.label}
           </button>
         ))}
+        <span className="mx-1 text-slate-300">|</span>
+        <input type="date" aria-label="Start date" value={customStart} onChange={(e) => setCustomStart(e.target.value)}
+          className="rounded border border-slate-200 px-2 py-1 text-xs" data-testid="custom-start" />
+        <input type="date" aria-label="End date" value={customEnd} onChange={(e) => setCustomEnd(e.target.value)}
+          className="rounded border border-slate-200 px-2 py-1 text-xs" data-testid="custom-end" />
+        <button onClick={applyCustom} className="rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-600">Custom</button>
       </div>
+      {rangeErr && <div role="alert" className="rounded-lg border border-red-300 bg-red-50 px-3 py-1.5 text-xs text-red-700">{rangeErr}</div>}
 
       {status === 'loading' && <LoadingCards />}
       {status === 'offline' && <OfflineState service="AI Receptionist" />}
