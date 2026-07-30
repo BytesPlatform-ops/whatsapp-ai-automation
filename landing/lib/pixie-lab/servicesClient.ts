@@ -28,7 +28,8 @@ import type {
   RcpCampaign, RcpCampaignReply, RcpBusinessProfile, RcpKnowledgeItem, RcpHealth,
   RcpKnowledgeSource, RcpIngestionJob, RcpRetrievalResult, RcpConfig, RcpConfigVersion,
   RcpWorkerJob, RcpWorkerHealth, RcpReminder, RcpUsageSummary, RcpLimit, RcpApproval,
-  RcpAnalyticsRange,
+  RcpAnalyticsRange, RcpGmailStatus, RcpGmailDraft, RcpCalendarStatus, RcpCalendar,
+  RcpSlot, RcpBookingRow, RcpWidgetConfig,
 } from './serviceTypes';
 
 async function req<T>(url: string, init?: RequestInit): Promise<Envelope<T>> {
@@ -687,4 +688,26 @@ export const receptionistApi = {
     if (end) qs.set('end', end);
     return req<RcpAnalyticsRange>(`${R}/analytics${qs.toString() ? `?${qs.toString()}` : ''}`);
   },
+
+  // ── Gmail provider (Wave 8/9) ─────────────────────────────────────────────
+  getGmailStatus: () => req<RcpGmailStatus>(`${R}/gmail`),
+  getGmailDrafts: () => req<{ drafts: RcpGmailDraft[] }>(`${R}/gmail?view=drafts`),
+  setGmailReplyMode: (mode: string) => post<{ reply_mode: string }>(`${R}/gmail`, { action: 'settings', gmail_reply_mode: mode }),
+  startGmailSync: (mode: 'initial' | 'incremental') => post<{ job_id: string }>(`${R}/gmail`, { action: 'sync', mode }),
+  retryGmailDraft: (id: string) => post<{ job_id: string }>(`${R}/gmail`, { action: 'retry', id }),
+  reconcileGmailDraft: (id: string) => post<{ job_id: string }>(`${R}/gmail`, { action: 'reconcile', id }),
+
+  // ── Calendar provider ─────────────────────────────────────────────────────
+  getCalendarStatus: () => req<RcpCalendarStatus>(`${R}/calendar`),
+  getCalendarList: () => req<{ calendars: RcpCalendar[] }>(`${R}/calendar?view=list`),
+  getCalendarAvailability: (service: string, days = 7) => req<{ status: string; slots: RcpSlot[] }>(`${R}/calendar?view=availability&service=${encodeURIComponent(service)}&days=${days}`),
+  getCalendarBookings: (status?: string) => req<{ bookings: RcpBookingRow[] }>(`${R}/calendar?view=bookings${status ? `&status=${encodeURIComponent(status)}` : ''}`),
+  saveCalendarConfig: (patch: Record<string, unknown>) => post<{ config: Record<string, unknown> }>(`${R}/calendar`, { action: 'config', ...patch }),
+  rescheduleCalendarBooking: (id: string, start: string, end: string) => post<{ status: string }>(`${R}/calendar`, { action: 'reschedule', id, start, end }),
+  cancelCalendarBooking: (id: string) => post<{ status: string }>(`${R}/calendar`, { action: 'cancel', id }),
+  reconcileCalendarBooking: (id: string) => post<{ status: string }>(`${R}/calendar`, { action: 'reconcile', id }),
+
+  // ── Widget ────────────────────────────────────────────────────────────────
+  getWidgetConfig: () => req<{ config: RcpWidgetConfig }>(`${R}/widget`),
+  saveWidgetConfig: (patch: Record<string, unknown>) => post<{ config: RcpWidgetConfig }>(`${R}/widget`, { action: 'save', ...patch }),
 };

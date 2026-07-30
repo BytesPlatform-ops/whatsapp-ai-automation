@@ -1015,6 +1015,30 @@ export interface RcpAnalyticsRange {
   range?: { start?: string; end?: string; preset?: string }; generated_at?: string;
   metrics?: Record<string, number>; rates?: Record<string, number>; top_intents?: Record<string, number>;
 }
+
+// ── Wave 8/9: Gmail / Calendar / Widget provider surfaces ────────────────────
+export interface RcpGmailStatus {
+  connection?: { connected?: boolean; email?: string; can_read?: boolean; can_draft?: boolean; can_send?: boolean; state?: string };
+  reply_mode?: string; last_history_id?: string; last_sync_at?: string;
+}
+export interface RcpGmailDraft {
+  id: string; to?: string; subject?: string; body?: string; thread_id?: string; status?: string;
+  provider_message_id?: string; approval_id?: string; reply_mode?: string; updated_at?: string;
+}
+export interface RcpCalendarStatus {
+  connection?: { connected?: boolean; email?: string; can_read_freebusy?: boolean; can_write_events?: boolean; state?: string };
+  configured?: boolean; calendar_id?: string; timezone?: string; services?: Record<string, number>;
+}
+export interface RcpCalendar { calendar_id: string; name?: string; access_role?: string; timezone?: string; primary?: boolean; }
+export interface RcpSlot { start: string; end: string; timezone?: string; }
+export interface RcpBookingRow {
+  id: string; name?: string; email?: string; service_type?: string; status?: string; start?: string; end?: string;
+  timezone?: string; provider_event_id?: string; provider_link?: string; conversation_id?: string;
+}
+export interface RcpWidgetConfig {
+  public_id?: string; enabled?: boolean; allowed_domains?: string[]; dev_mode?: boolean;
+  welcome_message?: string; offline_message?: string; updated_at?: string;
+}
 export interface RcpHealth {
   status?: string; agent_slug?: string; llm_provider?: string; model?: string; handlers?: number;
   persistence?: { backend?: string; durable?: boolean; supabase_configured?: boolean };

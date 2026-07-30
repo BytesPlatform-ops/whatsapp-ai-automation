@@ -13,8 +13,11 @@ import { IntegrationsPanel } from './IntegrationsPanel';
 import { KnowledgePanel } from './KnowledgePanel';
 import KnowledgeSourcesPanel from './KnowledgeSourcesPanel';
 import ApprovalsPanel from './ApprovalsPanel';
+import ProvidersPanel from './ProvidersPanel';
+import AnalyticsRangePanel from './AnalyticsRangePanel';
+import WidgetSetupPanel from './WidgetSetupPanel';
 
-export type RcpTab = 'dashboard' | 'console' | 'conversations' | 'crm' | 'operations' | 'integrations' | 'knowledge' | 'approvals';
+export type RcpTab = 'dashboard' | 'console' | 'conversations' | 'crm' | 'operations' | 'integrations' | 'knowledge' | 'approvals' | 'providers' | 'analytics' | 'widget';
 
 const TABS = [
   { label: 'Overview', href: '/pixie-lab/receptionist' },
@@ -23,6 +26,9 @@ const TABS = [
   { label: 'Inbox', href: '/pixie-lab/receptionist/conversations' },
   { label: 'CRM', href: '/pixie-lab/receptionist/crm' },
   { label: 'Approvals', href: '/pixie-lab/receptionist/approvals' },
+  { label: 'Providers', href: '/pixie-lab/receptionist/providers' },
+  { label: 'Analytics', href: '/pixie-lab/receptionist/analytics' },
+  { label: 'Widget', href: '/pixie-lab/receptionist/widget' },
   { label: 'Operations', href: '/pixie-lab/receptionist/operations' },
   { label: 'Integrations', href: '/pixie-lab/receptionist/integrations' },
   { label: 'Knowledge', href: '/pixie-lab/receptionist/knowledge' },
@@ -34,6 +40,9 @@ const TITLES: Record<RcpTab, string> = {
   conversations: 'Conversations',
   crm: 'CRM & Leads',
   approvals: 'Approvals',
+  providers: 'Gmail & Calendar',
+  analytics: 'Analytics',
+  widget: 'Website Widget',
   operations: 'Operations',
   integrations: 'Integrations',
   knowledge: 'Business Profile & Knowledge',
@@ -66,6 +75,9 @@ export function ReceptionistWorkspace({ tab, tenant }: { tab: RcpTab; tenant: st
           {tab === 'conversations' && <InboxPanel />}
           {tab === 'crm' && <CrmPanel />}
           {tab === 'approvals' && <ApprovalsPanel />}
+          {tab === 'providers' && <ProvidersPanel />}
+          {tab === 'analytics' && <AnalyticsRangePanel />}
+          {tab === 'widget' && <WidgetSetupPanel />}
           {tab === 'operations' && <OperationsPanel />}
           {tab === 'integrations' && <IntegrationsPanel />}
           {tab === 'knowledge' && (
