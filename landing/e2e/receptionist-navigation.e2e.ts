@@ -57,8 +57,9 @@ async function mockReceptionist(page: Page): Promise<void> {
 }
 
 test.describe('Receptionist navigation', () => {
-  const routes = ['', '/dashboard', '/conversations', '/crm', '/approvals', '/providers',
-                  '/analytics', '/widget', '/operations', '/integrations', '/knowledge'];
+  const routes = ['', '/dashboard', '/conversations', '/crm', '/approvals', '/gmail', '/providers',
+                  '/calendar', '/bookings', '/followups', '/analytics', '/widget',
+                  '/operations', '/integrations', '/knowledge'];
   for (const path of routes) {
     test(`direct navigation to ${path || '/'} renders without crash`, async ({ page }) => {
       await mockAuth(page);
