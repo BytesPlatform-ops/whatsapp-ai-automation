@@ -443,3 +443,128 @@ def handle_meta_connection_health(job: dict) -> dict:
     return {"status": "completed",
             "instagram": ig.validate_connection(tenant_id),
             "messenger": fb.validate_connection(tenant_id)}
+
+
+# ── SMS jobs ──────────────────────────────────────────────────────────────────
+
+@register_handler("sms_inbound")
+def handle_sms_inbound(job: dict) -> dict:
+    tenant_id = job.get("tenant_id", "")
+    payload = job.get("payload", {}) or {}
+    try:
+        from receptionist.service import sms_sync
+        return sms_sync.process_message(tenant_id, sender_number=payload.get("sender_number", ""),
+                                        payload=payload.get("payload", {}) or {})
+    except Exception as exc:  # pragma: no cover
+        return {"status": "failed", "reason": str(exc)[:120]}
+
+
+@register_handler("sms_status")
+def handle_sms_status(job: dict) -> dict:
+    tenant_id = job.get("tenant_id", "")
+    payload = job.get("payload", {}) or {}
+    from receptionist.service import sms_sync
+    return sms_sync.process_status(tenant_id, payload.get("status", {}) or {})
+
+
+@register_handler("sms_send_retry")
+def handle_sms_send_retry(job: dict) -> dict:
+    tenant_id = job.get("tenant_id", "")
+    payload = job.get("payload", {}) or {}
+    draft_id = payload.get("draft_id", "")
+    from receptionist.service import stores
+    d = stores.sms_drafts().get(tenant_id, draft_id)
+    if d is None:
+        return {"status": "failed", "reason": "draft_not_found"}
+    if d.get("status") in ("sent", "delivered", "provider_pending"):
+        return {"status": "completed", "already_sent": True}
+    from receptionist.service.registry import execute_action
+    res = execute_action(tenant_id, "sms_send", {
+        "to": d.get("customer_number", ""), "body": d.get("text", ""), "draft_id": draft_id,
+        "sender_number": d.get("sender_number", "")}, skip_approval=True,
+        idempotency_key=f"smssend:{draft_id}")
+    status = res.get("status")
+    if status == "provider_pending":
+        return {"status": "completed", "message_id": res.get("record_id", "")}
+    detail = str(res.get("detail", ""))
+    if status in ("suppressed", "blocked_by_policy") or "invalid_recipient" in detail or "missing_permission" in detail:
+        return {"status": "terminal", "reason": res.get("detail", status)}
+    if status == "delayed_quiet_hours":
+        return {"status": "completed", "delayed": True}
+    return {"status": "failed", "reason": res.get("detail", status)}
+
+
+@register_handler("sms_delayed_send")
+def handle_sms_delayed_send(job: dict) -> dict:
+    """Quiet-hours-queued send: re-validate consent + quiet hours, then send once."""
+    tenant_id = job.get("tenant_id", "")
+    payload = job.get("payload", {}) or {}
+    draft_id = payload.get("draft_id", "")
+    from receptionist.service import stores
+    d = stores.sms_drafts().get(tenant_id, draft_id)
+    if d is None:
+        return {"status": "failed", "reason": "draft_not_found"}
+    if d.get("status") in ("sent", "delivered", "provider_pending", "cancelled"):
+        return {"status": "completed", "already_handled": True}
+    from receptionist.service.registry import execute_action
+    res = execute_action(tenant_id, "sms_send", {
+        "to": d.get("customer_number", ""), "body": d.get("text", ""), "draft_id": draft_id,
+        "sender_number": d.get("sender_number", "")}, skip_approval=True,
+        idempotency_key=f"smsdelayed:{draft_id}")
+    status = res.get("status")
+    if status == "provider_pending":
+        return {"status": "completed", "message_id": res.get("record_id", "")}
+    if status == "delayed_quiet_hours":
+        return {"status": "retry", "reason": "still_quiet_hours"}
+    if status in ("suppressed", "blocked_by_policy"):
+        return {"status": "terminal", "reason": res.get("detail", status)}
+    return {"status": "failed", "reason": res.get("detail", status)}
+
+
+@register_handler("sms_reconcile")
+def handle_sms_reconcile(job: dict) -> dict:
+    tenant_id = job.get("tenant_id", "")
+    payload = job.get("payload", {}) or {}
+    from receptionist.service import stores
+    d = stores.sms_drafts().get(tenant_id, payload.get("draft_id", ""))
+    if d is None:
+        return {"status": "failed", "reason": "draft_not_found"}
+    mid = d.get("provider_message_id", "")
+    if not mid:
+        d["status"] = "reconciliation_required"
+        stores.sms_drafts().put(tenant_id, d)
+        return {"status": "reconciliation_required"}
+    from receptionist.providers import sms_adapter as sms
+    got = sms.reconcile_message(tenant_id, mid)
+    prov = (got.get("status") or "unknown").lower()
+    if prov in ("delivered", "sent", "failed", "undelivered"):
+        d["status"] = "delivered" if prov == "delivered" else ("failed" if prov in ("failed", "undelivered") else "sent")
+        stores.sms_drafts().put(tenant_id, d)
+        return {"status": "confirmed", "provider_status": prov}
+    return {"status": "unknown", "message_id": mid}
+
+
+@register_handler("sms_media_fetch")
+def handle_sms_media_fetch(job: dict) -> dict:
+    tenant_id = job.get("tenant_id", "")
+    payload = job.get("payload", {}) or {}
+    from receptionist.providers import sms_adapter as sms
+    from receptionist.service import stores
+    media_url = payload.get("media_url", "")
+    try:
+        meta = sms.get_media_metadata(tenant_id, media_url, payload.get("content_type", ""))
+    except sms.SMSError as exc:
+        return {"status": "failed", "reason": exc.category}
+    for m in stores.sms_media().list(tenant_id):
+        if m.get("media_url") == media_url:
+            m["kind"] = meta.get("kind", "")
+            m["status"] = "fetched"
+            stores.sms_media().put(tenant_id, m)
+    return {"status": "completed", "media_url": media_url}
+
+
+@register_handler("sms_connection_health")
+def handle_sms_connection_health(job: dict) -> dict:
+    tenant_id = job.get("tenant_id", "")
+    from receptionist.providers import sms_adapter as sms
+    return {"status": "completed", "health": sms.health_check(tenant_id)}
