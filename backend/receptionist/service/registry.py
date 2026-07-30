@@ -60,6 +60,7 @@ _BILLABLE_OPERATIONS = {
     "instagram_send_media": "receptionist_instagram_op",
     "messenger_send": "receptionist_messenger_op",
     "messenger_send_interactive": "receptionist_messenger_op",
+    "sms_send": "receptionist_sms_op",
 }
 
 
@@ -993,6 +994,71 @@ def _h_messenger_send_interactive(tenant_id: str, args: dict, *, conversation_id
     return _meta_send_common(tenant_id, args, "messenger", send_fn, "messenger_interactive")
 
 
+# ── SMS send handler ──────────────────────────────────────────────────────────
+
+def _sms_persist_send(tenant_id: str, args: dict, result: dict, *, status: str) -> None:
+    draft_id = args.get("draft_id", "")
+    if not draft_id:
+        return
+    from . import sms_sync
+    d = stores.sms_drafts().get(tenant_id, draft_id)
+    if d:
+        d["status"] = status
+        if result:
+            d["provider_message_id"] = result.get("message_id", "")
+            d["provider_segments"] = result.get("segments", d.get("segments", 0))
+            d["sent_at"] = now_iso()
+        sms_sync.save_draft(tenant_id, d)
+
+
+def _h_sms_send(tenant_id: str, args: dict, *, conversation_id: str = "") -> dict:
+    """Send an SMS reply: suppression → consent/quiet-hours policy → provider send
+    (confirmed) → persist → meter (per message + per segment). Quiet-hours blocked
+    sends are queued (delayed_quiet_hours), never silently dropped or force-sent.
+    Never fabricates 'delivered'; that arrives via the status callback."""
+    from ..providers import sms_adapter as sms
+    from . import sms_sync, sms_policy, sms_segments
+    to = args.get("to", "")
+    if sms_sync.is_suppressed(tenant_id, to):
+        _sms_persist_send(tenant_id, args, {}, status="blocked_suppression")
+        return {"status": "suppressed", "detail": "recipient is suppressed/opted-out",
+                "record_type": "", "record_id": "", "data": {}}
+    decision = sms_policy.evaluate_send(tenant_id, to_number=to, purpose=args.get("purpose", "support"),
+                                        responding_to_inbound=bool(args.get("responding_to_inbound")))
+    if not decision.get("allowed"):
+        reason = decision.get("blocked_reason", "blocked")
+        if reason == "quiet_hours":
+            _sms_persist_send(tenant_id, args, {}, status="delayed_quiet_hours")
+            try:
+                from ..worker import jobs_store
+                jobs_store.enqueue(tenant_id, "sms_delayed_send", {"draft_id": args.get("draft_id", "")},
+                                   run_at=decision.get("delayed_until", "") or None)
+            except Exception:
+                pass
+            return {"status": "delayed_quiet_hours", "detail": f"delayed until {decision.get('delayed_until','')}",
+                    "record_type": "", "record_id": "", "data": decision}
+        _sms_persist_send(tenant_id, args, {}, status="blocked_consent")
+        return {"status": "blocked_by_policy", "detail": f"sms_{reason}",
+                "record_type": "", "record_id": "", "data": decision}
+    body = args.get("body", "")
+    try:
+        result = sms.send_sms(tenant_id, to=to, body=body)
+    except sms.SMSError as exc:
+        return {"status": ("not_connected" if exc.category == "not_connected" else "failed"),
+                "detail": f"sms_{exc.category}", "record_type": "", "record_id": "", "data": {}}
+    _sms_persist_send(tenant_id, args, result, status="provider_pending")
+    try:
+        from . import usage
+        mid = result.get("message_id", "")
+        usage.increment(tenant_id, "sms_reply", idempotency_key=f"smssend:{mid}")
+        segs = result.get("segments") or sms_segments.estimate_segments(body) or 1
+        usage.increment(tenant_id, "sms_segments", amount=segs, idempotency_key=f"smsseg:{mid}")
+    except Exception:
+        pass
+    return {"status": "provider_pending", "detail": "sms accepted by provider",
+            "record_type": "sms_message", "record_id": result.get("message_id", ""), "data": result}
+
+
 def _h_calendar_create_event(tenant_id: str, args: dict, *, conversation_id: str = "") -> dict:
     """Create a real Calendar booking via the booking service (mock transport in
     tests). Rechecks availability, requires provider confirmation, idempotent."""
@@ -1128,6 +1194,7 @@ _REGISTRY: dict[str, ActionSpec] = {
     "instagram_send_media":           ActionSpec(_h_instagram_send_media, requires_approval=True, provider_action=True),
     "messenger_send":                 ActionSpec(_h_messenger_send, requires_approval=True, provider_action=True),
     "messenger_send_interactive":     ActionSpec(_h_messenger_send_interactive, requires_approval=True, provider_action=True),
+    "sms_send":                       ActionSpec(_h_sms_send, requires_approval=True, provider_action=True),
 }
 
 

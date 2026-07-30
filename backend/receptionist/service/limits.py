@@ -58,6 +58,11 @@ _RESOURCES: dict[str, tuple] = {
     "messenger_reply": ("receptionist_messenger_monthly_replies", _monthly("messenger_reply")),
     "messenger_interactive": ("receptionist_messenger_monthly_interactive", _monthly("messenger_interactive")),
     "messenger_media": ("receptionist_messenger_monthly_media", _monthly("messenger_media")),
+    "sms_inbound": ("receptionist_sms_monthly_inbound", _monthly("sms_inbound")),
+    "sms_reply": ("receptionist_sms_monthly_replies", _monthly("sms_reply")),
+    "sms_segments": ("receptionist_sms_monthly_segments", _monthly("sms_segments")),
+    "sms_mms": ("receptionist_sms_monthly_mms", _monthly("sms_mms")),
+    "sms_reminder": ("receptionist_sms_monthly_reminders", _monthly("sms_reminders")),
 }
 
 

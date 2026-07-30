@@ -32,6 +32,7 @@ COUNTER_METRICS: list[str] = [
     "whatsapp_inbound", "whatsapp_freeform", "whatsapp_template", "whatsapp_interactive",
     "instagram_inbound", "instagram_reply", "instagram_media",
     "messenger_inbound", "messenger_reply", "messenger_interactive", "messenger_media",
+    "sms_inbound", "sms_reply", "sms_segments", "sms_mms", "sms_reminders",
 ]
 
 
