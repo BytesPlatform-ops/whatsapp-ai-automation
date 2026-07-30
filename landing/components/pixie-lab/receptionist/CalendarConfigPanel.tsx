@@ -156,7 +156,7 @@ export default function CalendarConfigPanel() {
           <div className="grid gap-3 sm:grid-cols-2">
             <Field label="Timezone (IANA)"><TextInput value={tz} onChange={(e) => setTz(e.target.value)} placeholder="Europe/London" data-testid="tz" /></Field>
             <Field label="Booking policy">
-              <select value={policy} onChange={(e) => setPolicy(e.target.value)} className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" data-testid="policy">
+              <select aria-label="Booking policy" value={policy} onChange={(e) => setPolicy(e.target.value)} className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" data-testid="policy">
                 <option value="automatic">Automatic</option>
                 <option value="approval_required">Approval required</option>
                 <option value="manual_request_only">Manual request only</option>
@@ -201,7 +201,7 @@ export default function CalendarConfigPanel() {
       <Section title="Availability preview" sub="Real slots from your calendar — never sample data.">
         <Card>
           <div className="flex flex-wrap gap-2">
-            <select data-testid="preview-service" value={previewService} onChange={(e) => setPreviewService(e.target.value)}
+            <select aria-label="Preview service" data-testid="preview-service" value={previewService} onChange={(e) => setPreviewService(e.target.value)}
               className="rounded-lg border border-slate-200 px-3 py-2 text-sm">
               <option value="">First service</option>
               {Object.keys(services).map((k) => <option key={k} value={k}>{k}</option>)}

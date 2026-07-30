@@ -84,7 +84,7 @@ export default function ProvidersPanel() {
           </div>
           <div className="mt-3 grid gap-3 sm:grid-cols-2">
             <Field label="Reply mode">
-              <select data-testid="reply-mode" value={gmail?.reply_mode || 'draft_only'}
+              <select aria-label="Gmail reply mode" data-testid="reply-mode" value={gmail?.reply_mode || 'draft_only'}
                 onChange={(e) => setMode(e.target.value)} disabled={busy === 'mode'}
                 className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm">
                 {REPLY_MODES.map((m) => <option key={m} value={m}>{m.replace('_', ' ')}</option>)}
