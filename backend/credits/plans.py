@@ -140,6 +140,10 @@ _RECEPTIONIST_LIMITS_FREE = {
     "receptionist_voice_monthly_recorded_minutes": 0, "receptionist_voice_monthly_analyses": 0,
     "receptionist_voice_monthly_callbacks": 0, "receptionist_voice_stored_calls": 0,
     "receptionist_voice_max_call_seconds": 0,
+    "receptionist_campaign_active": 0, "receptionist_campaign_monthly_recipients": 0,
+    "receptionist_campaign_monthly_messages": 0, "receptionist_campaign_sequence_steps": 0,
+    "receptionist_campaign_audience_size": 0, "receptionist_campaign_saved_segments": 0,
+    "receptionist_campaign_ai_generations": 0, "receptionist_campaign_monthly_voice_minutes": 0,
 }
 _RECEPTIONIST_LIMITS_STARTER = {
     "receptionist_widget_sites": 3, "receptionist_monthly_conversations": 1000,
@@ -176,6 +180,10 @@ _RECEPTIONIST_LIMITS_STARTER = {
     "receptionist_voice_monthly_recorded_minutes": 0, "receptionist_voice_monthly_analyses": 200,
     "receptionist_voice_monthly_callbacks": 100, "receptionist_voice_stored_calls": 5000,
     "receptionist_voice_max_call_seconds": 600,
+    "receptionist_campaign_active": 2, "receptionist_campaign_monthly_recipients": 2000,
+    "receptionist_campaign_monthly_messages": 5000, "receptionist_campaign_sequence_steps": 5,
+    "receptionist_campaign_audience_size": 1000, "receptionist_campaign_saved_segments": 10,
+    "receptionist_campaign_ai_generations": 200, "receptionist_campaign_monthly_voice_minutes": 0,
 }
 _RECEPTIONIST_LIMITS_PRO = {
     "receptionist_widget_sites": 25, "receptionist_monthly_conversations": UNLIMITED,
@@ -212,6 +220,10 @@ _RECEPTIONIST_LIMITS_PRO = {
     "receptionist_voice_monthly_recorded_minutes": UNLIMITED, "receptionist_voice_monthly_analyses": UNLIMITED,
     "receptionist_voice_monthly_callbacks": UNLIMITED, "receptionist_voice_stored_calls": UNLIMITED,
     "receptionist_voice_max_call_seconds": 1800,
+    "receptionist_campaign_active": 20, "receptionist_campaign_monthly_recipients": UNLIMITED,
+    "receptionist_campaign_monthly_messages": UNLIMITED, "receptionist_campaign_sequence_steps": 10,
+    "receptionist_campaign_audience_size": 25000, "receptionist_campaign_saved_segments": UNLIMITED,
+    "receptionist_campaign_ai_generations": UNLIMITED, "receptionist_campaign_monthly_voice_minutes": 500,
 }
 
 

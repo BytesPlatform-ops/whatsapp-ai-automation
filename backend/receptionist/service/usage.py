@@ -37,6 +37,8 @@ COUNTER_METRICS: list[str] = [
     "telegram_callbacks", "telegram_media",
     "voice_inbound_calls", "voice_outbound_calls", "voice_outbound_initiations", "voice_minutes",
     "voice_transfers", "voice_recorded_minutes", "voice_analyses", "voice_callbacks",
+    "campaign_recipients", "campaign_messages", "campaign_replies", "campaign_conversions",
+    "campaign_ai_generations",
 ]
 
 

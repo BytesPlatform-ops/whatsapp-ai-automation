@@ -74,6 +74,12 @@ _RESOURCES: dict[str, tuple] = {
     "voice_callback": ("receptionist_voice_monthly_callbacks", _monthly("voice_callbacks")),
     "voice_number": ("receptionist_voice_numbers", lambda t: len(stores.voice_numbers().list(t))),
     "stored_call": ("receptionist_voice_stored_calls", lambda t: stores.voice_sessions().count(t)),
+    "campaign_recipient": ("receptionist_campaign_monthly_recipients", _monthly("campaign_recipients")),
+    "campaign_message": ("receptionist_campaign_monthly_messages", _monthly("campaign_messages")),
+    "campaign_ai_generation": ("receptionist_campaign_ai_generations", _monthly("campaign_ai_generations")),
+    "campaign_active": ("receptionist_campaign_active",
+                        lambda t: len([c for c in stores.cmp_campaigns().list(t)
+                                       if c.get("status") in ("active", "scheduled", "preparing")])),
 }
 
 
