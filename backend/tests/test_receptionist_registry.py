@@ -295,10 +295,12 @@ class TestProviderStubs:
         result = _h_calendar_create_event(TENANT, {"title": "Meeting"})
         assert result["status"] == "not_connected"
 
-    def test_calendar_update_event_handler_returns_not_connected(self):
+    def test_calendar_update_event_handler_unknown_booking(self):
+        """Reschedule validates the booking first: an unknown booking is not_found,
+        never a fabricated success."""
         from receptionist.service.registry import _h_calendar_update_event
-        result = _h_calendar_update_event(TENANT, {"event_id": "evt_123"})
-        assert result["status"] == "not_connected"
+        result = _h_calendar_update_event(TENANT, {"booking_id": "nope"})
+        assert result["status"] == "not_found"
 
     def test_provider_actions_are_in_registry(self):
         from receptionist.service.registry import get_spec

@@ -52,6 +52,7 @@ _BILLABLE_OPERATIONS = {
     "gmail_send": "receptionist_gmail_op",
     "calendar_create_event": "receptionist_calendar_op",
     "calendar_update_event": "receptionist_calendar_op",
+    "calendar_cancel_event": "receptionist_calendar_op",
 }
 
 
@@ -794,19 +795,53 @@ def _is_suppressed(tenant_id: str, *, email: str = "", phone: str = "") -> bool:
 
 
 def _h_calendar_create_event(tenant_id: str, args: dict, *, conversation_id: str = "") -> dict:
-    return {
-        "status": "not_connected",
-        "detail": "Calendar provider not connected — action queued for next integration phase",
-        "record_type": "", "record_id": "", "data": {},
-    }
+    """Create a real Calendar booking via the booking service (mock transport in
+    tests). Rechecks availability, requires provider confirmation, idempotent."""
+    from . import booking
+    from ..providers import gcal
+    try:
+        res = booking.create_booking(
+            tenant_id, service=args.get("service", "consultation"),
+            start=args.get("start", ""), end=args.get("end", ""),
+            name=args.get("name", ""), email=args.get("email", ""),
+            contact_id=args.get("contact_id", ""), conversation_id=conversation_id,
+            idempotency_key=args.get("idempotency_key", ""))
+    except gcal.CalendarError as exc:
+        return {"status": ("not_connected" if exc.category == "not_connected" else "failed"),
+                "detail": f"calendar_{exc.category}", "record_type": "", "record_id": "", "data": {}}
+    status = res.get("status")
+    if status == "confirmed":
+        b = res["booking"]
+        return {"status": "confirmed", "detail": "booking confirmed",
+                "record_type": "booking", "record_id": b["id"], "data": b}
+    # surface a truthful not_connected rather than a generic provider_unavailable
+    if status == "provider_unavailable" and res.get("reason") == "not_connected":
+        return {"status": "not_connected", "detail": "calendar_not_connected",
+                "record_type": "", "record_id": "", "data": {}}
+    return {"status": status, "detail": f"booking_{status}", "record_type": "", "record_id": "", "data": res}
 
 
 def _h_calendar_update_event(tenant_id: str, args: dict, *, conversation_id: str = "") -> dict:
-    return {
-        "status": "not_connected",
-        "detail": "Calendar provider not connected — action queued for next integration phase",
-        "record_type": "", "record_id": "", "data": {},
-    }
+    """Reschedule a confirmed booking (provider-backed)."""
+    from . import booking
+    res = booking.reschedule_booking(tenant_id, args.get("booking_id", ""),
+                                     new_start=args.get("start", ""), new_end=args.get("end", ""))
+    ok = res.get("status") == "rescheduled"
+    return {"status": ("rescheduled" if ok else res.get("status", "failed")),
+            "detail": f"reschedule_{res.get('status')}",
+            "record_type": "booking" if ok else "", "record_id": args.get("booking_id", "") if ok else "",
+            "data": res.get("booking", {})}
+
+
+def _h_calendar_cancel_event(tenant_id: str, args: dict, *, conversation_id: str = "") -> dict:
+    """Cancel a confirmed booking (provider-backed)."""
+    from . import booking
+    res = booking.cancel_booking(tenant_id, args.get("booking_id", ""), reason=args.get("reason", ""))
+    ok = res.get("status") == "cancelled"
+    return {"status": ("cancelled" if ok else res.get("status", "failed")),
+            "detail": f"cancel_{res.get('status')}",
+            "record_type": "booking" if ok else "", "record_id": args.get("booking_id", "") if ok else "",
+            "data": res.get("booking", {})}
 
 
 # ── Payment action (approval-gated) ──────────────────────────────────────────
@@ -886,6 +921,7 @@ _REGISTRY: dict[str, ActionSpec] = {
     "gmail_send":                     ActionSpec(_h_gmail_send, requires_approval=True, provider_action=True),
     "calendar_create_event":          ActionSpec(_h_calendar_create_event, requires_approval=True, provider_action=True),
     "calendar_update_event":          ActionSpec(_h_calendar_update_event, requires_approval=True, provider_action=True),
+    "calendar_cancel_event":          ActionSpec(_h_calendar_cancel_event, requires_approval=True, provider_action=True),
 }
 
 
