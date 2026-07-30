@@ -40,6 +40,9 @@ CONFIG_FIELDS: list[str] = [
     "whatsapp_reply_mode",  # WhatsApp channel policy (Wave 12)
     "instagram_reply_mode",  # Instagram channel policy (Wave 13)
     "messenger_reply_mode",  # Messenger channel policy (Wave 13)
+    "sms_reply_mode",  # SMS channel policy (Wave 14)
+    "sms_quiet_hours",  # SMS quiet-hours config (Wave 14)
+    "sms_promotional_enabled",  # SMS promotional gate (Wave 14)
 ]
 
 # Configuration is "configured enough to answer" once these are present.

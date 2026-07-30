@@ -23,6 +23,7 @@ unseal descriptors.
 
 from __future__ import annotations
 
+import re
 from typing import Optional
 
 import persistence
@@ -165,6 +166,30 @@ def find_tenant_by_page_id(page_id: str) -> Optional[str]:
             continue
         d = unseal_descriptor(descriptor)
         if str(d.get("page_id") or "") == pid:
+            return t
+    return None
+
+
+def find_tenant_by_sms_number(sender_number: str) -> Optional[str]:
+    """Resolve the workspace tenant that owns an SMS sender number.
+
+    Server-side only — used by the SMS webhook to derive ownership from the
+    verified destination (business) number (never from the request body). One
+    sender number maps to at most one active workspace.
+    """
+    n = re.sub(r"[^\d+]", "", sender_number or "")
+    if n and not n.startswith("+"):
+        n = "+" + n
+    if not n:
+        return None
+    for (t, c), descriptor in _CONNECTIONS.items():
+        if c not in ("sms_read", "sms_send"):
+            continue
+        d = unseal_descriptor(descriptor)
+        stored = re.sub(r"[^\d+]", "", str(d.get("sender_number") or ""))
+        if stored and not stored.startswith("+"):
+            stored = "+" + stored
+        if stored == n:
             return t
     return None
 

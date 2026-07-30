@@ -70,6 +70,15 @@ T_WA_TEMPLATES = "receptionist_whatsapp_templates"
 T_WA_MEDIA = "receptionist_whatsapp_media"
 T_WA_WINDOWS = "receptionist_whatsapp_windows"
 
+# SMS (Twilio-initial, replaceable provider).
+T_SMS_NUMBER_MAP = "receptionist_sms_number_map"
+T_SMS_THREAD_MAP = "receptionist_sms_thread_map"
+T_SMS_DRAFTS = "receptionist_sms_drafts"
+T_SMS_SEND_ATTEMPTS = "receptionist_sms_send_attempts"
+T_SMS_STATUSES = "receptionist_sms_statuses"
+T_SMS_MEDIA = "receptionist_sms_media"
+T_SMS_DELAYED = "receptionist_sms_delayed"
+
 # Meta Messaging (Instagram + Messenger) — shared domain, channel-discriminated.
 T_META_ASSETS = "receptionist_meta_assets"
 T_META_IDENTITY_MAP = "receptionist_meta_identity_map"
@@ -99,6 +108,8 @@ ALL_TABLES = [
     T_WA_TEMPLATES, T_WA_MEDIA, T_WA_WINDOWS,
     T_META_ASSETS, T_META_IDENTITY_MAP, T_META_THREAD_MAP, T_META_DRAFTS,
     T_META_SEND_ATTEMPTS, T_META_STATUSES, T_META_MEDIA, T_META_WINDOWS,
+    T_SMS_NUMBER_MAP, T_SMS_THREAD_MAP, T_SMS_DRAFTS, T_SMS_SEND_ATTEMPTS,
+    T_SMS_STATUSES, T_SMS_MEDIA, T_SMS_DELAYED,
 ]
 
 
@@ -294,6 +305,15 @@ def meta_send_attempts() -> RecordStore: return store(T_META_SEND_ATTEMPTS)
 def meta_statuses() -> RecordStore: return store(T_META_STATUSES)
 def meta_media() -> RecordStore: return store(T_META_MEDIA)
 def meta_windows() -> RecordStore: return store(T_META_WINDOWS)
+
+
+def sms_number_map() -> RecordStore: return store(T_SMS_NUMBER_MAP)
+def sms_thread_map() -> RecordStore: return store(T_SMS_THREAD_MAP)
+def sms_drafts() -> RecordStore: return store(T_SMS_DRAFTS)
+def sms_send_attempts() -> RecordStore: return store(T_SMS_SEND_ATTEMPTS)
+def sms_statuses() -> RecordStore: return store(T_SMS_STATUSES)
+def sms_media() -> RecordStore: return store(T_SMS_MEDIA)
+def sms_delayed() -> RecordStore: return store(T_SMS_DELAYED)
 
 
 # ── durable per-conversation lock ─────────────────────────────────────────────
