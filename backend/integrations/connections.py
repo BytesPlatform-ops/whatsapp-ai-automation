@@ -225,6 +225,29 @@ def find_tenant_by_telegram_business_connection(business_connection_id: str) -> 
     return None
 
 
+def find_tenant_by_voice_number(number_or_id: str) -> Optional[str]:
+    """Resolve the workspace tenant that owns a voice phone number (E.164 or the
+    provider phone-number id). Server-side only — used by the Vapi assistant-request
+    + server-events to derive ownership from the verified number/id, never the
+    payload. One number maps to at most one active workspace."""
+    raw = (number_or_id or "").strip()
+    if not raw:
+        return None
+    norm = re.sub(r"[^\d+]", "", raw)
+    if norm and not norm.startswith("+"):
+        norm = "+" + norm
+    for (t, c), descriptor in _CONNECTIONS.items():
+        if c not in ("voice_read", "voice_send"):
+            continue
+        d = unseal_descriptor(descriptor)
+        for num in (d.get("numbers") or []):
+            if str(num.get("phone_number_id", "")) == raw or re.sub(r"[^\d+]", "", str(num.get("number", ""))) in (raw, norm):
+                return t
+        if str(d.get("default_number_id", "")) == raw:
+            return t
+    return None
+
+
 def disconnect(tenant_id: str, capabilities: Optional[list[str]] = None) -> None:
     """Remove a tenant's connections (all, or a specific set of capabilities)."""
     for (t, c) in list(_CONNECTIONS.keys()):

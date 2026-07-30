@@ -33,6 +33,7 @@ MIGRATION_FILES = [
     MIGRATIONS_DIR / "20260810_receptionist_meta_messaging.sql",
     MIGRATIONS_DIR / "20260817_receptionist_sms.sql",
     MIGRATIONS_DIR / "20260824_receptionist_telegram.sql",
+    MIGRATIONS_DIR / "20260831_receptionist_voice.sql",
 ]
 
 sys.path.insert(0, str(BACKEND_DIR))

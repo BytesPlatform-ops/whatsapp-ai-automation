@@ -70,6 +70,18 @@ T_WA_TEMPLATES = "receptionist_whatsapp_templates"
 T_WA_MEDIA = "receptionist_whatsapp_media"
 T_WA_WINDOWS = "receptionist_whatsapp_windows"
 
+# Voice / telephony (Vapi-initial, replaceable provider).
+T_VOICE_NUMBERS = "receptionist_voice_numbers"
+T_VOICE_ASSISTANTS = "receptionist_voice_assistants"
+T_VOICE_SESSIONS = "receptionist_voice_sessions"
+T_VOICE_EVENTS = "receptionist_voice_events"
+T_VOICE_TRANSCRIPTS = "receptionist_voice_transcripts"
+T_VOICE_TOOLCALLS = "receptionist_voice_toolcalls"
+T_VOICE_TRANSFERS = "receptionist_voice_transfers"
+T_VOICE_RECORDINGS = "receptionist_voice_recordings"
+T_VOICE_REPORTS = "receptionist_voice_reports"
+T_VOICE_CALLBACKS = "receptionist_voice_callbacks"
+
 # Telegram (Bot + Business, one shared domain).
 T_TG_BUSINESS = "receptionist_telegram_business"
 T_TG_IDENTITY_MAP = "receptionist_telegram_identity_map"
@@ -123,6 +135,8 @@ ALL_TABLES = [
     T_SMS_STATUSES, T_SMS_MEDIA, T_SMS_DELAYED,
     T_TG_BUSINESS, T_TG_IDENTITY_MAP, T_TG_THREAD_MAP, T_TG_DRAFTS, T_TG_SEND_ATTEMPTS,
     T_TG_STATUSES, T_TG_CALLBACKS, T_TG_MEDIA, T_TG_EDITS,
+    T_VOICE_NUMBERS, T_VOICE_ASSISTANTS, T_VOICE_SESSIONS, T_VOICE_EVENTS, T_VOICE_TRANSCRIPTS,
+    T_VOICE_TOOLCALLS, T_VOICE_TRANSFERS, T_VOICE_RECORDINGS, T_VOICE_REPORTS, T_VOICE_CALLBACKS,
 ]
 
 
@@ -289,6 +303,7 @@ def configurations() -> RecordStore: return store(T_CONFIGURATIONS)
 def config_versions() -> RecordStore: return store(T_CONFIG_VERSIONS)
 def consent() -> RecordStore: return store(T_CONSENT)
 def suppression() -> RecordStore: return store(T_SUPPRESSION)
+def dnc() -> RecordStore: return store(T_DNC)
 def usage_counters() -> RecordStore: return store(T_USAGE_COUNTERS)
 def knowledge_sources() -> RecordStore: return store(T_KNOWLEDGE_SOURCES)
 def ingestion_jobs() -> RecordStore: return store(T_INGESTION_JOBS)
@@ -338,6 +353,18 @@ def tg_statuses() -> RecordStore: return store(T_TG_STATUSES)
 def tg_callbacks() -> RecordStore: return store(T_TG_CALLBACKS)
 def tg_media() -> RecordStore: return store(T_TG_MEDIA)
 def tg_edits() -> RecordStore: return store(T_TG_EDITS)
+
+
+def voice_numbers() -> RecordStore: return store(T_VOICE_NUMBERS)
+def voice_assistants() -> RecordStore: return store(T_VOICE_ASSISTANTS)
+def voice_sessions() -> RecordStore: return store(T_VOICE_SESSIONS)
+def voice_events() -> RecordStore: return store(T_VOICE_EVENTS)
+def voice_transcripts() -> RecordStore: return store(T_VOICE_TRANSCRIPTS)
+def voice_toolcalls() -> RecordStore: return store(T_VOICE_TOOLCALLS)
+def voice_transfers() -> RecordStore: return store(T_VOICE_TRANSFERS)
+def voice_recordings() -> RecordStore: return store(T_VOICE_RECORDINGS)
+def voice_reports() -> RecordStore: return store(T_VOICE_REPORTS)
+def voice_callbacks() -> RecordStore: return store(T_VOICE_CALLBACKS)
 
 
 # ── durable per-conversation lock ─────────────────────────────────────────────
