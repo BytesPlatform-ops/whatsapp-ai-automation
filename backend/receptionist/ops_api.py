@@ -487,3 +487,133 @@ def whatsapp_draft_retry(draft_id: str, tenant_id: str = Depends(resolve_tenant)
 def whatsapp_draft_reconcile(draft_id: str, tenant_id: str = Depends(resolve_tenant)) -> dict:
     from .worker import jobs_store
     return {"enqueued": True, "job_id": jobs_store.enqueue(tenant_id, "whatsapp_reconcile", {"draft_id": draft_id})}
+
+
+# ── Meta Messaging (Instagram + Messenger) endpoints (Wave 13) ────────────────
+
+_META_CHANNELS = ("instagram", "messenger")
+
+
+@ops_router.get("/meta-messaging/status")
+def meta_messaging_status(tenant_id: str = Depends(resolve_tenant)) -> dict:
+    from .service import meta_messaging_assets
+    return meta_messaging_assets.status(tenant_id)
+
+
+@ops_router.get("/meta-messaging/instagram/accounts")
+def meta_instagram_accounts(tenant_id: str = Depends(resolve_tenant)) -> dict:
+    from .providers import instagram_messaging as ig
+    from .providers.meta_messaging_common import MetaMessagingError
+    try:
+        return {"accounts": ig.list_accounts(tenant_id)}
+    except MetaMessagingError as e:
+        raise HTTPException(status_code=400, detail={"reason": e.category})
+
+
+@ops_router.get("/meta-messaging/messenger/pages")
+def meta_messenger_pages(tenant_id: str = Depends(resolve_tenant)) -> dict:
+    from .providers import messenger as fb
+    from .providers.meta_messaging_common import MetaMessagingError
+    try:
+        return {"pages": fb.list_pages(tenant_id)}
+    except MetaMessagingError as e:
+        raise HTTPException(status_code=400, detail={"reason": e.category})
+
+
+class MetaSelectIn(BaseModel):
+    channel: str
+    asset_id: str
+
+
+@ops_router.post("/meta-messaging/select")
+def meta_select_asset(body: MetaSelectIn, tenant_id: str = Depends(resolve_tenant)) -> dict:
+    from .service import meta_messaging_assets
+    if body.channel == "instagram":
+        res = meta_messaging_assets.select_instagram_account(tenant_id, body.asset_id)
+    elif body.channel == "messenger":
+        res = meta_messaging_assets.select_page(tenant_id, body.asset_id)
+    else:
+        raise HTTPException(status_code=400, detail="unknown channel")
+    if res.get("status") == "asset_ownership_failed":
+        raise HTTPException(status_code=403, detail=res)
+    return res
+
+
+class MetaSettingsIn(BaseModel):
+    channel: str
+    reply_mode: str | None = None
+
+
+@ops_router.post("/meta-messaging/settings")
+def meta_settings(body: MetaSettingsIn, tenant_id: str = Depends(resolve_tenant)) -> dict:
+    from .service import config_repo, meta_messaging_sync
+    if body.channel not in _META_CHANNELS:
+        raise HTTPException(status_code=400, detail="unknown channel")
+    if body.reply_mode in meta_messaging_sync.REPLY_MODES:
+        config_repo.save(tenant_id, {f"{body.channel}_reply_mode": body.reply_mode}, updated_by="settings")
+    return {"channel": body.channel, "reply_mode": meta_messaging_sync.reply_mode(tenant_id, body.channel)}
+
+
+@ops_router.get("/meta-messaging/drafts")
+def meta_drafts(channel: str = Query(""), tenant_id: str = Depends(resolve_tenant)) -> dict:
+    from .service import meta_messaging_sync
+    return {"drafts": meta_messaging_sync.list_drafts(tenant_id, channel=channel)}
+
+
+class MetaDraftEditIn(BaseModel):
+    text: str | None = None
+
+
+@ops_router.post("/meta-messaging/drafts/{draft_id}/edit")
+def meta_draft_edit(draft_id: str, body: MetaDraftEditIn, tenant_id: str = Depends(resolve_tenant)) -> dict:
+    from .service import meta_messaging_sync
+    d = meta_messaging_sync.edit_draft(tenant_id, draft_id, text=body.text)
+    if d is None:
+        raise HTTPException(status_code=404, detail="draft not found")
+    if d.get("status") == "locked":
+        raise HTTPException(status_code=409, detail="draft already sent")
+    return {"draft": d}
+
+
+@ops_router.post("/meta-messaging/drafts/{draft_id}/retry")
+def meta_draft_retry(draft_id: str, tenant_id: str = Depends(resolve_tenant)) -> dict:
+    from .service import stores
+    from .worker import jobs_store
+    d = stores.meta_drafts().get(tenant_id, draft_id)
+    if d is None:
+        raise HTTPException(status_code=404, detail="draft not found")
+    job = f"{d.get('channel', 'instagram')}_send_retry"
+    return {"enqueued": True, "job_id": jobs_store.enqueue(tenant_id, job, {"draft_id": draft_id})}
+
+
+@ops_router.post("/meta-messaging/drafts/{draft_id}/reconcile")
+def meta_draft_reconcile(draft_id: str, tenant_id: str = Depends(resolve_tenant)) -> dict:
+    from .service import stores
+    from .worker import jobs_store
+    d = stores.meta_drafts().get(tenant_id, draft_id)
+    if d is None:
+        raise HTTPException(status_code=404, detail="draft not found")
+    job = f"{d.get('channel', 'instagram')}_reconcile"
+    return {"enqueued": True, "job_id": jobs_store.enqueue(tenant_id, job, {"draft_id": draft_id})}
+
+
+@ops_router.post("/meta-messaging/test")
+def meta_test_connection(tenant_id: str = Depends(resolve_tenant)) -> dict:
+    from .service import meta_messaging_assets
+    return {"tested": True, **meta_messaging_assets.status(tenant_id)}
+
+
+@ops_router.post("/meta-messaging/health")
+def meta_health(tenant_id: str = Depends(resolve_tenant)) -> dict:
+    from .worker import jobs_store
+    return {"enqueued": True, "job_id": jobs_store.enqueue(tenant_id, "meta_connection_health", {})}
+
+
+class MetaDisconnectIn(BaseModel):
+    channel: str
+
+
+@ops_router.post("/meta-messaging/disconnect")
+def meta_disconnect(body: MetaDisconnectIn, tenant_id: str = Depends(resolve_tenant)) -> dict:
+    from .service import meta_messaging_assets
+    return meta_messaging_assets.disconnect(tenant_id, body.channel)

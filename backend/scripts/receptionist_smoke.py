@@ -17,6 +17,12 @@ Usage:
         python scripts/receptionist_smoke.py whatsapp-read --tenant t_x
     RUN_LIVE_RECEPTIONIST_WHATSAPP_SEND_TESTS=1 \\
         python scripts/receptionist_smoke.py whatsapp-send --tenant t_x --to 15551230000  # write
+    RUN_LIVE_RECEPTIONIST_INSTAGRAM_READ_TESTS=1 \\
+        python scripts/receptionist_smoke.py instagram-read --tenant t_x
+    RUN_LIVE_RECEPTIONIST_MESSENGER_READ_TESTS=1 \\
+        python scripts/receptionist_smoke.py messenger-read --tenant t_x
+    RUN_LIVE_RECEPTIONIST_INSTAGRAM_SEND_TESTS=1 \\
+        python scripts/receptionist_smoke.py instagram-send --tenant t_x --to 178XXXXXXXX  # write
 """
 
 from __future__ import annotations
@@ -60,6 +66,10 @@ def cmd_plan() -> int:
     print("  calendar-write → create test event + delete (WRITE)        [RUN_LIVE_RECEPTIONIST_CALENDAR_WRITE_TESTS]")
     print("  whatsapp-read  → validate + wabas + phone-numbers + templates [RUN_LIVE_RECEPTIONIST_WHATSAPP_READ_TESTS]")
     print("  whatsapp-send  → send 1 free-form text (WRITE, 24h window)   [RUN_LIVE_RECEPTIONIST_WHATSAPP_SEND_TESTS]")
+    print("  instagram-read → validate + list accounts                    [RUN_LIVE_RECEPTIONIST_INSTAGRAM_READ_TESTS]")
+    print("  instagram-send → send 1 DM (WRITE, open window)              [RUN_LIVE_RECEPTIONIST_INSTAGRAM_SEND_TESTS]")
+    print("  messenger-read → validate + list pages                       [RUN_LIVE_RECEPTIONIST_MESSENGER_READ_TESTS]")
+    print("  messenger-send → send 1 message (WRITE, open window)         [RUN_LIVE_RECEPTIONIST_MESSENGER_SEND_TESTS]")
     print("Defaults: dry-run, read-only, credentials + content redacted.")
     return 0
 
@@ -150,15 +160,60 @@ def cmd_whatsapp_send(tenant: str, to: str) -> int:
     return 0
 
 
+def cmd_instagram_read(tenant: str) -> int:
+    if not _require("RUN_LIVE_RECEPTIONIST_INSTAGRAM_READ_TESTS"):
+        return cmd_plan()
+    from receptionist.providers import instagram_messaging as ig
+    print("instagram-read (read-only — counts/state only, tokens redacted):")
+    _timed("validate", lambda: ig.validate_connection(tenant))
+    _timed("accounts", lambda: ig.list_accounts(tenant))
+    return 0
+
+
+def cmd_instagram_send(tenant: str, to: str) -> int:
+    if not _require("RUN_LIVE_RECEPTIONIST_INSTAGRAM_SEND_TESTS"):
+        return cmd_plan()
+    if not to:
+        print("ERR: --to is required for a send smoke test (use a safe test recipient id).")
+        return 2
+    from receptionist.providers import instagram_messaging as ig
+    print("instagram-send (WRITE — ONE DM; requires an open messaging window):")
+    _timed("send", lambda: ig.send_text(tenant, to=to, body="Automated Pixie smoke test — please ignore."))
+    return 0
+
+
+def cmd_messenger_read(tenant: str) -> int:
+    if not _require("RUN_LIVE_RECEPTIONIST_MESSENGER_READ_TESTS"):
+        return cmd_plan()
+    from receptionist.providers import messenger as fb
+    print("messenger-read (read-only — counts/state only, tokens redacted):")
+    _timed("validate", lambda: fb.validate_connection(tenant))
+    _timed("pages", lambda: fb.list_pages(tenant))
+    return 0
+
+
+def cmd_messenger_send(tenant: str, to: str) -> int:
+    if not _require("RUN_LIVE_RECEPTIONIST_MESSENGER_SEND_TESTS"):
+        return cmd_plan()
+    if not to:
+        print("ERR: --to is required for a send smoke test (use a safe test PSID).")
+        return 2
+    from receptionist.providers import messenger as fb
+    print("messenger-send (WRITE — ONE message; requires an open messaging window):")
+    _timed("send", lambda: fb.send_text(tenant, to=to, body="Automated Pixie smoke test — please ignore."))
+    return 0
+
+
 def main() -> int:
     p = argparse.ArgumentParser(description="Receptionist provider smoke tests (default: dry-run plan)")
     p.add_argument("command", nargs="?", default="plan",
                    choices=["plan", "gmail-read", "gmail-send", "calendar-read", "calendar-write",
-                            "whatsapp-read", "whatsapp-send"])
+                            "whatsapp-read", "whatsapp-send", "meta-messaging-plan",
+                            "instagram-read", "instagram-send", "messenger-read", "messenger-send"])
     p.add_argument("--tenant", default="")
     p.add_argument("--to", default="")
     args = p.parse_args()
-    if args.command == "plan":
+    if args.command in ("plan", "meta-messaging-plan"):
         return cmd_plan()
     if not args.tenant:
         print("ERR: --tenant is required for live smoke tests.")
@@ -170,6 +225,10 @@ def main() -> int:
         "calendar-write": lambda: cmd_calendar_write(args.tenant),
         "whatsapp-read": lambda: cmd_whatsapp_read(args.tenant),
         "whatsapp-send": lambda: cmd_whatsapp_send(args.tenant, args.to),
+        "instagram-read": lambda: cmd_instagram_read(args.tenant),
+        "instagram-send": lambda: cmd_instagram_send(args.tenant, args.to),
+        "messenger-read": lambda: cmd_messenger_read(args.tenant),
+        "messenger-send": lambda: cmd_messenger_send(args.tenant, args.to),
     }[args.command]()
 
 
