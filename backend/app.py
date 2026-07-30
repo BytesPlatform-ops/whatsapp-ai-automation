@@ -52,6 +52,7 @@ from receptionist.agent_api import agent_router as ai_receptionist_router
 from receptionist.agent_api import integrations_router
 from receptionist.console_api import console_router as ai_receptionist_console_router
 from receptionist.ops_api import ops_router as ai_receptionist_ops_router
+from receptionist.gmail_webhook import gmail_webhook_router as ai_receptionist_gmail_webhook_router
 from integrations.oauth_routes import router as google_oauth_router
 from meta.oauth_routes import router as meta_connect_router
 from meta.routes import agent_router as meta_agent_router
@@ -125,6 +126,7 @@ app.include_router(receptionist_router)
 app.include_router(ai_receptionist_router)  # /api/agents/ai-receptionist — real OpenAI + approval slice
 app.include_router(ai_receptionist_console_router)  # /api/agents/ai-receptionist/* — durable console: CRM, bookings, quotes, tasks, tickets, payments, knowledge, analytics
 app.include_router(ai_receptionist_ops_router)  # /api/agents/ai-receptionist/* — worker, knowledge ingestion, config versions, usage, limits, analytics ranges
+app.include_router(ai_receptionist_gmail_webhook_router)  # /api/agents/ai-receptionist/gmail/pubsub — Gmail push notifications
 app.include_router(integrations_router)  # /api/integrations/status — capability readiness
 app.include_router(google_oauth_router)  # /api/integrations/google/* — real Gmail/Calendar OAuth connect
 app.include_router(meta_connect_router)  # /api/meta/connect|assets|status — Meta OAuth + asset discovery

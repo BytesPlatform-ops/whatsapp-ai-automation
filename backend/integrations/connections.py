@@ -94,6 +94,24 @@ def find_active_connection_unsealed(tenant_id: str, capability: str) -> Optional
     return unseal_descriptor(descriptor)
 
 
+def find_tenant_by_google_email(email: str, capability: str = "email_read") -> Optional[str]:
+    """Resolve the workspace tenant that owns a Google connection for ``email``.
+
+    Server-side only — used by the Gmail Pub/Sub webhook to derive ownership from
+    the verified Google account (never from the request body). Case-insensitive.
+    """
+    e = (email or "").strip().lower()
+    if not e:
+        return None
+    for (t, c), descriptor in _CONNECTIONS.items():
+        if c != capability:
+            continue
+        d = unseal_descriptor(descriptor)
+        if (d.get("email") or "").strip().lower() == e:
+            return t  # ownership by verified account; caller checks connection status
+    return None
+
+
 def disconnect(tenant_id: str, capabilities: Optional[list[str]] = None) -> None:
     """Remove a tenant's connections (all, or a specific set of capabilities)."""
     for (t, c) in list(_CONNECTIONS.keys()):
