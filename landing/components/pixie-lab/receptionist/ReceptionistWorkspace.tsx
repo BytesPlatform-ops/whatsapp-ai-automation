@@ -12,8 +12,9 @@ import { OperationsPanel } from './OperationsPanel';
 import { IntegrationsPanel } from './IntegrationsPanel';
 import { KnowledgePanel } from './KnowledgePanel';
 import KnowledgeSourcesPanel from './KnowledgeSourcesPanel';
+import ApprovalsPanel from './ApprovalsPanel';
 
-export type RcpTab = 'dashboard' | 'console' | 'conversations' | 'crm' | 'operations' | 'integrations' | 'knowledge';
+export type RcpTab = 'dashboard' | 'console' | 'conversations' | 'crm' | 'operations' | 'integrations' | 'knowledge' | 'approvals';
 
 const TABS = [
   { label: 'Overview', href: '/pixie-lab/receptionist' },
@@ -21,6 +22,7 @@ const TABS = [
   { label: 'Console', href: '/pixie-lab/receptionist/console' },
   { label: 'Inbox', href: '/pixie-lab/receptionist/conversations' },
   { label: 'CRM', href: '/pixie-lab/receptionist/crm' },
+  { label: 'Approvals', href: '/pixie-lab/receptionist/approvals' },
   { label: 'Operations', href: '/pixie-lab/receptionist/operations' },
   { label: 'Integrations', href: '/pixie-lab/receptionist/integrations' },
   { label: 'Knowledge', href: '/pixie-lab/receptionist/knowledge' },
@@ -31,6 +33,7 @@ const TITLES: Record<RcpTab, string> = {
   console: 'Live Console',
   conversations: 'Conversations',
   crm: 'CRM & Leads',
+  approvals: 'Approvals',
   operations: 'Operations',
   integrations: 'Integrations',
   knowledge: 'Business Profile & Knowledge',
@@ -62,6 +65,7 @@ export function ReceptionistWorkspace({ tab, tenant }: { tab: RcpTab; tenant: st
           {tab === 'console' && <ConsolePanel />}
           {tab === 'conversations' && <InboxPanel />}
           {tab === 'crm' && <CrmPanel />}
+          {tab === 'approvals' && <ApprovalsPanel />}
           {tab === 'operations' && <OperationsPanel />}
           {tab === 'integrations' && <IntegrationsPanel />}
           {tab === 'knowledge' && (
