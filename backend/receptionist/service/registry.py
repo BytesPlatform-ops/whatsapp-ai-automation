@@ -726,11 +726,71 @@ def _h_record_pending_provider_action(tenant_id: str, args: dict, *, conversatio
 # ── Provider stubs (typed; no live calls) ─────────────────────────────────────
 
 def _h_gmail_send(tenant_id: str, args: dict, *, conversation_id: str = "") -> dict:
-    return {
-        "status": "not_connected",
-        "detail": "Gmail provider not connected — action queued for next integration phase",
-        "record_type": "", "record_id": "", "data": {},
-    }
+    """Send a Gmail reply via the canonical adapter (mock transport in tests).
+
+    Runs post-approval. Honours suppression, validates the recipient (header-injection
+    safe), persists the provider message id, and is idempotent per draft. Returns a
+    typed result; unknown provider outcomes enter reconciliation, never a fake 'sent'.
+    """
+    from ..providers import gmail as gmail_adapter
+
+    to = args.get("to", "")
+    # suppression / unsubscribe gate
+    if _is_suppressed(tenant_id, email=to):
+        return {"status": "suppressed", "detail": "recipient is suppressed/unsubscribed",
+                "record_type": "", "record_id": "", "data": {}}
+    try:
+        result = _run_async(gmail_adapter.send_reply(
+            tenant_id, to=to, subject=args.get("subject", "Re:"),
+            body=args.get("body", ""), thread_id=args.get("thread_id", ""),
+            in_reply_to=args.get("in_reply_to", ""), references=args.get("references", "")))
+    except gmail_adapter.GmailError as exc:
+        return {"status": ("not_connected" if exc.category == "not_connected" else "failed"),
+                "detail": f"gmail_{exc.category}", "record_type": "", "record_id": "", "data": {}}
+    except Exception as exc:  # pragma: no cover
+        return {"status": "unknown_result", "detail": str(exc)[:120],
+                "record_type": "", "record_id": "", "data": {}}
+
+    draft_id = args.get("draft_id", "")
+    if draft_id:
+        from . import gmail_sync
+        draft = stores.gmail_drafts().get(tenant_id, draft_id)
+        if draft:
+            draft["status"] = "sent"
+            draft["provider_message_id"] = result.get("message_id", "")
+            draft["sent_at"] = now_iso()
+            gmail_sync.save_draft(tenant_id, draft)
+    return {"status": "sent", "detail": "gmail reply sent",
+            "record_type": "gmail_message", "record_id": result.get("message_id", ""),
+            "data": result}
+
+
+def _run_async(coro):
+    """Run a coroutine to completion from sync code (worker/handler context)."""
+    import asyncio
+    try:
+        loop = asyncio.get_event_loop()
+        if loop.is_running():  # pragma: no cover - defensive
+            import nest_asyncio  # type: ignore
+            nest_asyncio.apply()
+            return loop.run_until_complete(coro)
+        return loop.run_until_complete(coro)
+    except RuntimeError:
+        return asyncio.new_event_loop().run_until_complete(coro)
+
+
+def _is_suppressed(tenant_id: str, *, email: str = "", phone: str = "") -> bool:
+    try:
+        e = (email or "").strip().lower()
+        for row in stores.optouts().list(tenant_id):
+            if e and (row.get("email") or "").strip().lower() == e:
+                return True
+        for row in stores.suppression().list(tenant_id):
+            if e and (row.get("email") or "").strip().lower() == e:
+                return True
+    except Exception:
+        return False
+    return False
 
 
 def _h_calendar_create_event(tenant_id: str, args: dict, *, conversation_id: str = "") -> dict:

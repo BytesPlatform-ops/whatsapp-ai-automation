@@ -283,11 +283,12 @@ class TestProviderStubs:
         assert result["status"] in ("approval_required", "not_connected")
 
     def test_gmail_send_handler_directly_returns_not_connected(self):
-        """Test the underlying handler stub directly (bypassing approval)."""
+        """With no Google connection, the real adapter path reports not_connected
+        (typed detail), never a fabricated send."""
         from receptionist.service.registry import _h_gmail_send
         result = _h_gmail_send(TENANT, {"to": "x@y.com", "subject": "Hi"})
         assert result["status"] == "not_connected"
-        assert "not connected" in result["detail"].lower()
+        assert "not_connected" in result["detail"]
 
     def test_calendar_create_event_handler_returns_not_connected(self):
         from receptionist.service.registry import _h_calendar_create_event
