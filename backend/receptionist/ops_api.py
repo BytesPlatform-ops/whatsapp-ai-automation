@@ -1178,3 +1178,167 @@ def campaign_action(campaign_id: str, action: str, body: CampaignActionIn | None
     if action == "archive":
         return campaigns.archive(tenant_id, campaign_id)
     raise HTTPException(status_code=400, detail="unknown action")
+
+
+# ── CRM marketplace endpoints (Wave 18) ───────────────────────────────────────
+
+@ops_router.get("/crm/catalog")
+def crm_catalog(tenant_id: str = Depends(resolve_tenant)) -> dict:
+    from .providers.crm import catalog
+    from .service import crm_marketplace
+    return {"catalog": catalog(), "connections": crm_marketplace.list_connections(tenant_id),
+            "marketplace_enabled": crm_marketplace.marketplace_enabled()}
+
+
+@ops_router.get("/crm/{provider}/status")
+def crm_status(provider: str, tenant_id: str = Depends(resolve_tenant)) -> dict:
+    from .service import crm_marketplace
+    return {"connection": crm_marketplace.status(tenant_id, provider)}
+
+
+@ops_router.get("/crm/{provider}/oauth-start")
+def crm_oauth_start(provider: str, tenant_id: str = Depends(resolve_tenant)) -> dict:
+    from .service import crm_marketplace
+    return crm_marketplace.oauth_start(tenant_id, provider)
+
+
+class CrmConnectIn(BaseModel):
+    access_token: str = ""
+    refresh_token: str = ""
+    api_key: str = ""
+    account_id: str = ""
+    base_url: str = ""
+
+
+@ops_router.post("/crm/{provider}/connect")
+def crm_connect(provider: str, body: CrmConnectIn, tenant_id: str = Depends(resolve_tenant)) -> dict:
+    from .service import crm_marketplace
+    res = crm_marketplace.connect(tenant_id, provider, access_token=body.access_token,
+                                  refresh_token=body.refresh_token, api_key=body.api_key,
+                                  account_id=body.account_id, base_url=body.base_url)
+    if res.get("status") == "failed":
+        raise HTTPException(status_code=400, detail=res)
+    return res
+
+
+@ops_router.get("/crm/{provider}/capabilities")
+def crm_capabilities(provider: str, tenant_id: str = Depends(resolve_tenant)) -> dict:
+    from .service import crm_marketplace
+    return crm_marketplace.discover_capabilities(tenant_id, provider)
+
+
+class CrmObjectsIn(BaseModel):
+    objects: list[str]
+
+
+@ops_router.post("/crm/{provider}/objects")
+def crm_set_objects(provider: str, body: CrmObjectsIn, tenant_id: str = Depends(resolve_tenant)) -> dict:
+    from .service import crm_marketplace
+    return crm_marketplace.set_objects(tenant_id, provider, body.objects)
+
+
+class CrmDirectionIn(BaseModel):
+    direction: str
+
+
+@ops_router.post("/crm/{provider}/sync-direction")
+def crm_sync_direction(provider: str, body: CrmDirectionIn, tenant_id: str = Depends(resolve_tenant)) -> dict:
+    from .service import crm_marketplace
+    return crm_marketplace.set_sync_direction(tenant_id, provider, body.direction)
+
+
+class CrmFieldMapIn(BaseModel):
+    object_type: str
+    provider_field_id: str
+    provider_field_name: str
+    provider_field_type: str
+    canonical_field: str
+    direction: str = "import"
+    required: bool = False
+
+
+@ops_router.post("/crm/{provider}/field-mappings")
+def crm_field_mapping(provider: str, body: CrmFieldMapIn, tenant_id: str = Depends(resolve_tenant)) -> dict:
+    from .service import crm_mapping
+    return {"mapping": crm_mapping.set_field_mapping(
+        tenant_id, provider, body.object_type, provider_field_id=body.provider_field_id,
+        provider_field_name=body.provider_field_name, provider_field_type=body.provider_field_type,
+        canonical_field=body.canonical_field, direction=body.direction, required=body.required)}
+
+
+class CrmPipelineMapIn(BaseModel):
+    external_pipeline_id: str
+    canonical_pipeline_id: str
+    stage_map: dict | None = None
+
+
+@ops_router.post("/crm/{provider}/pipeline-mappings")
+def crm_pipeline_mapping(provider: str, body: CrmPipelineMapIn, tenant_id: str = Depends(resolve_tenant)) -> dict:
+    from .service import crm_mapping
+    return {"mapping": crm_mapping.set_pipeline_mapping(
+        tenant_id, provider, external_pipeline_id=body.external_pipeline_id,
+        canonical_pipeline_id=body.canonical_pipeline_id, stage_map=body.stage_map or {})}
+
+
+class CrmImportIn(BaseModel):
+    object_type: str = "contact"
+
+
+@ops_router.post("/crm/{provider}/import")
+def crm_import(provider: str, body: CrmImportIn, tenant_id: str = Depends(resolve_tenant)) -> dict:
+    from .worker import jobs_store
+    return {"enqueued": True, "job_id": jobs_store.enqueue(
+        tenant_id, "crm_initial_import", {"provider": provider, "object_type": body.object_type})}
+
+
+@ops_router.post("/crm/{provider}/sync")
+def crm_sync_now(provider: str, tenant_id: str = Depends(resolve_tenant)) -> dict:
+    from .worker import jobs_store
+    return {"enqueued": True, "job_id": jobs_store.enqueue(tenant_id, "crm_incremental_sync", {"provider": provider})}
+
+
+@ops_router.get("/crm/{provider}/conflicts")
+def crm_conflicts(provider: str, tenant_id: str = Depends(resolve_tenant)) -> dict:
+    from .service import crm_sync
+    return {"conflicts": [c for c in crm_sync.list_conflicts(tenant_id) if c.get("provider") == provider]}
+
+
+class CrmResolveIn(BaseModel):
+    conflict_id: str
+    resolution: str
+
+
+@ops_router.post("/crm/{provider}/conflicts/resolve")
+def crm_resolve_conflict(provider: str, body: CrmResolveIn, tenant_id: str = Depends(resolve_tenant)) -> dict:
+    from .service import crm_sync
+    return crm_sync.resolve_conflict(tenant_id, body.conflict_id, resolution=body.resolution)
+
+
+@ops_router.get("/crm/{provider}/analytics")
+def crm_analytics_get(provider: str, tenant_id: str = Depends(resolve_tenant)) -> dict:
+    from .service import crm_analytics
+    return {"analytics": crm_analytics.rollup(tenant_id, provider)}
+
+
+@ops_router.post("/crm/{provider}/pause")
+def crm_pause(provider: str, tenant_id: str = Depends(resolve_tenant)) -> dict:
+    from .service import crm_marketplace
+    return crm_marketplace.pause(tenant_id, provider)
+
+
+@ops_router.post("/crm/{provider}/resume")
+def crm_resume(provider: str, tenant_id: str = Depends(resolve_tenant)) -> dict:
+    from .service import crm_marketplace
+    return crm_marketplace.resume(tenant_id, provider)
+
+
+@ops_router.post("/crm/{provider}/health")
+def crm_health(provider: str, tenant_id: str = Depends(resolve_tenant)) -> dict:
+    from .worker import jobs_store
+    return {"enqueued": True, "job_id": jobs_store.enqueue(tenant_id, "crm_connection_health", {"provider": provider})}
+
+
+@ops_router.post("/crm/{provider}/disconnect")
+def crm_disconnect(provider: str, tenant_id: str = Depends(resolve_tenant)) -> dict:
+    from .service import crm_marketplace
+    return crm_marketplace.disconnect(tenant_id, provider)

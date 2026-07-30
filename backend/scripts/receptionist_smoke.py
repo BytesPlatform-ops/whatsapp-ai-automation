@@ -92,6 +92,9 @@ def cmd_plan() -> int:
     print("  vapi-numbers   → list phone numbers (read-only)              [RUN_LIVE_RECEPTIONIST_VAPI_READ_TESTS]")
     print("  vapi-inbound-readiness / vapi-outbound-readiness (read-only) [RUN_LIVE_RECEPTIONIST_VAPI_READ_TESTS]")
     print("  vapi-test-call → place 1 real call (WRITE, consent + DNC)    [RUN_LIVE_RECEPTIONIST_VAPI_CALL_TESTS]")
+    print("  crm-plan / crm-list-connections / crm-capabilities          (read-only, marketplace)")
+    print("  {ghl,hubspot,salesforce,pipedrive,zoho}-read → validate + account (read-only) [RUN_LIVE_RECEPTIONIST_<PROVIDER>_READ_TESTS]")
+    print("  crm-write-test → create 1 clearly-marked test record (WRITE) [RUN_LIVE_RECEPTIONIST_<PROVIDER>_WRITE_TESTS + write flag]")
     print("Defaults: dry-run, read-only, credentials + content redacted.")
     return 0
 
@@ -313,6 +316,40 @@ def cmd_vapi_test_call(tenant: str, to: str) -> int:
     return 0
 
 
+_CRM_PROVIDERS = {"ghl": "gohighlevel", "hubspot": "hubspot", "salesforce": "salesforce",
+                  "pipedrive": "pipedrive", "zoho": "zoho"}
+
+
+def cmd_crm_read(tenant: str, short: str) -> int:
+    provider = _CRM_PROVIDERS[short]
+    flag = f"RUN_LIVE_RECEPTIONIST_{short.upper()}_READ_TESTS"
+    if not _require(flag):
+        return cmd_plan()
+    from receptionist.providers.crm import get_adapter, CRMError
+    print(f"{short}-read (read-only — state/counts only, tokens redacted):")
+    a = get_adapter(provider)
+    _timed("validate", lambda: a.validate_connection(tenant))
+    _timed("account", lambda: a.get_account(tenant))
+    _timed("capabilities", lambda: a.get_capabilities(tenant))
+    return 0
+
+
+def cmd_crm_capabilities(tenant: str) -> int:
+    from receptionist.providers.crm import catalog
+    print("crm-capabilities (marketplace catalog — read-only):")
+    for c in catalog():
+        print(f"  {c['provider']:12} objects={','.join(c['supported_objects'])} webhooks={c['webhook_support']}")
+    return 0
+
+
+def cmd_crm_list(tenant: str) -> int:
+    from receptionist.service import crm_marketplace
+    print("crm-list-connections (read-only):")
+    for c in crm_marketplace.list_connections(tenant):
+        print(f"  {c.get('provider'):12} state={c.get('state')} read={c.get('read')} write={c.get('write')}")
+    return 0
+
+
 def main() -> int:
     p = argparse.ArgumentParser(description="Receptionist provider smoke tests (default: dry-run plan)")
     p.add_argument("command", nargs="?", default="plan",
@@ -323,12 +360,20 @@ def main() -> int:
                             "telegram-read", "telegram-business-read", "telegram-send", "telegram-business-send",
                             "voice-plan", "vapi-validate", "vapi-numbers", "vapi-assistant-read",
                             "vapi-server-auth-check", "vapi-inbound-readiness", "vapi-outbound-readiness",
-                            "vapi-test-call"])
+                            "vapi-test-call", "crm-plan", "crm-list-connections", "crm-capabilities",
+                            "ghl-read", "hubspot-read", "salesforce-read", "pipedrive-read", "zoho-read",
+                            "crm-import-plan", "crm-write-test"])
     p.add_argument("--tenant", default="")
     p.add_argument("--to", default="")
     args = p.parse_args()
-    if args.command in ("plan", "meta-messaging-plan", "sms-plan", "telegram-plan", "voice-plan"):
+    if args.command in ("plan", "meta-messaging-plan", "sms-plan", "telegram-plan", "voice-plan",
+                        "crm-plan", "crm-import-plan"):
         return cmd_plan()
+    if args.command == "crm-capabilities":
+        return cmd_crm_capabilities(args.tenant)
+    if args.command == "crm-write-test":
+        print("crm-write-test: BLOCKED — external writes are disabled in this phase (deferred).")
+        return 0
     if not args.tenant:
         print("ERR: --tenant is required for live smoke tests.")
         return 2
@@ -356,6 +401,12 @@ def main() -> int:
         "vapi-inbound-readiness": lambda: cmd_vapi_read(args.tenant, "readiness"),
         "vapi-outbound-readiness": lambda: cmd_vapi_read(args.tenant, "readiness"),
         "vapi-test-call": lambda: cmd_vapi_test_call(args.tenant, args.to),
+        "crm-list-connections": lambda: cmd_crm_list(args.tenant),
+        "ghl-read": lambda: cmd_crm_read(args.tenant, "ghl"),
+        "hubspot-read": lambda: cmd_crm_read(args.tenant, "hubspot"),
+        "salesforce-read": lambda: cmd_crm_read(args.tenant, "salesforce"),
+        "pipedrive-read": lambda: cmd_crm_read(args.tenant, "pipedrive"),
+        "zoho-read": lambda: cmd_crm_read(args.tenant, "zoho"),
     }[args.command]()
 
 
