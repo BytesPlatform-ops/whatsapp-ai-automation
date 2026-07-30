@@ -128,33 +128,8 @@ def _profile_snippets(profile: dict) -> list[tuple[str, str]]:
 
 
 def answer_question(tenant_id: str, question: str) -> Optional[dict]:
-    """Best keyword-overlap answer from FAQs + knowledge + profile. None if no
-    configured source is relevant (caller must NOT hallucinate)."""
-    q = _tokens(question)
-    if not q:
-        return None
-    profile = get_profile(tenant_id)
-
-    candidates: list[tuple[float, str, str, str]] = []  # (score, answer, source, ref)
-
-    for faq in profile.get("faqs", []) or []:
-        qq, aa = faq.get("q", ""), faq.get("a", "")
-        overlap = len(q & _tokens(qq + " " + aa))
-        if overlap:
-            candidates.append((overlap + 0.5, aa, "faq", qq))
-
-    for item in list_knowledge(tenant_id):
-        overlap = len(q & _tokens(item.get("title", "") + " " + item.get("content", "")))
-        if overlap:
-            candidates.append((float(overlap), item.get("content", ""), "knowledge", item.get("id", "")))
-
-    for label, text in _profile_snippets(profile):
-        overlap = len(q & _tokens(label + " " + text))
-        if overlap:
-            candidates.append((overlap + 0.25, text, f"profile:{label}", label))
-
-    if not candidates:
-        return None
-    candidates.sort(key=lambda c: c[0], reverse=True)
-    best = candidates[0]
-    return {"answer": best[1], "source": best[2], "ref": best[3], "score": best[0]}
+    """Best answer from FAQs + knowledge + structured profile fields via the hybrid
+    retriever (:mod:`receptionist.service.knowledge`). None when evidence is too weak
+    (caller must NOT hallucinate). Kept as the stable contract used by the FAQ handler."""
+    from . import knowledge  # lazy to avoid an import cycle
+    return knowledge.answer_question(tenant_id, question)
