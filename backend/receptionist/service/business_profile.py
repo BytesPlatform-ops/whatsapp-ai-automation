@@ -27,28 +27,49 @@ def _tokens(text: str) -> set[str]:
 # ── profile ───────────────────────────────────────────────────────────────────
 
 def get_profile(tenant_id: str) -> dict:
-    """Return the tenant's profile, or a default (unsaved) profile if none exists."""
+    """Return the tenant's profile for runtime grounding.
+
+    The canonical writable store is the versioned config repository. This projects
+    the active config into the BusinessProfile shape the engine/handlers read, so a
+    saved onboarding/settings change grounds the very next turn. Falls back to the
+    legacy flat ``receptionist_business_profile`` row (pre-config-repo tenants),
+    then to an unsaved default.
+    """
+    from . import config_repo
+    cfg = config_repo.get_active(tenant_id)
+    if cfg is not None:
+        return config_repo.to_business_profile(cfg)
     existing = stores.business_profiles().get(tenant_id, tenant_id)
     if existing is not None:
         return existing
     return BusinessProfile(tenant_id=tenant_id).model_dump()
 
 
+# BusinessProfile field → canonical config field (only where names differ).
+_PROFILE_TO_CONFIG = {
+    "pricing_notes": "prices",
+    "location": "locations",
+    "escalation_rules": "escalation_triggers",
+}
+
+
 def save_profile(tenant_id: str, patch: dict) -> dict:
-    """Merge patch into the tenant's profile and persist it. id == tenant_id."""
-    profile = get_profile(tenant_id)
+    """Persist a profile patch through the versioned config repository (one writable
+    store). Returns the projected BusinessProfile so callers see a consistent shape."""
+    from . import config_repo
+    cfg_patch: dict = {}
     for key, val in (patch or {}).items():
         if key in ("tenant_id", "id"):
             continue
-        if val is not None:
-            profile[key] = val
-    profile["tenant_id"] = tenant_id
-    profile["id"] = tenant_id
-    profile["updated_at"] = now_iso()
-    return stores.business_profiles().put(tenant_id, profile)
+        cfg_patch[_PROFILE_TO_CONFIG.get(key, key)] = val
+    cfg = config_repo.save(tenant_id, cfg_patch, updated_by=(patch or {}).get("updated_by", ""))
+    return config_repo.to_business_profile(cfg)
 
 
 def profile_is_configured(tenant_id: str) -> bool:
+    from . import config_repo
+    if config_repo.get_active(tenant_id) is not None:
+        return config_repo.is_configured(tenant_id)
     p = get_profile(tenant_id)
     return bool(p.get("business_name") or p.get("services") or p.get("faqs")
                or p.get("hours") or p.get("policies"))

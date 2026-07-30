@@ -64,8 +64,49 @@ def _slug(name: str) -> str:
     return f"{s}-{uuid.uuid4().hex[:6]}"
 
 
+# Onboarding CORE_FIELDS key → canonical config field (config_repo.CONFIG_FIELDS).
+_CORE_TO_CONFIG = {
+    "BUSINESS_NAME": "business_name",
+    "BUSINESS_TYPE": "industry",
+    "LOCATION": "locations",
+    "HOURS": "hours",
+    "TIMEZONE": "timezone",
+    "CONTACT_INFO": "contact_details",
+    "LANGUAGES": "languages",
+    "BRAND_TONE": "tone",
+    "HUMAN_HANDOFF": "handoff_rules",
+}
+# Compiled prompt-var (from bank answers) → canonical config field.
+_VAR_TO_CONFIG = {
+    "SERVICES": "service_descriptions",
+    "PRICING": "prices",
+    "PAYMENT_RULES": "payment_policy",
+    "BOOKING_RULES": "booking_rules",
+    "CANCELLATION_RULES": "cancellation_policy",
+    "REFUND_RETURN_RULES": "refund_policy",
+    "POLICIES": "policies",
+    "FOLLOW_UP_RULES": "custom_instructions",
+    "URGENT_HANDLING_RULES": "escalation_triggers",
+}
+
+
+def _config_patch_from(tenant_id: str, industry: str, core: dict, prompt_vars: dict) -> dict:
+    """Build a config_repo patch from onboarding core answers + compiled prompt vars."""
+    patch: dict = {"industry": industry}
+    for k, v in (core or {}).items():
+        target = _CORE_TO_CONFIG.get(k)
+        if target and v not in (None, ""):
+            patch[target] = v
+    for var, target in _VAR_TO_CONFIG.items():
+        val = prompt_vars.get(var)
+        if val and val != "Not specified":
+            patch[target] = val
+    return patch
+
+
 def save_tenant(*, business_name: str, industry: str, core: dict, answers: list[dict]) -> str:
-    """Persist a new tenant's onboarding answers. Returns the new tenant_id."""
+    """Persist a new tenant's onboarding answers durably (config_repo) + a local JSON
+    mirror (kept only for the import/migration tool). Returns the new tenant_id."""
     tenant_id = _slug(business_name)
     _DIR.mkdir(parents=True, exist_ok=True)
     profile = {
@@ -75,6 +116,12 @@ def save_tenant(*, business_name: str, industry: str, core: dict, answers: list[
         "answers": [a for a in answers if a.get("value") not in (None, "")],
     }
     (_DIR / f"{tenant_id}.json").write_text(json.dumps(profile, indent=2, ensure_ascii=False), encoding="utf-8")
+
+    # Durable, versioned, grounds the very next conversation turn.
+    from receptionist.service import config_repo
+    prompt_vars = _compile_prompt_vars(profile)
+    config_repo.save(tenant_id, _config_patch_from(tenant_id, industry, core, prompt_vars),
+                     updated_by="onboarding")
     return tenant_id
 
 
@@ -88,7 +135,11 @@ def build_prompt_vars(tenant_id: str) -> dict | None:
     profile = load_profile(tenant_id)
     if not profile:
         return None
+    return _compile_prompt_vars(profile)
 
+
+def _compile_prompt_vars(profile: dict) -> dict:
+    """Compile an in-memory onboarding profile dict into BUSINESS INFO vars."""
     values = {v: "Not specified" for v in PROMPT_VARS}
     # Core fields map 1:1 to prompt vars.
     for k, v in (profile.get("core") or {}).items():

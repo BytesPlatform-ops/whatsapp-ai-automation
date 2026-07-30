@@ -45,12 +45,18 @@ T_CAMPAIGN_REPLIES = "receptionist_campaign_replies"
 T_MESSAGE_INDEX = "receptionist_message_index"
 T_LOCKS = "receptionist_locks"
 T_ACTION_EXECUTIONS = "receptionist_action_executions"
+T_CONFIGURATIONS = "receptionist_configurations"
+T_CONFIG_VERSIONS = "receptionist_config_versions"
+T_CONSENT = "receptionist_consent"
+T_SUPPRESSION = "receptionist_suppression"
+T_USAGE_COUNTERS = "receptionist_usage_counters"
 
 ALL_TABLES = [
     T_CONVERSATIONS, T_MESSAGES, T_ACTIONS, T_CONTACTS, T_COMPANIES, T_BOOKINGS,
     T_QUOTES, T_CALLBACKS, T_VOICEMAILS, T_WAITLIST, T_PAYMENTS, T_TICKETS,
     T_ESCALATIONS, T_TASKS, T_REMINDERS, T_OPTOUTS, T_BUSINESS_PROFILE,
     T_KNOWLEDGE, T_CAMPAIGN_REPLIES, T_MESSAGE_INDEX, T_LOCKS, T_ACTION_EXECUTIONS,
+    T_CONFIGURATIONS, T_CONFIG_VERSIONS, T_CONSENT, T_SUPPRESSION, T_USAGE_COUNTERS,
 ]
 
 
@@ -213,6 +219,11 @@ def add_contact_activity(tenant_id: str, contact_id: Optional[str], note: str) -
 def message_index() -> RecordStore: return store(T_MESSAGE_INDEX)
 def locks() -> RecordStore: return store(T_LOCKS)
 def action_executions() -> RecordStore: return store(T_ACTION_EXECUTIONS)
+def configurations() -> RecordStore: return store(T_CONFIGURATIONS)
+def config_versions() -> RecordStore: return store(T_CONFIG_VERSIONS)
+def consent() -> RecordStore: return store(T_CONSENT)
+def suppression() -> RecordStore: return store(T_SUPPRESSION)
+def usage_counters() -> RecordStore: return store(T_USAGE_COUNTERS)
 
 
 # ── durable per-conversation lock ─────────────────────────────────────────────
