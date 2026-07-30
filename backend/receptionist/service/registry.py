@@ -99,12 +99,80 @@ def _store_idempotency(tenant_id: str, idempotency_key: str, execution: dict) ->
 
 # ── approval helper ───────────────────────────────────────────────────────────
 
+def execute_approved_action(approval_item: Any) -> dict:  # type: ignore[type-arg]
+    """Durable, stateless executor for an approved receptionist action.
+
+    Reconstructs the action purely from the approval's persisted ``prepared_output``
+    (action_type, arguments, conversation_id, idempotency_key) — NO in-process
+    closure — so approval execution survives a cold restart. Executes exactly once
+    (idempotency index), refuses rejected/expired approvals, fails safely on an
+    unknown action type, records the execution and settles billing once.
+    """
+    tenant_id = getattr(approval_item, "tenant_id", "")
+    status = getattr(approval_item, "status", "")
+    if status in ("rejected", "skipped"):
+        return {"ok": False, "error": f"{status} approval cannot execute"}
+
+    po = getattr(approval_item, "prepared_output", None) or {}
+    action_type = po.get("action_type") or getattr(approval_item, "action_type", "")
+    args = po.get("arguments", {}) or {}
+    conv_id = po.get("conversation_id", "")
+    idem = po.get("idempotency_key", "")
+
+    spec = _REGISTRY.get(action_type)
+    if spec is None:
+        return {"ok": False, "error": f"unknown action_type: {action_type}"}
+
+    # Execute once: a real (non-approval_required) prior result → return it.
+    if idem:
+        cached = _check_idempotency(tenant_id, idem)
+        if cached is not None and cached.get("status") != "approval_required":
+            return {"ok": True, "idempotent": True, "status": cached.get("status"),
+                    "detail": cached.get("detail"), "record_type": cached.get("record_type"),
+                    "record_id": cached.get("record_id")}
+
+    try:
+        result = spec.handler(tenant_id, args, conversation_id=conv_id)
+    except Exception as exc:
+        log.exception("approved action %s failed", action_type)
+        return {"ok": False, "error": str(exc)}
+
+    _persist_execution(tenant_id, action_type, args, idem, conv_id, result)
+    try:
+        meter(tenant_id, action_type, idempotency_key=idem or f"approved:{tenant_id}:{action_type}")
+    except Exception:
+        pass
+    return {"ok": True, **result}
+
+
+_EXECUTOR_REGISTERED = False
+
+
+def _ensure_executor_registered() -> None:
+    """Register the durable stateless executor for AGENT_SLUG exactly once. Safe to
+    call at import and on every approval filing (so a restarted process re-registers
+    before it can approve anything)."""
+    global _EXECUTOR_REGISTERED
+    if _EXECUTOR_REGISTERED:
+        return
+    try:
+        from approvals.router import register_executor_for
+        register_executor_for(AGENT_SLUG, execute_approved_action)
+        _EXECUTOR_REGISTERED = True
+    except Exception:
+        pass
+
+
 def _file_approval(tenant_id: str, action_type: str, args: dict,
                    idempotency_key: str, conversation_id: str) -> dict:
-    """File a shared approval via the approvals subsystem and register an executor."""
-    from approvals.router import create_approval, register_executor_for
+    """File a shared approval via the approvals subsystem. The executor is a durable,
+    module-level function (registered at import), so no per-approval closure is kept."""
+    from approvals.router import create_approval
 
-    # Build snapshot payload so the reviewer sees exactly what would execute
+    _ensure_executor_registered()
+
+    # Build snapshot payload so the reviewer sees exactly what would execute — and so
+    # the stateless executor can reconstruct the action after a restart.
     prepared = {
         "action_type": action_type,
         "arguments": args,
@@ -123,32 +191,6 @@ def _file_approval(tenant_id: str, action_type: str, args: dict,
         prepared_output=prepared,
         preview=f"{action_type} for conversation {conversation_id or 'unknown'}",
     )
-
-    # Register an executor so that approve → runs the action exactly once
-    def _executor(approval_item: Any) -> dict:  # type: ignore[type-arg]
-        po = approval_item.prepared_output or {}
-        exec_action_type = po.get("action_type", action_type)
-        exec_args = po.get("arguments", args)
-        exec_conv_id = po.get("conversation_id", conversation_id)
-        exec_idem = po.get("idempotency_key", "")
-        spec = _REGISTRY.get(exec_action_type)
-        if spec is None:
-            return {"ok": False, "error": f"unknown action_type: {exec_action_type}"}
-        # Run without approval gating (already approved) — skip the approval check
-        try:
-            result = spec.handler(
-                approval_item.tenant_id, exec_args,
-                conversation_id=exec_conv_id,
-            )
-            _persist_execution(
-                approval_item.tenant_id, exec_action_type, exec_args,
-                exec_idem, exec_conv_id, result,
-            )
-            return result
-        except Exception as exc:
-            return {"ok": False, "error": str(exc)}
-
-    register_executor_for(AGENT_SLUG, _executor)
 
     return {
         "status": "approval_required",
@@ -858,3 +900,8 @@ def execute_action(
     _persist_execution(tenant_id, action_type, args, idempotency_key, conversation_id, result)
 
     return result
+
+
+# Register the durable, stateless approval executor at import so approving a
+# receptionist action works even on a freshly restarted process.
+_ensure_executor_registered()
