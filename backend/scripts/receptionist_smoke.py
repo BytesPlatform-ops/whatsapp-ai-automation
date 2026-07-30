@@ -31,6 +31,10 @@ Usage:
         python scripts/receptionist_smoke.py telegram-read --tenant t_x
     RUN_LIVE_RECEPTIONIST_TELEGRAM_SEND_TESTS=1 \\
         python scripts/receptionist_smoke.py telegram-send --tenant t_x --to 123456789  # write
+    RUN_LIVE_RECEPTIONIST_VAPI_READ_TESTS=1 \\
+        python scripts/receptionist_smoke.py vapi-validate --tenant t_x
+    RUN_LIVE_RECEPTIONIST_VAPI_CALL_TESTS=1 \\
+        python scripts/receptionist_smoke.py vapi-test-call --tenant t_x --to +15551230000  # WRITE (real call)
 """
 
 from __future__ import annotations
@@ -84,6 +88,10 @@ def cmd_plan() -> int:
     print("  telegram-business-read → validate business connection        [RUN_LIVE_RECEPTIONIST_TELEGRAM_BUSINESS_READ_TESTS]")
     print("  telegram-send  → send 1 Bot message (WRITE, user-initiated)  [RUN_LIVE_RECEPTIONIST_TELEGRAM_SEND_TESTS]")
     print("  telegram-business-send → send 1 Business message (WRITE)     [RUN_LIVE_RECEPTIONIST_TELEGRAM_BUSINESS_SEND_TESTS]")
+    print("  vapi-validate  → validate account + server auth (read-only)  [RUN_LIVE_RECEPTIONIST_VAPI_READ_TESTS]")
+    print("  vapi-numbers   → list phone numbers (read-only)              [RUN_LIVE_RECEPTIONIST_VAPI_READ_TESTS]")
+    print("  vapi-inbound-readiness / vapi-outbound-readiness (read-only) [RUN_LIVE_RECEPTIONIST_VAPI_READ_TESTS]")
+    print("  vapi-test-call → place 1 real call (WRITE, consent + DNC)    [RUN_LIVE_RECEPTIONIST_VAPI_CALL_TESTS]")
     print("Defaults: dry-run, read-only, credentials + content redacted.")
     return 0
 
@@ -271,6 +279,40 @@ def cmd_telegram_send(tenant: str, to: str, business: bool = False) -> int:
     return 0
 
 
+def cmd_vapi_read(tenant: str, what: str) -> int:
+    if not _require("RUN_LIVE_RECEPTIONIST_VAPI_READ_TESTS"):
+        return cmd_plan()
+    from receptionist.providers import voice_adapter as voice
+    print(f"vapi {what} (read-only — state/counts only, key + server secret redacted):")
+    if what == "validate":
+        _timed("account", lambda: voice.get_account(tenant))
+        _timed("connection", lambda: voice.validate_connection(tenant))
+    elif what == "numbers":
+        _timed("numbers", lambda: voice.list_phone_numbers(tenant))
+    else:  # readiness
+        v = voice.validate_connection(tenant)
+        print(f"  inbound_ready={v.get('state') in ('ready_for_inbound','ready_inbound_outbound')} "
+              f"outbound_ready={v.get('state') in ('ready_for_outbound','ready_inbound_outbound')}")
+    return 0
+
+
+def cmd_vapi_test_call(tenant: str, to: str) -> int:
+    if not _require("RUN_LIVE_RECEPTIONIST_VAPI_CALL_TESTS"):
+        return cmd_plan()
+    if not to:
+        print("ERR: --to is required for a live test call (safe test number only).")
+        return 2
+    from receptionist.service import voice_policy
+    d = voice_policy.evaluate_outbound_call(tenant, to=to, purpose="callback", responding_to_request=True)
+    if not d.get("allowed"):
+        print(f"BLOCKED by policy: {d.get('blocked_reason')} — not placing a call.")
+        return 0
+    from receptionist.providers import voice_adapter as voice
+    print("vapi-test-call (WRITE — ONE real call; consent + DNC + quiet-hours checked above):")
+    _timed("start_call", lambda: voice.start_outbound_call(tenant, to=to, number_id="", assistant_id=""))
+    return 0
+
+
 def main() -> int:
     p = argparse.ArgumentParser(description="Receptionist provider smoke tests (default: dry-run plan)")
     p.add_argument("command", nargs="?", default="plan",
@@ -278,11 +320,14 @@ def main() -> int:
                             "whatsapp-read", "whatsapp-send", "meta-messaging-plan",
                             "instagram-read", "instagram-send", "messenger-read", "messenger-send",
                             "sms-plan", "sms-read", "sms-send", "telegram-plan",
-                            "telegram-read", "telegram-business-read", "telegram-send", "telegram-business-send"])
+                            "telegram-read", "telegram-business-read", "telegram-send", "telegram-business-send",
+                            "voice-plan", "vapi-validate", "vapi-numbers", "vapi-assistant-read",
+                            "vapi-server-auth-check", "vapi-inbound-readiness", "vapi-outbound-readiness",
+                            "vapi-test-call"])
     p.add_argument("--tenant", default="")
     p.add_argument("--to", default="")
     args = p.parse_args()
-    if args.command in ("plan", "meta-messaging-plan", "sms-plan", "telegram-plan"):
+    if args.command in ("plan", "meta-messaging-plan", "sms-plan", "telegram-plan", "voice-plan"):
         return cmd_plan()
     if not args.tenant:
         print("ERR: --tenant is required for live smoke tests.")
@@ -304,6 +349,13 @@ def main() -> int:
         "telegram-business-read": lambda: cmd_telegram_read(args.tenant, business=True),
         "telegram-send": lambda: cmd_telegram_send(args.tenant, args.to),
         "telegram-business-send": lambda: cmd_telegram_send(args.tenant, args.to, business=True),
+        "vapi-validate": lambda: cmd_vapi_read(args.tenant, "validate"),
+        "vapi-numbers": lambda: cmd_vapi_read(args.tenant, "numbers"),
+        "vapi-assistant-read": lambda: cmd_vapi_read(args.tenant, "validate"),
+        "vapi-server-auth-check": lambda: cmd_vapi_read(args.tenant, "validate"),
+        "vapi-inbound-readiness": lambda: cmd_vapi_read(args.tenant, "readiness"),
+        "vapi-outbound-readiness": lambda: cmd_vapi_read(args.tenant, "readiness"),
+        "vapi-test-call": lambda: cmd_vapi_test_call(args.tenant, args.to),
     }[args.command]()
 
 

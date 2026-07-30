@@ -871,3 +871,165 @@ def telegram_health(tenant_id: str = Depends(resolve_tenant)) -> dict:
 def telegram_disconnect(tenant_id: str = Depends(resolve_tenant)) -> dict:
     from .service import telegram_assets
     return telegram_assets.disconnect(tenant_id)
+
+
+# ── Voice / telephony endpoints (Wave 16) ─────────────────────────────────────
+
+@ops_router.get("/voice/status")
+def voice_status(tenant_id: str = Depends(resolve_tenant)) -> dict:
+    from .service import voice_assets
+    return voice_assets.status(tenant_id)
+
+
+@ops_router.post("/voice/validate")
+def voice_validate(tenant_id: str = Depends(resolve_tenant)) -> dict:
+    from .providers import voice_adapter as voice
+    try:
+        return {"account": voice.get_account(tenant_id)}
+    except voice.VoiceError as e:
+        raise HTTPException(status_code=400, detail={"reason": e.category})
+
+
+class VoiceConnectIn(BaseModel):
+    vapi_api_key: str
+    server_secret: str | None = None
+
+
+@ops_router.post("/voice/connect")
+def voice_connect(body: VoiceConnectIn, tenant_id: str = Depends(resolve_tenant)) -> dict:
+    from .service import voice_assets
+    res = voice_assets.connect(tenant_id, vapi_api_key=body.vapi_api_key, server_secret=body.server_secret or "")
+    if res.get("status") == "failed":
+        raise HTTPException(status_code=400, detail=res)
+    return res
+
+
+@ops_router.get("/voice/numbers")
+def voice_numbers(tenant_id: str = Depends(resolve_tenant)) -> dict:
+    from .service import voice_assets
+    res = voice_assets.discover_numbers(tenant_id)
+    if res.get("status") == "failed":
+        raise HTTPException(status_code=400, detail=res)
+    return res
+
+
+class VoiceImportIn(BaseModel):
+    source: str
+    number: str
+
+
+@ops_router.post("/voice/numbers/import")
+def voice_number_import(body: VoiceImportIn, tenant_id: str = Depends(resolve_tenant)) -> dict:
+    from .service import voice_assets
+    return voice_assets.import_number(tenant_id, source=body.source, number=body.number)
+
+
+class VoiceSettingsIn(BaseModel):
+    inbound: bool | None = None
+    outbound: bool | None = None
+    recording: bool | None = None
+    default_number_id: str | None = None
+    default_assistant_id: str | None = None
+
+
+@ops_router.post("/voice/settings")
+def voice_settings(body: VoiceSettingsIn, tenant_id: str = Depends(resolve_tenant)) -> dict:
+    from .service import voice_assets
+    return voice_assets.set_settings(tenant_id, inbound=body.inbound, outbound=body.outbound,
+                                     recording=body.recording, default_number_id=body.default_number_id or "",
+                                     default_assistant_id=body.default_assistant_id or "")
+
+
+@ops_router.get("/voice/assistant")
+def voice_assistant_config(tenant_id: str = Depends(resolve_tenant)) -> dict:
+    from .service import voice_assistant
+    return {"assistant": voice_assistant.build_assistant_config(tenant_id)}
+
+
+@ops_router.get("/voice/calls")
+def voice_calls(tenant_id: str = Depends(resolve_tenant)) -> dict:
+    from .service import voice_sessions
+    return {"calls": voice_sessions.list_calls(tenant_id)}
+
+
+@ops_router.get("/voice/calls/{call_id}")
+def voice_call_detail(call_id: str, tenant_id: str = Depends(resolve_tenant)) -> dict:
+    from .service import voice_sessions, stores
+    s = voice_sessions.session_for_call(tenant_id, call_id)
+    if s is None:
+        raise HTTPException(status_code=404, detail="call not found")
+    transcripts = sorted([t for t in stores.voice_transcripts().list(tenant_id) if t.get("call_id") == call_id],
+                         key=lambda t: t.get("sequence", 0))
+    toolcalls = [t for t in stores.voice_toolcalls().list(tenant_id) if t.get("call_id") == call_id]
+    summary = stores.voice_reports().get(tenant_id, f"vsum::{tenant_id}::{call_id}")
+    return {"call": s, "transcript": transcripts, "tool_calls": toolcalls, "summary": summary}
+
+
+class VoiceOutboundIn(BaseModel):
+    to: str
+    number_id: str | None = None
+    purpose: str | None = None
+    responding_to_request: bool | None = None
+
+
+@ops_router.post("/voice/calls/outbound")
+def voice_start_outbound(body: VoiceOutboundIn, tenant_id: str = Depends(resolve_tenant)) -> dict:
+    from .service.registry import execute_action
+    # operator-initiated call from the console is an explicit authorised action;
+    # policy (consent/DNC/quiet-hours/outbound-enabled) is still enforced in the handler.
+    res = execute_action(tenant_id, "voice_outbound_call", {
+        "to": body.to, "number_id": body.number_id or "", "purpose": body.purpose or "callback",
+        "responding_to_request": bool(body.responding_to_request)}, skip_approval=True,
+        idempotency_key=f"voiceout:{tenant_id}:{body.to}:{body.purpose or 'callback'}")
+    return res
+
+
+class VoiceCallbackIn(BaseModel):
+    to: str
+    number_id: str | None = None
+
+
+@ops_router.post("/voice/callbacks")
+def voice_schedule_callback(body: VoiceCallbackIn, tenant_id: str = Depends(resolve_tenant)) -> dict:
+    from .worker import jobs_store
+    cb_id = jobs_store.enqueue(tenant_id, "voice_scheduled_callback",
+                               {"callback_id": f"{tenant_id}:{body.to}",
+                                "args": {"to": body.to, "number_id": body.number_id or ""}})
+    return {"enqueued": True, "job_id": cb_id}
+
+
+@ops_router.post("/voice/calls/{call_id}/reconcile")
+def voice_reconcile(call_id: str, tenant_id: str = Depends(resolve_tenant)) -> dict:
+    from .worker import jobs_store
+    return {"enqueued": True, "job_id": jobs_store.enqueue(tenant_id, "voice_call_reconcile", {"call_id": call_id})}
+
+
+class VoiceSummaryEditIn(BaseModel):
+    text: str
+
+
+@ops_router.post("/voice/calls/{call_id}/summary")
+def voice_edit_summary(call_id: str, body: VoiceSummaryEditIn, tenant_id: str = Depends(resolve_tenant)) -> dict:
+    from .service import voice_sessions
+    r = voice_sessions.edit_summary(tenant_id, call_id, text=body.text)
+    if r is None:
+        raise HTTPException(status_code=404, detail="summary not found")
+    return {"summary": r}
+
+
+@ops_router.post("/voice/test")
+def voice_test(tenant_id: str = Depends(resolve_tenant)) -> dict:
+    from .service import voice_assets
+    return {"tested": True, **voice_assets.status(tenant_id)}
+
+
+@ops_router.post("/voice/health")
+def voice_health(tenant_id: str = Depends(resolve_tenant)) -> dict:
+    from .worker import jobs_store
+    return {"enqueued": True, "job_id": jobs_store.enqueue(tenant_id, "voice_connection_health", {})}
+
+
+@ops_router.post("/voice/disconnect")
+def voice_disconnect(tenant_id: str = Depends(resolve_tenant)) -> dict:
+    from .service import voice_assets
+    return voice_assets.disconnect(tenant_id)
