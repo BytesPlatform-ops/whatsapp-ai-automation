@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Mail, Calendar, MessageSquare, BookOpen } from 'lucide-react';
+import { Mail, Calendar, MessageSquare, MessageCircle, BookOpen } from 'lucide-react';
 import { receptionistApi } from '@/lib/pixie-lab/servicesClient';
 import type { RcpUsageSummary, RcpLimit } from '@/lib/pixie-lab/serviceTypes';
 
@@ -27,6 +27,14 @@ const GROUPS: { title: string; icon: React.ReactNode; rows: [string, string][] }
     title: 'Gmail', icon: <Mail size={15} color="#ea4335" />, rows: [
       ['gmail_operations', 'Sync operations'],
       ['gmail_replies', 'Replies sent'],
+    ],
+  },
+  {
+    title: 'WhatsApp', icon: <MessageCircle size={15} color="#25D366" />, rows: [
+      ['whatsapp_inbound', 'Inbound messages'],
+      ['whatsapp_freeform', 'Free-form replies'],
+      ['whatsapp_template', 'Template sends'],
+      ['whatsapp_interactive', 'Interactive sends'],
     ],
   },
   {

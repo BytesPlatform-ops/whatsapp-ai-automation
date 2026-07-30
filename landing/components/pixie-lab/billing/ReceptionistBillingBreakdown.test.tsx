@@ -20,13 +20,16 @@ describe('ReceptionistBillingBreakdown', () => {
   it('renders provider counters from real usage', async () => {
     getUsage.mockResolvedValue({ backendUp: true,
       period: { start: '2026-07-01T00:00:00', end: '2026-07-31T00:00:00', fallback: false },
-      counters: { monthly_conversations: 12, gmail_replies: 4, bookings: 2, calendar_operations: 5 },
+      counters: { monthly_conversations: 12, gmail_replies: 4, bookings: 2, calendar_operations: 5,
+        whatsapp_inbound: 9, whatsapp_freeform: 3 },
       gauges: { stored_contacts: 7, knowledge_sources: 1 } } as never);
     render(<ReceptionistBillingBreakdown />);
     expect(await screen.findByText('Gmail')).toBeInTheDocument();
+    expect(screen.getByText('WhatsApp')).toBeInTheDocument();
     expect(screen.getByText('Bookings')).toBeInTheDocument();
     // real values shown
     expect(screen.getByText('Replies sent').closest('div')?.textContent).toContain('4');
+    expect(screen.getByText('Inbound messages').closest('div')?.textContent).toContain('9');
   });
 
   it('empty usage shows zero, not sample data', async () => {
