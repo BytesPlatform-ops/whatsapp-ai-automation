@@ -726,3 +726,148 @@ def sms_health(tenant_id: str = Depends(resolve_tenant)) -> dict:
 def sms_disconnect(tenant_id: str = Depends(resolve_tenant)) -> dict:
     from .service import sms_assets
     return sms_assets.disconnect(tenant_id)
+
+
+# ── Telegram endpoints (Wave 15) ──────────────────────────────────────────────
+
+_TG_MODES = ("bot", "business")
+
+
+@ops_router.get("/telegram/status")
+def telegram_status(tenant_id: str = Depends(resolve_tenant)) -> dict:
+    from .service import telegram_assets
+    return telegram_assets.status(tenant_id)
+
+
+@ops_router.get("/telegram/webhook-info")
+def telegram_webhook_info(tenant_id: str = Depends(resolve_tenant)) -> dict:
+    from .providers import telegram_adapter as tg
+    try:
+        return {"webhook": tg.get_webhook_info(tenant_id)}
+    except tg.TelegramError as e:
+        raise HTTPException(status_code=400, detail={"reason": e.category})
+
+
+class TgConnectIn(BaseModel):
+    bot_token: str
+
+
+@ops_router.post("/telegram/connect")
+def telegram_connect(body: TgConnectIn, tenant_id: str = Depends(resolve_tenant)) -> dict:
+    from .service import telegram_assets
+    res = telegram_assets.connect_bot(tenant_id, body.bot_token)
+    if res.get("status") == "failed":
+        raise HTTPException(status_code=400, detail=res)
+    return res
+
+
+@ops_router.post("/telegram/validate")
+def telegram_validate(tenant_id: str = Depends(resolve_tenant)) -> dict:
+    from .providers import telegram_adapter as tg
+    try:
+        return {"bot": tg.validate_bot(tenant_id)}
+    except tg.TelegramError as e:
+        raise HTTPException(status_code=400, detail={"reason": e.category})
+
+
+class TgWebhookIn(BaseModel):
+    base_url: str | None = None
+    rotate_secret: bool | None = None
+
+
+@ops_router.post("/telegram/webhook")
+def telegram_configure_webhook(body: TgWebhookIn, tenant_id: str = Depends(resolve_tenant)) -> dict:
+    from .service import telegram_assets
+    if body.rotate_secret:
+        return telegram_assets.rotate_webhook_secret(tenant_id, base_url=body.base_url or "")
+    return telegram_assets.configure_webhook(tenant_id, base_url=body.base_url or "")
+
+
+@ops_router.post("/telegram/webhook/remove")
+def telegram_remove_webhook(tenant_id: str = Depends(resolve_tenant)) -> dict:
+    from .service import telegram_assets
+    return telegram_assets.remove_webhook(tenant_id)
+
+
+@ops_router.get("/telegram/business")
+def telegram_business_list(tenant_id: str = Depends(resolve_tenant)) -> dict:
+    from .service import stores
+    return {"connections": stores.tg_business().list(tenant_id)}
+
+
+class TgModeIn(BaseModel):
+    standard: bool | None = None
+    business: bool | None = None
+
+
+@ops_router.post("/telegram/mode")
+def telegram_set_mode(body: TgModeIn, tenant_id: str = Depends(resolve_tenant)) -> dict:
+    from .service import telegram_assets
+    return telegram_assets.set_mode_enabled(tenant_id, standard=body.standard, business=body.business)
+
+
+class TgSettingsIn(BaseModel):
+    mode: str = "bot"
+    reply_mode: str | None = None
+
+
+@ops_router.post("/telegram/settings")
+def telegram_settings(body: TgSettingsIn, tenant_id: str = Depends(resolve_tenant)) -> dict:
+    from .service import config_repo, telegram_policy
+    if body.mode not in _TG_MODES:
+        raise HTTPException(status_code=400, detail="unknown mode")
+    if body.reply_mode in telegram_policy.REPLY_MODES:
+        field = "telegram_business_reply_mode" if body.mode == "business" else "telegram_reply_mode"
+        config_repo.save(tenant_id, {field: body.reply_mode}, updated_by="settings")
+    return {"mode": body.mode, "reply_mode": telegram_policy.reply_mode(tenant_id, body.mode)}
+
+
+@ops_router.get("/telegram/drafts")
+def telegram_drafts(mode: str = Query(""), tenant_id: str = Depends(resolve_tenant)) -> dict:
+    from .service import telegram_sync
+    return {"drafts": telegram_sync.list_drafts(tenant_id, mode=mode)}
+
+
+class TgDraftEditIn(BaseModel):
+    text: str | None = None
+
+
+@ops_router.post("/telegram/drafts/{draft_id}/edit")
+def telegram_draft_edit(draft_id: str, body: TgDraftEditIn, tenant_id: str = Depends(resolve_tenant)) -> dict:
+    from .service import telegram_sync
+    d = telegram_sync.edit_draft(tenant_id, draft_id, text=body.text)
+    if d is None:
+        raise HTTPException(status_code=404, detail="draft not found")
+    if d.get("status") == "locked":
+        raise HTTPException(status_code=409, detail="draft already sent")
+    return {"draft": d}
+
+
+@ops_router.post("/telegram/drafts/{draft_id}/retry")
+def telegram_draft_retry(draft_id: str, tenant_id: str = Depends(resolve_tenant)) -> dict:
+    from .worker import jobs_store
+    return {"enqueued": True, "job_id": jobs_store.enqueue(tenant_id, "telegram_send_retry", {"draft_id": draft_id})}
+
+
+@ops_router.post("/telegram/drafts/{draft_id}/reconcile")
+def telegram_draft_reconcile(draft_id: str, tenant_id: str = Depends(resolve_tenant)) -> dict:
+    from .worker import jobs_store
+    return {"enqueued": True, "job_id": jobs_store.enqueue(tenant_id, "telegram_reconcile", {"draft_id": draft_id})}
+
+
+@ops_router.post("/telegram/test")
+def telegram_test(tenant_id: str = Depends(resolve_tenant)) -> dict:
+    from .service import telegram_assets
+    return {"tested": True, **telegram_assets.status(tenant_id)}
+
+
+@ops_router.post("/telegram/health")
+def telegram_health(tenant_id: str = Depends(resolve_tenant)) -> dict:
+    from .worker import jobs_store
+    return {"enqueued": True, "job_id": jobs_store.enqueue(tenant_id, "telegram_connection_health", {})}
+
+
+@ops_router.post("/telegram/disconnect")
+def telegram_disconnect(tenant_id: str = Depends(resolve_tenant)) -> dict:
+    from .service import telegram_assets
+    return telegram_assets.disconnect(tenant_id)

@@ -27,6 +27,10 @@ Usage:
         python scripts/receptionist_smoke.py sms-read --tenant t_x
     RUN_LIVE_RECEPTIONIST_SMS_SEND_TESTS=1 \\
         python scripts/receptionist_smoke.py sms-send --tenant t_x --to +15551230000  # write
+    RUN_LIVE_RECEPTIONIST_TELEGRAM_READ_TESTS=1 \\
+        python scripts/receptionist_smoke.py telegram-read --tenant t_x
+    RUN_LIVE_RECEPTIONIST_TELEGRAM_SEND_TESTS=1 \\
+        python scripts/receptionist_smoke.py telegram-send --tenant t_x --to 123456789  # write
 """
 
 from __future__ import annotations
@@ -76,6 +80,10 @@ def cmd_plan() -> int:
     print("  messenger-send → send 1 message (WRITE, open window)         [RUN_LIVE_RECEPTIONIST_MESSENGER_SEND_TESTS]")
     print("  sms-read       → validate + list numbers                     [RUN_LIVE_RECEPTIONIST_SMS_READ_TESTS]")
     print("  sms-send       → send 1 SMS (WRITE, consent + quiet hours)   [RUN_LIVE_RECEPTIONIST_SMS_SEND_TESTS]")
+    print("  telegram-read  → validate bot + webhook info                 [RUN_LIVE_RECEPTIONIST_TELEGRAM_READ_TESTS]")
+    print("  telegram-business-read → validate business connection        [RUN_LIVE_RECEPTIONIST_TELEGRAM_BUSINESS_READ_TESTS]")
+    print("  telegram-send  → send 1 Bot message (WRITE, user-initiated)  [RUN_LIVE_RECEPTIONIST_TELEGRAM_SEND_TESTS]")
+    print("  telegram-business-send → send 1 Business message (WRITE)     [RUN_LIVE_RECEPTIONIST_TELEGRAM_BUSINESS_SEND_TESTS]")
     print("Defaults: dry-run, read-only, credentials + content redacted.")
     return 0
 
@@ -232,17 +240,49 @@ def cmd_sms_send(tenant: str, to: str) -> int:
     return 0
 
 
+def cmd_telegram_read(tenant: str, business: bool = False) -> int:
+    flag = "RUN_LIVE_RECEPTIONIST_TELEGRAM_BUSINESS_READ_TESTS" if business else "RUN_LIVE_RECEPTIONIST_TELEGRAM_READ_TESTS"
+    if not _require(flag):
+        return cmd_plan()
+    from receptionist.providers import telegram_adapter as tg
+    print(f"telegram-{'business-' if business else ''}read (read-only — state only, token redacted):")
+    _timed("validate", lambda: tg.validate_connection(tenant))
+    _timed("bot", lambda: tg.validate_bot(tenant))
+    if business:
+        _timed("webhook", lambda: tg.get_webhook_info(tenant))
+    return 0
+
+
+def cmd_telegram_send(tenant: str, to: str, business: bool = False) -> int:
+    flag = "RUN_LIVE_RECEPTIONIST_TELEGRAM_BUSINESS_SEND_TESTS" if business else "RUN_LIVE_RECEPTIONIST_TELEGRAM_SEND_TESTS"
+    if not _require(flag):
+        return cmd_plan()
+    if not to:
+        print("ERR: --to is required for a send smoke test (use a safe test chat id).")
+        return 2
+    from receptionist.providers import telegram_adapter as tg
+    body = "Automated Pixie smoke test — please ignore."
+    if business:
+        print("telegram-business-send (WRITE — ONE Business message):")
+        _timed("send", lambda: tg.send_business_message(tenant, chat_id=to, text=body, business_connection_id=""))
+    else:
+        print("telegram-send (WRITE — ONE Bot message; user must have initiated):")
+        _timed("send", lambda: tg.send_message(tenant, chat_id=to, text=body))
+    return 0
+
+
 def main() -> int:
     p = argparse.ArgumentParser(description="Receptionist provider smoke tests (default: dry-run plan)")
     p.add_argument("command", nargs="?", default="plan",
                    choices=["plan", "gmail-read", "gmail-send", "calendar-read", "calendar-write",
                             "whatsapp-read", "whatsapp-send", "meta-messaging-plan",
                             "instagram-read", "instagram-send", "messenger-read", "messenger-send",
-                            "sms-plan", "sms-read", "sms-send"])
+                            "sms-plan", "sms-read", "sms-send", "telegram-plan",
+                            "telegram-read", "telegram-business-read", "telegram-send", "telegram-business-send"])
     p.add_argument("--tenant", default="")
     p.add_argument("--to", default="")
     args = p.parse_args()
-    if args.command in ("plan", "meta-messaging-plan", "sms-plan"):
+    if args.command in ("plan", "meta-messaging-plan", "sms-plan", "telegram-plan"):
         return cmd_plan()
     if not args.tenant:
         print("ERR: --tenant is required for live smoke tests.")
@@ -260,6 +300,10 @@ def main() -> int:
         "messenger-send": lambda: cmd_messenger_send(args.tenant, args.to),
         "sms-read": lambda: cmd_sms_read(args.tenant),
         "sms-send": lambda: cmd_sms_send(args.tenant, args.to),
+        "telegram-read": lambda: cmd_telegram_read(args.tenant),
+        "telegram-business-read": lambda: cmd_telegram_read(args.tenant, business=True),
+        "telegram-send": lambda: cmd_telegram_send(args.tenant, args.to),
+        "telegram-business-send": lambda: cmd_telegram_send(args.tenant, args.to, business=True),
     }[args.command]()
 
 
