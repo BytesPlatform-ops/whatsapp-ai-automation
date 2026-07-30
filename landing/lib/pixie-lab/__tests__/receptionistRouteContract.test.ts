@@ -70,6 +70,13 @@ const KNOWN_BACKEND = new Set<string>([
   '/api/agents/ai-receptionist/widget/config',
   '/api/agents/ai-receptionist/widget/verification',
   '/api/agents/ai-receptionist/widget/verify',
+  // Wave 12: WhatsApp provider endpoints
+  '/api/agents/ai-receptionist/whatsapp/status',
+  '/api/agents/ai-receptionist/whatsapp/wabas',
+  '/api/agents/ai-receptionist/whatsapp/phone-numbers',
+  '/api/agents/ai-receptionist/whatsapp/settings',
+  '/api/agents/ai-receptionist/whatsapp/templates',
+  '/api/agents/ai-receptionist/whatsapp/drafts',
   '/api/approvals',
 ]);
 
@@ -101,6 +108,7 @@ const REQUIRED_PROXIES: string[] = [
   'gmail/route.ts',
   'calendar/route.ts',
   'widget/route.ts',
+  'whatsapp/route.ts',
 ];
 
 function read(file: string): string {

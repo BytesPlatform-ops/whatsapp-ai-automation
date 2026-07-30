@@ -30,6 +30,7 @@ import type {
   RcpWorkerJob, RcpWorkerHealth, RcpReminder, RcpUsageSummary, RcpLimit, RcpApproval,
   RcpAnalyticsRange, RcpGmailStatus, RcpGmailDraft, RcpCalendarStatus, RcpCalendar,
   RcpSlot, RcpBookingRow, RcpWidgetConfig, RcpWidgetVerification,
+  RcpWhatsAppStatus, RcpWhatsAppTemplate, RcpWhatsAppDraft,
 } from './serviceTypes';
 
 async function req<T>(url: string, init?: RequestInit): Promise<Envelope<T>> {
@@ -713,4 +714,14 @@ export const receptionistApi = {
   saveWidgetConfig: (patch: Record<string, unknown>) => post<{ config: RcpWidgetConfig }>(`${R}/widget`, { action: 'save', ...patch }),
   getWidgetVerification: () => req<RcpWidgetVerification>(`${R}/widget?view=verification`),
   verifyWidget: (domain: string) => post<RcpWidgetVerification>(`${R}/widget`, { action: 'verify', domain }),
+
+  // ── WhatsApp (Wave 12) ────────────────────────────────────────────────────
+  getWhatsAppStatus: () => req<RcpWhatsAppStatus>(`${R}/whatsapp`),
+  getWhatsAppTemplates: () => req<{ templates: RcpWhatsAppTemplate[] }>(`${R}/whatsapp?view=templates`),
+  getWhatsAppDrafts: () => req<{ drafts: RcpWhatsAppDraft[] }>(`${R}/whatsapp?view=drafts`),
+  setWhatsAppReplyMode: (mode: string) => post<{ reply_mode: string }>(`${R}/whatsapp`, { action: 'settings', whatsapp_reply_mode: mode }),
+  syncWhatsAppTemplates: () => post<{ synced: number }>(`${R}/whatsapp`, { action: 'sync' }),
+  editWhatsAppDraft: (id: string, text: string) => post<{ draft: RcpWhatsAppDraft }>(`${R}/whatsapp`, { action: 'edit', id, text }),
+  retryWhatsAppDraft: (id: string) => post<{ job_id: string }>(`${R}/whatsapp`, { action: 'retry', id }),
+  reconcileWhatsAppDraft: (id: string) => post<{ job_id: string }>(`${R}/whatsapp`, { action: 'reconcile', id }),
 };

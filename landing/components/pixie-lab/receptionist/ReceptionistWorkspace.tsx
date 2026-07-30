@@ -20,8 +20,9 @@ import BookingsPanel from './BookingsPanel';
 import FollowUpsPanel from './FollowUpsPanel';
 import CalendarConfigPanel from './CalendarConfigPanel';
 import GmailDraftsPanel from './GmailDraftsPanel';
+import WhatsAppPanel from './WhatsAppPanel';
 
-export type RcpTab = 'dashboard' | 'console' | 'conversations' | 'crm' | 'operations' | 'integrations' | 'knowledge' | 'approvals' | 'providers' | 'analytics' | 'widget' | 'bookings' | 'followups' | 'calendar' | 'gmail';
+export type RcpTab = 'dashboard' | 'console' | 'conversations' | 'crm' | 'operations' | 'integrations' | 'knowledge' | 'approvals' | 'providers' | 'analytics' | 'widget' | 'bookings' | 'followups' | 'calendar' | 'gmail' | 'whatsapp';
 
 const TABS = [
   { label: 'Overview', href: '/pixie-lab/receptionist' },
@@ -31,6 +32,7 @@ const TABS = [
   { label: 'CRM', href: '/pixie-lab/receptionist/crm' },
   { label: 'Approvals', href: '/pixie-lab/receptionist/approvals' },
   { label: 'Gmail', href: '/pixie-lab/receptionist/gmail' },
+  { label: 'WhatsApp', href: '/pixie-lab/receptionist/whatsapp' },
   { label: 'Providers', href: '/pixie-lab/receptionist/providers' },
   { label: 'Calendar', href: '/pixie-lab/receptionist/calendar' },
   { label: 'Bookings', href: '/pixie-lab/receptionist/bookings' },
@@ -50,6 +52,7 @@ const TITLES: Record<RcpTab, string> = {
   approvals: 'Approvals',
   providers: 'Gmail & Calendar',
   gmail: 'Gmail Drafts',
+  whatsapp: 'WhatsApp',
   calendar: 'Calendar Setup',
   bookings: 'Bookings',
   followups: 'Follow-Ups & Reminders',
@@ -89,6 +92,7 @@ export function ReceptionistWorkspace({ tab, tenant }: { tab: RcpTab; tenant: st
           {tab === 'approvals' && <ApprovalsPanel />}
           {tab === 'providers' && <ProvidersPanel />}
           {tab === 'gmail' && <GmailDraftsPanel />}
+          {tab === 'whatsapp' && <WhatsAppPanel />}
           {tab === 'calendar' && <CalendarConfigPanel />}
           {tab === 'bookings' && <BookingsPanel />}
           {tab === 'followups' && <FollowUpsPanel />}

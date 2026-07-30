@@ -1043,6 +1043,25 @@ export interface RcpWidgetVerification {
   installed?: boolean;
   domains?: { domain: string; status?: string; last_verified_at?: string; last_failure?: string; evidence?: string }[];
 }
+
+// ── Wave 12: WhatsApp ────────────────────────────────────────────────────────
+export interface RcpWhatsAppStatus {
+  connection?: {
+    connected?: boolean; waba_id?: string; waba_name?: string; phone_number_id?: string;
+    display_phone_number?: string; verified_name?: string; can_send?: boolean; can_template?: boolean;
+    webhook_subscribed?: boolean; quality?: string; state?: string;
+  };
+  reply_mode?: string;
+}
+export interface RcpWhatsAppTemplate {
+  name: string; language?: string; category?: string; status?: string; variables?: number;
+  last_synced_at?: string;
+}
+export interface RcpWhatsAppDraft {
+  id: string; wa_id?: string; text?: string; message_type?: string; status?: string;
+  provider_message_id?: string; approval_id?: string; template_required?: boolean;
+  window_open?: boolean; provider_error?: string; updated_at?: string;
+}
 export interface RcpHealth {
   status?: string; agent_slug?: string; llm_provider?: string; model?: string; handlers?: number;
   persistence?: { backend?: string; durable?: boolean; supabase_configured?: boolean };
