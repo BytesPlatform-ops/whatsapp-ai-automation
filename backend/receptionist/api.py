@@ -1,11 +1,17 @@
-"""Receptionist HTTP surface (web_chat channel).
+"""Receptionist web-chat HTTP surface.
 
-GET  /receptionist        → a test chat page (type → reply + parsed [ACTION]).
-POST /receptionist/chat   → run the engine for one message, return reply + action
-                            + usage, and emit a UsageEvent for billing.
+GET  /receptionist        → a test chat page (type → reply + parsed action).
+POST /receptionist/chat   → run ONE message through the CANONICAL engine
+                            (``service.engine.run_message``) and return a
+                            legacy-compatible ``{reply_text, action, action_result,
+                            usage}`` envelope via an adapter.
 
-Mounted into the main FastAPI app (modular monolith). Real channels (sms, voice,
-whatsapp) add their own adapters + routes against the same engine.
+This route no longer runs its own prompt, tag parser or local action/CRM/calendar/
+booking/payment side effects — all of that now converges on the canonical engine
+(tenant resolution, idempotency, conversation lock, history + knowledge retrieval,
+response plan, action registry, approval policy, Billing, activity/analytics). The
+legacy ``core.ReceptionEngine`` / ``actions.run_action`` path is retained only as
+reference and is unreachable from any writable route.
 """
 
 from __future__ import annotations
@@ -16,17 +22,10 @@ from fastapi import APIRouter, Depends
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
-from billing import get_recorder
-from schemas import UsageEvent, UsageEventType
-
-from .actions import run_action
-from .channels import WebChatAdapter
 from .context import resolve_tenant
-from .core import ReceptionEngine
 
 router = APIRouter(prefix="/receptionist", tags=["receptionist"])
 _STATIC = Path(__file__).resolve().parent / "static"
-_adapter = WebChatAdapter()
 
 
 class ChatIn(BaseModel):
@@ -35,6 +34,38 @@ class ChatIn(BaseModel):
     channel: str = "chat"  # "chat" | "voice" (browser speech)
     history: list[dict] = Field(default_factory=list)
     customer_id: str | None = None
+    conversation_id: str | None = None
+    idempotency_key: str = ""
+
+
+def _legacy_chat_response(out: dict) -> dict:
+    """Adapt the canonical engine result into the legacy web-chat envelope."""
+    action_name = out.get("action", "none")
+    handled = bool(action_name and action_name not in ("none", "fallback"))
+    return {
+        "reply_text": out.get("reply", ""),
+        "action": {
+            "type": out.get("intent", "fallback"),
+            "status": out.get("status", ""),
+            "action": action_name,
+        },
+        "action_result": {
+            "handled": handled,
+            "status": out.get("status", ""),
+            "record_type": out.get("record_type", ""),
+            "record_id": out.get("record_id", ""),
+            "provider_status": out.get("provider_status", ""),
+            "escalated": out.get("escalated", False),
+        },
+        "usage": {  # canonical Billing meters internally; token usage is not surfaced here
+            "model": out.get("model", ""),
+            "tokens_in": 0, "tokens_out": 0, "latency_ms": 0, "cost_usd": 0.0,
+        },
+        "conversation_id": out.get("conversation_id", ""),
+        "intent": out.get("intent", "fallback"),
+        "ai_paused": out.get("ai_paused", False),
+        "response_plan_version": out.get("response_plan_version", ""),
+    }
 
 
 @router.get("")
@@ -44,31 +75,14 @@ async def page() -> FileResponse:
 
 @router.post("/chat")
 async def chat(body: ChatIn, tenant_id: str = Depends(resolve_tenant)) -> dict:
-    req = _adapter.to_request(tenant_id, body.model_dump())
-    reply, result = await ReceptionEngine().handle(req)
+    from .service import engine
 
-    # Run the real side-effect for the parsed action (booking → calendar, etc.).
-    action_result = run_action(reply.action, req)
-
-    # Bill the model call (model/tokens/latency/cost).
-    get_recorder().record(UsageEvent(
+    channel = "voice" if str(body.channel) == "voice" else "web_chat"
+    out = engine.run_message(
         tenant_id=tenant_id,
-        event_type=UsageEventType.RECEPTION,
-        model=result.model,
-        tier=result.tier,
-        tokens_in=result.tokens_in,
-        tokens_out=result.tokens_out,
-        latency_ms=result.latency_ms,
-        cost_usd=result.cost_usd,
-    ))
-
-    out = _adapter.format_reply(reply)
-    out["action_result"] = action_result
-    out["usage"] = {
-        "model": result.model,
-        "tokens_in": result.tokens_in,
-        "tokens_out": result.tokens_out,
-        "latency_ms": result.latency_ms,
-        "cost_usd": result.cost_usd,
-    }
-    return out
+        message=body.message,
+        channel=channel,
+        conversation_id=body.conversation_id or None,
+        idempotency_key=body.idempotency_key or "",
+    )
+    return _legacy_chat_response(out)

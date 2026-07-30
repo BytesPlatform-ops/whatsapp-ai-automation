@@ -53,3 +53,35 @@ def test_canonical_message_endpoint_is_the_writable_engine():
     # the turn persisted a conversation + messages via the canonical stores
     assert stores.conversations().count("t_a") == 1
     assert stores.messages().count("t_a") >= 2
+
+
+def test_legacy_chat_route_folds_into_canonical_engine(monkeypatch):
+    """POST /receptionist/chat must reach the canonical engine (durable conversation)
+    and no longer run an independent prompt/parser/side-effect path."""
+    monkeypatch.setenv("PIXIE_INTERNAL_API_SECRET", "")
+    monkeypatch.setenv("PIXIE_MODEL_MODE", "fake")
+    from receptionist.service import stores
+    stores.reset_all()
+    import app
+    from fastapi.testclient import TestClient
+    client = TestClient(app.app)
+
+    r = client.post("/receptionist/chat", json={"tenant_id": "t_chat", "message": "what are your hours?"})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert "reply_text" in body and "action" in body and "usage" in body
+    assert body["conversation_id"]
+    assert stores.conversations().count("t_chat") == 1
+    assert stores.messages().count("t_chat") >= 2
+
+
+def test_no_independent_writable_engine_imports_in_chat_route():
+    """The chat route module must not run the legacy engine/action executor."""
+    import inspect
+    from receptionist import api
+    src = inspect.getsource(api)
+    # no import of the legacy engine / action dispatcher, and no call to run_action(
+    assert "from .core import" not in src
+    assert "from .actions import" not in src
+    assert "run_action(" not in src
+    assert "ReceptionEngine(" not in src
