@@ -270,6 +270,23 @@ def gmail_drafts(tenant_id: str = Depends(resolve_tenant)) -> dict:
     return {"drafts": gmail_sync.list_drafts(tenant_id)}
 
 
+class GmailDraftEditIn(BaseModel):
+    subject: str | None = None
+    body: str | None = None
+
+
+@ops_router.post("/gmail/drafts/{draft_id}/edit")
+def gmail_draft_edit(draft_id: str, body: GmailDraftEditIn, tenant_id: str = Depends(resolve_tenant)) -> dict:
+    """Edit a draft. Editing a pending-approval draft invalidates the approval."""
+    from .service import gmail_sync
+    draft = gmail_sync.edit_draft(tenant_id, draft_id, subject=body.subject, body=body.body)
+    if draft is None:
+        raise HTTPException(status_code=404, detail="draft not found")
+    if draft.get("status") == "locked":
+        raise HTTPException(status_code=409, detail="draft already sent")
+    return {"draft": draft}
+
+
 @ops_router.post("/gmail/drafts/{draft_id}/retry")
 def gmail_draft_retry(draft_id: str, tenant_id: str = Depends(resolve_tenant)) -> dict:
     from .worker import jobs_store

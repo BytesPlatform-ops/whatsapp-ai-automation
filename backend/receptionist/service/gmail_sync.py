@@ -121,6 +121,49 @@ def list_drafts(tenant_id: str) -> list[dict]:
     return stores.gmail_drafts().list(tenant_id)
 
 
+def edit_draft(tenant_id: str, draft_id: str, *, subject: Optional[str] = None,
+               body: Optional[str] = None) -> Optional[dict]:
+    """Edit a draft's subject/body. A sent/sending draft cannot be edited. Editing a
+    draft that is pending approval INVALIDATES the approval (the old approved payload
+    can no longer send) — the draft returns to 'generated' and must be re-submitted."""
+    draft = stores.gmail_drafts().get(tenant_id, draft_id)
+    if draft is None:
+        return None
+    if draft.get("status") in ("sent", "sending"):
+        return {"status": "locked", "detail": "sent drafts cannot be edited"}
+
+    # audit the previous content
+    draft.setdefault("edit_history", []).append({
+        "at": now_iso(), "subject": draft.get("subject", ""), "body": draft.get("body", "")})
+    if subject is not None:
+        draft["subject"] = subject
+    if body is not None:
+        draft["body"] = body
+
+    invalidated = False
+    if draft.get("status") == "pending_approval" and draft.get("approval_id"):
+        _invalidate_approval(tenant_id, draft["approval_id"])
+        invalidated = True
+        draft["approval_id"] = ""
+    draft["status"] = "generated"  # requires a fresh approval before it can send
+    saved = save_draft(tenant_id, draft)
+    saved["approval_invalidated"] = invalidated
+    return saved
+
+
+def _invalidate_approval(tenant_id: str, approval_id: str) -> None:
+    """Mark a pending approval as skipped so its (now-stale) payload cannot execute."""
+    try:
+        from approvals.router import get_approvals_store
+        store = get_approvals_store()
+        item = store.get(tenant_id, approval_id)
+        if item is not None and item.status in ("pending", "approved"):
+            item.status = "skipped"
+            store.save(item)
+    except Exception:
+        pass
+
+
 # ── the sync-one-message flow (Parts 4/9/10) ──────────────────────────────────
 
 def process_message(tenant_id: str, message_id: str, *, business_email: str = "",

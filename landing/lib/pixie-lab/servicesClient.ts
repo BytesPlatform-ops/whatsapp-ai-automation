@@ -694,6 +694,7 @@ export const receptionistApi = {
   getGmailDrafts: () => req<{ drafts: RcpGmailDraft[] }>(`${R}/gmail?view=drafts`),
   setGmailReplyMode: (mode: string) => post<{ reply_mode: string }>(`${R}/gmail`, { action: 'settings', gmail_reply_mode: mode }),
   startGmailSync: (mode: 'initial' | 'incremental') => post<{ job_id: string }>(`${R}/gmail`, { action: 'sync', mode }),
+  editGmailDraft: (id: string, patch: { subject?: string; body?: string }) => post<{ draft: RcpGmailDraft }>(`${R}/gmail`, { action: 'edit', id, ...patch }),
   retryGmailDraft: (id: string) => post<{ job_id: string }>(`${R}/gmail`, { action: 'retry', id }),
   reconcileGmailDraft: (id: string) => post<{ job_id: string }>(`${R}/gmail`, { action: 'reconcile', id }),
 

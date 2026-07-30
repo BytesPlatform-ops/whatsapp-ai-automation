@@ -24,6 +24,7 @@ export async function POST(req: Request) {
   let r;
   if (action === 'settings') r = await backendSend('POST', `${A}/gmail/settings`, g.tenant, rest);
   else if (action === 'sync') r = await backendSend('POST', `${A}/gmail/sync`, g.tenant, rest);
+  else if (action === 'edit' && did) r = await backendSend('POST', `${A}/gmail/drafts/${encodeURIComponent(did)}/edit`, g.tenant, rest);
   else if (action === 'retry' && did) r = await backendSend('POST', `${A}/gmail/drafts/${encodeURIComponent(did)}/retry`, g.tenant, {});
   else if (action === 'reconcile' && did) r = await backendSend('POST', `${A}/gmail/drafts/${encodeURIComponent(did)}/reconcile`, g.tenant, {});
   else return NextResponse.json({ backendUp: true, error: 'unsupported action' }, { status: 400 });

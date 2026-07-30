@@ -13,6 +13,7 @@ vi.mock('@/lib/pixie-lab/servicesClient', () => ({
     getGmailDrafts: vi.fn(),
     retryGmailDraft: vi.fn(),
     reconcileGmailDraft: vi.fn(),
+    editGmailDraft: vi.fn(),
   },
 }));
 
@@ -102,5 +103,18 @@ describe('GmailDraftsPanel', () => {
     await screen.findByText('Failed');
     fireEvent.click(screen.getByRole('button', { name: /Retry send/i }));
     await waitFor(() => expect(api.retryGmailDraft).toHaveBeenCalledWith('d2'));
+  });
+
+  it('inline edit saves and surfaces approval invalidation', async () => {
+    api.getGmailDrafts.mockResolvedValue({ backendUp: true, drafts: [
+      { id: 'd3', subject: 'Re: hi', body: 'draft', to: 'a@x.com', status: 'pending_approval' }] } as never);
+    api.editGmailDraft.mockResolvedValue({ backendUp: true, draft: { id: 'd3', approval_invalidated: true } } as never);
+    render(<GmailDraftsPanel />);
+    await screen.findByText('Pending approval');
+    fireEvent.click(screen.getByRole('button', { name: /Edit draft/i }));
+    fireEvent.change(screen.getByLabelText('Draft body'), { target: { value: 'edited body' } });
+    fireEvent.click(screen.getByRole('button', { name: /Save/i }));
+    await waitFor(() => expect(api.editGmailDraft).toHaveBeenCalledWith('d3', { subject: 'Re: hi', body: 'edited body' }));
+    expect(await screen.findByText(/previous approval was invalidated/i)).toBeInTheDocument();
   });
 });
