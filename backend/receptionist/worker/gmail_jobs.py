@@ -694,3 +694,152 @@ def handle_telegram_connection_health(job: dict) -> dict:
     tenant_id = job.get("tenant_id", "")
     from receptionist.providers import telegram_adapter as tg
     return {"status": "completed", "health": tg.validate_connection(tenant_id)}
+
+
+# ── Voice jobs (Vapi) ─────────────────────────────────────────────────────────
+
+@register_handler("voice_event_process")
+def handle_voice_event_process(job: dict) -> dict:
+    tenant_id = job.get("tenant_id", "")
+    payload = job.get("payload", {}) or {}
+    from receptionist.service import voice_sessions
+    from receptionist.providers.voice_adapter import normalise_call
+    msg = payload.get("message", {}) or {}
+    call = msg.get("call") or {}
+    status = (msg.get("status") or "").lower()
+    internal = {"queued": "queued", "ringing": "ringing", "in-progress": "in_progress",
+                "forwarding": "transferring", "ended": "completed"}.get(status, status or "in_progress")
+    return voice_sessions.update_status(tenant_id, payload.get("call_id", ""), status=internal,
+                                        ended_reason=(call.get("endedReason") or ""))
+
+
+@register_handler("voice_transcript_process")
+def handle_voice_transcript_process(job: dict) -> dict:
+    tenant_id = job.get("tenant_id", "")
+    payload = job.get("payload", {}) or {}
+    msg = payload.get("message", {}) or {}
+    t = msg.get("transcript") or {}
+    seq = int(msg.get("sequence", t.get("sequence", 0)) or 0)
+    final = (msg.get("transcriptType", "") == "final") or bool(t.get("final"))
+    from receptionist.service import voice_sessions
+    return voice_sessions.record_transcript(
+        tenant_id, payload.get("call_id", ""), sequence=seq,
+        speaker=(t.get("role") or msg.get("role") or "customer"),
+        text=(t.get("transcript") or msg.get("transcript") or ""), final=final,
+        language=t.get("language", ""))
+
+
+@register_handler("voice_tool_execute")
+def handle_voice_tool_execute(job: dict) -> dict:
+    tenant_id = job.get("tenant_id", "")
+    payload = job.get("payload", {}) or {}
+    from receptionist.service import voice_sessions
+    return voice_sessions.process_tool_call(
+        tenant_id, payload.get("call_id", ""), tool_call_id=payload.get("tool_call_id", ""),
+        tool_name=payload.get("tool_name", ""), arguments=payload.get("arguments", {}) or {})
+
+
+@register_handler("voice_transfer")
+def handle_voice_transfer(job: dict) -> dict:
+    tenant_id = job.get("tenant_id", "")
+    payload = job.get("payload", {}) or {}
+    msg = payload.get("message", {}) or {}
+    from receptionist.service import voice_sessions
+    outcome = (msg.get("status") or "requested").lower()
+    return voice_sessions.process_transfer(tenant_id, payload.get("call_id", ""),
+                                           department=str(msg.get("department", "")), outcome=outcome)
+
+
+@register_handler("voice_end_report_process")
+def handle_voice_end_report(job: dict) -> dict:
+    tenant_id = job.get("tenant_id", "")
+    payload = job.get("payload", {}) or {}
+    msg = payload.get("message", {}) or {}
+    call = msg.get("call") or {}
+    from receptionist.providers.voice_adapter import normalise_call
+    nc = normalise_call({**call, "endedReason": msg.get("endedReason", call.get("endedReason", "")),
+                         "durationSeconds": msg.get("durationSeconds", 0), "cost": msg.get("cost", {})})
+    from receptionist.service import voice_sessions
+    return voice_sessions.process_end_report(tenant_id, payload.get("call_id", ""), report={
+        "duration_seconds": nc["duration_seconds"], "ended_reason": nc["ended_reason"],
+        "provider_cost": nc["provider_cost"], "telephony_cost": nc["telephony_cost"],
+        "model_cost": nc["model_cost"], "summary": msg.get("summary", "")})
+
+
+@register_handler("voice_call_retry")
+def handle_voice_call_retry(job: dict) -> dict:
+    tenant_id = job.get("tenant_id", "")
+    payload = job.get("payload", {}) or {}
+    from receptionist.service.registry import execute_action
+    res = execute_action(tenant_id, "voice_outbound_call", payload.get("args", {}) or {},
+                         skip_approval=True, idempotency_key=payload.get("idempotency_key", ""))
+    status = res.get("status")
+    if status == "queued":
+        return {"status": "completed", "call_id": res.get("record_id", "")}
+    if status in ("suppressed", "blocked_by_policy"):
+        return {"status": "terminal", "reason": res.get("detail", status)}
+    return {"status": "failed", "reason": res.get("detail", status)}
+
+
+@register_handler("voice_call_reconcile")
+def handle_voice_call_reconcile(job: dict) -> dict:
+    tenant_id = job.get("tenant_id", "")
+    payload = job.get("payload", {}) or {}
+    call_id = payload.get("call_id", "")
+    from receptionist.providers import voice_adapter as voice
+    from receptionist.service import voice_sessions
+    got = voice.reconcile_call(tenant_id, call_id)
+    st = got.get("status", "provider_unknown")
+    if st in voice_sessions.STATUSES:
+        voice_sessions.update_status(tenant_id, call_id, status=st, ended_reason=got.get("ended_reason", ""))
+        return {"status": "confirmed", "call_status": st}
+    voice_sessions.update_status(tenant_id, call_id, status="reconciliation_required")
+    return {"status": "reconciliation_required"}
+
+
+@register_handler("voice_recording_fetch")
+def handle_voice_recording_fetch(job: dict) -> dict:
+    tenant_id = job.get("tenant_id", "")
+    payload = job.get("payload", {}) or {}
+    from receptionist.providers import voice_adapter as voice
+    from receptionist.service import stores, voice_policy
+    from receptionist.service.ids import new_id, now_iso
+    if not voice_policy.recording_policy(tenant_id).get("enabled"):
+        return {"status": "skipped", "reason": "recording_disabled"}
+    meta = voice.get_recording_metadata(tenant_id, payload.get("call_id", ""))
+    stores.voice_recordings().put(tenant_id, {
+        "id": new_id("vrec"), "tenant_id": tenant_id, "call_id": payload.get("call_id", ""),
+        "has_recording": meta.get("has_recording", False), "status": "fetched", "created_at": now_iso()})
+    return {"status": "completed"}
+
+
+@register_handler("voice_post_call_analysis")
+def handle_voice_post_call_analysis(job: dict) -> dict:
+    tenant_id = job.get("tenant_id", "")
+    payload = job.get("payload", {}) or {}
+    from receptionist.service import voice_sessions, usage
+    summary = voice_sessions.build_summary(tenant_id, payload.get("call_id", ""))
+    try:
+        usage.increment(tenant_id, "voice_analyses", idempotency_key=f"vanalysis:{payload.get('call_id','')}")
+    except Exception:
+        pass
+    return {"status": "completed", "summary_id": summary.get("id", "")}
+
+
+@register_handler("voice_scheduled_callback")
+def handle_voice_scheduled_callback(job: dict) -> dict:
+    tenant_id = job.get("tenant_id", "")
+    payload = job.get("payload", {}) or {}
+    from receptionist.service.registry import execute_action
+    res = execute_action(tenant_id, "voice_outbound_call", {**(payload.get("args", {}) or {}),
+                         "responding_to_request": True, "purpose": "callback"}, skip_approval=True,
+                         idempotency_key=f"vcallback:{payload.get('callback_id','')}")
+    return {"status": "completed" if res.get("status") == "queued" else res.get("status", "failed"),
+            "call_id": res.get("record_id", "")}
+
+
+@register_handler("voice_connection_health")
+def handle_voice_connection_health(job: dict) -> dict:
+    tenant_id = job.get("tenant_id", "")
+    from receptionist.providers import voice_adapter as voice
+    return {"status": "completed", "health": voice.validate_connection(tenant_id)}
