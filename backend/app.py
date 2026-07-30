@@ -56,6 +56,7 @@ from receptionist.gmail_webhook import gmail_webhook_router as ai_receptionist_g
 from receptionist.whatsapp_webhook import whatsapp_webhook_router as ai_receptionist_whatsapp_webhook_router
 from receptionist.meta_messaging_webhook import meta_messaging_webhook_router as ai_receptionist_meta_messaging_webhook_router
 from receptionist.sms_webhook import sms_webhook_router as ai_receptionist_sms_webhook_router
+from receptionist.telegram_webhook import telegram_webhook_router as ai_receptionist_telegram_webhook_router
 from integrations.oauth_routes import router as google_oauth_router
 from meta.oauth_routes import router as meta_connect_router
 from meta.routes import agent_router as meta_agent_router
@@ -133,6 +134,7 @@ app.include_router(ai_receptionist_gmail_webhook_router)  # /api/agents/ai-recep
 app.include_router(ai_receptionist_whatsapp_webhook_router)  # /api/agents/ai-receptionist/whatsapp/webhook — WhatsApp Cloud API
 app.include_router(ai_receptionist_meta_messaging_webhook_router)  # /api/agents/ai-receptionist/meta-messaging/webhook — Instagram + Messenger
 app.include_router(ai_receptionist_sms_webhook_router)  # /api/agents/ai-receptionist/sms/webhook + /sms/status — SMS
+app.include_router(ai_receptionist_telegram_webhook_router)  # /api/agents/ai-receptionist/telegram/webhook/{id} — Telegram Bot + Business
 app.include_router(integrations_router)  # /api/integrations/status — capability readiness
 app.include_router(google_oauth_router)  # /api/integrations/google/* — real Gmail/Calendar OAuth connect
 app.include_router(meta_connect_router)  # /api/meta/connect|assets|status — Meta OAuth + asset discovery

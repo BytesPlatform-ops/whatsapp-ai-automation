@@ -568,3 +568,129 @@ def handle_sms_connection_health(job: dict) -> dict:
     tenant_id = job.get("tenant_id", "")
     from receptionist.providers import sms_adapter as sms
     return {"status": "completed", "health": sms.health_check(tenant_id)}
+
+
+# ── Telegram jobs (Bot + Business) ────────────────────────────────────────────
+
+def _tg_inbound(job: dict, mode: str) -> dict:
+    tenant_id = job.get("tenant_id", "")
+    payload = job.get("payload", {}) or {}
+    try:
+        from receptionist.service import telegram_sync
+        return telegram_sync.process_message(tenant_id, mode=mode, message=payload.get("message", {}) or {})
+    except Exception as exc:  # pragma: no cover
+        return {"status": "failed", "reason": str(exc)[:120]}
+
+
+@register_handler("telegram_inbound")
+def handle_telegram_inbound(job: dict) -> dict:
+    return _tg_inbound(job, "bot")
+
+
+@register_handler("telegram_business_inbound")
+def handle_telegram_business_inbound(job: dict) -> dict:
+    return _tg_inbound(job, "business")
+
+
+@register_handler("telegram_callback")
+def handle_telegram_callback(job: dict) -> dict:
+    tenant_id = job.get("tenant_id", "")
+    payload = job.get("payload", {}) or {}
+    from receptionist.service import telegram_sync
+    return telegram_sync.process_callback(tenant_id, payload.get("callback_query", {}) or {})
+
+
+@register_handler("telegram_edited")
+def handle_telegram_edited(job: dict) -> dict:
+    tenant_id = job.get("tenant_id", "")
+    payload = job.get("payload", {}) or {}
+    from receptionist.service import telegram_sync
+    return telegram_sync.process_edited(tenant_id, payload.get("mode", "bot"), payload.get("message", {}) or {})
+
+
+@register_handler("telegram_deleted")
+def handle_telegram_deleted(job: dict) -> dict:
+    tenant_id = job.get("tenant_id", "")
+    payload = job.get("payload", {}) or {}
+    from receptionist.service import telegram_sync
+    return telegram_sync.process_deleted(tenant_id, payload.get("mode", "business"),
+                                         payload.get("chat_id", ""), payload.get("message_ids", []))
+
+
+@register_handler("telegram_business_connection")
+def handle_telegram_business_connection(job: dict) -> dict:
+    tenant_id = job.get("tenant_id", "")
+    payload = job.get("payload", {}) or {}
+    from receptionist.service import telegram_sync
+    return telegram_sync.process_business_connection(tenant_id, payload.get("business_connection", {}) or {})
+
+
+@register_handler("telegram_send_retry")
+def handle_telegram_send_retry(job: dict) -> dict:
+    tenant_id = job.get("tenant_id", "")
+    payload = job.get("payload", {}) or {}
+    draft_id = payload.get("draft_id", "")
+    from receptionist.service import stores
+    d = stores.tg_drafts().get(tenant_id, draft_id)
+    if d is None:
+        return {"status": "failed", "reason": "draft_not_found"}
+    if d.get("status") in ("sent", "provider_pending"):
+        return {"status": "completed", "already_sent": True}
+    mode = d.get("mode", "bot")
+    action = "telegram_business_send" if mode == "business" else "telegram_send"
+    from receptionist.service.registry import execute_action
+    res = execute_action(tenant_id, action, {
+        "chat_id": d.get("chat_id", ""), "user_id": d.get("user_id", ""), "body": d.get("text", ""),
+        "draft_id": draft_id, "business_connection_id": d.get("business_connection_id", "")},
+        skip_approval=True, idempotency_key=f"tgsend:{draft_id}")
+    status = res.get("status")
+    if status == "provider_pending":
+        return {"status": "completed", "message_id": res.get("record_id", "")}
+    detail = str(res.get("detail", ""))
+    if status in ("suppressed", "blocked_by_policy") or "forbidden_chat" in detail or "business_rights_missing" in detail:
+        return {"status": "terminal", "reason": res.get("detail", status)}
+    return {"status": "failed", "reason": res.get("detail", status)}
+
+
+@register_handler("telegram_reconcile")
+def handle_telegram_reconcile(job: dict) -> dict:
+    tenant_id = job.get("tenant_id", "")
+    payload = job.get("payload", {}) or {}
+    from receptionist.service import stores
+    d = stores.tg_drafts().get(tenant_id, payload.get("draft_id", ""))
+    if d is None:
+        return {"status": "failed", "reason": "draft_not_found"}
+    if d.get("provider_message_id"):
+        d["status"] = "provider_pending"
+        stores.tg_drafts().put(tenant_id, d)
+        return {"status": "confirmed", "message_id": d["provider_message_id"]}
+    d["status"] = "reconciliation_required"
+    stores.tg_drafts().put(tenant_id, d)
+    return {"status": "reconciliation_required"}
+
+
+@register_handler("telegram_media_fetch")
+def handle_telegram_media_fetch(job: dict) -> dict:
+    tenant_id = job.get("tenant_id", "")
+    payload = job.get("payload", {}) or {}
+    from receptionist.providers import telegram_adapter as tg
+    from receptionist.service import stores
+    file_id = payload.get("file_id", "")
+    try:
+        meta = tg.get_file_metadata(tenant_id, file_id)
+    except tg.TelegramError as exc:
+        return {"status": "failed", "reason": exc.category}
+    for m in stores.tg_media().list(tenant_id):
+        if m.get("file_id") == file_id:
+            m["file_unique_id"] = meta.get("file_unique_id", "")
+            m["file_size"] = meta.get("file_size", 0)
+            m["status"] = "fetched"
+            stores.tg_media().put(tenant_id, m)
+    return {"status": "completed", "file_id": file_id}
+
+
+@register_handler("telegram_connection_health")
+def handle_telegram_connection_health(job: dict) -> dict:
+    tenant_id = job.get("tenant_id", "")
+    from receptionist.providers import telegram_adapter as tg
+    return {"status": "completed", "health": tg.validate_connection(tenant_id)}
