@@ -13,6 +13,10 @@ Usage:
         python scripts/receptionist_smoke.py calendar-read --tenant t_x
     RUN_LIVE_RECEPTIONIST_GMAIL_SEND_TESTS=1 \\
         python scripts/receptionist_smoke.py gmail-send --tenant t_x --to you@test  # write
+    RUN_LIVE_RECEPTIONIST_WHATSAPP_READ_TESTS=1 \\
+        python scripts/receptionist_smoke.py whatsapp-read --tenant t_x
+    RUN_LIVE_RECEPTIONIST_WHATSAPP_SEND_TESTS=1 \\
+        python scripts/receptionist_smoke.py whatsapp-send --tenant t_x --to 15551230000  # write
 """
 
 from __future__ import annotations
@@ -54,6 +58,8 @@ def cmd_plan() -> int:
     print("  gmail-send     → build+send 1 (WRITE)                      [RUN_LIVE_RECEPTIONIST_GMAIL_SEND_TESTS]")
     print("  calendar-read  → list (1) + free/busy 1 bounded (1)        [RUN_LIVE_RECEPTIONIST_CALENDAR_READ_TESTS]")
     print("  calendar-write → create test event + delete (WRITE)        [RUN_LIVE_RECEPTIONIST_CALENDAR_WRITE_TESTS]")
+    print("  whatsapp-read  → validate + wabas + phone-numbers + templates [RUN_LIVE_RECEPTIONIST_WHATSAPP_READ_TESTS]")
+    print("  whatsapp-send  → send 1 free-form text (WRITE, 24h window)   [RUN_LIVE_RECEPTIONIST_WHATSAPP_SEND_TESTS]")
     print("Defaults: dry-run, read-only, credentials + content redacted.")
     return 0
 
@@ -117,10 +123,38 @@ def cmd_calendar_write(tenant: str) -> int:
     return 0
 
 
+def cmd_whatsapp_read(tenant: str) -> int:
+    if not _require("RUN_LIVE_RECEPTIONIST_WHATSAPP_READ_TESTS"):
+        return cmd_plan()
+    from receptionist.providers import whatsapp_cloud as wa
+    print("whatsapp-read (read-only — counts/state only, tokens redacted):")
+    _timed("validate", lambda: wa.validate_connection(tenant))
+    ok, wabas = _timed("wabas", lambda: wa.list_business_accounts(tenant))
+    if ok and wabas:
+        waba_id = wabas[0].get("waba_id", "")
+        _timed("phone-numbers", lambda: wa.list_phone_numbers(tenant, waba_id))
+    _timed("templates", lambda: wa.list_templates(tenant))
+    return 0
+
+
+def cmd_whatsapp_send(tenant: str, to: str) -> int:
+    if not _require("RUN_LIVE_RECEPTIONIST_WHATSAPP_SEND_TESTS"):
+        return cmd_plan()
+    if not to:
+        print("ERR: --to is required for a send smoke test (use a safe test number in E.164 digits).")
+        return 2
+    from receptionist.providers import whatsapp_cloud as wa
+    print("whatsapp-send (WRITE — ONE free-form text; requires an open 24h window):")
+    _timed("send", lambda: wa.send_text(tenant, to=to,
+                                        body="Automated Pixie smoke test — please ignore."))
+    return 0
+
+
 def main() -> int:
     p = argparse.ArgumentParser(description="Receptionist provider smoke tests (default: dry-run plan)")
     p.add_argument("command", nargs="?", default="plan",
-                   choices=["plan", "gmail-read", "gmail-send", "calendar-read", "calendar-write"])
+                   choices=["plan", "gmail-read", "gmail-send", "calendar-read", "calendar-write",
+                            "whatsapp-read", "whatsapp-send"])
     p.add_argument("--tenant", default="")
     p.add_argument("--to", default="")
     args = p.parse_args()
@@ -134,6 +168,8 @@ def main() -> int:
         "gmail-send": lambda: cmd_gmail_send(args.tenant, args.to),
         "calendar-read": lambda: cmd_calendar_read(args.tenant),
         "calendar-write": lambda: cmd_calendar_write(args.tenant),
+        "whatsapp-read": lambda: cmd_whatsapp_read(args.tenant),
+        "whatsapp-send": lambda: cmd_whatsapp_send(args.tenant, args.to),
     }[args.command]()
 
 
