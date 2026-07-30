@@ -617,3 +617,112 @@ class MetaDisconnectIn(BaseModel):
 def meta_disconnect(body: MetaDisconnectIn, tenant_id: str = Depends(resolve_tenant)) -> dict:
     from .service import meta_messaging_assets
     return meta_messaging_assets.disconnect(tenant_id, body.channel)
+
+
+# ── SMS endpoints (Wave 14) ───────────────────────────────────────────────────
+
+@ops_router.get("/sms/status")
+def sms_status(tenant_id: str = Depends(resolve_tenant)) -> dict:
+    from .service import sms_assets
+    return sms_assets.status(tenant_id)
+
+
+@ops_router.get("/sms/numbers")
+def sms_numbers(tenant_id: str = Depends(resolve_tenant)) -> dict:
+    from .providers import sms_adapter as sms
+    try:
+        return {"numbers": sms.list_numbers(tenant_id)}
+    except sms.SMSError as e:
+        raise HTTPException(status_code=400, detail={"reason": e.category})
+
+
+class SmsSelectIn(BaseModel):
+    sender_number: str
+
+
+@ops_router.post("/sms/select")
+def sms_select(body: SmsSelectIn, tenant_id: str = Depends(resolve_tenant)) -> dict:
+    from .service import sms_assets
+    res = sms_assets.select_number(tenant_id, body.sender_number)
+    if res.get("status") in ("number_not_owned", "number_not_sms_capable"):
+        raise HTTPException(status_code=400, detail=res)
+    return res
+
+
+class SmsSettingsIn(BaseModel):
+    sms_reply_mode: str | None = None
+
+
+@ops_router.post("/sms/settings")
+def sms_settings(body: SmsSettingsIn, tenant_id: str = Depends(resolve_tenant)) -> dict:
+    from .service import config_repo, sms_policy
+    if body.sms_reply_mode in sms_policy.REPLY_MODES:
+        config_repo.save(tenant_id, {"sms_reply_mode": body.sms_reply_mode}, updated_by="settings")
+    return {"reply_mode": sms_policy.reply_mode(tenant_id)}
+
+
+class SmsQuietHoursIn(BaseModel):
+    enabled: bool | None = None
+    start_hour: int | None = None
+    end_hour: int | None = None
+    timezone: str | None = None
+    days: list[int] | None = None
+
+
+@ops_router.post("/sms/quiet-hours")
+def sms_quiet_hours(body: SmsQuietHoursIn, tenant_id: str = Depends(resolve_tenant)) -> dict:
+    from .service import sms_assets, sms_policy
+    current = sms_policy.quiet_hours_config(tenant_id)
+    patch = {k: v for k, v in body.model_dump().items() if v is not None}
+    return sms_assets.set_quiet_hours(tenant_id, {**current, **patch})
+
+
+@ops_router.get("/sms/drafts")
+def sms_drafts(tenant_id: str = Depends(resolve_tenant)) -> dict:
+    from .service import sms_sync
+    return {"drafts": sms_sync.list_drafts(tenant_id)}
+
+
+class SmsDraftEditIn(BaseModel):
+    text: str | None = None
+
+
+@ops_router.post("/sms/drafts/{draft_id}/edit")
+def sms_draft_edit(draft_id: str, body: SmsDraftEditIn, tenant_id: str = Depends(resolve_tenant)) -> dict:
+    from .service import sms_sync
+    d = sms_sync.edit_draft(tenant_id, draft_id, text=body.text)
+    if d is None:
+        raise HTTPException(status_code=404, detail="draft not found")
+    if d.get("status") == "locked":
+        raise HTTPException(status_code=409, detail="draft already sent")
+    return {"draft": d}
+
+
+@ops_router.post("/sms/drafts/{draft_id}/retry")
+def sms_draft_retry(draft_id: str, tenant_id: str = Depends(resolve_tenant)) -> dict:
+    from .worker import jobs_store
+    return {"enqueued": True, "job_id": jobs_store.enqueue(tenant_id, "sms_send_retry", {"draft_id": draft_id})}
+
+
+@ops_router.post("/sms/drafts/{draft_id}/reconcile")
+def sms_draft_reconcile(draft_id: str, tenant_id: str = Depends(resolve_tenant)) -> dict:
+    from .worker import jobs_store
+    return {"enqueued": True, "job_id": jobs_store.enqueue(tenant_id, "sms_reconcile", {"draft_id": draft_id})}
+
+
+@ops_router.post("/sms/test")
+def sms_test(tenant_id: str = Depends(resolve_tenant)) -> dict:
+    from .service import sms_assets
+    return {"tested": True, **sms_assets.status(tenant_id)}
+
+
+@ops_router.post("/sms/health")
+def sms_health(tenant_id: str = Depends(resolve_tenant)) -> dict:
+    from .worker import jobs_store
+    return {"enqueued": True, "job_id": jobs_store.enqueue(tenant_id, "sms_connection_health", {})}
+
+
+@ops_router.post("/sms/disconnect")
+def sms_disconnect(tenant_id: str = Depends(resolve_tenant)) -> dict:
+    from .service import sms_assets
+    return sms_assets.disconnect(tenant_id)

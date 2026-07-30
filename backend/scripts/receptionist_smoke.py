@@ -23,6 +23,10 @@ Usage:
         python scripts/receptionist_smoke.py messenger-read --tenant t_x
     RUN_LIVE_RECEPTIONIST_INSTAGRAM_SEND_TESTS=1 \\
         python scripts/receptionist_smoke.py instagram-send --tenant t_x --to 178XXXXXXXX  # write
+    RUN_LIVE_RECEPTIONIST_SMS_READ_TESTS=1 \\
+        python scripts/receptionist_smoke.py sms-read --tenant t_x
+    RUN_LIVE_RECEPTIONIST_SMS_SEND_TESTS=1 \\
+        python scripts/receptionist_smoke.py sms-send --tenant t_x --to +15551230000  # write
 """
 
 from __future__ import annotations
@@ -70,6 +74,8 @@ def cmd_plan() -> int:
     print("  instagram-send → send 1 DM (WRITE, open window)              [RUN_LIVE_RECEPTIONIST_INSTAGRAM_SEND_TESTS]")
     print("  messenger-read → validate + list pages                       [RUN_LIVE_RECEPTIONIST_MESSENGER_READ_TESTS]")
     print("  messenger-send → send 1 message (WRITE, open window)         [RUN_LIVE_RECEPTIONIST_MESSENGER_SEND_TESTS]")
+    print("  sms-read       → validate + list numbers                     [RUN_LIVE_RECEPTIONIST_SMS_READ_TESTS]")
+    print("  sms-send       → send 1 SMS (WRITE, consent + quiet hours)   [RUN_LIVE_RECEPTIONIST_SMS_SEND_TESTS]")
     print("Defaults: dry-run, read-only, credentials + content redacted.")
     return 0
 
@@ -204,16 +210,39 @@ def cmd_messenger_send(tenant: str, to: str) -> int:
     return 0
 
 
+def cmd_sms_read(tenant: str) -> int:
+    if not _require("RUN_LIVE_RECEPTIONIST_SMS_READ_TESTS"):
+        return cmd_plan()
+    from receptionist.providers import sms_adapter as sms
+    print("sms-read (read-only — counts/state only, credentials redacted):")
+    _timed("validate", lambda: sms.validate_connection(tenant))
+    _timed("numbers", lambda: sms.list_numbers(tenant))
+    return 0
+
+
+def cmd_sms_send(tenant: str, to: str) -> int:
+    if not _require("RUN_LIVE_RECEPTIONIST_SMS_SEND_TESTS"):
+        return cmd_plan()
+    if not to:
+        print("ERR: --to is required for a send smoke test (use a safe E.164 test number).")
+        return 2
+    from receptionist.providers import sms_adapter as sms
+    print("sms-send (WRITE — ONE SMS; consent + quiet-hours still apply at the app layer):")
+    _timed("send", lambda: sms.send_sms(tenant, to=to, body="Automated Pixie smoke test — please ignore."))
+    return 0
+
+
 def main() -> int:
     p = argparse.ArgumentParser(description="Receptionist provider smoke tests (default: dry-run plan)")
     p.add_argument("command", nargs="?", default="plan",
                    choices=["plan", "gmail-read", "gmail-send", "calendar-read", "calendar-write",
                             "whatsapp-read", "whatsapp-send", "meta-messaging-plan",
-                            "instagram-read", "instagram-send", "messenger-read", "messenger-send"])
+                            "instagram-read", "instagram-send", "messenger-read", "messenger-send",
+                            "sms-plan", "sms-read", "sms-send"])
     p.add_argument("--tenant", default="")
     p.add_argument("--to", default="")
     args = p.parse_args()
-    if args.command in ("plan", "meta-messaging-plan"):
+    if args.command in ("plan", "meta-messaging-plan", "sms-plan"):
         return cmd_plan()
     if not args.tenant:
         print("ERR: --tenant is required for live smoke tests.")
@@ -229,6 +258,8 @@ def main() -> int:
         "instagram-send": lambda: cmd_instagram_send(args.tenant, args.to),
         "messenger-read": lambda: cmd_messenger_read(args.tenant),
         "messenger-send": lambda: cmd_messenger_send(args.tenant, args.to),
+        "sms-read": lambda: cmd_sms_read(args.tenant),
+        "sms-send": lambda: cmd_sms_send(args.tenant, args.to),
     }[args.command]()
 
 
