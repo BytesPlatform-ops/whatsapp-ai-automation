@@ -58,6 +58,7 @@ from receptionist.meta_messaging_webhook import meta_messaging_webhook_router as
 from receptionist.sms_webhook import sms_webhook_router as ai_receptionist_sms_webhook_router
 from receptionist.telegram_webhook import telegram_webhook_router as ai_receptionist_telegram_webhook_router
 from receptionist.voice_webhook import voice_webhook_router as ai_receptionist_voice_webhook_router
+from receptionist.crm_webhook import crm_webhook_router as ai_receptionist_crm_webhook_router
 from integrations.oauth_routes import router as google_oauth_router
 from meta.oauth_routes import router as meta_connect_router
 from meta.routes import agent_router as meta_agent_router
@@ -137,6 +138,7 @@ app.include_router(ai_receptionist_meta_messaging_webhook_router)  # /api/agents
 app.include_router(ai_receptionist_sms_webhook_router)  # /api/agents/ai-receptionist/sms/webhook + /sms/status — SMS
 app.include_router(ai_receptionist_telegram_webhook_router)  # /api/agents/ai-receptionist/telegram/webhook/{id} — Telegram Bot + Business
 app.include_router(ai_receptionist_voice_webhook_router)  # /api/agents/ai-receptionist/voice/webhook — Vapi server events
+app.include_router(ai_receptionist_crm_webhook_router)  # /api/agents/ai-receptionist/crm/webhook/{provider}/{account} — CRM providers
 app.include_router(integrations_router)  # /api/integrations/status — capability readiness
 app.include_router(google_oauth_router)  # /api/integrations/google/* — real Gmail/Calendar OAuth connect
 app.include_router(meta_connect_router)  # /api/meta/connect|assets|status — Meta OAuth + asset discovery

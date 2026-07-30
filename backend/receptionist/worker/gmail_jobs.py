@@ -941,3 +941,82 @@ def handle_campaign_analytics_rollup(job: dict) -> dict:
     payload = job.get("payload", {}) or {}
     from receptionist.service import campaign_analytics
     return {"status": "completed", "metrics": campaign_analytics.rollup(tenant_id, payload.get("campaign_id", ""))}
+
+
+# ── CRM marketplace jobs (Wave 18) ────────────────────────────────────────────
+
+@register_handler("crm_connection_health")
+def handle_crm_connection_health(job: dict) -> dict:
+    tenant_id = job.get("tenant_id", "")
+    payload = job.get("payload", {}) or {}
+    from receptionist.service import crm_marketplace
+    return {"status": "completed", "health": crm_marketplace.status(tenant_id, payload.get("provider", ""))}
+
+
+@register_handler("crm_initial_import")
+def handle_crm_initial_import(job: dict) -> dict:
+    tenant_id = job.get("tenant_id", "")
+    payload = job.get("payload", {}) or {}
+    from receptionist.service import crm_sync
+    try:
+        return crm_sync.initial_import(tenant_id, payload.get("provider", ""), payload.get("object_type", "contact"))
+    except Exception as exc:  # pragma: no cover
+        return {"status": "failed", "reason": str(exc)[:120]}
+
+
+@register_handler("crm_incremental_sync")
+def handle_crm_incremental_sync(job: dict) -> dict:
+    tenant_id = job.get("tenant_id", "")
+    payload = job.get("payload", {}) or {}
+    from receptionist.service import crm_sync
+    return crm_sync.incremental_sync(tenant_id, payload.get("provider", ""))
+
+
+@register_handler("crm_webhook_event")
+def handle_crm_webhook_event(job: dict) -> dict:
+    tenant_id = job.get("tenant_id", "")
+    payload = job.get("payload", {}) or {}
+    from receptionist.providers.crm import get_adapter, CRMError
+    from receptionist.service import crm_sync
+    provider = payload.get("provider", "")
+    try:
+        rec = get_adapter(provider).get_record(tenant_id, payload.get("object_type", "contact"), payload.get("record_id", ""))
+    except CRMError as exc:
+        return {"status": "failed", "reason": exc.category}
+    return crm_sync.ingest_record(tenant_id, provider, rec)
+
+
+@register_handler("crm_reconcile_record")
+def handle_crm_reconcile_record(job: dict) -> dict:
+    tenant_id = job.get("tenant_id", "")
+    payload = job.get("payload", {}) or {}
+    from receptionist.providers.crm import get_adapter
+    return get_adapter(payload.get("provider", "")).reconcile_record(
+        tenant_id, payload.get("object_type", "contact"), payload.get("record_id", ""))
+
+
+@register_handler("crm_outbound_write")
+def handle_crm_outbound_write(job: dict) -> dict:
+    tenant_id = job.get("tenant_id", "")
+    payload = job.get("payload", {}) or {}
+    from receptionist.service import crm_sync
+    return crm_sync.outbound_write(tenant_id, payload.get("provider", ""),
+                                   canonical_type=payload.get("canonical_type", "contact"),
+                                   canonical_id=payload.get("canonical_id", ""),
+                                   trigger=payload.get("trigger", "manual"), payload=payload.get("payload", {}))
+
+
+@register_handler("crm_cursor_recovery")
+def handle_crm_cursor_recovery(job: dict) -> dict:
+    tenant_id = job.get("tenant_id", "")
+    payload = job.get("payload", {}) or {}
+    from receptionist.service import crm_sync
+    return crm_sync.recover_cursor(tenant_id, payload.get("provider", ""))
+
+
+@register_handler("crm_sync_rollup")
+def handle_crm_sync_rollup(job: dict) -> dict:
+    tenant_id = job.get("tenant_id", "")
+    payload = job.get("payload", {}) or {}
+    from receptionist.service import crm_analytics
+    return {"status": "completed", "metrics": crm_analytics.rollup(tenant_id, payload.get("provider", ""))}
