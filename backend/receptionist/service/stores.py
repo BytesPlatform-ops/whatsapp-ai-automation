@@ -53,6 +53,15 @@ T_USAGE_COUNTERS = "receptionist_usage_counters"
 T_DNC = "receptionist_dnc"
 T_KNOWLEDGE_SOURCES = "receptionist_knowledge_sources"
 T_INGESTION_JOBS = "receptionist_ingestion_jobs"
+T_GMAIL_SYNC_STATE = "receptionist_gmail_sync_state"
+T_GMAIL_THREAD_MAP = "receptionist_gmail_thread_map"
+T_GMAIL_DRAFTS = "receptionist_gmail_drafts"
+T_GMAIL_SEND_ATTEMPTS = "receptionist_gmail_send_attempts"
+T_CALENDAR_CONFIG = "receptionist_calendar_config"
+T_BOOKING_HOLDS = "receptionist_booking_holds"
+T_PROVIDER_EVENTS = "receptionist_provider_events"
+T_WIDGET_DOMAINS = "receptionist_widget_domains"
+T_WIDGET_SESSIONS = "receptionist_widget_sessions"
 T_CAMPAIGN_OPTOUTS = "receptionist_campaign_optouts"
 T_CAMPAIGNS = "receptionist_campaigns"
 T_CAMPAIGN_TARGETS = "receptionist_campaign_targets"
@@ -66,6 +75,9 @@ ALL_TABLES = [
     T_CONFIGURATIONS, T_CONFIG_VERSIONS, T_CONSENT, T_SUPPRESSION, T_USAGE_COUNTERS,
     T_DNC, T_CAMPAIGN_OPTOUTS, T_CAMPAIGNS, T_CAMPAIGN_TARGETS, T_SEND_LOG,
     T_KNOWLEDGE_SOURCES, T_INGESTION_JOBS,
+    T_GMAIL_SYNC_STATE, T_GMAIL_THREAD_MAP, T_GMAIL_DRAFTS, T_GMAIL_SEND_ATTEMPTS,
+    T_CALENDAR_CONFIG, T_BOOKING_HOLDS, T_PROVIDER_EVENTS,
+    T_WIDGET_DOMAINS, T_WIDGET_SESSIONS,
 ]
 
 
@@ -235,6 +247,15 @@ def suppression() -> RecordStore: return store(T_SUPPRESSION)
 def usage_counters() -> RecordStore: return store(T_USAGE_COUNTERS)
 def knowledge_sources() -> RecordStore: return store(T_KNOWLEDGE_SOURCES)
 def ingestion_jobs() -> RecordStore: return store(T_INGESTION_JOBS)
+def gmail_sync_state() -> RecordStore: return store(T_GMAIL_SYNC_STATE)
+def gmail_thread_map() -> RecordStore: return store(T_GMAIL_THREAD_MAP)
+def gmail_drafts() -> RecordStore: return store(T_GMAIL_DRAFTS)
+def gmail_send_attempts() -> RecordStore: return store(T_GMAIL_SEND_ATTEMPTS)
+def calendar_config() -> RecordStore: return store(T_CALENDAR_CONFIG)
+def booking_holds() -> RecordStore: return store(T_BOOKING_HOLDS)
+def provider_events() -> RecordStore: return store(T_PROVIDER_EVENTS)
+def widget_domains() -> RecordStore: return store(T_WIDGET_DOMAINS)
+def widget_sessions() -> RecordStore: return store(T_WIDGET_SESSIONS)
 
 
 # ── durable per-conversation lock ─────────────────────────────────────────────
