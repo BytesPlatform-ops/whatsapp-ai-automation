@@ -1083,6 +1083,28 @@ export interface RcpMetaDraft {
   message_type?: string; status?: string; provider_message_id?: string; approval_id?: string;
   tag_required?: boolean; window_open?: boolean; provider_error?: string; updated_at?: string;
 }
+export interface RcpSmsQuietHours {
+  enabled?: boolean; start_hour?: number; end_hour?: number; timezone?: string; days?: number[];
+}
+export interface RcpSmsConnection {
+  connected?: boolean; provider?: string; sender_number?: string; country?: string;
+  sms_capable?: boolean; mms_capable?: boolean; can_send?: boolean;
+  inbound_webhook_subscribed?: boolean; delivery_webhook_subscribed?: boolean;
+  last_inbound_at?: string; last_send_at?: string; last_error?: string; state?: string;
+}
+export interface RcpSmsStatus {
+  connection?: RcpSmsConnection; reply_mode?: string; quiet_hours?: RcpSmsQuietHours;
+}
+export interface RcpSmsNumber {
+  sender_number?: string; friendly_name?: string; country?: string;
+  sms_capable?: boolean; mms_capable?: boolean;
+}
+export interface RcpSmsDraft {
+  id: string; customer_number?: string; sender_number?: string; text?: string; status?: string;
+  encoding?: string; segments?: number; provider_segments?: number; provider_message_id?: string;
+  approval_id?: string; quiet_hours_active?: boolean; delayed_until?: string;
+  consent_decision?: string; provider_error?: string; updated_at?: string;
+}
 export interface RcpHealth {
   status?: string; agent_slug?: string; llm_provider?: string; model?: string; handlers?: number;
   persistence?: { backend?: string; durable?: boolean; supabase_configured?: boolean };

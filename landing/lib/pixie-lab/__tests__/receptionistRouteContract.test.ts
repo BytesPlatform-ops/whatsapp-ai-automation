@@ -87,6 +87,16 @@ const KNOWN_BACKEND = new Set<string>([
   '/api/agents/ai-receptionist/meta-messaging/test',
   '/api/agents/ai-receptionist/meta-messaging/health',
   '/api/agents/ai-receptionist/meta-messaging/disconnect',
+  // Wave 14: SMS endpoints
+  '/api/agents/ai-receptionist/sms/status',
+  '/api/agents/ai-receptionist/sms/numbers',
+  '/api/agents/ai-receptionist/sms/select',
+  '/api/agents/ai-receptionist/sms/settings',
+  '/api/agents/ai-receptionist/sms/quiet-hours',
+  '/api/agents/ai-receptionist/sms/drafts',
+  '/api/agents/ai-receptionist/sms/test',
+  '/api/agents/ai-receptionist/sms/health',
+  '/api/agents/ai-receptionist/sms/disconnect',
   '/api/approvals',
 ]);
 
@@ -120,6 +130,7 @@ const REQUIRED_PROXIES: string[] = [
   'widget/route.ts',
   'whatsapp/route.ts',
   'meta-messaging/route.ts',
+  'sms/route.ts',
 ];
 
 function read(file: string): string {

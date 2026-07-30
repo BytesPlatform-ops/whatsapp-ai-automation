@@ -32,6 +32,7 @@ import type {
   RcpSlot, RcpBookingRow, RcpWidgetConfig, RcpWidgetVerification,
   RcpWhatsAppStatus, RcpWhatsAppTemplate, RcpWhatsAppDraft,
   RcpMetaMessagingStatus, RcpMetaAsset, RcpMetaDraft, RcpMetaConnection,
+  RcpSmsStatus, RcpSmsNumber, RcpSmsDraft, RcpSmsQuietHours, RcpSmsConnection,
 } from './serviceTypes';
 
 async function req<T>(url: string, init?: RequestInit): Promise<Envelope<T>> {
@@ -739,4 +740,18 @@ export const receptionistApi = {
   editMetaDraft: (id: string, text: string) => post<{ draft: RcpMetaDraft }>(`${R}/meta-messaging`, { action: 'edit', id, text }),
   retryMetaDraft: (id: string) => post<{ job_id: string }>(`${R}/meta-messaging`, { action: 'retry', id }),
   reconcileMetaDraft: (id: string) => post<{ job_id: string }>(`${R}/meta-messaging`, { action: 'reconcile', id }),
+
+  // ── SMS (Wave 14) ─────────────────────────────────────────────────────────
+  getSmsStatus: () => req<RcpSmsStatus>(`${R}/sms`),
+  getSmsNumbers: () => req<{ numbers: RcpSmsNumber[] }>(`${R}/sms?view=numbers`),
+  getSmsDrafts: () => req<{ drafts: RcpSmsDraft[] }>(`${R}/sms?view=drafts`),
+  selectSmsNumber: (senderNumber: string) => post<{ status: string; connection: RcpSmsConnection }>(`${R}/sms`, { action: 'select', sender_number: senderNumber }),
+  setSmsReplyMode: (mode: string) => post<{ reply_mode: string }>(`${R}/sms`, { action: 'settings', sms_reply_mode: mode }),
+  setSmsQuietHours: (quietHours: RcpSmsQuietHours) => post<{ quiet_hours: RcpSmsQuietHours }>(`${R}/sms`, { action: 'quiet-hours', ...quietHours }),
+  testSms: () => post<RcpSmsStatus>(`${R}/sms`, { action: 'test' }),
+  runSmsHealth: () => post<{ job_id: string }>(`${R}/sms`, { action: 'health' }),
+  disconnectSms: () => post<{ status: string }>(`${R}/sms`, { action: 'disconnect' }),
+  editSmsDraft: (id: string, text: string) => post<{ draft: RcpSmsDraft }>(`${R}/sms`, { action: 'edit', id, text }),
+  retrySmsDraft: (id: string) => post<{ job_id: string }>(`${R}/sms`, { action: 'retry', id }),
+  reconcileSmsDraft: (id: string) => post<{ job_id: string }>(`${R}/sms`, { action: 'reconcile', id }),
 };
