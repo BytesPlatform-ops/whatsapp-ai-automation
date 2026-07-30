@@ -29,6 +29,7 @@ COUNTER_METRICS: list[str] = [
     "reminders", "follow_ups", "knowledge_ingestions", "approvals_created",
     "gmail_operations", "calendar_operations", "worker_operations",
     "gmail_replies", "bookings", "reschedules", "cancellations",
+    "whatsapp_inbound", "whatsapp_freeform", "whatsapp_template", "whatsapp_interactive",
 ]
 
 

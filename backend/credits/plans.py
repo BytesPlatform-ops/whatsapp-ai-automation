@@ -117,6 +117,9 @@ _RECEPTIONIST_LIMITS_FREE = {
     "receptionist_gmail_accounts": 0, "receptionist_gmail_monthly_replies": 0,
     "receptionist_calendar_accounts": 0, "receptionist_monthly_bookings": 0,
     "receptionist_monthly_reschedules": 0, "receptionist_monthly_cancellations": 0,
+    "receptionist_whatsapp_numbers": 0, "receptionist_whatsapp_wabas": 0,
+    "receptionist_whatsapp_monthly_inbound": 0, "receptionist_whatsapp_monthly_freeform": 0,
+    "receptionist_whatsapp_monthly_templates": 0, "receptionist_whatsapp_monthly_interactive": 0,
 }
 _RECEPTIONIST_LIMITS_STARTER = {
     "receptionist_widget_sites": 3, "receptionist_monthly_conversations": 1000,
@@ -130,6 +133,9 @@ _RECEPTIONIST_LIMITS_STARTER = {
     "receptionist_gmail_accounts": 1, "receptionist_gmail_monthly_replies": 500,
     "receptionist_calendar_accounts": 1, "receptionist_monthly_bookings": 200,
     "receptionist_monthly_reschedules": 200, "receptionist_monthly_cancellations": 200,
+    "receptionist_whatsapp_numbers": 1, "receptionist_whatsapp_wabas": 1,
+    "receptionist_whatsapp_monthly_inbound": 2000, "receptionist_whatsapp_monthly_freeform": 1000,
+    "receptionist_whatsapp_monthly_templates": 500, "receptionist_whatsapp_monthly_interactive": 500,
 }
 _RECEPTIONIST_LIMITS_PRO = {
     "receptionist_widget_sites": 25, "receptionist_monthly_conversations": UNLIMITED,
@@ -143,6 +149,9 @@ _RECEPTIONIST_LIMITS_PRO = {
     "receptionist_gmail_accounts": 3, "receptionist_gmail_monthly_replies": UNLIMITED,
     "receptionist_calendar_accounts": 3, "receptionist_monthly_bookings": UNLIMITED,
     "receptionist_monthly_reschedules": UNLIMITED, "receptionist_monthly_cancellations": UNLIMITED,
+    "receptionist_whatsapp_numbers": 5, "receptionist_whatsapp_wabas": 3,
+    "receptionist_whatsapp_monthly_inbound": UNLIMITED, "receptionist_whatsapp_monthly_freeform": UNLIMITED,
+    "receptionist_whatsapp_monthly_templates": UNLIMITED, "receptionist_whatsapp_monthly_interactive": UNLIMITED,
 }
 
 

@@ -47,6 +47,10 @@ _RESOURCES: dict[str, tuple] = {
     "booking":        ("receptionist_monthly_bookings", _monthly("bookings")),
     "reschedule":     ("receptionist_monthly_reschedules", _monthly("reschedules")),
     "cancellation":   ("receptionist_monthly_cancellations", _monthly("cancellations")),
+    "whatsapp_inbound": ("receptionist_whatsapp_monthly_inbound", _monthly("whatsapp_inbound")),
+    "whatsapp_freeform": ("receptionist_whatsapp_monthly_freeform", _monthly("whatsapp_freeform")),
+    "whatsapp_template": ("receptionist_whatsapp_monthly_templates", _monthly("whatsapp_template")),
+    "whatsapp_interactive": ("receptionist_whatsapp_monthly_interactive", _monthly("whatsapp_interactive")),
 }
 
 
