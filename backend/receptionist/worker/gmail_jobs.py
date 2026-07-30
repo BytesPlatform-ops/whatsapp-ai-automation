@@ -843,3 +843,101 @@ def handle_voice_connection_health(job: dict) -> dict:
     tenant_id = job.get("tenant_id", "")
     from receptionist.providers import voice_adapter as voice
     return {"status": "completed", "health": voice.validate_connection(tenant_id)}
+
+
+# ── Campaign jobs (orchestration over existing channels) ──────────────────────
+
+@register_handler("campaign_prepare")
+def handle_campaign_prepare(job: dict) -> dict:
+    tenant_id = job.get("tenant_id", "")
+    payload = job.get("payload", {}) or {}
+    campaign_id = payload.get("campaign_id", "")
+    from receptionist.service import campaigns, campaign_audience, stores, usage
+    c = campaigns.get(tenant_id, campaign_id)
+    if c is None or c.get("status") != "preparing":
+        return {"status": "skipped", "reason": "not_preparing"}
+    if not campaigns.approval_valid(tenant_id, campaign_id):
+        campaigns._set_status(tenant_id, campaign_id, "blocked_policy", action="approval_invalid")
+        return {"status": "blocked", "reason": "approval_invalid"}
+    snap = campaign_audience.create_snapshot(tenant_id, c)
+    try:
+        usage.increment(tenant_id, "campaign_recipients", amount=snap.get("included", 0),
+                        idempotency_key=f"cmprcpt:{snap['id']}")
+    except Exception:
+        pass
+    c["status"] = "active"; c["updated_at"] = campaigns.now_iso()
+    stores.cmp_campaigns().put(tenant_id, c)
+    campaigns.audit(tenant_id, campaign_id, "activated", detail={"snapshot_id": snap["id"]})
+    # enqueue per-recipient first step
+    from receptionist.worker import jobs_store
+    enqueued = 0
+    for r in campaign_audience.list_recipients(tenant_id, campaign_id):
+        if r.get("state") == "pending":
+            jobs_store.enqueue(tenant_id, "campaign_execute_step",
+                               {"campaign_id": campaign_id, "contact_id": r.get("contact_id", "")})
+            enqueued += 1
+    return {"status": "prepared", "recipients": snap.get("included", 0), "enqueued": enqueued}
+
+
+@register_handler("campaign_execute_step")
+def handle_campaign_execute_step(job: dict) -> dict:
+    tenant_id = job.get("tenant_id", "")
+    payload = job.get("payload", {}) or {}
+    from receptionist.service import campaign_execution
+    res = campaign_execution.execute_step(tenant_id, payload.get("campaign_id", ""), payload.get("contact_id", ""))
+    # schedule the next step when the recipient advanced
+    if res.get("status") == "advanced":
+        from receptionist.worker import jobs_store
+        jobs_store.enqueue(tenant_id, "campaign_execute_step",
+                           {"campaign_id": payload.get("campaign_id", ""), "contact_id": payload.get("contact_id", "")})
+    return res
+
+
+@register_handler("campaign_process_reply")
+def handle_campaign_process_reply(job: dict) -> dict:
+    tenant_id = job.get("tenant_id", "")
+    payload = job.get("payload", {}) or {}
+    from receptionist.service import campaign_execution
+    return campaign_execution.process_reply(tenant_id, contact_id=payload.get("contact_id", ""),
+                                            conversation_id=payload.get("conversation_id", ""),
+                                            kind=payload.get("kind", "direct_reply"))
+
+
+@register_handler("campaign_evaluate_stop_conditions")
+def handle_campaign_stop_conditions(job: dict) -> dict:
+    tenant_id = job.get("tenant_id", "")
+    payload = job.get("payload", {}) or {}
+    from receptionist.service import campaign_execution
+    return campaign_execution.evaluate_stop_conditions(tenant_id, payload.get("campaign_id", ""),
+                                                       payload.get("contact_id", ""))
+
+
+@register_handler("campaign_cancel")
+def handle_campaign_cancel(job: dict) -> dict:
+    tenant_id = job.get("tenant_id", "")
+    payload = job.get("payload", {}) or {}
+    from receptionist.service import campaigns
+    return campaigns.cancel(tenant_id, payload.get("campaign_id", ""), actor="worker")
+
+
+@register_handler("campaign_complete")
+def handle_campaign_complete(job: dict) -> dict:
+    tenant_id = job.get("tenant_id", "")
+    payload = job.get("payload", {}) or {}
+    campaign_id = payload.get("campaign_id", "")
+    from receptionist.service import campaigns, campaign_audience, stores
+    recipients = campaign_audience.list_recipients(tenant_id, campaign_id)
+    terminal = {"completed", "stopped", "opted_out", "suppressed", "failed", "cancelled",
+                "expired", "eligibility_blocked", "send_disabled"}
+    if recipients and all(r.get("state") in terminal for r in recipients):
+        campaigns._set_status(tenant_id, campaign_id, "completed", action="completed")
+        return {"status": "completed"}
+    return {"status": "still_active"}
+
+
+@register_handler("campaign_analytics_rollup")
+def handle_campaign_analytics_rollup(job: dict) -> dict:
+    tenant_id = job.get("tenant_id", "")
+    payload = job.get("payload", {}) or {}
+    from receptionist.service import campaign_analytics
+    return {"status": "completed", "metrics": campaign_analytics.rollup(tenant_id, payload.get("campaign_id", ""))}
