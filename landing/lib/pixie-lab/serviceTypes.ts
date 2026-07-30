@@ -1150,6 +1150,32 @@ export interface RcpVoiceCallDetail {
   tool_calls?: { tool_name?: string; result?: Record<string, unknown> }[];
   summary?: Record<string, unknown> | null;
 }
+export interface RcpOutboundCampaign {
+  id: string; name?: string; purpose?: string; campaign_type?: string; status?: string;
+  strategy?: string; channels?: string[]; version?: number; created_by?: string;
+  created_at?: string; updated_at?: string; approval_id?: string;
+}
+export interface RcpOutboundStep {
+  id: string; name?: string; channel?: string; order?: number; delay_seconds?: number;
+  fallback_channel?: string; max_attempts?: number;
+}
+export interface RcpOutboundContent {
+  id: string; channel?: string; subject?: string; body?: string; template_ref?: string;
+  version?: number; approval_state?: string; validation?: { ok?: boolean; errors?: string[] };
+}
+export interface RcpOutboundRecipient {
+  id: string; contact_id?: string; channel?: string; eligibility?: string; state?: string;
+  current_step?: number; attempts?: number; stop_reason?: string; exclusion_reason?: string;
+}
+export interface RcpOutboundEstimate {
+  total?: number; eligible?: number; breakdown?: Record<string, number>; channels?: string[];
+}
+export interface RcpOutboundAnalytics {
+  audience?: number; eligible?: number; excluded?: number; sent?: number; replied?: number;
+  opted_out?: number; failed?: number; conversions?: number; completion_rate?: number;
+  channel_breakdown?: Record<string, number>; attribution_breakdown?: Record<string, number>;
+  send_disabled?: number;
+}
 export interface RcpHealth {
   status?: string; agent_slug?: string; llm_provider?: string; model?: string; handlers?: number;
   persistence?: { backend?: string; durable?: boolean; supabase_configured?: boolean };

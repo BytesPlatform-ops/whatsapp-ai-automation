@@ -35,6 +35,8 @@ import type {
   RcpSmsStatus, RcpSmsNumber, RcpSmsDraft, RcpSmsQuietHours, RcpSmsConnection,
   RcpTelegramStatus, RcpTelegramConnection, RcpTelegramDraft,
   RcpVoiceStatus, RcpVoiceConnection, RcpVoiceNumber, RcpVoiceCall, RcpVoiceCallDetail,
+  RcpOutboundCampaign, RcpOutboundStep, RcpOutboundContent, RcpOutboundRecipient,
+  RcpOutboundEstimate, RcpOutboundAnalytics,
 } from './serviceTypes';
 
 async function req<T>(url: string, init?: RequestInit): Promise<Envelope<T>> {
@@ -639,7 +641,7 @@ export const receptionistApi = {
   // payments
   getPayments: () => req<{ payments: RcpPayment[] }>(`${R}/payments`),
   createPaymentLink: (p: { amount: number; currency?: string; description?: string; email?: string }) => post<{ payment: RcpPayment; provider?: unknown }>(`${R}/payments`, { action: 'create-link', ...p }),
-  // campaigns
+  // campaigns (legacy reply-classification feature)
   getCampaigns: () => req<{ campaigns: RcpCampaign[] }>(`${R}/campaigns`),
   getCampaignReplies: (campaign_id: string) => req<{ replies: RcpCampaignReply[] }>(`${R}/campaigns?campaign_id=${encodeURIComponent(campaign_id)}`),
   ingestCampaignReply: (p: { campaign_id?: string; message: string; email?: string; phone?: string }) => post<RcpRunResult>(`${R}/campaigns`, { action: 'ingest', ...p }),
@@ -789,4 +791,17 @@ export const receptionistApi = {
   editVoiceSummary: (callId: string, text: string) => post<{ summary: Record<string, unknown> }>(`${R}/voice`, { action: 'summary', call_id: callId, text }),
   runVoiceHealth: () => post<{ job_id: string }>(`${R}/voice`, { action: 'health' }),
   disconnectVoice: () => post<{ status: string }>(`${R}/voice`, { action: 'disconnect' }),
+
+  // ── Advanced outbound campaigns (Wave 17) ─────────────────────────────────
+  listOutboundCampaigns: () => req<{ campaigns: RcpOutboundCampaign[]; feature_enabled: boolean; send_enabled: boolean }>(`${R}/outbound-campaigns`),
+  getOutboundCampaign: (id: string) => req<{ campaign: RcpOutboundCampaign; steps: RcpOutboundStep[]; content: RcpOutboundContent[]; approval_valid: boolean; audit: Record<string, unknown>[] }>(`${R}/outbound-campaigns?view=detail&id=${encodeURIComponent(id)}`),
+  getOutboundAudience: (id: string) => req<{ estimate: RcpOutboundEstimate }>(`${R}/outbound-campaigns?view=audience&id=${encodeURIComponent(id)}`),
+  getOutboundRecipients: (id: string) => req<{ recipients: RcpOutboundRecipient[] }>(`${R}/outbound-campaigns?view=recipients&id=${encodeURIComponent(id)}`),
+  getOutboundAnalytics: (id: string) => req<{ analytics: RcpOutboundAnalytics }>(`${R}/outbound-campaigns?view=analytics&id=${encodeURIComponent(id)}`),
+  createOutboundCampaign: (payload: { name: string; purpose: string; channels: string[] }) => post<{ campaign: RcpOutboundCampaign }>(`${R}/outbound-campaigns`, { action: 'create', ...payload }),
+  updateOutboundCampaign: (id: string, patch: Record<string, unknown>) => post<{ campaign: RcpOutboundCampaign }>(`${R}/outbound-campaigns`, { action: 'update', id, patch }),
+  addOutboundStep: (id: string, step: Record<string, unknown>) => post<{ step: RcpOutboundStep }>(`${R}/outbound-campaigns`, { action: 'add-step', id, step }),
+  setOutboundContent: (id: string, content: Record<string, unknown>) => post<{ content: RcpOutboundContent }>(`${R}/outbound-campaigns`, { action: 'set-content', id, content }),
+  validateOutboundCampaign: (id: string) => req<{ ok: boolean; errors: string[] }>(`${R}/outbound-campaigns?view=validate&id=${encodeURIComponent(id)}`),
+  outboundCampaignAction: (id: string, action: string, body?: Record<string, unknown>) => post<{ status: string }>(`${R}/outbound-campaigns`, { action, id, ...(body || {}) }),
 };

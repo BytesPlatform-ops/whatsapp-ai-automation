@@ -121,6 +121,8 @@ const KNOWN_BACKEND = new Set<string>([
   '/api/agents/ai-receptionist/voice/callbacks',
   '/api/agents/ai-receptionist/voice/health',
   '/api/agents/ai-receptionist/voice/disconnect',
+  // Wave 17: Advanced outbound campaigns
+  '/api/agents/ai-receptionist/outbound-campaigns',
   '/api/approvals',
 ]);
 
@@ -157,6 +159,7 @@ const REQUIRED_PROXIES: string[] = [
   'sms/route.ts',
   'telegram/route.ts',
   'voice/route.ts',
+  'outbound-campaigns/route.ts',
 ];
 
 function read(file: string): string {
