@@ -70,6 +70,20 @@ T_WA_TEMPLATES = "receptionist_whatsapp_templates"
 T_WA_MEDIA = "receptionist_whatsapp_media"
 T_WA_WINDOWS = "receptionist_whatsapp_windows"
 
+# Advanced outbound campaigns (orchestration over existing channels, Wave 17).
+T_CMP_CAMPAIGNS = "receptionist_campaigns_v2"
+T_CMP_VERSIONS = "receptionist_campaign_versions"
+T_CMP_STEPS = "receptionist_campaign_steps"
+T_CMP_CONTENT = "receptionist_campaign_content"
+T_CMP_APPROVALS = "receptionist_campaign_approvals"
+T_CMP_SEGMENTS = "receptionist_campaign_segments"
+T_CMP_SNAPSHOTS = "receptionist_campaign_snapshots"
+T_CMP_RECIPIENTS = "receptionist_campaign_recipients"
+T_CMP_EXECUTIONS = "receptionist_campaign_executions"
+T_CMP_FREQCAPS = "receptionist_campaign_freqcaps"
+T_CMP_ATTRIBUTION = "receptionist_campaign_attribution"
+T_CMP_AUDIT = "receptionist_campaign_audit"
+
 # Voice / telephony (Vapi-initial, replaceable provider).
 T_VOICE_NUMBERS = "receptionist_voice_numbers"
 T_VOICE_ASSISTANTS = "receptionist_voice_assistants"
@@ -137,6 +151,8 @@ ALL_TABLES = [
     T_TG_STATUSES, T_TG_CALLBACKS, T_TG_MEDIA, T_TG_EDITS,
     T_VOICE_NUMBERS, T_VOICE_ASSISTANTS, T_VOICE_SESSIONS, T_VOICE_EVENTS, T_VOICE_TRANSCRIPTS,
     T_VOICE_TOOLCALLS, T_VOICE_TRANSFERS, T_VOICE_RECORDINGS, T_VOICE_REPORTS, T_VOICE_CALLBACKS,
+    T_CMP_CAMPAIGNS, T_CMP_VERSIONS, T_CMP_STEPS, T_CMP_CONTENT, T_CMP_APPROVALS, T_CMP_SEGMENTS,
+    T_CMP_SNAPSHOTS, T_CMP_RECIPIENTS, T_CMP_EXECUTIONS, T_CMP_FREQCAPS, T_CMP_ATTRIBUTION, T_CMP_AUDIT,
 ]
 
 
@@ -365,6 +381,20 @@ def voice_transfers() -> RecordStore: return store(T_VOICE_TRANSFERS)
 def voice_recordings() -> RecordStore: return store(T_VOICE_RECORDINGS)
 def voice_reports() -> RecordStore: return store(T_VOICE_REPORTS)
 def voice_callbacks() -> RecordStore: return store(T_VOICE_CALLBACKS)
+
+
+def cmp_campaigns() -> RecordStore: return store(T_CMP_CAMPAIGNS)
+def cmp_versions() -> RecordStore: return store(T_CMP_VERSIONS)
+def cmp_steps() -> RecordStore: return store(T_CMP_STEPS)
+def cmp_content() -> RecordStore: return store(T_CMP_CONTENT)
+def cmp_approvals() -> RecordStore: return store(T_CMP_APPROVALS)
+def cmp_segments() -> RecordStore: return store(T_CMP_SEGMENTS)
+def cmp_snapshots() -> RecordStore: return store(T_CMP_SNAPSHOTS)
+def cmp_recipients() -> RecordStore: return store(T_CMP_RECIPIENTS)
+def cmp_executions() -> RecordStore: return store(T_CMP_EXECUTIONS)
+def cmp_freqcaps() -> RecordStore: return store(T_CMP_FREQCAPS)
+def cmp_attribution() -> RecordStore: return store(T_CMP_ATTRIBUTION)
+def cmp_audit() -> RecordStore: return store(T_CMP_AUDIT)
 
 
 # ── durable per-conversation lock ─────────────────────────────────────────────

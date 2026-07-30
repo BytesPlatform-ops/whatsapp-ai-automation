@@ -49,6 +49,9 @@ CONFIG_FIELDS: list[str] = [
     "voice_recording_policy",  # Voice recording + consent policy (Wave 16)
     "voice_inbound_policy",  # Voice inbound/after-hours policy (Wave 16)
     "voice_transfer_destinations",  # verified transfer destinations (Wave 16)
+    "campaign_settings",  # campaign feature/frequency-cap config (Wave 17)
+    "campaign_promotional_enabled",  # promotional-campaign gate (Wave 17)
+    "campaign_dynamic_enrolment_enabled",  # dynamic audience enrolment gate (Wave 17)
 ]
 
 # Configuration is "configured enough to answer" once these are present.
