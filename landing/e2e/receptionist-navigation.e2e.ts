@@ -54,10 +54,25 @@ async function mockReceptionist(page: Page): Promise<void> {
       answer: 'We open 9am to 5pm', evidence: [{ source_id: 'profile:hours', chunk_id: 'hours', source_type: 'text',
         text: 'We open 9am to 5pm', score: 2.5, method: 'structured_field' }] }));
   });
+  // WhatsApp panel: status (default view), ?view=templates, ?view=drafts.
+  await page.route('**/api/lab/receptionist/whatsapp**', async (r) => {
+    const url = r.request().url();
+    if (r.request().method() !== 'GET') { await r.fulfill(json({ backendUp: true, reply_mode: 'draft_only' })); return; }
+    if (url.includes('view=templates')) {
+      await r.fulfill(json({ backendUp: true, templates: [
+        { name: 'appointment_reminder', language: 'en_US', category: 'UTILITY', status: 'APPROVED', variables: 2 }] }));
+    } else if (url.includes('view=drafts')) {
+      await r.fulfill(json({ backendUp: true, drafts: [] }));
+    } else {
+      await r.fulfill(json({ backendUp: true, reply_mode: 'draft_only', connection: {
+        connected: true, display_phone_number: '+15551230000', waba_name: 'Acme',
+        can_send: true, can_template: true, webhook_subscribed: true, state: 'ready_for_templates' } }));
+    }
+  });
 }
 
 test.describe('Receptionist navigation', () => {
-  const routes = ['', '/dashboard', '/conversations', '/crm', '/approvals', '/gmail', '/providers',
+  const routes = ['', '/dashboard', '/conversations', '/crm', '/approvals', '/gmail', '/whatsapp', '/providers',
                   '/calendar', '/bookings', '/followups', '/analytics', '/widget',
                   '/operations', '/integrations', '/knowledge'];
   for (const path of routes) {
