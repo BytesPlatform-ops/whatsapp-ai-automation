@@ -10,6 +10,8 @@ vi.mock('@/lib/pixie-lab/servicesClient', () => ({
     getAnalyticsRange: vi.fn(),
     getWidgetConfig: vi.fn(),
     saveWidgetConfig: vi.fn(),
+    getWidgetVerification: vi.fn(),
+    verifyWidget: vi.fn(),
   },
 }));
 
@@ -75,6 +77,7 @@ describe('AnalyticsRangePanel', () => {
 describe('WidgetSetupPanel', () => {
   beforeEach(() => {
     getWidget.mockResolvedValue({ backendUp: true, config: { public_id: 'wdg_abc', enabled: true, allowed_domains: ['shop.example'] } } as never);
+    vi.mocked(receptionistApi.getWidgetVerification).mockResolvedValue({ backendUp: true, installed: false, domains: [] } as never);
   });
 
   it('embed uses only the public id (never the tenant)', async () => {

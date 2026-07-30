@@ -1039,6 +1039,10 @@ export interface RcpWidgetConfig {
   public_id?: string; enabled?: boolean; allowed_domains?: string[]; dev_mode?: boolean;
   welcome_message?: string; offline_message?: string; updated_at?: string;
 }
+export interface RcpWidgetVerification {
+  installed?: boolean;
+  domains?: { domain: string; status?: string; last_verified_at?: string; last_failure?: string; evidence?: string }[];
+}
 export interface RcpHealth {
   status?: string; agent_slug?: string; llm_provider?: string; model?: string; handlers?: number;
   persistence?: { backend?: string; durable?: boolean; supabase_configured?: boolean };

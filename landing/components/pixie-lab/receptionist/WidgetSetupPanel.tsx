@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Copy, Check, Plus, Trash2, Globe } from 'lucide-react';
 import { receptionistApi } from '@/lib/pixie-lab/servicesClient';
-import type { RcpWidgetConfig } from '@/lib/pixie-lab/serviceTypes';
+import type { RcpWidgetConfig, RcpWidgetVerification } from '@/lib/pixie-lab/serviceTypes';
 import { OfflineState, LoadingCards } from '@/components/pixie-lab/services/ServiceStates';
 import { Card, Section, Field, TextInput, TextArea, PrimaryButton, GhostButton, Pill, RCP_ACCENT } from './widgets';
 
@@ -17,15 +17,17 @@ function embedCode(publicId: string): string {
 export default function WidgetSetupPanel() {
   const [status, setStatus] = useState<Status>('loading');
   const [cfg, setCfg] = useState<RcpWidgetConfig>({});
+  const [verify, setVerify] = useState<RcpWidgetVerification | undefined>();
   const [domain, setDomain] = useState('');
   const [copied, setCopied] = useState(false);
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
-    const r = await receptionistApi.getWidgetConfig();
+    const [r, v] = await Promise.all([receptionistApi.getWidgetConfig(), receptionistApi.getWidgetVerification()]);
     if (!r.backendUp) { setStatus('offline'); return; }
     setCfg((r as { config?: RcpWidgetConfig }).config || {});
+    if (v.backendUp) setVerify(v as RcpWidgetVerification);
     setStatus('ready');
   }, []);
 
@@ -105,6 +107,26 @@ export default function WidgetSetupPanel() {
                 <GhostButton onClick={() => removeDomain(d)} aria-label={`Remove ${d}`}><Trash2 size={14} /></GhostButton>
               </div>
             ))}
+          </div>
+        </Card>
+      </Section>
+
+      <Section title="Installation" sub="Status reflects a real handshake from the allowed domain — clicking Verify never fakes an installed state.">
+        <Card>
+          <div className="flex items-center justify-between">
+            <Pill color={verify?.installed ? '#16a34a' : '#64748b'}>{verify?.installed ? 'Installed' : 'Not installed'}</Pill>
+            <GhostButton onClick={async () => { const v = await receptionistApi.verifyWidget(''); if (v.backendUp) setVerify(v as RcpWidgetVerification); }}>
+              Verify
+            </GhostButton>
+          </div>
+          <div className="mt-2 space-y-1" data-testid="verify-domains">
+            {(verify?.domains || []).map((d) => (
+              <div key={d.domain} className="flex items-center justify-between text-xs text-slate-600">
+                <span>{d.domain}</span>
+                <Pill color={d.status === 'installed' ? '#16a34a' : '#f59e0b'}>{d.status || 'not_installed'}</Pill>
+              </div>
+            ))}
+            {(verify?.domains || []).length === 0 && <p className="text-xs text-slate-500">Add a domain to track installation.</p>}
           </div>
         </Card>
       </Section>

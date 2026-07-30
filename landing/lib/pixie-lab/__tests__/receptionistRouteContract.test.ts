@@ -68,6 +68,8 @@ const KNOWN_BACKEND = new Set<string>([
   '/api/agents/ai-receptionist/calendar/availability',
   '/api/agents/ai-receptionist/calendar/bookings',
   '/api/agents/ai-receptionist/widget/config',
+  '/api/agents/ai-receptionist/widget/verification',
+  '/api/agents/ai-receptionist/widget/verify',
   '/api/approvals',
 ]);
 

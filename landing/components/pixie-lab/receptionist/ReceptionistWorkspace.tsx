@@ -16,8 +16,12 @@ import ApprovalsPanel from './ApprovalsPanel';
 import ProvidersPanel from './ProvidersPanel';
 import AnalyticsRangePanel from './AnalyticsRangePanel';
 import WidgetSetupPanel from './WidgetSetupPanel';
+import BookingsPanel from './BookingsPanel';
+import FollowUpsPanel from './FollowUpsPanel';
+import CalendarConfigPanel from './CalendarConfigPanel';
+import GmailDraftsPanel from './GmailDraftsPanel';
 
-export type RcpTab = 'dashboard' | 'console' | 'conversations' | 'crm' | 'operations' | 'integrations' | 'knowledge' | 'approvals' | 'providers' | 'analytics' | 'widget';
+export type RcpTab = 'dashboard' | 'console' | 'conversations' | 'crm' | 'operations' | 'integrations' | 'knowledge' | 'approvals' | 'providers' | 'analytics' | 'widget' | 'bookings' | 'followups' | 'calendar' | 'gmail';
 
 const TABS = [
   { label: 'Overview', href: '/pixie-lab/receptionist' },
@@ -26,7 +30,11 @@ const TABS = [
   { label: 'Inbox', href: '/pixie-lab/receptionist/conversations' },
   { label: 'CRM', href: '/pixie-lab/receptionist/crm' },
   { label: 'Approvals', href: '/pixie-lab/receptionist/approvals' },
+  { label: 'Gmail', href: '/pixie-lab/receptionist/gmail' },
   { label: 'Providers', href: '/pixie-lab/receptionist/providers' },
+  { label: 'Calendar', href: '/pixie-lab/receptionist/calendar' },
+  { label: 'Bookings', href: '/pixie-lab/receptionist/bookings' },
+  { label: 'Follow-Ups', href: '/pixie-lab/receptionist/followups' },
   { label: 'Analytics', href: '/pixie-lab/receptionist/analytics' },
   { label: 'Widget', href: '/pixie-lab/receptionist/widget' },
   { label: 'Operations', href: '/pixie-lab/receptionist/operations' },
@@ -41,6 +49,10 @@ const TITLES: Record<RcpTab, string> = {
   crm: 'CRM & Leads',
   approvals: 'Approvals',
   providers: 'Gmail & Calendar',
+  gmail: 'Gmail Drafts',
+  calendar: 'Calendar Setup',
+  bookings: 'Bookings',
+  followups: 'Follow-Ups & Reminders',
   analytics: 'Analytics',
   widget: 'Website Widget',
   operations: 'Operations',
@@ -76,6 +88,10 @@ export function ReceptionistWorkspace({ tab, tenant }: { tab: RcpTab; tenant: st
           {tab === 'crm' && <CrmPanel />}
           {tab === 'approvals' && <ApprovalsPanel />}
           {tab === 'providers' && <ProvidersPanel />}
+          {tab === 'gmail' && <GmailDraftsPanel />}
+          {tab === 'calendar' && <CalendarConfigPanel />}
+          {tab === 'bookings' && <BookingsPanel />}
+          {tab === 'followups' && <FollowUpsPanel />}
           {tab === 'analytics' && <AnalyticsRangePanel />}
           {tab === 'widget' && <WidgetSetupPanel />}
           {tab === 'operations' && <OperationsPanel />}

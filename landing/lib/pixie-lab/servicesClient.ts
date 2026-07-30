@@ -29,7 +29,7 @@ import type {
   RcpKnowledgeSource, RcpIngestionJob, RcpRetrievalResult, RcpConfig, RcpConfigVersion,
   RcpWorkerJob, RcpWorkerHealth, RcpReminder, RcpUsageSummary, RcpLimit, RcpApproval,
   RcpAnalyticsRange, RcpGmailStatus, RcpGmailDraft, RcpCalendarStatus, RcpCalendar,
-  RcpSlot, RcpBookingRow, RcpWidgetConfig,
+  RcpSlot, RcpBookingRow, RcpWidgetConfig, RcpWidgetVerification,
 } from './serviceTypes';
 
 async function req<T>(url: string, init?: RequestInit): Promise<Envelope<T>> {
@@ -710,4 +710,6 @@ export const receptionistApi = {
   // ── Widget ────────────────────────────────────────────────────────────────
   getWidgetConfig: () => req<{ config: RcpWidgetConfig }>(`${R}/widget`),
   saveWidgetConfig: (patch: Record<string, unknown>) => post<{ config: RcpWidgetConfig }>(`${R}/widget`, { action: 'save', ...patch }),
+  getWidgetVerification: () => req<RcpWidgetVerification>(`${R}/widget?view=verification`),
+  verifyWidget: (domain: string) => post<RcpWidgetVerification>(`${R}/widget`, { action: 'verify', domain }),
 };
