@@ -20,6 +20,7 @@ vi.mock('@/lib/pixie-lab/servicesClient', () => ({
 import GmailDraftsPanel from './GmailDraftsPanel';
 import WhatsAppPanel from './WhatsAppPanel';
 import MetaMessagingPanel from './MetaMessagingPanel';
+import SmsPanel from './SmsPanel';
 import BookingsPanel from './BookingsPanel';
 import FollowUpsPanel from './FollowUpsPanel';
 import CalendarConfigPanel from './CalendarConfigPanel';
@@ -32,6 +33,7 @@ const PANELS: [string, React.ComponentType][] = [
   ['GmailDrafts', GmailDraftsPanel],
   ['WhatsApp', WhatsAppPanel],
   ['MetaMessaging', MetaMessagingPanel],
+  ['Sms', SmsPanel],
   ['Bookings', BookingsPanel],
   ['FollowUps', FollowUpsPanel],
   ['CalendarConfig', CalendarConfigPanel],

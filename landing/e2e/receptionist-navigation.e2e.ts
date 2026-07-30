@@ -54,6 +54,22 @@ async function mockReceptionist(page: Page): Promise<void> {
       answer: 'We open 9am to 5pm', evidence: [{ source_id: 'profile:hours', chunk_id: 'hours', source_type: 'text',
         text: 'We open 9am to 5pm', score: 2.5, method: 'structured_field' }] }));
   });
+  // SMS panel: status (default), ?view=numbers|drafts.
+  await page.route('**/api/lab/receptionist/sms**', async (r) => {
+    const url = r.request().url();
+    if (r.request().method() !== 'GET') { await r.fulfill(json({ backendUp: true, status: 'selected' })); return; }
+    if (url.includes('view=numbers')) {
+      await r.fulfill(json({ backendUp: true, numbers: [{ sender_number: '+15550001111', country: 'US', sms_capable: true, mms_capable: true }] }));
+    } else if (url.includes('view=drafts')) {
+      await r.fulfill(json({ backendUp: true, drafts: [] }));
+    } else {
+      await r.fulfill(json({ backendUp: true, reply_mode: 'draft_only',
+        quiet_hours: { enabled: true, start_hour: 21, end_hour: 8, timezone: 'UTC' },
+        connection: { connected: true, state: 'ready_to_send', sender_number: '+15550001111',
+          country: 'US', sms_capable: true, mms_capable: true, can_send: true,
+          inbound_webhook_subscribed: true, delivery_webhook_subscribed: true } }));
+    }
+  });
   // Meta Messaging panel: status (default), ?view=instagram-accounts|messenger-pages|drafts.
   await page.route('**/api/lab/receptionist/meta-messaging**', async (r) => {
     const url = r.request().url();
@@ -91,7 +107,7 @@ async function mockReceptionist(page: Page): Promise<void> {
 
 test.describe('Receptionist navigation', () => {
   const routes = ['', '/dashboard', '/conversations', '/crm', '/approvals', '/gmail', '/whatsapp',
-                  '/meta-messaging', '/providers',
+                  '/meta-messaging', '/sms', '/providers',
                   '/calendar', '/bookings', '/followups', '/analytics', '/widget',
                   '/operations', '/integrations', '/knowledge'];
   for (const path of routes) {
