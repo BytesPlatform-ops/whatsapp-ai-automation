@@ -102,12 +102,23 @@ PRODUCT_CATALOG: Dict[str, ProductSpec] = {
         product_id="ai_receptionist",
         display_name="AI Receptionist",
         agent_backend_key="receptionist",
-        operation_types=["receptionist_call", "receptionist_booking"],
+        operation_types=[
+            "receptionist_classify", "receptionist_response_plan", "receptionist_reply",
+            "receptionist_summarize", "receptionist_knowledge_ingest",
+            "receptionist_knowledge_embed", "receptionist_knowledge_retrieve",
+            "receptionist_approval_exec", "receptionist_escalation_notify",
+            "receptionist_reminder_prep", "receptionist_follow_up_prep",
+            "receptionist_worker_op", "receptionist_gmail_op", "receptionist_calendar_op",
+        ],
         source_products=["ai_receptionist", "receptionist"],
-        usage_counter_keys=["receptionist_calls"],
-        access_key="",
-        implemented=False,
-        billing_active=False,
+        usage_counter_keys=[
+            "receptionist_conversations", "receptionist_ai_turns", "receptionist_summaries",
+            "receptionist_knowledge_ingestions", "receptionist_escalations",
+            "receptionist_reminders", "receptionist_follow_ups",
+        ],
+        access_key="ai_receptionist",
+        implemented=True,
+        billing_active=True,
     ),
 }
 

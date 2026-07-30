@@ -44,11 +44,34 @@ class ActionSpec:
     provider_action: bool = False  # True = external provider; stub returns not_connected
 
 
-# ── billing stub ──────────────────────────────────────────────────────────────
+# ── billing ────────────────────────────────────────────────────────────────────
 
-def meter(tenant_id: str, action_type: str, *, estimated_cost: float = 0.0) -> None:
-    """No-op billing stub — safe today; wired to the credits engine in a future wave."""
-    pass  # pragma: no cover
+# Registry action_type → billing operation_type (only billable actions listed).
+_BILLABLE_OPERATIONS = {
+    "create_payment_link": "receptionist_approval_exec",
+    "gmail_send": "receptionist_gmail_op",
+    "calendar_create_event": "receptionist_calendar_op",
+    "calendar_update_event": "receptionist_calendar_op",
+}
+
+
+def meter(tenant_id: str, action_type: str, *, estimated_cost: float = 0.0,
+          idempotency_key: str = "") -> None:
+    """Attribute a billable action to the ``ai_receptionist`` product. No-op (zero)
+    unless billing is enabled and the action is billable; idempotent on the key so a
+    duplicate action never double-charges. Never raises — billing must not break an
+    action."""
+    op = _BILLABLE_OPERATIONS.get(action_type)
+    if not op:
+        return
+    try:
+        from . import billing
+        micro = int(estimated_cost * 1_000_000) if estimated_cost else 0
+        billing.charge(tenant_id, op,
+                       operation_id=idempotency_key or f"{tenant_id}:{action_type}",
+                       actual_micro_usd=micro)
+    except Exception:
+        pass
 
 
 # ── idempotency helpers ───────────────────────────────────────────────────────
@@ -814,9 +837,9 @@ def execute_action(
         _persist_execution(tenant_id, action_type, args, idempotency_key, conversation_id, result)
         return result
 
-    # 4. Billing hook (no-op)
+    # 4. Billing hook — attributes billable actions to ai_receptionist (idempotent)
     try:
-        meter(tenant_id, action_type, estimated_cost=estimated_cost)
+        meter(tenant_id, action_type, estimated_cost=estimated_cost, idempotency_key=idempotency_key)
     except Exception:
         pass
 

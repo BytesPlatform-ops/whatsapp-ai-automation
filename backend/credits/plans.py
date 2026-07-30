@@ -42,7 +42,7 @@ ACCESS_KEYS = (
     "content_agent", "ai_influencer", "publishing", "live_publishing",
     "video_generation", "advanced_content_types", "publishing_calendar",
     "byok", "premium_video_models", "higher_resolution", "priority_processing",
-    "real_provider_access",
+    "real_provider_access", "ai_receptionist",
 )
 # Quantitative-limit keys.
 LIMIT_KEYS = (
@@ -103,37 +103,76 @@ _SEO_LIMITS_PRO = {
 }
 
 
+# ── AI Receptionist plan limits (server-authoritative; keys match receptionist limits) ──
+# UNLIMITED (-1) never blocks. Zero means the capability is disabled on that plan.
+_RECEPTIONIST_LIMITS_FREE = {
+    "receptionist_widget_sites": 1, "receptionist_monthly_conversations": 50,
+    "receptionist_monthly_ai_turns": 200, "receptionist_stored_contacts": 100,
+    "receptionist_stored_conversations": 200, "receptionist_knowledge_sources": 3,
+    "receptionist_knowledge_storage_mb": 5, "receptionist_monthly_knowledge_ingestions": 5,
+    "receptionist_monthly_summaries": 50, "receptionist_monthly_escalations": 20,
+    "receptionist_pending_approvals": 10, "receptionist_scheduled_reminders": 10,
+    "receptionist_scheduled_follow_ups": 10, "receptionist_human_assignees": 1,
+    "receptionist_retention_days": 30,
+}
+_RECEPTIONIST_LIMITS_STARTER = {
+    "receptionist_widget_sites": 3, "receptionist_monthly_conversations": 1000,
+    "receptionist_monthly_ai_turns": 5000, "receptionist_stored_contacts": 5000,
+    "receptionist_stored_conversations": 5000, "receptionist_knowledge_sources": 25,
+    "receptionist_knowledge_storage_mb": 100, "receptionist_monthly_knowledge_ingestions": 100,
+    "receptionist_monthly_summaries": 1000, "receptionist_monthly_escalations": 500,
+    "receptionist_pending_approvals": 100, "receptionist_scheduled_reminders": 500,
+    "receptionist_scheduled_follow_ups": 500, "receptionist_human_assignees": 3,
+    "receptionist_retention_days": 180,
+}
+_RECEPTIONIST_LIMITS_PRO = {
+    "receptionist_widget_sites": 25, "receptionist_monthly_conversations": UNLIMITED,
+    "receptionist_monthly_ai_turns": UNLIMITED, "receptionist_stored_contacts": UNLIMITED,
+    "receptionist_stored_conversations": UNLIMITED, "receptionist_knowledge_sources": 200,
+    "receptionist_knowledge_storage_mb": 2000, "receptionist_monthly_knowledge_ingestions": UNLIMITED,
+    "receptionist_monthly_summaries": UNLIMITED, "receptionist_monthly_escalations": UNLIMITED,
+    "receptionist_pending_approvals": UNLIMITED, "receptionist_scheduled_reminders": UNLIMITED,
+    "receptionist_scheduled_follow_ups": UNLIMITED, "receptionist_human_assignees": 10,
+    "receptionist_retention_days": UNLIMITED,
+}
+
+
 PLAN_CATALOG: Dict[str, Plan] = {
     "free": Plan(
         id="free", name="Free", monthly_credits=0,
         access={"content_agent": True, "publishing": True, "publishing_calendar": True,
                 "ai_influencer": False, "live_publishing": False, "video_generation": False,
-                "real_provider_access": False, "byok": False},
+                "real_provider_access": False, "byok": False, "ai_receptionist": True},
         limits={"monthly_text_generations": 10, "monthly_video_generations": 0, "max_documents": 20,
                 "max_variations": 1, "connected_accounts": 1, "scheduled_jobs": 3,
                 "active_influencer_profiles": 0, "concurrent_provider_jobs": 1,
-                "version_history_depth": 3, "team_members": 1, **_SEO_LIMITS_FREE},
+                "version_history_depth": 3, "team_members": 1, **_SEO_LIMITS_FREE,
+                **_RECEPTIONIST_LIMITS_FREE},
     ),
     "starter": Plan(
         id="starter", name="Starter", monthly_credits=2000,
         access={"content_agent": True, "publishing": True, "publishing_calendar": True,
                 "ai_influencer": True, "live_publishing": False, "video_generation": True,
-                "real_provider_access": True, "advanced_content_types": True, "byok": True},
+                "real_provider_access": True, "advanced_content_types": True, "byok": True,
+                "ai_receptionist": True},
         limits={"monthly_text_generations": 200, "monthly_video_generations": 10, "max_documents": 200,
                 "max_variations": 3, "connected_accounts": 3, "scheduled_jobs": 50,
                 "active_influencer_profiles": 1, "concurrent_provider_jobs": 2,
-                "version_history_depth": 20, "team_members": 2, **_SEO_LIMITS_STARTER},
+                "version_history_depth": 20, "team_members": 2, **_SEO_LIMITS_STARTER,
+                **_RECEPTIONIST_LIMITS_STARTER},
     ),
     "pro": Plan(
         id="pro", name="Pro", monthly_credits=10000,
         access={"content_agent": True, "publishing": True, "publishing_calendar": True,
                 "ai_influencer": True, "live_publishing": True, "video_generation": True,
                 "real_provider_access": True, "advanced_content_types": True, "byok": True,
-                "premium_video_models": True, "higher_resolution": True, "priority_processing": True},
+                "premium_video_models": True, "higher_resolution": True, "priority_processing": True,
+                "ai_receptionist": True},
         limits={"monthly_text_generations": UNLIMITED, "monthly_video_generations": 100, "max_documents": UNLIMITED,
                 "max_variations": 5, "connected_accounts": 10, "scheduled_jobs": UNLIMITED,
                 "active_influencer_profiles": 5, "concurrent_provider_jobs": 5,
-                "version_history_depth": UNLIMITED, "team_members": 10, **_SEO_LIMITS_PRO},
+                "version_history_depth": UNLIMITED, "team_members": 10, **_SEO_LIMITS_PRO,
+                **_RECEPTIONIST_LIMITS_PRO},
     ),
 }
 
