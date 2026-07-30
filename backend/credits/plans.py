@@ -114,6 +114,9 @@ _RECEPTIONIST_LIMITS_FREE = {
     "receptionist_pending_approvals": 10, "receptionist_scheduled_reminders": 10,
     "receptionist_scheduled_follow_ups": 10, "receptionist_human_assignees": 1,
     "receptionist_retention_days": 30,
+    "receptionist_gmail_accounts": 0, "receptionist_gmail_monthly_replies": 0,
+    "receptionist_calendar_accounts": 0, "receptionist_monthly_bookings": 0,
+    "receptionist_monthly_reschedules": 0, "receptionist_monthly_cancellations": 0,
 }
 _RECEPTIONIST_LIMITS_STARTER = {
     "receptionist_widget_sites": 3, "receptionist_monthly_conversations": 1000,
@@ -124,6 +127,9 @@ _RECEPTIONIST_LIMITS_STARTER = {
     "receptionist_pending_approvals": 100, "receptionist_scheduled_reminders": 500,
     "receptionist_scheduled_follow_ups": 500, "receptionist_human_assignees": 3,
     "receptionist_retention_days": 180,
+    "receptionist_gmail_accounts": 1, "receptionist_gmail_monthly_replies": 500,
+    "receptionist_calendar_accounts": 1, "receptionist_monthly_bookings": 200,
+    "receptionist_monthly_reschedules": 200, "receptionist_monthly_cancellations": 200,
 }
 _RECEPTIONIST_LIMITS_PRO = {
     "receptionist_widget_sites": 25, "receptionist_monthly_conversations": UNLIMITED,
@@ -134,6 +140,9 @@ _RECEPTIONIST_LIMITS_PRO = {
     "receptionist_pending_approvals": UNLIMITED, "receptionist_scheduled_reminders": UNLIMITED,
     "receptionist_scheduled_follow_ups": UNLIMITED, "receptionist_human_assignees": 10,
     "receptionist_retention_days": UNLIMITED,
+    "receptionist_gmail_accounts": 3, "receptionist_gmail_monthly_replies": UNLIMITED,
+    "receptionist_calendar_accounts": 3, "receptionist_monthly_bookings": UNLIMITED,
+    "receptionist_monthly_reschedules": UNLIMITED, "receptionist_monthly_cancellations": UNLIMITED,
 }
 
 

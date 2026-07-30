@@ -28,6 +28,7 @@ COUNTER_METRICS: list[str] = [
     "monthly_conversations", "monthly_ai_turns", "summaries", "escalations",
     "reminders", "follow_ups", "knowledge_ingestions", "approvals_created",
     "gmail_operations", "calendar_operations", "worker_operations",
+    "gmail_replies", "bookings", "reschedules", "cancellations",
 ]
 
 

@@ -761,6 +761,12 @@ def _h_gmail_send(tenant_id: str, args: dict, *, conversation_id: str = "") -> d
             draft["provider_message_id"] = result.get("message_id", "")
             draft["sent_at"] = now_iso()
             gmail_sync.save_draft(tenant_id, draft)
+    try:
+        from . import usage
+        usage.increment(tenant_id, "gmail_replies",
+                        idempotency_key=f"greply:{result.get('message_id', '')}")
+    except Exception:
+        pass
     return {"status": "sent", "detail": "gmail reply sent",
             "record_type": "gmail_message", "record_id": result.get("message_id", ""),
             "data": result}

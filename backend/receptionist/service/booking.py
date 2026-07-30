@@ -206,6 +206,13 @@ def create_booking(tenant_id: str, *, service: str, start: str, end: str, name: 
             if b.get("idempotency_key") == idempotency_key and b.get("provider_event_id"):
                 return {"status": "confirmed", "booking": b, "idempotent": True}
 
+    # plan-limit gate (hard when enforcement on; advisory otherwise)
+    from . import limits
+    try:
+        limits.enforce(tenant_id, "booking")
+    except limits.LimitExceeded:
+        return {"status": "limit_reached", "limit_key": "receptionist_monthly_bookings"}
+
     cfg = get_config(tenant_id)
     # recheck the slot is still free right before creation
     avail = availability(tenant_id, service=service, start=_parse(start), days=1, now=now)
@@ -248,6 +255,7 @@ def create_booking(tenant_id: str, *, service: str, start: str, end: str, name: 
     try:
         from . import usage
         usage.increment(tenant_id, "calendar_operations", idempotency_key=f"book:{booking['id']}")
+        usage.increment(tenant_id, "bookings", idempotency_key=f"bookct:{booking['id']}")
     except Exception:
         pass
     return {"status": "confirmed", "booking": booking}

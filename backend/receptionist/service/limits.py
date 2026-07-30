@@ -43,6 +43,10 @@ _RESOURCES: dict[str, tuple] = {
     "escalation":     ("receptionist_monthly_escalations", _monthly("escalations")),
     "reminder":       ("receptionist_scheduled_reminders", lambda t: stores.reminders().count(t)),
     "follow_up":      ("receptionist_scheduled_follow_ups", _monthly("follow_ups")),
+    "gmail_reply":    ("receptionist_gmail_monthly_replies", _monthly("gmail_replies")),
+    "booking":        ("receptionist_monthly_bookings", _monthly("bookings")),
+    "reschedule":     ("receptionist_monthly_reschedules", _monthly("reschedules")),
+    "cancellation":   ("receptionist_monthly_cancellations", _monthly("cancellations")),
 }
 
 
