@@ -24,6 +24,7 @@ import SmsPanel from './SmsPanel';
 import TelegramPanel from './TelegramPanel';
 import VoicePanel from './VoicePanel';
 import CampaignsPanel from './CampaignsPanel';
+import CrmMarketplacePanel from './CrmMarketplacePanel';
 import BookingsPanel from './BookingsPanel';
 import FollowUpsPanel from './FollowUpsPanel';
 import CalendarConfigPanel from './CalendarConfigPanel';
@@ -40,6 +41,7 @@ const PANELS: [string, React.ComponentType][] = [
   ['Telegram', TelegramPanel],
   ['Voice', VoicePanel],
   ['Campaigns', CampaignsPanel],
+  ['CrmMarketplace', CrmMarketplacePanel],
   ['Bookings', BookingsPanel],
   ['FollowUps', FollowUpsPanel],
   ['CalendarConfig', CalendarConfigPanel],

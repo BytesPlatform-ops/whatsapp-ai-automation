@@ -54,6 +54,21 @@ async function mockReceptionist(page: Page): Promise<void> {
       answer: 'We open 9am to 5pm', evidence: [{ source_id: 'profile:hours', chunk_id: 'hours', source_type: 'text',
         text: 'We open 9am to 5pm', score: 2.5, method: 'structured_field' }] }));
   });
+  // CRM marketplace panel: catalog (default), ?view=status|conflicts|analytics.
+  await page.route('**/api/lab/receptionist/crm-marketplace**', async (r) => {
+    const url = r.request().url();
+    if (r.request().method() !== 'GET') { await r.fulfill(json({ backendUp: true, status: 'connected' })); return; }
+    if (url.includes('view=status')) {
+      await r.fulfill(json({ backendUp: true, connection: { connected: true, provider: 'hubspot', state: 'sync_paused', write: false, sync_direction: 'import_only' } }));
+    } else if (url.includes('view=conflicts')) {
+      await r.fulfill(json({ backendUp: true, conflicts: [] }));
+    } else if (url.includes('view=analytics')) {
+      await r.fulfill(json({ backendUp: true, analytics: { records_imported: 0, stored_mappings: 0, open_conflicts: 0 } }));
+    } else {
+      await r.fulfill(json({ backendUp: true, marketplace_enabled: false, connections: [],
+        catalog: [{ provider: 'hubspot', name: 'HubSpot', supported_objects: ['contact'], webhook_support: true }] }));
+    }
+  });
   // Outbound campaigns panel: list (default), ?view=detail|analytics.
   await page.route('**/api/lab/receptionist/outbound-campaigns**', async (r) => {
     const url = r.request().url();
@@ -147,7 +162,7 @@ async function mockReceptionist(page: Page): Promise<void> {
 
 test.describe('Receptionist navigation', () => {
   const routes = ['', '/dashboard', '/conversations', '/crm', '/approvals', '/gmail', '/whatsapp',
-                  '/meta-messaging', '/sms', '/telegram', '/voice', '/campaigns', '/providers',
+                  '/meta-messaging', '/sms', '/telegram', '/voice', '/campaigns', '/crm-marketplace', '/providers',
                   '/calendar', '/bookings', '/followups', '/analytics', '/widget',
                   '/operations', '/integrations', '/knowledge'];
   for (const path of routes) {
