@@ -38,7 +38,7 @@ function statusColor(s: string): string {
  * `onConnectionChange` lets the parent workspace re-fetch Meta status after a
  * disconnect (so the panel hides) or reconnect.
  */
-export function AdsPanel({ onConnectionChange }: { onConnectionChange?: () => void }) {
+export function AdsPanel({ onConnectionChange, draftId }: { onConnectionChange?: () => void; draftId?: string }) {
   const [accounts, setAccounts] = useState<MetaAdAccount[]>([]);
   const [selected, setSelected] = useState('');
   const [range, setRange] = useState('last_30d');
@@ -58,6 +58,7 @@ export function AdsPanel({ onConnectionChange }: { onConnectionChange?: () => vo
   const [creating, setCreating] = useState(false);
   const [createMsg, setCreateMsg] = useState('');
   const [disconnecting, setDisconnecting] = useState(false);
+  const [draftBanner, setDraftBanner] = useState('');
 
   // Translate any endpoint's structured error into shared banners. Returns true
   // if the response carried an error (so callers can stop).
@@ -95,6 +96,20 @@ export function AdsPanel({ onConnectionChange }: { onConnectionChange?: () => vo
 
   useEffect(() => { void loadAccounts(); }, [loadAccounts]);
   useEffect(() => { if (selected) void loadData(selected); }, [selected, loadData]);
+
+  // Deep-linked from a Command Center recommendation: pre-fill the PAUSED-only
+  // campaign form with Pixie's draft. Nothing is created until the user clicks
+  // Create (paused) — this only fills the form.
+  useEffect(() => {
+    if (!draftId) return;
+    void metaApi.marketingRecommendations().then((d) => {
+      const draft = (d.recommendations || []).find((r) => r.id === draftId)?.draft;
+      if (!draft) return;
+      if (draft.campaign_name) setNewName(draft.campaign_name);
+      if (draft.objective && OBJECTIVES.includes(draft.objective)) setNewObjective(draft.objective);
+      setDraftBanner(`Reviewing Pixie's draft “${draft.campaign_name || 'campaign'}”. It will be created PAUSED — nothing goes live automatically.`);
+    });
+  }, [draftId]);
 
   async function chooseAccount(id: string) {
     setSelected(id);
@@ -260,6 +275,9 @@ export function AdsPanel({ onConnectionChange }: { onConnectionChange?: () => vo
         <div className={box}>
           <h3 className="font-display text-[14.5px] font-bold text-[var(--pl-text)]">Create campaign</h3>
           <p className="mt-1 text-[12px] text-[var(--pl-text-muted)]">New campaigns are created <b>PAUSED</b> — nothing goes live automatically. Activate in Meta Ads Manager when ready.</p>
+          {draftBanner && (
+            <div className="mt-2 rounded-lg border p-2.5 text-[12px] text-[var(--pl-text-soft)]" style={{ borderColor: ACCENT, background: `${ACCENT}0d` }}>{draftBanner}</div>
+          )}
           <div className="mt-3 flex flex-wrap items-center gap-2.5">
             <input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="Campaign name" className="w-[240px] rounded-lg border border-[var(--pl-border)] bg-[var(--pl-surface-soft)] px-3 py-2 text-[13px] text-[var(--pl-text)]" />
             <select value={newObjective} onChange={(e) => setNewObjective(e.target.value)} className="rounded-lg border border-[var(--pl-border)] bg-[var(--pl-surface-soft)] px-3 py-2 text-[13px] text-[var(--pl-text)]">

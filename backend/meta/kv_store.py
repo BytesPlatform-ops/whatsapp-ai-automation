@@ -79,3 +79,28 @@ class KVList:
     # Test helper — drop the in-process cache so it reloads from persistence.
     def _reset_cache(self) -> None:
         self._cache = None
+
+
+class KVDict:
+    """One JSON object per tenant (e.g. analysis state). Same cache+persist model
+    as KVList — for single-object-per-tenant values that aren't lists."""
+
+    def __init__(self, name: str) -> None:
+        self._name = name
+        self._cache: Optional[dict] = None
+
+    def _snap(self) -> dict:
+        if self._cache is None:
+            self._cache = persistence.load(self._name, {}) or {}
+        return self._cache
+
+    def get(self, tenant_id: str) -> Optional[dict]:
+        return self._snap().get(tenant_id)
+
+    def set(self, tenant_id: str, value: dict) -> dict:
+        self._snap()[tenant_id] = value
+        persistence.save(self._name, self._snap())
+        return value
+
+    def _reset_cache(self) -> None:
+        self._cache = None

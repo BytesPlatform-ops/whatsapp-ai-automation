@@ -66,6 +66,7 @@ from meta.routes import meta_data_router
 from meta.ads_routes import router as meta_ads_router
 from meta.brand_routes import router as meta_brand_router
 from meta.planner_routes import router as meta_planner_router
+from meta.marketing_routes import router as meta_marketing_brain_router
 from content.routes import router as content_router
 from seo.agent_routes import router as seo_agent_router
 from seo.google.routes import router as seo_google_router
@@ -147,6 +148,7 @@ app.include_router(meta_data_router)  # /api/meta/analytics|ads|webhooks — Met
 app.include_router(meta_ads_router)  # /api/meta/ad-accounts|campaigns|insights — Meta Ads Marketing API
 app.include_router(meta_brand_router)  # /api/meta/brand-brain — Brand Brain from old posts
 app.include_router(meta_planner_router)  # /api/meta/ideas|calendar — Idea Curator + Content Calendar
+app.include_router(meta_marketing_brain_router)  # /api/meta/marketing — Marketing Brain (analyze/brain/recommendations)
 app.include_router(content_router)  # /api/content/assets — media upload (Supabase Storage)
 app.include_router(seo_agent_router)  # /api/agents/seo — platform-aware audit + one-tap optimize
 app.include_router(seo_google_router)  # /api/agents/seo/google/* — GSC + GA4 connect/sync/views

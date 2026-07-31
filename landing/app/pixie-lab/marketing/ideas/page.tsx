@@ -1,14 +1,9 @@
-import type { Metadata } from 'next';
-import { tenantForMembership } from '@/lib/pixie-lab/backend';
-import { MarketingWorkspace } from '@/components/pixie-lab/marketing/MarketingWorkspace';
-import { AccessRestricted } from '@/components/pixie-lab/PageKit';
-import { guardPermission } from '@/lib/workspace';
+import { redirect } from 'next/navigation';
 
-export const metadata: Metadata = { title: 'Idea Curator — Pixie Lab', robots: { index: false, follow: false } };
 export const dynamic = 'force-dynamic';
 
-export default async function MarketingIdeasPage() {
-  const guard = await guardPermission('marketing.view');
-  if (!guard.ok) return <AccessRestricted what="Marketing" />;
-  return <MarketingWorkspace tab="ideas" tenant={tenantForMembership(guard.membership)} />;
+// Unified into the full-service workspace — kept as a stable redirect so existing
+// links to /pixie-lab/marketing/ideas continue to work.
+export default function Page() {
+  redirect('/pixie-lab/marketing/full-service?tab=ideas');
 }

@@ -1,32 +1,19 @@
 import type { Metadata } from 'next';
-import { createClient } from '@/lib/supabase/server';
-import { tenantForUser } from '@/lib/supabase/auth';
-import { ServiceView } from '@/components/pixie-lab/ServiceView';
-import { MetaConnectCard } from '@/components/pixie-lab/marketing/MetaConnectCard';
+import { tenantForMembership } from '@/lib/pixie-lab/backend';
+import { MarketingCommandCenter } from '@/components/pixie-lab/marketing/MarketingCommandCenter';
 import { AccessRestricted } from '@/components/pixie-lab/PageKit';
 import { guardPermission } from '@/lib/workspace';
 
 export const metadata: Metadata = { title: 'Marketing — Pixie Lab', robots: { index: false, follow: false } };
 export const dynamic = 'force-dynamic';
 
-function configured() {
-  return Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
-}
-
+/**
+ * Marketing Command Center — the unified home of Pixie Marketing. Personalized
+ * recommendations come from the Marketing Brain (connected Meta data), not static
+ * cards. Detailed operations live in the tabbed workspace this page deep-links into.
+ */
 export default async function MarketingPage() {
   const guard = await guardPermission('marketing.view');
   if (!guard.ok) return <AccessRestricted what="Marketing" />;
-
-  let user = null;
-  if (configured()) {
-    try { user = (await createClient().auth.getUser()).data.user; } catch { user = null; }
-  }
-  return (
-    <>
-      {/* Meta integration entry (Connect Meta + status) — above the existing
-          marketing overview, which is left exactly as-is. */}
-      <MetaConnectCard />
-      <ServiceView agent="marketing" tenant={tenantForUser(user)} nowMs={Date.now()} />
-    </>
-  );
+  return <MarketingCommandCenter tenant={tenantForMembership(guard.membership)} />;
 }

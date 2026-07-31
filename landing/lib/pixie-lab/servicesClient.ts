@@ -22,6 +22,7 @@ import type {
   MetaStatus, MetaInboxItem, MetaContentItem,
   MetaAdAccount, MetaCampaign, MetaAdInsights, MetaDiagnostics, MetaAdsAnalysis, BrandBrain,
   ContentIdea, IdeaGenerateResult, CalendarItem, CalendarResult,
+  MarketingRecommendation, MarketingBrandView, MarketingAnalysisState, MarketingAnalyzeResult, BusinessProfile,
   ContentAsset, StorageStatus, ApprovalItem, Envelope,
   RcpRunResult, RcpOverview, RcpIntegrationStatus, RcpConversation, RcpConversationDetail,
   RcpContact, RcpBooking, RcpQuote, RcpTask, RcpTicket, RcpEscalation, RcpPayment,
@@ -569,6 +570,20 @@ export const metaApi = {
     post<{ status?: string; idea?: ContentIdea; backendUp?: boolean }>('/api/lab/meta/calendar', { action: 'save-to-library', id }),
   requestPublishCalendarItem: (id: string) =>
     post<{ status?: string; approval_id?: string; item?: CalendarItem; message?: string; note?: string; backendUp?: boolean }>('/api/lab/meta/calendar', { action: 'request-publish', id }),
+  // ── Marketing Brain (Command Center) ────────────────────────────────────────
+  marketingAnalyze: () =>
+    post<MarketingAnalyzeResult & { backendUp?: boolean }>('/api/lab/meta/marketing', { action: 'analyze' }),
+  marketingRecommendations: () =>
+    req<{ recommendations?: MarketingRecommendation[]; backendUp?: boolean }>('/api/lab/meta/marketing?resource=recommendations'),
+  marketingState: () =>
+    req<MarketingAnalysisState & { backendUp?: boolean }>('/api/lab/meta/marketing?resource=state'),
+  marketingBrain: () =>
+    req<MarketingBrandView & { backendUp?: boolean }>('/api/lab/meta/marketing?resource=brain'),
+  resolveRecommendation: (id: string, decision: 'approve' | 'skip') =>
+    post<{ status?: string; recommendation?: MarketingRecommendation; backendUp?: boolean }>('/api/lab/meta/marketing', { action: 'resolve', id, decision }),
+  marketingProfile: () => req<BusinessProfile & { backendUp?: boolean }>('/api/lab/meta/marketing?resource=profile'),
+  saveMarketingProfile: (answers: Record<string, string | string[]>) =>
+    post<BusinessProfile & { backendUp?: boolean }>('/api/lab/meta/marketing', { action: 'save-profile', answers }),
 };
 
 /* ------------------------------ Content ------------------------------ */
