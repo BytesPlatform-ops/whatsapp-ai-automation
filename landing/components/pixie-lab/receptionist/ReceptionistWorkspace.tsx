@@ -26,8 +26,9 @@ import SmsPanel from './SmsPanel';
 import TelegramPanel from './TelegramPanel';
 import VoicePanel from './VoicePanel';
 import CampaignsPanel from './CampaignsPanel';
+import CrmMarketplacePanel from './CrmMarketplacePanel';
 
-export type RcpTab = 'dashboard' | 'console' | 'conversations' | 'crm' | 'operations' | 'integrations' | 'knowledge' | 'approvals' | 'providers' | 'analytics' | 'widget' | 'bookings' | 'followups' | 'calendar' | 'gmail' | 'whatsapp' | 'meta-messaging' | 'sms' | 'telegram' | 'voice' | 'campaigns';
+export type RcpTab = 'dashboard' | 'console' | 'conversations' | 'crm' | 'operations' | 'integrations' | 'knowledge' | 'approvals' | 'providers' | 'analytics' | 'widget' | 'bookings' | 'followups' | 'calendar' | 'gmail' | 'whatsapp' | 'meta-messaging' | 'sms' | 'telegram' | 'voice' | 'campaigns' | 'crm-marketplace';
 
 const TABS = [
   { label: 'Overview', href: '/pixie-lab/receptionist' },
@@ -47,6 +48,7 @@ const TABS = [
   { label: 'Bookings', href: '/pixie-lab/receptionist/bookings' },
   { label: 'Follow-Ups', href: '/pixie-lab/receptionist/followups' },
   { label: 'Campaigns', href: '/pixie-lab/receptionist/campaigns' },
+  { label: 'CRM Marketplace', href: '/pixie-lab/receptionist/crm-marketplace' },
   { label: 'Analytics', href: '/pixie-lab/receptionist/analytics' },
   { label: 'Widget', href: '/pixie-lab/receptionist/widget' },
   { label: 'Operations', href: '/pixie-lab/receptionist/operations' },
@@ -68,6 +70,7 @@ const TITLES: Record<RcpTab, string> = {
   telegram: 'Telegram',
   voice: 'Voice & Telephony',
   campaigns: 'Outbound Campaigns',
+  'crm-marketplace': 'CRM Marketplace',
   calendar: 'Calendar Setup',
   bookings: 'Bookings',
   followups: 'Follow-Ups & Reminders',
@@ -113,6 +116,7 @@ export function ReceptionistWorkspace({ tab, tenant }: { tab: RcpTab; tenant: st
           {tab === 'telegram' && <TelegramPanel />}
           {tab === 'voice' && <VoicePanel />}
           {tab === 'campaigns' && <CampaignsPanel />}
+          {tab === 'crm-marketplace' && <CrmMarketplacePanel />}
           {tab === 'calendar' && <CalendarConfigPanel />}
           {tab === 'bookings' && <BookingsPanel />}
           {tab === 'followups' && <FollowUpsPanel />}

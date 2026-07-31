@@ -37,6 +37,7 @@ import type {
   RcpVoiceStatus, RcpVoiceConnection, RcpVoiceNumber, RcpVoiceCall, RcpVoiceCallDetail,
   RcpOutboundCampaign, RcpOutboundStep, RcpOutboundContent, RcpOutboundRecipient,
   RcpOutboundEstimate, RcpOutboundAnalytics,
+  RcpCrmCatalogEntry, RcpCrmConnection, RcpCrmConflict, RcpCrmAnalytics,
 } from './serviceTypes';
 
 async function req<T>(url: string, init?: RequestInit): Promise<Envelope<T>> {
@@ -804,4 +805,18 @@ export const receptionistApi = {
   setOutboundContent: (id: string, content: Record<string, unknown>) => post<{ content: RcpOutboundContent }>(`${R}/outbound-campaigns`, { action: 'set-content', id, content }),
   validateOutboundCampaign: (id: string) => req<{ ok: boolean; errors: string[] }>(`${R}/outbound-campaigns?view=validate&id=${encodeURIComponent(id)}`),
   outboundCampaignAction: (id: string, action: string, body?: Record<string, unknown>) => post<{ status: string }>(`${R}/outbound-campaigns`, { action, id, ...(body || {}) }),
+
+  // ── External CRM marketplace (Wave 18) ────────────────────────────────────
+  getCrmCatalog: () => req<{ catalog: RcpCrmCatalogEntry[]; connections: RcpCrmConnection[]; marketplace_enabled: boolean }>(`${R}/crm-marketplace`),
+  getCrmStatus: (provider: string) => req<{ connection: RcpCrmConnection }>(`${R}/crm-marketplace?view=status&provider=${encodeURIComponent(provider)}`),
+  getCrmConflicts: (provider: string) => req<{ conflicts: RcpCrmConflict[] }>(`${R}/crm-marketplace?view=conflicts&provider=${encodeURIComponent(provider)}`),
+  getCrmAnalytics: (provider: string) => req<{ analytics: RcpCrmAnalytics }>(`${R}/crm-marketplace?view=analytics&provider=${encodeURIComponent(provider)}`),
+  connectCrm: (provider: string, creds: { access_token?: string; api_key?: string; account_id?: string }) => post<{ status: string; capabilities: string[] }>(`${R}/crm-marketplace`, { action: 'connect', provider, ...creds }),
+  discoverCrmCapabilities: (provider: string) => post<{ capabilities: string[] }>(`${R}/crm-marketplace`, { action: 'capabilities', provider }),
+  setCrmObjects: (provider: string, objects: string[]) => post<{ status: string }>(`${R}/crm-marketplace`, { action: 'objects', provider, objects }),
+  setCrmSyncDirection: (provider: string, direction: string) => post<{ status: string; write_enabled?: boolean }>(`${R}/crm-marketplace`, { action: 'sync-direction', provider, direction }),
+  crmImport: (provider: string, objectType: string) => post<{ job_id: string }>(`${R}/crm-marketplace`, { action: 'import', provider, object_type: objectType }),
+  crmSyncNow: (provider: string) => post<{ job_id: string }>(`${R}/crm-marketplace`, { action: 'sync', provider }),
+  resolveCrmConflict: (provider: string, conflictId: string, resolution: string) => post<{ status: string }>(`${R}/crm-marketplace`, { action: 'resolve-conflict', provider, conflict_id: conflictId, resolution }),
+  crmProviderAction: (provider: string, action: string) => post<{ status: string }>(`${R}/crm-marketplace`, { action, provider }),
 };

@@ -1176,6 +1176,25 @@ export interface RcpOutboundAnalytics {
   channel_breakdown?: Record<string, number>; attribution_breakdown?: Record<string, number>;
   send_disabled?: number;
 }
+export interface RcpCrmCatalogEntry {
+  provider: string; name?: string; auth_type?: string; label?: string;
+  supported_objects?: string[]; webhook_support?: boolean; incremental_sync?: boolean;
+  custom_fields?: boolean; campaign_audience?: boolean; sync_directions?: string[];
+}
+export interface RcpCrmConnection {
+  connected?: boolean; provider?: string; account_id?: string; account_name?: string;
+  read?: boolean; write?: boolean; webhook?: boolean; objects?: string[];
+  sync_direction?: string; last_sync_at?: string; last_error?: string; state?: string;
+}
+export interface RcpCrmConflict {
+  id: string; provider?: string; object_type?: string; record_id?: string; kind?: string;
+  state?: string; detail?: Record<string, unknown>;
+}
+export interface RcpCrmAnalytics {
+  connected_crms?: number; records_imported?: number; conflicts?: number; open_conflicts?: number;
+  auto_resolved_conflicts?: number; manual_resolutions?: number; failed_records?: number;
+  outbound_writes?: number; stored_mappings?: number;
+}
 export interface RcpHealth {
   status?: string; agent_slug?: string; llm_provider?: string; model?: string; handlers?: number;
   persistence?: { backend?: string; durable?: boolean; supabase_configured?: boolean };
